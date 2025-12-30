@@ -183,7 +183,7 @@ async function verifyConnection() {
     console.log('🔧 Solución: Ejecuta las migraciones en Supabase')
     console.log('')
     console.log('Opción 1 - Desde el Dashboard:')
-    console.log('   1. Abre: https://supabase.com/dashboard/project/cswtugmwazxdktntndpy/sql')
+    console.log('   1. Abre: https://supabase.com/dashboard/project/YOUR_PROJECT_ID/sql')
     console.log('   2. Ejecuta en orden:')
     console.log('      - supabase/migrations/01_initial_schema.sql')
     console.log('      - supabase/migrations/03_functions.sql')
@@ -191,7 +191,7 @@ async function verifyConnection() {
     console.log('      - supabase/migrations/02_simple_seed.sql (opcional)')
     console.log('')
     console.log('Opción 2 - Usando Supabase CLI:')
-    console.log('   supabase link --project-ref cswtugmwazxdktntndpy')
+    console.log('   supabase link --project-ref YOUR_PROJECT_ID')
     console.log('   supabase db push')
     console.log('')
   }

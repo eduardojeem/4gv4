@@ -195,7 +195,7 @@ INSERT INTO customer_segments (name, description, criteria, color, icon, priorit
     
     console.log(basicSQL)
     console.log('='.repeat(80))
-    console.log('\n🌐 Accede a: https://supabase.com/dashboard/project/cswtugmwazxdktntndpy/sql')
+    console.log('\n🌐 Accede a: https://supabase.com/dashboard/project/YOUR_PROJECT_ID/sql')
     console.log('📝 Copia y pega el SQL de arriba en el editor')
     console.log('▶️  Haz clic en "Run" para ejecutar')
     

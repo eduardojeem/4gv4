@@ -109,6 +109,9 @@ Thumbs.db
 *.swo
 *~
 
+# Kiro IDE files
+.kiro/
+
 # Bundle analysis
 bundle-analysis/
 .webpack-bundle-analyzer/
@@ -138,3 +141,18 @@ playwright-report/
 
 # Supabase
 .supabase/
+supabase/.temp/
+
+# Temporary SQL files for development/testing
+check_promotions_table.sql
+verify_columns.sql
+
+# Backup/improved versions of files (keep only the active version)
+*-improved.*
+*-backup.*
+*.backup
+*.bak
+*.tmp
+
+# Development documentation (keep main docs)
+PROMOTION_SYSTEM.md
