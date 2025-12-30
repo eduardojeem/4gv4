@@ -26,8 +26,9 @@ import {
 
 import { Separator } from "@/components/ui/separator"
 import { formatCurrency } from '@/lib/currency'
-import { usePromotionEngine, type CartItem, type Promotion } from '@/hooks/use-promotion-engine'
+import { usePromotionEngine } from '@/hooks/use-promotion-engine'
 import { usePromotions } from '@/hooks/use-promotions'
+import type { CartItem, Promotion } from '@/types/promotion'
 import { toast } from 'sonner'
 
 interface PromotionEngineProps {

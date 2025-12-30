@@ -4,40 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { parseISO, isAfter, isBefore, differenceInDays } from 'date-fns'
-
-export interface Promotion {
-  id: string
-  name: string
-  code: string
-  description?: string
-  type: 'percentage' | 'fixed'
-  value: number
-  min_purchase?: number
-  max_discount?: number
-  start_date: string | null
-  end_date: string | null
-  is_active: boolean
-  usage_count?: number
-  usage_limit?: number
-  created_at?: string
-  updated_at?: string
-}
-
-export interface PromotionFilters {
-  search: string
-  status: 'all' | 'active' | 'scheduled' | 'expired' | 'inactive'
-  type: 'all' | 'percentage' | 'fixed'
-}
-
-export interface PromotionStats {
-  total: number
-  active: number
-  scheduled: number
-  expired: number
-  inactive: number
-  totalUsage: number
-  expiringSoon: number
-}
+import type { Promotion, PromotionFilters, PromotionStats } from '@/types/promotion'
 
 export function usePromotions() {
   const [promotions, setPromotions] = useState<Promotion[]>([])

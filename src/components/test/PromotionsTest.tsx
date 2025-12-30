@@ -1,6 +1,6 @@
 'use client'
 
-import { usePromotions } from '@/hooks/usePromotions'
+import { usePromotions } from '@/hooks/use-promotions'
 
 export function PromotionsTest() {
   const { promotions, loading } = usePromotions()

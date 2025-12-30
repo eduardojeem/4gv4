@@ -3,7 +3,7 @@ import {
   PromotionContext, 
   PromotionResult, 
   PromotionEngineConfig 
-} from '@/types/promotions'
+} from '@/types/promotion'
 
 export class PromotionEngine {
   private config: PromotionEngineConfig

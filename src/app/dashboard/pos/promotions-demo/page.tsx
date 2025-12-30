@@ -8,7 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { PromotionEngine } from '@/components/pos/PromotionEngine'
 import { formatCurrency } from '@/lib/currency'
 import { Plus, Minus, ShoppingCart } from 'lucide-react'
-import type { CartItem } from '@/hooks/use-promotion-engine'
+import type { CartItem } from '@/types/promotion'
 
 // Mock products for demo
 const mockProducts = [

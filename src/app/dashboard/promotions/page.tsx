@@ -62,7 +62,8 @@ import { Switch } from "@/components/ui/switch"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Textarea } from "@/components/ui/textarea"
 import { formatCurrency } from '@/lib/currency'
-import { usePromotions, type Promotion } from '@/hooks/use-promotions'
+import { usePromotions } from '@/hooks/use-promotions'
+import type { Promotion } from '@/types/promotion'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
 

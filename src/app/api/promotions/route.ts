@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Promotion, PromotionType } from '@/types/promotions'
+import type { Promotion } from '@/types/promotion'
 
 // Mock data para desarrollo
 const mockPromotions: Promotion[] = [

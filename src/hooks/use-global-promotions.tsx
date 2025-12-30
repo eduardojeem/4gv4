@@ -2,16 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 import { toast } from 'sonner'
-
-export interface PromotionResult {
-  promotion_id: string
-  code: string
-  name: string
-  type: 'percentage' | 'fixed'
-  discount_amount: number
-  applied: boolean
-  reason?: string
-}
+import type { PromotionResult } from '@/types/promotion'
 
 interface GlobalPromotionsContextType {
   appliedPromotions: PromotionResult[]
