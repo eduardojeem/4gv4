@@ -44,6 +44,7 @@ const mockPromotions: Promotion[] = [
     value: 15,
     min_purchase: 200000,
     start_date: '2024-01-01T00:00:00Z',
+    end_date: '2024-12-31T23:59:59Z',
     is_active: true,
     usage_count: 45,
     usage_limit: 200,
@@ -59,8 +60,10 @@ const mockPromotions: Promotion[] = [
     value: 0,
     min_purchase: 100000,
     start_date: '2024-01-01T00:00:00Z',
+    end_date: '2024-12-31T23:59:59Z',
     is_active: true,
     usage_count: 78,
+    usage_limit: null,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z'
   }
