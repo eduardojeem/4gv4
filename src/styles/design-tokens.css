@@ -1,0 +1,248 @@
+/* Design Tokens - Sistema de Diseño Estandarizado */
+
+:root {
+  /* === ESPACIADO === */
+  --spacing-xs: 0.5rem;   /* 8px  - Para elementos muy compactos */
+  --spacing-sm: 1rem;     /* 16px - Espaciado estándar pequeño */
+  --spacing-md: 1.5rem;   /* 24px - Espaciado estándar mediano */
+  --spacing-lg: 2rem;     /* 32px - Espaciado estándar grande */
+  --spacing-xl: 3rem;     /* 48px - Espaciado para secciones */
+
+  /* === PADDING DE COMPONENTES === */
+  --padding-card-xs: 0.75rem;  /* p-3 - Cards muy compactas */
+  --padding-card-sm: 1rem;     /* p-4 - Cards secundarias */
+  --padding-card-md: 1.5rem;   /* p-6 - Cards principales */
+  --padding-card-lg: 2rem;     /* p-8 - Cards destacadas */
+
+  /* === GAPS ESTÁNDAR === */
+  --gap-tight: 0.5rem;    /* gap-2 - Elementos muy juntos */
+  --gap-normal: 1rem;     /* gap-4 - Gap estándar */
+  --gap-relaxed: 1.5rem;  /* gap-6 - Gap amplio */
+  --gap-loose: 2rem;      /* gap-8 - Gap muy amplio */
+
+  /* === ICONOS === */
+  --icon-xs: 0.875rem;    /* h-3.5 w-3.5 - 14px */
+  --icon-sm: 1rem;        /* h-4 w-4 - 16px */
+  --icon-md: 1.25rem;     /* h-5 w-5 - 20px */
+  --icon-lg: 1.5rem;      /* h-6 w-6 - 24px */
+
+  /* === BORDES Y RADIOS === */
+  --border-radius-sm: 0.5rem;   /* rounded-lg */
+  --border-radius-md: 0.75rem;  /* rounded-xl */
+  --border-radius-lg: 1rem;     /* rounded-2xl */
+}
+
+/* === UTILIDADES DE ESPACIADO === */
+
+/* Gaps estandarizados */
+.gap-tight { gap: var(--gap-tight); }
+.gap-normal { gap: var(--gap-normal); }
+.gap-relaxed { gap: var(--gap-relaxed); }
+.gap-loose { gap: var(--gap-loose); }
+
+/* Paddings estandarizados para cards */
+.card-padding-xs { padding: var(--padding-card-xs); }
+.card-padding-sm { padding: var(--padding-card-sm); }
+.card-padding-md { padding: var(--padding-card-md); }
+.card-padding-lg { padding: var(--padding-card-lg); }
+
+/* === GRIDS ESTANDARIZADOS === */
+
+/* Grid para KPIs - 4 columnas en desktop */
+.grid-kpi {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4;
+  gap: var(--gap-normal);
+}
+
+/* Grid para dashboard - 2 columnas principales */
+.grid-dashboard {
+  @apply grid grid-cols-1 lg:grid-cols-2;
+  gap: var(--gap-relaxed);
+}
+
+/* Grid para contenido - 3 columnas balanceadas */
+.grid-content {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3;
+  gap: var(--gap-normal);
+}
+
+/* Grid para listas - 1 columna con espaciado */
+.grid-list {
+  @apply grid grid-cols-1;
+  gap: var(--gap-normal);
+}
+
+/* Grid compacto para modo denso */
+.grid-compact {
+  @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5;
+  gap: var(--gap-tight);
+}
+
+/* === FLEXBOX ESTANDARIZADO === */
+
+/* Flex con gaps estándar */
+.flex-tight {
+  @apply flex items-center;
+  gap: var(--gap-tight);
+}
+
+.flex-normal {
+  @apply flex items-center;
+  gap: var(--gap-normal);
+}
+
+.flex-relaxed {
+  @apply flex items-center;
+  gap: var(--gap-relaxed);
+}
+
+/* Flex para botones y controles */
+.flex-controls {
+  @apply flex items-center justify-between;
+  gap: var(--gap-normal);
+}
+
+/* === COMPONENTES ESTANDARIZADOS === */
+
+/* Card variants */
+.card-standard {
+  @apply bg-card text-card-foreground rounded-xl border shadow-sm;
+  padding: var(--padding-card-md);
+}
+
+.card-compact {
+  @apply bg-card text-card-foreground rounded-lg border;
+  padding: var(--padding-card-sm);
+}
+
+.card-elevated {
+  @apply bg-card text-card-foreground rounded-xl border shadow-md;
+  padding: var(--padding-card-md);
+}
+
+/* Button con iconos estandarizados */
+.btn-with-icon {
+  @apply inline-flex items-center justify-center;
+  gap: var(--gap-tight);
+}
+
+.btn-with-icon svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
+/* === ICONOS ESTANDARIZADOS === */
+.icon-xs { width: var(--icon-xs); height: var(--icon-xs); }
+.icon-sm { width: var(--icon-sm); height: var(--icon-sm); }
+.icon-md { width: var(--icon-md); height: var(--icon-md); }
+.icon-lg { width: var(--icon-lg); height: var(--icon-lg); }
+
+/* === RESPONSIVE HELPERS === */
+
+/* Espaciado responsivo */
+.spacing-responsive {
+  padding: var(--padding-card-sm);
+}
+
+@media (min-width: 768px) {
+  .spacing-responsive {
+    padding: var(--padding-card-md);
+  }
+}
+
+/* Grid responsivo inteligente */
+.grid-auto-fit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--gap-normal);
+}
+
+.grid-auto-fill {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--gap-normal);
+}
+
+/* === MODO COMPACTO === */
+
+/* Overrides para modo compacto */
+.compact .card-standard,
+.compact .card-elevated {
+  padding: var(--padding-card-sm);
+}
+
+.compact .gap-normal {
+  gap: var(--gap-tight);
+}
+
+.compact .gap-relaxed {
+  gap: var(--gap-normal);
+}
+
+.compact .icon-sm {
+  width: var(--icon-xs);
+  height: var(--icon-xs);
+}
+
+/* === UTILIDADES DE LAYOUT === */
+
+/* Contenedores estándar */
+.container-section {
+  @apply w-full max-w-7xl mx-auto;
+  padding: var(--spacing-md);
+}
+
+.container-content {
+  @apply w-full;
+  padding: var(--spacing-sm);
+}
+
+/* Headers de sección */
+.section-header {
+  @apply flex items-center justify-between mb-6;
+}
+
+.section-title {
+  @apply text-2xl font-bold;
+}
+
+.section-description {
+  @apply text-muted-foreground mt-1;
+}
+
+/* === ANIMACIONES Y TRANSICIONES === */
+.transition-standard {
+  @apply transition-all duration-200 ease-in-out;
+}
+
+.hover-lift {
+  @apply transition-transform duration-200 hover:scale-105;
+}
+
+.hover-shadow {
+  @apply transition-shadow duration-200 hover:shadow-md;
+}
+
+/* === ACCESIBILIDAD === */
+
+/* Focus visible mejorado */
+.focus-enhanced {
+  @apply focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none;
+}
+
+/* Touch targets mínimos */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* === DEBUGGING === */
+
+/* Utilidad para visualizar grids en desarrollo */
+.debug-grid {
+  outline: 1px solid rgba(255, 0, 0, 0.3);
+}
+
+.debug-grid > * {
+  outline: 1px solid rgba(0, 255, 0, 0.3);
+}

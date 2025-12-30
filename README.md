@@ -1,36 +1,175 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 4GV4 - Sistema de Gestión Empresarial
 
-## Getting Started
+Un sistema completo de gestión empresarial construido con Next.js 15, React 19 y Supabase, diseñado para manejar inventarios, reparaciones, clientes y punto de venta.
 
-First, run the development server:
+## 🚀 Características Principales
+
+- **Dashboard Administrativo**: Panel completo con métricas y análisis en tiempo real
+- **Gestión de Inventarios**: Control de productos, categorías y stock
+- **Sistema POS**: Punto de venta integrado con gestión de clientes
+- **Módulo de Reparaciones**: Seguimiento completo de reparaciones técnicas
+- **Gestión de Clientes**: CRM integrado con historial y créditos
+- **Reportes y Analytics**: Dashboards interactivos con exportación
+- **Modo Oscuro**: Interfaz adaptable con soporte completo para tema oscuro
+- **Responsive Design**: Optimizado para desktop, tablet y móvil
+
+## 🛠️ Tecnologías
+
+- **Frontend**: Next.js 15, React 19, TypeScript
+- **Styling**: Tailwind CSS, Radix UI, Framer Motion
+- **Backend**: Supabase (PostgreSQL, Auth, Storage)
+- **Testing**: Vitest, Testing Library, Playwright
+- **CI/CD**: GitHub Actions
+- **Deployment**: Vercel
+
+## 📋 Requisitos Previos
+
+- Node.js 18.x o superior
+- npm, yarn, pnpm o bun
+- Cuenta de Supabase (para base de datos)
+
+## 🚀 Instalación y Configuración
+
+### 1. Clonar el repositorio
+
+```bash
+git clone https://github.com/tu-usuario/4gv4.git
+cd 4gv4
+```
+
+### 2. Instalar dependencias
+
+```bash
+npm install
+# o
+yarn install
+# o
+pnpm install
+```
+
+### 3. Configurar variables de entorno
+
+```bash
+cp .env.example .env.local
+```
+
+Edita `.env.local` con tus credenciales:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=tu_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+```
+
+### 4. Configurar Supabase
+
+```bash
+# Ejecutar migraciones de base de datos
+npm run setup:repairs
+npm run verify:supabase
+```
+
+### 5. Ejecutar en desarrollo
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📁 Estructura del Proyecto
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+├── .github/              # GitHub workflows y templates
+├── .storybook/           # Configuración de Storybook
+├── public/               # Archivos estáticos
+├── scripts/              # Scripts de utilidad y setup
+├── src/                  # Código fuente principal
+│   ├── app/             # App Router de Next.js
+│   │   ├── dashboard/   # Páginas del dashboard
+│   │   ├── api/         # API routes
+│   │   └── auth/        # Páginas de autenticación
+│   ├── components/      # Componentes reutilizables
+│   │   ├── ui/          # Componentes base de UI
+│   │   ├── dashboard/   # Componentes específicos del dashboard
+│   │   └── pos/         # Componentes del punto de venta
+│   ├── hooks/           # Custom hooks
+│   ├── lib/             # Utilidades y configuración
+│   ├── types/           # Definiciones de TypeScript
+│   └── styles/          # Estilos globales
+├── supabase/            # Migraciones y configuración de Supabase
+└── package.json         # Dependencias y scripts
+```
 
-## Learn More
+## 🧪 Testing
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Ejecutar todos los tests
+npm run test
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Tests con coverage
+npm run test:coverage
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Tests de integración
+npm run test:integration
 
-## Deploy on Vercel
+# Tests de accesibilidad
+npm run test:accessibility
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📦 Build y Deployment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+# Build para producción
+npm run build:production
+
+# Análisis del bundle
+npm run build:analyze
+
+# Deploy a staging
+npm run deploy:staging
+```
+
+## 🔧 Scripts Disponibles
+
+- `npm run dev` - Servidor de desarrollo
+- `npm run build` - Build para producción
+- `npm run start` - Servidor de producción
+- `npm run lint` - Linting del código
+- `npm run test` - Ejecutar tests
+- `npm run storybook` - Ejecutar Storybook
+
+## 📚 Documentación
+
+- [Guía de Contribución](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [Configuración de Storybook](.storybook/)
+- [Scripts de Setup](scripts/)
+
+## 🤝 Contribución
+
+1. Fork el proyecto
+2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
+3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
+4. Push a la rama (`git push origin feature/AmazingFeature`)
+5. Abre un Pull Request
+
+## 📄 Licencia
+
+Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más detalles.
+
+## 🆘 Soporte
+
+Si tienes problemas o preguntas:
+
+1. Revisa la [documentación en el código](src/)
+2. Busca en los [issues existentes](https://github.com/tu-usuario/4gv4/issues)
+3. Crea un nuevo issue si es necesario
+
+## 🔄 Changelog
+
+Ver [CHANGELOG.md](CHANGELOG.md) para los cambios recientes.
+
+---
+
+Desarrollado con ❤️ usando Next.js y Supabase

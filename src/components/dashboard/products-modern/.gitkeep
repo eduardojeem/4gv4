@@ -1,0 +1,11 @@
+# Modern Products Dashboard Components
+
+This directory contains the redesigned modern components for the products dashboard.
+
+## Structure
+
+- `core/` - Core components (MetricCard, SearchBar, etc.)
+- `filters/` - Filter-related components
+- `views/` - Different view modes (grid, table, compact)
+- `modals/` - Modal components
+- `shared/` - Shared utilities and components

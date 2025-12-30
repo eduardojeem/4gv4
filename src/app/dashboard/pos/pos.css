@@ -1,0 +1,736 @@
+/* POS System Custom Styles */
+
+/* Smooth transitions for all interactive elements */
+* {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Container animations */
+.pos-container {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Product card hover effects */
+.product-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateZ(0);
+}
+
+.product-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.product-card:active {
+  transform: translateY(-2px) scale(1.01);
+}
+
+/* Cart item animations */
+.cart-item {
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Button press animations */
+.btn-press {
+  transition: all 0.1s ease-in-out;
+}
+
+.btn-press:active {
+  transform: scale(0.95);
+}
+
+/* Quantity button animations */
+.quantity-btn {
+  transition: all 0.2s ease-in-out;
+}
+
+.quantity-btn:hover {
+  transform: scale(1.1);
+}
+
+.quantity-btn:active {
+  transform: scale(0.9);
+}
+
+/* Search input focus animation */
+.search-input {
+  transition: all 0.3s ease-in-out;
+}
+
+.search-input:focus {
+  transform: scale(1.02);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Sidebar slide animation */
+.sidebar-enter {
+  transform: translateX(-100%);
+}
+
+.sidebar-enter-active {
+  transform: translateX(0);
+  transition: transform 0.3s ease-in-out;
+}
+
+.sidebar-exit {
+  transform: translateX(0);
+}
+
+.sidebar-exit-active {
+  transform: translateX(-100%);
+  transition: transform 0.3s ease-in-out;
+}
+
+/* Modal animations */
+.modal-overlay {
+  animation: fadeInOverlay 0.2s ease-out;
+}
+
+@keyframes fadeInOverlay {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-content {
+  animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Loading spinner */
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Pulse animation for notifications */
+.pulse {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Badge bounce animation */
+.badge-bounce {
+  animation: bounce 0.5s ease-in-out;
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
+}
+
+/* Responsive Design Improvements */
+
+/* Mobile First Approach */
+@media (max-width: 640px) {
+  .pos-container {
+    padding: 0.5rem;
+  }
+  
+  .product-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+  
+  .product-card {
+    padding: 0.75rem;
+  }
+  
+  .cart-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 50vh;
+    border-radius: 1rem 1rem 0 0;
+    z-index: 50;
+  }
+  
+  .search-input {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  .btn-mobile {
+    min-height: 44px; /* iOS touch target */
+    min-width: 44px;
+  }
+}
+
+/* Tablet Styles */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .product-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  
+  .pos-layout {
+    grid-template-columns: 1fr 350px;
+  }
+  
+  .sidebar {
+    width: 280px;
+  }
+}
+
+/* Desktop Styles */
+@media (min-width: 1025px) {
+  .product-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+  
+  .pos-layout {
+    grid-template-columns: 1fr 400px;
+  }
+  
+  .sidebar {
+    width: 320px;
+  }
+}
+
+/* Large Desktop */
+@media (min-width: 1440px) {
+  .product-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  
+  .pos-layout {
+    grid-template-columns: 1fr 450px;
+  }
+}
+
+/* Touch Device Optimizations */
+@media (pointer: coarse) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.75rem;
+  }
+  
+  .product-card {
+    padding: 1rem;
+  }
+  
+  .quantity-btn {
+    min-height: 40px;
+    min-width: 40px;
+  }
+  
+  .btn-touch {
+    padding: 0.875rem 1.5rem;
+    font-size: 1rem;
+  }
+}
+
+/* High DPI Displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .product-image {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .product-card:hover {
+    box-shadow: 0 20px 25px -5px rgba(255, 255, 255, 0.1), 0 10px 10px -5px rgba(255, 255, 255, 0.04);
+  }
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+  
+  .pos-container {
+    background: white !important;
+    color: black !important;
+  }
+}
+
+/* Focus Styles for Accessibility */
+.focus-visible:focus {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Glass morphism effect */
+.glass {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+/* Gradient backgrounds */
+.gradient-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.gradient-success {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.gradient-warning {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+/* Micro-interactions */
+.micro-bounce:hover {
+  animation: microBounce 0.3s ease-in-out;
+}
+
+@keyframes microBounce {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+/* Success animation */
+.success-checkmark {
+  animation: successPop 0.5s ease-in-out;
+}
+
+@keyframes successPop {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Mobile-specific optimizations */
+.mobile-optimized {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Improved touch targets for mobile */
+.touch-optimized {
+  min-height: 48px;
+  min-width: 48px;
+  padding: 12px;
+}
+
+/* Mobile cart overlay */
+.mobile-cart-overlay {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.1);
+  transform: translateY(100%);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1000;
+}
+
+.mobile-cart-overlay.open {
+  transform: translateY(0);
+}
+
+/* Mobile header improvements */
+.mobile-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+  background: hsl(var(--card));
+}
+
+/* Tablet-specific grid layouts */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .tablet-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  
+  .tablet-sidebar {
+    width: 300px;
+  }
+  
+  .tablet-product-card {
+    padding: 1rem;
+    min-height: 200px;
+  }
+}
+
+/* Enhanced mobile navigation */
+.mobile-nav {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 25px;
+  padding: 10px 20px;
+  display: flex;
+  gap: 15px;
+  z-index: 1000;
+}
+
+.mobile-nav-item {
+  color: white;
+  padding: 10px;
+  border-radius: 15px;
+  transition: all 0.2s ease;
+}
+
+.mobile-nav-item:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Swipe gestures support */
+.swipeable {
+  touch-action: pan-x;
+}
+
+/* Mobile product grid optimization */
+@media (max-width: 640px) {
+  .mobile-product-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    padding: 0.5rem;
+  }
+  
+  .mobile-product-card {
+    padding: 0.75rem;
+    min-height: 180px;
+    border-radius: 12px;
+  }
+  
+  .mobile-product-image {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .mobile-product-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 0.25rem;
+  }
+  
+  .mobile-product-price {
+    font-size: 1rem;
+    font-weight: 700;
+    color: hsl(var(--primary));
+  }
+}
+
+/* Tablet landscape optimizations */
+@media (min-width: 1024px) and (orientation: landscape) {
+  .tablet-landscape-layout {
+    grid-template-columns: 1fr 380px;
+  }
+  
+  .tablet-landscape-products {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+  }
+}
+
+/* Mobile keyboard optimizations */
+@media (max-width: 768px) {
+  .mobile-input {
+    font-size: 16px; /* Prevents zoom on iOS */
+    padding: 12px 16px;
+    border-radius: 12px;
+  }
+  
+  .mobile-search {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: hsl(var(--card));
+    padding: 1rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+}
+
+/* Improved scrolling for mobile */
+.mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Mobile cart summary */
+.mobile-cart-summary {
+  position: sticky;
+  bottom: 0;
+  background: hsl(var(--card));
+  border-top: 1px solid hsl(var(--border));
+  padding: 1rem;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Touch feedback */
+.touch-feedback:active {
+  background-color: rgba(0, 0, 0, 0.05);
+  transform: scale(0.98);
+}
+
+/* Mobile modal improvements */
+@media (max-width: 640px) {
+  .mobile-modal {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    border-radius: 0;
+    max-width: 100%;
+    max-height: 100%;
+  }
+  
+  .mobile-modal-content {
+    height: 100vh;
+    overflow-y: auto;
+  }
+}
+
+/* Accessibility improvements for touch */
+@media (pointer: coarse) {
+  .accessible-touch {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  .accessible-button {
+    padding: 12px 20px;
+    font-size: 16px;
+    border-radius: 8px;
+  }
+}
+
+/* Performance optimizations */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.optimized-scroll {
+  contain: layout style paint;
+}
+
+/* Reduced motion for better performance */
+@media (prefers-reduced-motion: reduce) {
+  .mobile-optimized * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  }
+}
+
+/* =========================
+   POS Theming & Palette
+   ========================= */
+
+/* Cohesive color palette for POS */
+.pos-theme {
+  --pos-primary: #2563eb; /* blue-600 */
+  --pos-primary-dark: #1d4ed8; /* blue-700 */
+  --pos-secondary: #06b6d4; /* cyan-500 */
+  --pos-accent: #8b5cf6; /* violet-500 */
+  --pos-success: #22c55e; /* green-500 */
+  --pos-warning: #f59e0b; /* amber-500 */
+  --pos-danger: #ef4444; /* red-500 */
+  --pos-surface: rgba(255, 255, 255, 0.6);
+  --pos-surface-dark: rgba(30, 41, 59, 0.6);
+}
+
+/* Header gradient with strong contrast */
+.pos-header-gradient {
+  background: linear-gradient(135deg, #1e3a8a 0%, var(--pos-primary) 60%, var(--pos-secondary) 100%);
+  color: #ffffff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+.dark .pos-header-gradient {
+  background: linear-gradient(135deg, #0f172a 0%, var(--pos-primary-dark) 60%, #0ea5e9 100%);
+  color: #e5e7eb;
+  border-bottom-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Accent card surface for summaries and highlights */
+.pos-card-accent {
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.08), rgba(139, 92, 246, 0.06));
+  border: 1px solid rgba(37, 99, 235, 0.15);
+}
+.dark .pos-card-accent {
+  background: linear-gradient(180deg, rgba(29, 78, 216, 0.12), rgba(109, 40, 217, 0.1));
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+/* Product card accent and hover state */
+.pos-product-card {
+  border: 1px solid rgba(37, 99, 235, 0.15);
+}
+.pos-product-card:hover {
+  border-color: var(--pos-primary);
+  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.15);
+}
+
+/* Badge highlight with gradient */
+.pos-badge-highlight {
+  background: linear-gradient(135deg, var(--pos-primary) 0%, var(--pos-secondary) 100%);
+  color: #ffffff !important;
+  border: none;
+}
+.dark .pos-badge-highlight {
+  background: linear-gradient(135deg, var(--pos-primary-dark) 0%, #0ea5e9 100%);
+}
+
+/* Primary CTA button */
+.pos-button-primary {
+  background: linear-gradient(135deg, var(--pos-primary) 0%, var(--pos-accent) 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+.pos-button-primary:hover {
+  filter: brightness(1.05);
+}
+.dark .pos-button-primary {
+  background: linear-gradient(135deg, var(--pos-primary-dark) 0%, #7c3aed 100%) !important;
+}
+
+/* Total row highlight */
+.pos-total-highlight {
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.15);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+.dark .pos-total-highlight {
+  background: rgba(29, 78, 216, 0.12);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+/* Savings chip */
+.pos-savings-chip {
+  background: linear-gradient(135deg, #22c55e 0%, #06b6d4 100%);
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+}
+.dark .pos-savings-chip {
+  background: linear-gradient(135deg, #16a34a 0%, #0891b2 100%);
+}

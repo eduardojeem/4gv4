@@ -1,0 +1,323 @@
+/* Estilos de Accesibilidad */
+
+/* Alto Contraste */
+.high-contrast {
+  --background: 0 0% 0%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 5%;
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 5%;
+  --popover-foreground: 0 0% 100%;
+  --primary: 0 0% 100%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 85%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 25%;
+  --input: 0 0% 25%;
+  --ring: 0 0% 100%;
+}
+
+.high-contrast * {
+  border-color: hsl(var(--border)) !important;
+}
+
+.high-contrast button,
+.high-contrast input,
+.high-contrast select,
+.high-contrast textarea {
+  border: 2px solid hsl(var(--border)) !important;
+}
+
+/* Movimiento Reducido */
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Tamaños de Fuente */
+.font-small {
+  font-size: 14px;
+}
+
+.font-medium {
+  font-size: 16px;
+}
+
+.font-large {
+  font-size: 18px;
+}
+
+.font-extra-large {
+  font-size: 20px;
+}
+
+.font-small h1 { font-size: 1.75rem; }
+.font-small h2 { font-size: 1.5rem; }
+.font-small h3 { font-size: 1.25rem; }
+.font-small h4 { font-size: 1.125rem; }
+.font-small h5 { font-size: 1rem; }
+.font-small h6 { font-size: 0.875rem; }
+
+.font-large h1 { font-size: 2.5rem; }
+.font-large h2 { font-size: 2rem; }
+.font-large h3 { font-size: 1.75rem; }
+.font-large h4 { font-size: 1.5rem; }
+.font-large h5 { font-size: 1.25rem; }
+.font-large h6 { font-size: 1.125rem; }
+
+.font-extra-large h1 { font-size: 3rem; }
+.font-extra-large h2 { font-size: 2.5rem; }
+.font-extra-large h3 { font-size: 2rem; }
+.font-extra-large h4 { font-size: 1.75rem; }
+.font-extra-large h5 { font-size: 1.5rem; }
+.font-extra-large h6 { font-size: 1.25rem; }
+
+/* Indicadores de Foco Mejorados */
+.enhanced-focus *:focus {
+  outline: 3px solid hsl(var(--primary)) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 3px hsla(var(--primary), 0.3) !important;
+}
+
+.enhanced-focus button:focus,
+.enhanced-focus input:focus,
+.enhanced-focus select:focus,
+.enhanced-focus textarea:focus,
+.enhanced-focus [role="button"]:focus,
+.enhanced-focus [tabindex]:focus {
+  outline: 3px solid hsl(var(--primary)) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 3px hsla(var(--primary), 0.3) !important;
+  border-color: hsl(var(--primary)) !important;
+}
+
+/* Optimización para Lectores de Pantalla */
+.screen-reader-optimized .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.screen-reader-optimized [aria-hidden="true"] {
+  display: none !important;
+}
+
+.screen-reader-optimized button,
+.screen-reader-optimized [role="button"] {
+  position: relative;
+}
+
+.screen-reader-optimized button::after,
+.screen-reader-optimized [role="button"]::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Navegación por Teclado */
+.keyboard-navigation {
+  --focus-ring-width: 2px;
+  --focus-ring-color: hsl(var(--primary));
+  --focus-ring-offset: 2px;
+}
+
+.keyboard-navigation *:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.keyboard-navigation [tabindex="-1"]:focus {
+  outline: none;
+}
+
+.keyboard-navigation .skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  padding: 8px;
+  text-decoration: none;
+  border-radius: 4px;
+  z-index: 9999;
+}
+
+.keyboard-navigation .skip-link:focus {
+  top: 6px;
+}
+
+/* Amigable para Daltonismo */
+.color-blind-friendly {
+  --success-pattern: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M8.5 14.5L4 10l1.5-1.5L8.5 11.5 16 4l1.5 1.5L8.5 14.5z' fill='%23ffffff'/%3E%3C/svg%3E");
+  --error-pattern: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M15 5L10 10L5 5L3.5 6.5L8.5 11.5L3.5 16.5L5 18L10 13L15 18L16.5 16.5L11.5 11.5L16.5 6.5L15 5Z' fill='%23ffffff'/%3E%3C/svg%3E");
+  --warning-pattern: url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 2L18 16H2L10 2ZM10 6L4.5 14H15.5L10 6ZM9 9H11V12H9V9ZM9 13H11V15H9V13Z' fill='%23ffffff'/%3E%3C/svg%3E");
+}
+
+.color-blind-friendly .bg-green-500,
+.color-blind-friendly .bg-green-600,
+.color-blind-friendly .text-green-500,
+.color-blind-friendly .text-green-600 {
+  background-image: var(--success-pattern);
+  background-repeat: no-repeat;
+  background-position: center right 8px;
+  background-size: 16px 16px;
+}
+
+.color-blind-friendly .bg-red-500,
+.color-blind-friendly .bg-red-600,
+.color-blind-friendly .text-red-500,
+.color-blind-friendly .text-red-600 {
+  background-image: var(--error-pattern);
+  background-repeat: no-repeat;
+  background-position: center right 8px;
+  background-size: 16px 16px;
+}
+
+.color-blind-friendly .bg-yellow-500,
+.color-blind-friendly .bg-yellow-600,
+.color-blind-friendly .bg-orange-500,
+.color-blind-friendly .bg-orange-600,
+.color-blind-friendly .text-yellow-500,
+.color-blind-friendly .text-yellow-600,
+.color-blind-friendly .text-orange-500,
+.color-blind-friendly .text-orange-600 {
+  background-image: var(--warning-pattern);
+  background-repeat: no-repeat;
+  background-position: center right 8px;
+  background-size: 16px 16px;
+}
+
+/* Estados de Botones con Patrones */
+.color-blind-friendly button.bg-green-500::before,
+.color-blind-friendly .bg-green-500::before {
+  content: "✓ ";
+  font-weight: bold;
+}
+
+.color-blind-friendly button.bg-red-500::before,
+.color-blind-friendly .bg-red-500::before {
+  content: "✗ ";
+  font-weight: bold;
+}
+
+.color-blind-friendly button.bg-yellow-500::before,
+.color-blind-friendly button.bg-orange-500::before,
+.color-blind-friendly .bg-yellow-500::before,
+.color-blind-friendly .bg-orange-500::before {
+  content: "⚠ ";
+  font-weight: bold;
+}
+
+/* Mejoras de Contraste para Texto */
+.color-blind-friendly {
+  --text-contrast-ratio: 4.5;
+}
+
+.color-blind-friendly .text-muted-foreground {
+  color: hsl(var(--foreground) / 0.8) !important;
+}
+
+.color-blind-friendly .text-gray-500,
+.color-blind-friendly .text-gray-600 {
+  color: hsl(var(--foreground) / 0.7) !important;
+}
+
+/* Animaciones Respetando Preferencias */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Alto Contraste del Sistema */
+@media (prefers-contrast: high) {
+  :root {
+    --border: 0 0% 25%;
+    --input: 0 0% 25%;
+  }
+  
+  * {
+    border-color: hsl(var(--border)) !important;
+  }
+  
+  button,
+  input,
+  select,
+  textarea {
+    border: 2px solid hsl(var(--border)) !important;
+  }
+}
+
+/* Utilidades de Accesibilidad */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.focus-trap {
+  position: relative;
+}
+
+.focus-trap::before,
+.focus-trap::after {
+  content: "";
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Mejoras para Dispositivos Táctiles */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Mejoras para Pantallas Pequeñas */
+@media (max-width: 768px) {
+  .font-large {
+    font-size: 16px;
+  }
+  
+  .font-extra-large {
+    font-size: 18px;
+  }
+}
