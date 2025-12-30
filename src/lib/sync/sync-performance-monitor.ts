@@ -562,7 +562,10 @@ export class SyncPerformanceMonitor {
     }
   }
 
-  private generateRecommendations(summary: Record<string, unknown>, bottlenecks: Record<string, unknown>): string[] {
+  private generateRecommendations(
+    summary: SyncPerformanceReport['summary'],
+    bottlenecks: SyncPerformanceReport['bottlenecks']
+  ): string[] {
     const recommendations: string[] = []
 
     if (summary.successRate < 95) {

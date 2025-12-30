@@ -62,39 +62,22 @@ export interface ButtonNotificationState {
   pendingActions: Set<string>
 }
 
+export interface ButtonState {
+  status: 'idle' | 'loading' | 'success' | 'error'
+  message: string | null
+  isLoading: boolean
+}
+
 export function useOptimizedNotifications() {
   const [state, setState] = useState<ButtonNotificationState>({
     isLoading: false,
     lastNotificationId: null,
     pendingActions: new Set()
   })
+
   
-  const timeoutRef = useRef<NodeJS.Timeout>()
-  const notificationQueue = useRef<Array<() => void>>([])
-  const isProcessingQueue = useRef(false)
-
-  // Procesar cola de notificaciones para evitar spam
-  const processNotificationQueue = useCallback(() => {
-    if (isProcessingQueue.current || notificationQueue.current.length === 0) {
-      return
-    }
-
-    isProcessingQueue.current = true
-    const nextNotification = notificationQueue.current.shift()
-    
-    if (nextNotification) {
-      nextNotification()
-      
-      // Procesar siguiente notificación después de un breve delay
-      setTimeout(() => {
-        isProcessingQueue.current = false
-        processNotificationQueue()
-      }, 100)
-    } else {
-      isProcessingQueue.current = false
-    }
-  }, [])
-
+  const timeoutRef = useRef<NodeJS.Timeout>(undefined)
+  
   // Función principal para mostrar notificaciones optimizadas
   const showNotification = useCallback((
     variant: NotificationVariant,
@@ -168,14 +151,13 @@ export function useOptimizedNotifications() {
       return toastId
     }
 
-    // Agregar a la cola si es importante o procesar inmediatamente
+    // Agregar a la cola global o procesar inmediatamente
     if (important) {
       return notificationFn()
     } else {
-      notificationQueue.current.push(notificationFn)
-      processNotificationQueue()
+      notificationQueue.enqueue(notificationFn)
     }
-  }, [processNotificationQueue])
+  }, [])
 
   // Notificación para acciones de botones con loading state
   const notifyButtonAction = useCallback(async <T>(
@@ -308,7 +290,7 @@ export function useOptimizedNotifications() {
       ...options,
       duration: Infinity,
       action: {
-        label: 'Confirmar',
+        label: options.action?.label || 'Confirmar',
         onClick: async () => {
           try {
             await onConfirm()
@@ -318,7 +300,7 @@ export function useOptimizedNotifications() {
         }
       },
       cancel: {
-        label: 'Cancelar',
+        label: options.cancel?.label || 'Cancelar',
         onClick: () => {
           // Toast se cierra automáticamente
         }
@@ -340,7 +322,6 @@ export function useOptimizedNotifications() {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
     }
-    notificationQueue.current = []
   }, [])
 
   return {
@@ -374,7 +355,7 @@ export function useOptimizedNotifications() {
 // Hook para botones específicos con estados optimizados
 export function useButtonNotifications(buttonId: string) {
   const { notifyButtonAction, notifyQuickAction, notifyWithConfirmation } = useOptimizedNotifications()
-  const [buttonState, setButtonState] = useState<ButtonNotificationState>({
+  const [buttonState, setButtonState] = useState<ButtonState>({
     status: 'idle',
     message: null,
     isLoading: false
@@ -494,7 +475,7 @@ export function useButtonNotifications(buttonId: string) {
     }, 2000)
   }, [buttonId, notifyQuickAction])
 
-  const confirmAction = useCallback(async <T>(
+  const confirmAction = useCallback(<T>(
     action: () => Promise<T>,
     confirmationConfig: {
       title: string
@@ -508,15 +489,25 @@ export function useButtonNotifications(buttonId: string) {
       error?: string | ((error: Error) => string)
     },
     options: NotificationOptions = {}
-  ): Promise<T> => {
+  ) => {
     return notifyWithConfirmation(
-      buttonId,
-      action,
-      confirmationConfig,
-      messages,
-      options
+      confirmationConfig.description || confirmationConfig.title,
+      async () => {
+        await executeAction(action, messages, options)
+      },
+      {
+        ...options,
+        action: {
+          label: confirmationConfig.confirmText || 'Confirmar',
+          onClick: () => {}
+        },
+        cancel: {
+          label: confirmationConfig.cancelText || 'Cancelar',
+          onClick: () => {}
+        }
+      }
     )
-  }, [buttonId, notifyWithConfirmation])
+  }, [notifyWithConfirmation, executeAction])
 
   // Función para limpiar caché específico del botón
   const clearButtonCache = useCallback(() => {

@@ -7,11 +7,12 @@ import { useCallback, useRef, useEffect } from 'react'
 /**
  * Hook para debounce de funciones
  */
-export function useDebounce<T extends (...args: unknown[]) => unknown>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useDebounce<T extends (...args: any[]) => any>(
   callback: T,
   delay: number
 ): T {
-  const timeoutRef = useRef<NodeJS.Timeout>()
+  const timeoutRef = useRef<NodeJS.Timeout>(undefined)
 
   const debouncedCallback = useCallback(
     (...args: Parameters<T>) => {
@@ -40,12 +41,13 @@ export function useDebounce<T extends (...args: unknown[]) => unknown>(
 /**
  * Hook para throttle de funciones
  */
-export function useThrottle<T extends (...args: unknown[]) => unknown>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useThrottle<T extends (...args: any[]) => any>(
   callback: T,
   delay: number
 ): T {
   const lastCallRef = useRef<number>(0)
-  const timeoutRef = useRef<NodeJS.Timeout>()
+  const timeoutRef = useRef<NodeJS.Timeout>(undefined)
 
   const throttledCallback = useCallback(
     (...args: Parameters<T>) => {

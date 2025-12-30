@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { Promotion } from '@/types/promotion'
+import type { Promotion, PromotionType } from '@/types/promotion'
 
 // Mock data para desarrollo
 const mockPromotions: Promotion[] = [
@@ -114,10 +114,10 @@ export async function GET(request: NextRequest) {
     if (current_date) {
       const checkDate = new Date(current_date)
       filteredPromotions = filteredPromotions.filter(p => {
-        const startDate = new Date(p.start_date)
+        const startDate = p.start_date ? new Date(p.start_date) : null
         const endDate = p.end_date ? new Date(p.end_date) : null
         
-        return checkDate >= startDate && (!endDate || checkDate <= endDate)
+        return (!startDate || checkDate >= startDate) && (!endDate || checkDate <= endDate)
       })
     }
 
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar fechas
-    if (body.end_date && new Date(body.start_date) >= new Date(body.end_date)) {
+    if (body.start_date && body.end_date && new Date(body.start_date) >= new Date(body.end_date)) {
       return NextResponse.json(
         { error: 'La fecha de fin debe ser posterior a la fecha de inicio' },
         { status: 400 }

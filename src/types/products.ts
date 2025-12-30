@@ -2,7 +2,7 @@
 // Use @/types/product-unified instead
 // This file provides compatibility exports
 
-export {
+import {
   Product,
   Category,
   Supplier,
@@ -11,6 +11,17 @@ export {
   ProductInput,
   ProductDisplay
 } from '@/types/product-unified'
+
+export type {
+  Product,
+  Category,
+  Supplier,
+  ProductAlert,
+  ProductWithRelations,
+  ProductInput,
+  ProductDisplay
+}
+
 
 // Legacy form data type - kept for compatibility
 export interface ProductFormData {
@@ -89,4 +100,42 @@ export interface ProductFilters {
 export interface ProductSortOptions {
   field: 'name' | 'sku' | 'sale_price' | 'stock_quantity' | 'created_at' | 'updated_at'
   direction: 'asc' | 'desc'
+}
+
+// Pagination options
+export interface PaginationOptions {
+  page: number
+  limit: number
+}
+
+// Pagination info
+export interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  total_pages: number
+}
+
+// Product list response
+export interface ProductListResponse {
+  products: Product[]
+  pagination: PaginationInfo
+  filters: ProductFilters
+  sort: ProductSortOptions
+}
+
+// Dashboard statistics
+export interface ProductDashboardStats {
+  total_products: number
+  active_products: number
+  total_stock_value: number
+  total_cost_value: number
+  total_margin: number
+  avg_margin_percentage: number
+  low_stock_count: number
+  out_of_stock_count: number
+  categories_count: number
+  suppliers_count: number
+  recent_movements_count: number
+  alerts_count: number
 }

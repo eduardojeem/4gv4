@@ -53,12 +53,26 @@ export type Supplier = DbSupplier
 export interface ProductAlert {
   id: string
   product_id: string
-  type: 'low_stock' | 'out_of_stock' | 'expiring' | 'price_change'
+  type: 'low_stock' | 'out_of_stock' | 'expiring' | 'price_change' | 'no_supplier' | 'no_category' | 'no_image' | 'inactive_with_sales' | 'new_product' | 'missing_supplier' | 'missing_category' | 'missing_image'
   message: string
-  severity: 'low' | 'medium' | 'high'
-  is_read: boolean
+  severity?: 'low' | 'medium' | 'high'
+  is_read?: boolean
+  read: boolean
+  is_resolved: boolean
   created_at: string
-  updated_at: string
+  updated_at?: string
+  product_name?: string
+  details?: {
+    current_stock?: number
+    min_stock?: number
+    last_sale?: string
+    old_price?: number
+    new_price?: number
+    [key: string]: any
+  }
+  // DB compatibility
+  alert_type?: string
+  resolved_at?: string | null
 }
 
 // Product Movement type for compatibility

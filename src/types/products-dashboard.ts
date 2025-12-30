@@ -85,3 +85,14 @@ export interface SearchOptions {
   fields: ('name' | 'sku' | 'brand' | 'description')[]
   caseSensitive?: boolean
 }
+
+// Inventory Alert type for compatibility
+export interface InventoryAlert {
+  id: string
+  productId: string
+  type: 'low_stock' | 'out_of_stock' | 'expiring' | 'price_change'
+  message: string
+  severity: 'low' | 'medium' | 'high'
+  created_at: string
+  resolved: boolean
+}

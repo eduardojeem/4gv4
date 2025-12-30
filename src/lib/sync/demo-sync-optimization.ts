@@ -401,7 +401,9 @@ export async function cleanupDemo(): Promise<void> {
 }
 
 // Ejecutar demostración si el archivo se ejecuta directamente
-if (require.main === module) {
+// Note: This check needs to be compatible with the environment (Node vs Bun vs Browser)
+// For now we export the function and rely on a separate script to run it if needed
+if (typeof require !== 'undefined' && require.main === module) {
   runSyncOptimizationDemo()
     .then(() => {
       console.log('\n🎯 Demostración completada. Ejecute cleanupDemo() para limpiar.')

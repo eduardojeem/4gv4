@@ -1,11 +1,13 @@
 // Tipos centralizados para el sistema de promociones
 
+export type PromotionType = 'percentage' | 'fixed'
+
 export interface Promotion {
   id: string
   name: string
   code: string
   description?: string
-  type: 'percentage' | 'fixed'
+  type: PromotionType
   value: number
   min_purchase?: number
   max_discount?: number
@@ -13,7 +15,7 @@ export interface Promotion {
   end_date: string | null
   is_active: boolean
   usage_count?: number
-  usage_limit?: number
+  usage_limit?: number | null
   applicable_products?: string[]
   applicable_categories?: string[]
   created_at?: string
@@ -36,7 +38,7 @@ export interface PromotionResult {
   promotion_id: string
   code: string
   name: string
-  type: 'percentage' | 'fixed'
+  type: PromotionType
   discount_amount: number
   applied: boolean
   reason?: string

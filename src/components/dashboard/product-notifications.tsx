@@ -79,7 +79,7 @@ export function ProductNotifications({
 }: ProductNotificationsProps) {
   const [expandedAlert, setExpandedAlert] = useState<string | null>(null)
 
-  const unreadAlerts = alerts.filter(alert => !alert.is_read)
+  const unreadAlerts = alerts.filter(alert => !alert.read)
   const criticalAlerts = alerts.filter(alert => 
     alert.type === 'out_of_stock' || alert.type === 'low_stock'
   )

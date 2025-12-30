@@ -41,13 +41,13 @@ export async function GET(
     // Calcular estadísticas adicionales
     const stats = {
       usage_percentage: promotion.usage_limit 
-        ? (promotion.usage_count / promotion.usage_limit) * 100 
+        ? ((promotion.usage_count || 0) / promotion.usage_limit) * 100 
         : 0,
       is_expired: promotion.end_date 
         ? new Date() > new Date(promotion.end_date)
         : false,
       is_active_now: promotion.is_active && 
-        new Date() >= new Date(promotion.start_date) &&
+        promotion.start_date && new Date() >= new Date(promotion.start_date) &&
         (!promotion.end_date || new Date() <= new Date(promotion.end_date)),
       days_remaining: promotion.end_date
         ? Math.max(0, Math.ceil((new Date(promotion.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
@@ -104,7 +104,7 @@ export async function PUT(
     const startDate = body.start_date || mockPromotions[index].start_date
     const endDate = body.end_date || mockPromotions[index].end_date
     
-    if (endDate && new Date(startDate) >= new Date(endDate)) {
+    if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
       return NextResponse.json(
         { error: 'La fecha de fin debe ser posterior a la fecha de inicio' },
         { status: 400 }
@@ -151,7 +151,7 @@ export async function DELETE(
 
     // Verificar si la promoción está siendo utilizada activamente
     const promotion = mockPromotions[index]
-    if (promotion.usage_count > 0) {
+    if ((promotion.usage_count || 0) > 0) {
       // En lugar de eliminar, desactivar la promoción
       mockPromotions[index] = {
         ...promotion,
@@ -206,7 +206,7 @@ export async function PATCH(
     switch (body.operation) {
       case 'increment_usage':
         const incrementAmount = body.amount || 1
-        const newUsage = promotion.usage_count + incrementAmount
+        const newUsage = (promotion.usage_count || 0) + incrementAmount
         
         // Verificar límite de uso
         if (promotion.usage_limit && newUsage > promotion.usage_limit) {
@@ -247,7 +247,7 @@ export async function PATCH(
           )
         }
 
-        if (new Date(body.new_end_date) <= new Date(promotion.start_date)) {
+        if (new Date(body.new_end_date) <= new Date(promotion.start_date || new Date())) {
           return NextResponse.json(
             { error: 'La nueva fecha de fin debe ser posterior a la fecha de inicio' },
             { status: 400 }
