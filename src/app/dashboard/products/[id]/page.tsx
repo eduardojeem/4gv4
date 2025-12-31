@@ -87,13 +87,11 @@ export default function ProductDetailPage() {
     return (categories || []).map(c => ({
       id: c.id,
       name: c.name,
-      description: c.description || undefined,
-      parent_id: undefined,
+      description: c.description || null,
+      parent_id: null,
       is_active: c.is_active,
       created_at: c.created_at,
-      updated_at: c.updated_at,
-      subcategories: undefined,
-      products_count: undefined
+      updated_at: c.updated_at
     }))
   }, [categories])
 
@@ -101,15 +99,14 @@ export default function ProductDetailPage() {
     return (suppliers || []).map(s => ({
       id: s.id,
       name: s.name,
-      contact_name: s.contact_name || undefined,
-      email: s.contact_email || undefined,
-      phone: s.phone || undefined,
-      address: s.address || undefined,
-      tax_id: s.tax_id || undefined,
+      contact_name: s.contact_name || null,
+      contact_email: s.contact_email || null,
+      phone: s.phone || null,
+      address: s.address || null,
+      tax_id: s.tax_id || null,
       is_active: s.is_active,
       created_at: s.created_at,
-      updated_at: s.updated_at,
-      products_count: undefined
+      updated_at: s.updated_at
     }))
   }, [suppliers])
 

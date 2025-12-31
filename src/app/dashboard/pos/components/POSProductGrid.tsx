@@ -10,17 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Package, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { VirtualizedProductGrid } from './VirtualizedProductList';
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  stock: number;
-  category: string;
-  image?: string;
-  barcode?: string;
-  min_stock?: number;
-}
+import type { Product } from '../types';
 
 interface POSProductGridProps {
   products: Product[];
@@ -28,13 +18,14 @@ interface POSProductGridProps {
   selectedCategory: string;
   onAddToCart: (product: Product) => void;
   isLoading?: boolean;
+  getCartQuantity?: (productId: string) => number;
 }
 
 const ProductCard = memo<{
   product: Product;
   onAddToCart: (product: Product) => void;
 }>(({ product, onAddToCart }) => {
-  const isLowStock = product.stock <= (product.min_stock || 5);
+  const isLowStock = product.stock <= (product.minStock || 5);
   const isOutOfStock = product.stock <= 0;
 
   return (
@@ -104,7 +95,8 @@ export const POSProductGrid: React.FC<POSProductGridProps> = memo(({
   searchTerm,
   selectedCategory,
   onAddToCart,
-  isLoading = false
+  isLoading = false,
+  getCartQuantity
 }) => {
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
@@ -154,8 +146,8 @@ export const POSProductGrid: React.FC<POSProductGridProps> = memo(({
       <VirtualizedProductGrid
         products={filteredProducts}
         onAddToCart={onAddToCart}
-        itemHeight={280}
-        containerHeight={600}
+        getCartQuantity={getCartQuantity || (() => 0)}
+        height={600}
       />
     );
   }

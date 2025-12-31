@@ -51,6 +51,7 @@ import { useProductVariants } from '@/hooks/useProductVariants'
 import { usePOSKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useSmartSearch } from './hooks/useSmartSearch'
 import { usePromotions } from '@/hooks/use-promotions'
+import { usePromotionEngine } from '@/hooks/use-promotion-engine'
 import { ProductWithVariants, ProductVariant } from '@/types/product-variants'
 import { usePerformanceMonitor, useRenderTimeMonitor } from './hooks/usePerformanceMonitor'
 import { recordMetric } from './utils/performance-monitor'
@@ -298,7 +299,7 @@ export default function POSPage() {
 
   // Hooks para variantes y promociones
   const { getProductWithVariants, convertVariantToCartItem } = useProductVariants()
-  const { applyPromotionsToCart } = usePromotions()
+  const { calculateCartSummary } = usePromotionEngine()
 
   // Keyboard shortcuts integration
   const { showShortcutsHelp } = usePOSKeyboardShortcuts({
@@ -1569,15 +1570,20 @@ export default function POSPage() {
       // Evaluar promociones antes de procesar la venta
       try {
         const cartItems = cart.map(item => ({
+          id: item.id,
           product_id: item.id,
-          category: item.category,
+          variant_id: undefined,
+          sku: item.sku || item.id,
+          name: item.name,
           quantity: item.quantity,
-          price: item.price
+          unit_price: item.price,
+          category_id: item.category,
+          total_price: item.price * item.quantity
         }))
-        const result = applyPromotionsToCart(cartItems as any[], cartCalculations.total)
-        if (result.appliedPromotions.length > 0) {
-          console.log('Promociones aplicadas:', result.appliedPromotions)
-          console.log('Descuento total calculado:', result.totalDiscount)
+        const result = calculateCartSummary(cartItems, [], [])
+        if (result.applied_promotions.length > 0) {
+          console.log('Promociones aplicadas:', result.applied_promotions)
+          console.log('Descuento total calculado:', result.discount_amount)
         }
       } catch (error) {
         console.error('Error evaluando promociones:', error)
@@ -1688,7 +1694,7 @@ export default function POSPage() {
         setPaymentStatus('idle')
       }, 600)
     })
-  }, [cart, paymentMethod, cashReceived, cartCalculations, clearCart, persistSaleToSupabase, processInventorySale, applyPromotionsToCart, selectedCustomer, isWholesale, measureSaleProcessing])
+  }, [cart, paymentMethod, cashReceived, cartCalculations, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing])
 
   // Funciones para múltiples métodos de pago
   const addPaymentSplit = useCallback((method: string, amount: number, reference?: string) => {

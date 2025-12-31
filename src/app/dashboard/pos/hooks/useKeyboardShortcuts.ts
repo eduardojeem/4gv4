@@ -64,7 +64,7 @@ export function useKeyboardShortcuts(
       const activeElement = document.activeElement
       isInputFocusedRef.current = activeElement?.tagName === 'INPUT' || 
                                    activeElement?.tagName === 'TEXTAREA' ||
-                                   activeElement?.contentEditable === 'true'
+                                   (activeElement as HTMLElement)?.contentEditable === 'true'
     }
 
     // Verificar estado inicial

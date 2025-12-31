@@ -89,7 +89,10 @@ export default function ModernProductsPage() {
     const duplicatedData = {
       ...product,
       sku: `DUP-${product.sku}`,
-      name: `${product.name} (Copia)`
+      name: `${product.name} (Copia)`,
+      dimensions: typeof product.dimensions === 'string' 
+        ? JSON.parse(product.dimensions) 
+        : product.dimensions
     }
     
     const result = await createProduct(duplicatedData)
@@ -357,15 +360,23 @@ export default function ModernProductsPage() {
           categories={categories as any}
           suppliers={suppliers as any}
           onSave={async (data) => {
+            // Transform dimensions to ensure compatibility
+            const transformedData = {
+              ...data,
+              dimensions: data.dimensions && typeof data.dimensions === 'object' 
+                ? data.dimensions as any
+                : data.dimensions
+            }
+            
             if (editingProduct) {
-              const result = await updateProduct(editingProduct.id, data)
+              const result = await updateProduct(editingProduct.id, transformedData)
               if (result.success) {
                 toast.success('Producto actualizado')
               } else {
                 toast.error(result.error || 'Error al actualizar')
               }
             } else {
-              const result = await createProduct(data)
+              const result = await createProduct(transformedData)
               if (result.success) {
                 toast.success('Producto creado')
               } else {
