@@ -165,6 +165,7 @@ CREATE OR REPLACE FUNCTION public.update_product_stock(
     notes TEXT DEFAULT NULL
 )
 RETURNS BOOLEAN
+SET search_path = public
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -221,6 +222,7 @@ $$;
 -- Función para obtener estadísticas de productos
 CREATE OR REPLACE FUNCTION public.get_product_stats()
 RETURNS JSON
+SET search_path = public
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -256,52 +258,66 @@ ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
 -- NOTA: En producción, estas políticas deberían ser más restrictivas
 
 -- Categorías - lectura pública, escritura autenticada
-CREATE POLICY IF NOT EXISTS "categories_read_policy" ON public.categories
+DROP POLICY IF EXISTS "categories_read_policy" ON public.categories;
+CREATE POLICY "categories_read_policy" ON public.categories
     FOR SELECT USING (true);
 
-CREATE POLICY IF NOT EXISTS "categories_write_policy" ON public.categories
+DROP POLICY IF EXISTS "categories_write_policy" ON public.categories;
+CREATE POLICY "categories_write_policy" ON public.categories
     FOR ALL USING (auth.role() = 'authenticated');
 
 -- Proveedores - lectura pública, escritura autenticada
-CREATE POLICY IF NOT EXISTS "suppliers_read_policy" ON public.suppliers
+DROP POLICY IF EXISTS "suppliers_read_policy" ON public.suppliers;
+CREATE POLICY "suppliers_read_policy" ON public.suppliers
     FOR SELECT USING (true);
 
-CREATE POLICY IF NOT EXISTS "suppliers_write_policy" ON public.suppliers
+DROP POLICY IF EXISTS "suppliers_write_policy" ON public.suppliers;
+CREATE POLICY "suppliers_write_policy" ON public.suppliers
     FOR ALL USING (auth.role() = 'authenticated');
 
 -- Productos - lectura pública, escritura autenticada
-CREATE POLICY IF NOT EXISTS "products_read_policy" ON public.products
+DROP POLICY IF EXISTS "products_read_policy" ON public.products;
+CREATE POLICY "products_read_policy" ON public.products
     FOR SELECT USING (true);
 
-CREATE POLICY IF NOT EXISTS "products_write_policy" ON public.products
+DROP POLICY IF EXISTS "products_write_policy" ON public.products;
+CREATE POLICY "products_write_policy" ON public.products
     FOR ALL USING (auth.role() = 'authenticated');
 
 -- Clientes - lectura y escritura autenticada
-CREATE POLICY IF NOT EXISTS "customers_read_policy" ON public.customers
+DROP POLICY IF EXISTS "customers_read_policy" ON public.customers;
+CREATE POLICY "customers_read_policy" ON public.customers
     FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY IF NOT EXISTS "customers_write_policy" ON public.customers
+DROP POLICY IF EXISTS "customers_write_policy" ON public.customers;
+CREATE POLICY "customers_write_policy" ON public.customers
     FOR ALL USING (auth.role() = 'authenticated');
 
 -- Ventas - lectura y escritura autenticada
-CREATE POLICY IF NOT EXISTS "sales_read_policy" ON public.sales
+DROP POLICY IF EXISTS "sales_read_policy" ON public.sales;
+CREATE POLICY "sales_read_policy" ON public.sales
     FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY IF NOT EXISTS "sales_write_policy" ON public.sales
+DROP POLICY IF EXISTS "sales_write_policy" ON public.sales;
+CREATE POLICY "sales_write_policy" ON public.sales
     FOR ALL USING (auth.role() = 'authenticated');
 
 -- Items de venta - lectura y escritura autenticada
-CREATE POLICY IF NOT EXISTS "sale_items_read_policy" ON public.sale_items
+DROP POLICY IF EXISTS "sale_items_read_policy" ON public.sale_items;
+CREATE POLICY "sale_items_read_policy" ON public.sale_items
     FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY IF NOT EXISTS "sale_items_write_policy" ON public.sale_items
+DROP POLICY IF EXISTS "sale_items_write_policy" ON public.sale_items;
+CREATE POLICY "sale_items_write_policy" ON public.sale_items
     FOR ALL USING (auth.role() = 'authenticated');
 
 -- Movimientos de stock - lectura y escritura autenticada
-CREATE POLICY IF NOT EXISTS "stock_movements_read_policy" ON public.stock_movements
+DROP POLICY IF EXISTS "stock_movements_read_policy" ON public.stock_movements;
+CREATE POLICY "stock_movements_read_policy" ON public.stock_movements
     FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY IF NOT EXISTS "stock_movements_write_policy" ON public.stock_movements
+DROP POLICY IF EXISTS "stock_movements_write_policy" ON public.stock_movements;
+CREATE POLICY "stock_movements_write_policy" ON public.stock_movements
     FOR ALL USING (auth.role() = 'authenticated');
 
 -- 5. TRIGGERS PARA ACTUALIZACIÓN AUTOMÁTICA

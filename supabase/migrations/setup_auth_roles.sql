@@ -42,7 +42,9 @@ ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 
 -- Función get_user_role
 CREATE OR REPLACE FUNCTION public.get_user_role(user_uuid UUID DEFAULT auth.uid())
-RETURNS TEXT AS $$
+RETURNS TEXT 
+SET search_path = public
+AS $$
 BEGIN
   RETURN (
     SELECT role 
@@ -57,7 +59,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Función has_permission
 CREATE OR REPLACE FUNCTION public.has_permission(permission_name TEXT, user_uuid UUID DEFAULT auth.uid())
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN 
+SET search_path = public
+AS $$
 DECLARE
   user_role TEXT;
   role_permissions TEXT[];

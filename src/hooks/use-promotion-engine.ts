@@ -19,6 +19,7 @@ const DEFAULT_CONFIG: PromotionEngineConfig = {
   tax_rate: 0.10 // 10% IVA
 }
 
+// Hook para el motor de promociones
 export function usePromotionEngine(config: Partial<PromotionEngineConfig> = {}) {
   const [appliedPromotions, setAppliedPromotions] = useState<PromotionResult[]>([])
   const [availablePromotions, setAvailablePromotions] = useState<Promotion[]>([])

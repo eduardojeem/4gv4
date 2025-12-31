@@ -47,7 +47,9 @@ CHECK (role IN (
 -- ----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.handle_new_user_role() 
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 DECLARE
     default_role TEXT := 'client_normal';
 BEGIN

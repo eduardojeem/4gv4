@@ -88,7 +88,9 @@ CREATE INDEX IF NOT EXISTS idx_customers_tags ON public.customers USING gin(tags
 
 -- 4. Create function to auto-update updated_at timestamp
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
@@ -104,10 +106,12 @@ CREATE TRIGGER update_customers_updated_at
 
 -- 6. Create function to auto-generate customer_code
 CREATE OR REPLACE FUNCTION public.generate_customer_code()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
     IF NEW.customer_code IS NULL THEN
-        NEW.customer_code := 'CLI-' || LPAD(NEXTVAL('customer_code_seq')::TEXT, 6, '0');
+        NEW.customer_code := 'CLI-' || LPAD(NEXTVAL('public.customer_code_seq')::TEXT, 6, '0');
     END IF;
     RETURN NEW;
 END;
@@ -179,7 +183,20 @@ FROM public.customers;
 GRANT SELECT ON public.customer_stats TO authenticated;
 
 -- 14. Enable Realtime for customers table
-ALTER PUBLICATION supabase_realtime ADD TABLE public.customers;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_rel pr
+    JOIN pg_class c ON pr.prrelid = c.oid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relname = 'customers'
+      AND pr.prpubid = (SELECT oid FROM pg_publication WHERE pubname = 'supabase_realtime')
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.customers;
+  END IF;
+END $$;
 
 -- 15. Create function to search customers (for autocomplete)
 CREATE OR REPLACE FUNCTION public.search_customers(search_term TEXT)
@@ -190,7 +207,9 @@ RETURNS TABLE (
     email TEXT,
     phone TEXT,
     similarity REAL
-) AS $$
+) 
+SET search_path = public
+AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -226,9 +245,9 @@ COMMENT ON COLUMN public.customers.tags IS 'Array of tags for flexible categoriz
 -- Success message
 DO $$
 BEGIN
-    RAISE NOTICE '✅ Customers table setup completed successfully!';
-    RAISE NOTICE '📊 Indexes created for optimal performance';
-    RAISE NOTICE '🔒 RLS policies enabled';
-    RAISE NOTICE '🔄 Realtime enabled';
-    RAISE NOTICE '🔍 Search function created';
+    RAISE NOTICE '✅ Configuración de tabla de clientes completada exitosamente!';
+    RAISE NOTICE '📊 Índices creados para rendimiento óptimo';
+    RAISE NOTICE '🔒 Políticas RLS habilitadas';
+    RAISE NOTICE '🔄 Tiempo real habilitado';
+    RAISE NOTICE '🔍 Función de búsqueda creada';
 END $$;

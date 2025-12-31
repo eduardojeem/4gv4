@@ -203,7 +203,9 @@ RETURNS TABLE (
     total_value DECIMAL,
     avg_price DECIMAL,
     low_stock_count BIGINT
-) AS $$
+) 
+SET search_path = public
+AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -215,8 +217,8 @@ BEGIN
         COALESCE(SUM(p.stock_quantity * p.purchase_price), 0) as total_value,
         COALESCE(ROUND(AVG(p.sale_price)::numeric, 2), 0) as avg_price,
         COUNT(p.id) FILTER (WHERE p.stock_quantity <= p.min_stock) as low_stock_count
-    FROM categories c
-    LEFT JOIN products p ON c.id = p.category_id AND p.is_active = true
+    FROM public.categories c
+    LEFT JOIN public.products p ON c.id = p.category_id AND p.is_active = true
     WHERE c.is_active = true
     GROUP BY c.id, c.name
     ORDER BY product_count DESC;
@@ -348,7 +350,9 @@ CREATE OR REPLACE FUNCTION update_product_stock(
     notes_param TEXT DEFAULT NULL,
     unit_cost_param DECIMAL DEFAULT NULL
 )
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN 
+SET search_path = public
+AS $$
 DECLARE
     current_stock INTEGER;
     product_exists BOOLEAN;

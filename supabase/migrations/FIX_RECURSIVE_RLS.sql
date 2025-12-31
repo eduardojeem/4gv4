@@ -7,7 +7,9 @@ DROP POLICY IF EXISTS "Admins can manage all profiles" ON public.profiles;
 -- 2. Create a SECURITY DEFINER function to safely check admin status
 -- This bypasses RLS on the queried tables, preventing recursion
 CREATE OR REPLACE FUNCTION public.is_admin_safe()
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN 
+SET search_path = public
+AS $$
 BEGIN
   -- Check user_roles table first (preferred source of truth)
   IF EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin') THEN
@@ -63,5 +65,5 @@ ON CONFLICT (user_id) DO UPDATE SET role = 'admin';
 
 DO $$
 BEGIN
-    RAISE NOTICE '✅ Recursive policies fixed. Admin check is now safe.';
+    RAISE NOTICE '✅ Políticas recursivas arregladas. La verificación de administrador es ahora segura.';
 END $$;

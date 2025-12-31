@@ -121,17 +121,21 @@ END;
 $$ language 'plpgsql';
 
 -- Triggers para updated_at
+DROP TRIGGER IF EXISTS update_customer_segments_updated_at ON customer_segments;
 CREATE TRIGGER update_customer_segments_updated_at 
     BEFORE UPDATE ON customer_segments 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_automation_rules_updated_at ON automation_rules;
 CREATE TRIGGER update_automation_rules_updated_at 
     BEFORE UPDATE ON automation_rules 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Función para registrar cambios en historial
 CREATE OR REPLACE FUNCTION log_segment_changes()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
         INSERT INTO segment_history (segment_id, action, changes, performed_by)
@@ -151,6 +155,7 @@ END;
 $$ language 'plpgsql';
 
 -- Trigger para historial de cambios
+DROP TRIGGER IF EXISTS log_customer_segments_changes ON customer_segments;
 CREATE TRIGGER log_customer_segments_changes
     AFTER INSERT OR UPDATE OR DELETE ON customer_segments
     FOR EACH ROW EXECUTE FUNCTION log_segment_changes();
@@ -163,24 +168,49 @@ ALTER TABLE ai_insights ENABLE ROW LEVEL SECURITY;
 ALTER TABLE automation_rules ENABLE ROW LEVEL SECURITY;
 
 -- Políticas RLS básicas (ajustar según necesidades de seguridad)
+DROP POLICY IF EXISTS "Users can view all segments" ON customer_segments;
 CREATE POLICY "Users can view all segments" ON customer_segments FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can create segments" ON customer_segments;
 CREATE POLICY "Users can create segments" ON customer_segments FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can update segments" ON customer_segments;
 CREATE POLICY "Users can update segments" ON customer_segments FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Users can delete segments" ON customer_segments;
 CREATE POLICY "Users can delete segments" ON customer_segments FOR DELETE USING (true);
 
+DROP POLICY IF EXISTS "Users can view all analytics" ON segment_analytics;
 CREATE POLICY "Users can view all analytics" ON segment_analytics FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can create analytics" ON segment_analytics;
 CREATE POLICY "Users can create analytics" ON segment_analytics FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can update analytics" ON segment_analytics;
 CREATE POLICY "Users can update analytics" ON segment_analytics FOR UPDATE USING (true);
 
+DROP POLICY IF EXISTS "Users can view all history" ON segment_history;
 CREATE POLICY "Users can view all history" ON segment_history FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Users can view all insights" ON ai_insights;
 CREATE POLICY "Users can view all insights" ON ai_insights FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can create insights" ON ai_insights;
 CREATE POLICY "Users can create insights" ON ai_insights FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can update insights" ON ai_insights;
 CREATE POLICY "Users can update insights" ON ai_insights FOR UPDATE USING (true);
 
+DROP POLICY IF EXISTS "Users can view all automation rules" ON automation_rules;
 CREATE POLICY "Users can view all automation rules" ON automation_rules FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users can create automation rules" ON automation_rules;
 CREATE POLICY "Users can create automation rules" ON automation_rules FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can update automation rules" ON automation_rules;
 CREATE POLICY "Users can update automation rules" ON automation_rules FOR UPDATE USING (true);
+
+DROP POLICY IF EXISTS "Users can delete automation rules" ON automation_rules;
 CREATE POLICY "Users can delete automation rules" ON automation_rules FOR DELETE USING (true);
 
 -- Insertar algunos segmentos de ejemplo
@@ -229,7 +259,8 @@ INSERT INTO customer_segments (name, description, criteria, color, icon, priorit
     'briefcase',
     3,
     ARRAY['empresarial', 'b2b', 'volumen']
-);
+)
+ON CONFLICT DO NOTHING;
 
 -- Insertar algunos insights de ejemplo
 INSERT INTO ai_insights (type, title, description, impact, confidence, suggested_action, affected_customers, potential_revenue) VALUES
@@ -262,7 +293,8 @@ INSERT INTO ai_insights (type, title, description, impact, confidence, suggested
     'Expandir capacidades de atención al cliente por WhatsApp Business',
     234,
     NULL
-);
+)
+ON CONFLICT DO NOTHING;
 
 -- Comentarios para documentación
 COMMENT ON TABLE customer_segments IS 'Almacena definiciones de segmentos de clientes con criterios y configuración';

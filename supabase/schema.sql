@@ -2,14 +2,38 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Create custom types
-CREATE TYPE user_role AS ENUM ('admin', 'vendedor', 'tecnico', 'cliente');
-CREATE TYPE customer_type AS ENUM ('nuevo', 'regular', 'frecuente', 'vip');
-CREATE TYPE payment_method AS ENUM ('efectivo', 'tarjeta', 'transferencia');
-CREATE TYPE sale_status AS ENUM ('pendiente', 'completada', 'cancelada');
-CREATE TYPE repair_status AS ENUM ('recibido', 'diagnostico', 'reparacion', 'listo', 'entregado');
+DO $$ BEGIN
+    CREATE TYPE user_role AS ENUM ('admin', 'vendedor', 'tecnico', 'cliente');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE customer_type AS ENUM ('nuevo', 'regular', 'frecuente', 'vip');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE payment_method AS ENUM ('efectivo', 'tarjeta', 'transferencia');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE sale_status AS ENUM ('pendiente', 'completada', 'cancelada');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE repair_status AS ENUM ('recibido', 'diagnostico', 'reparacion', 'listo', 'entregado');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Profiles table (extends auth.users)
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
     id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     full_name TEXT,
@@ -21,7 +45,7 @@ CREATE TABLE profiles (
 );
 
 -- Customers table
-CREATE TABLE customers (
+CREATE TABLE IF NOT EXISTS customers (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
@@ -37,7 +61,7 @@ CREATE TABLE customers (
 );
 
 -- Suppliers table
-CREATE TABLE suppliers (
+CREATE TABLE IF NOT EXISTS suppliers (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     name TEXT NOT NULL,
     contact_name TEXT,
@@ -50,7 +74,7 @@ CREATE TABLE suppliers (
 );
 
 -- Categories table
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     description TEXT,
@@ -58,7 +82,7 @@ CREATE TABLE categories (
 );
 
 -- Products table
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     name TEXT NOT NULL,
     sku TEXT NOT NULL UNIQUE,
@@ -75,7 +99,7 @@ CREATE TABLE products (
 );
 
 -- Sales table
-CREATE TABLE sales (
+CREATE TABLE IF NOT EXISTS sales (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
@@ -89,7 +113,7 @@ CREATE TABLE sales (
 );
 
 -- Sale items table
-CREATE TABLE sale_items (
+CREATE TABLE IF NOT EXISTS sale_items (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     sale_id UUID REFERENCES sales(id) ON DELETE CASCADE,
     product_id UUID REFERENCES products(id) ON DELETE CASCADE,
@@ -100,7 +124,7 @@ CREATE TABLE sale_items (
 );
 
 -- Repairs table
-CREATE TABLE repairs (
+CREATE TABLE IF NOT EXISTS repairs (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
     technician_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
@@ -122,7 +146,7 @@ CREATE TABLE repairs (
 );
 
 -- Repair photos table
-CREATE TABLE repair_photos (
+CREATE TABLE IF NOT EXISTS repair_photos (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     repair_id UUID REFERENCES repairs(id) ON DELETE CASCADE,
     photo_url TEXT NOT NULL,
@@ -131,19 +155,19 @@ CREATE TABLE repair_photos (
 );
 
 -- Create indexes for better performance
-CREATE INDEX idx_profiles_role ON profiles(role);
-CREATE INDEX idx_customers_phone ON customers(phone);
-CREATE INDEX idx_customers_email ON customers(email);
-CREATE INDEX idx_products_sku ON products(sku);
-CREATE INDEX idx_products_category ON products(category_id);
-CREATE INDEX idx_products_stock ON products(stock);
-CREATE INDEX idx_sales_date ON sales(created_at);
-CREATE INDEX idx_sales_customer ON sales(customer_id);
-CREATE INDEX idx_sales_user ON sales(user_id);
-CREATE INDEX idx_repairs_status ON repairs(status);
-CREATE INDEX idx_repairs_customer ON repairs(customer_id);
-CREATE INDEX idx_repairs_technician ON repairs(technician_id);
-CREATE INDEX idx_repairs_date ON repairs(created_at);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
+CREATE INDEX IF NOT EXISTS idx_products_stock ON products(stock);
+CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(created_at);
+CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id);
+CREATE INDEX IF NOT EXISTS idx_sales_user ON sales(user_id);
+CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
+CREATE INDEX IF NOT EXISTS idx_repairs_customer ON repairs(customer_id);
+CREATE INDEX IF NOT EXISTS idx_repairs_technician ON repairs(technician_id);
+CREATE INDEX IF NOT EXISTS idx_repairs_date ON repairs(created_at);
 
 -- Create updated_at triggers
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -154,21 +178,27 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
 CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON profiles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_customers_updated_at ON customers;
 CREATE TRIGGER update_customers_updated_at BEFORE UPDATE ON customers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_suppliers_updated_at ON suppliers;
 CREATE TRIGGER update_suppliers_updated_at BEFORE UPDATE ON suppliers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_products_updated_at ON products;
 CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_sales_updated_at ON sales;
 CREATE TRIGGER update_sales_updated_at BEFORE UPDATE ON sales
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_repairs_updated_at ON repairs;
 CREATE TRIGGER update_repairs_updated_at BEFORE UPDATE ON repairs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -184,13 +214,16 @@ ALTER TABLE repairs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE repair_photos ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
-CREATE POLICY "Users can view own profile" ON profiles
+DROP POLICY IF EXISTS "Usuarios pueden ver su propio perfil" ON profiles;
+CREATE POLICY "Usuarios pueden ver su propio perfil" ON profiles
     FOR SELECT USING (auth.uid() = id);
 
-CREATE POLICY "Users can update own profile" ON profiles
+DROP POLICY IF EXISTS "Usuarios pueden actualizar su propio perfil" ON profiles;
+CREATE POLICY "Usuarios pueden actualizar su propio perfil" ON profiles
     FOR UPDATE USING (auth.uid() = id);
 
-CREATE POLICY "Admins can view all profiles" ON profiles
+DROP POLICY IF EXISTS "Administradores pueden ver todos los perfiles" ON profiles;
+CREATE POLICY "Administradores pueden ver todos los perfiles" ON profiles
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM profiles 
@@ -199,10 +232,12 @@ CREATE POLICY "Admins can view all profiles" ON profiles
     );
 
 -- Customers policies
-CREATE POLICY "Authenticated users can view customers" ON customers
+DROP POLICY IF EXISTS "Usuarios autenticados pueden ver clientes" ON customers;
+CREATE POLICY "Usuarios autenticados pueden ver clientes" ON customers
     FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Admins and vendedores can manage customers" ON customers
+DROP POLICY IF EXISTS "Administradores y vendedores pueden gestionar clientes" ON customers;
+CREATE POLICY "Administradores y vendedores pueden gestionar clientes" ON customers
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM profiles 
@@ -211,10 +246,12 @@ CREATE POLICY "Admins and vendedores can manage customers" ON customers
     );
 
 -- Products policies
-CREATE POLICY "Authenticated users can view products" ON products
+DROP POLICY IF EXISTS "Usuarios autenticados pueden ver productos" ON products;
+CREATE POLICY "Usuarios autenticados pueden ver productos" ON products
     FOR SELECT USING (auth.role() = 'authenticated');
 
-CREATE POLICY "Admins can manage products" ON products
+DROP POLICY IF EXISTS "Administradores pueden gestionar productos" ON products;
+CREATE POLICY "Administradores pueden gestionar productos" ON products
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM profiles 
@@ -223,7 +260,8 @@ CREATE POLICY "Admins can manage products" ON products
     );
 
 -- Sales policies
-CREATE POLICY "Users can view own sales" ON sales
+DROP POLICY IF EXISTS "Usuarios pueden ver sus propias ventas" ON sales;
+CREATE POLICY "Usuarios pueden ver sus propias ventas" ON sales
     FOR SELECT USING (
         user_id = auth.uid() OR
         EXISTS (
@@ -232,7 +270,8 @@ CREATE POLICY "Users can view own sales" ON sales
         )
     );
 
-CREATE POLICY "Vendedores and admins can create sales" ON sales
+DROP POLICY IF EXISTS "Vendedores y administradores pueden crear ventas" ON sales;
+CREATE POLICY "Vendedores y administradores pueden crear ventas" ON sales
     FOR INSERT WITH CHECK (
         EXISTS (
             SELECT 1 FROM profiles 
@@ -241,7 +280,8 @@ CREATE POLICY "Vendedores and admins can create sales" ON sales
     );
 
 -- Repairs policies
-CREATE POLICY "Technicians can view assigned repairs" ON repairs
+DROP POLICY IF EXISTS "Técnicos pueden ver reparaciones asignadas" ON repairs;
+CREATE POLICY "Técnicos pueden ver reparaciones asignadas" ON repairs
     FOR SELECT USING (
         technician_id = auth.uid() OR
         EXISTS (
@@ -250,7 +290,8 @@ CREATE POLICY "Technicians can view assigned repairs" ON repairs
         )
     );
 
-CREATE POLICY "Admins and vendedores can manage repairs" ON repairs
+DROP POLICY IF EXISTS "Administradores y vendedores pueden gestionar reparaciones" ON repairs;
+CREATE POLICY "Administradores y vendedores pueden gestionar reparaciones" ON repairs
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM profiles 
@@ -271,13 +312,16 @@ CREATE TABLE IF NOT EXISTS kanban_orders (
 ALTER TABLE kanban_orders ENABLE ROW LEVEL SECURITY;
 
 -- Policies: users can only access their own kanban orders
-CREATE POLICY "Users can view own kanban orders" ON kanban_orders
+DROP POLICY IF EXISTS "Usuarios pueden ver sus propios ordenes kanban" ON kanban_orders;
+CREATE POLICY "Usuarios pueden ver sus propios ordenes kanban" ON kanban_orders
     FOR SELECT USING (user_id = auth.uid());
 
-CREATE POLICY "Users can insert own kanban orders" ON kanban_orders
+DROP POLICY IF EXISTS "Usuarios pueden insertar sus propios ordenes kanban" ON kanban_orders;
+CREATE POLICY "Usuarios pueden insertar sus propios ordenes kanban" ON kanban_orders
     FOR INSERT WITH CHECK (user_id = auth.uid());
 
-CREATE POLICY "Users can update own kanban orders" ON kanban_orders
+DROP POLICY IF EXISTS "Usuarios pueden actualizar sus propios ordenes kanban" ON kanban_orders;
+CREATE POLICY "Usuarios pueden actualizar sus propios ordenes kanban" ON kanban_orders
     FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 
 -- Insert default categories
@@ -285,11 +329,14 @@ INSERT INTO categories (name, description) VALUES
     ('Celulares', 'Dispositivos móviles'),
     ('Repuestos', 'Partes y componentes para reparación'),
     ('Accesorios', 'Fundas, cargadores, auriculares, etc.'),
-    ('Insumos', 'Herramientas y materiales de reparación');
+    ('Insumos', 'Herramientas y materiales de reparación')
+ON CONFLICT (name) DO NOTHING;
 
 -- Function to handle new user registration
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
     INSERT INTO public.profiles (id, email, full_name)
     VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
@@ -298,13 +345,18 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Trigger for new user registration
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Cash register management
 -- Types for cash movements
-CREATE TYPE IF NOT EXISTS cash_movement_type AS ENUM ('opening', 'sale', 'in', 'out', 'closing');
+DO $$ BEGIN
+    CREATE TYPE cash_movement_type AS ENUM ('apertura', 'venta', 'ingreso', 'egreso', 'cierre');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- Cash registers table
 CREATE TABLE IF NOT EXISTS cash_registers (
@@ -335,6 +387,7 @@ CREATE INDEX IF NOT EXISTS idx_cash_movements_register ON cash_movements(registe
 CREATE INDEX IF NOT EXISTS idx_cash_movements_timestamp ON cash_movements(timestamp);
 
 -- updated_at trigger for cash_registers
+DROP TRIGGER IF EXISTS update_cash_registers_updated_at ON cash_registers;
 CREATE TRIGGER update_cash_registers_updated_at BEFORE UPDATE ON cash_registers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -343,31 +396,47 @@ ALTER TABLE cash_registers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cash_movements ENABLE ROW LEVEL SECURITY;
 
 -- Policies for cash_registers
-CREATE POLICY IF NOT EXISTS "Authenticated users can view cash registers" ON cash_registers
-    FOR SELECT USING (auth.role() = 'authenticated');
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Usuarios autenticados pueden ver cajas registradoras" ON cash_registers;
+  CREATE POLICY "Usuarios autenticados pueden ver cajas registradoras" ON cash_registers
+      FOR SELECT USING (auth.role() = 'authenticated');
+END $$;
 
-CREATE POLICY IF NOT EXISTS "Admins and vendedores can manage cash registers" ON cash_registers
-    FOR ALL USING (
-        EXISTS (
-            SELECT 1 FROM profiles 
-            WHERE id = auth.uid() AND role IN ('admin', 'vendedor')
-        )
-    );
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Administradores y vendedores pueden gestionar cajas registradoras" ON cash_registers;
+  CREATE POLICY "Administradores y vendedores pueden gestionar cajas registradoras" ON cash_registers
+      FOR ALL USING (
+          EXISTS (
+              SELECT 1 FROM profiles 
+              WHERE id = auth.uid() AND role IN ('admin', 'vendedor')
+          )
+      );
+END $$;
 
 -- Policies for cash_movements
-CREATE POLICY IF NOT EXISTS "Authenticated users can view cash movements" ON cash_movements
-    FOR SELECT USING (auth.role() = 'authenticated');
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Usuarios autenticados pueden ver movimientos de caja" ON cash_movements;
+  CREATE POLICY "Usuarios autenticados pueden ver movimientos de caja" ON cash_movements
+      FOR SELECT USING (auth.role() = 'authenticated');
+END $$;
 
-CREATE POLICY IF NOT EXISTS "Admins and vendedores can insert cash movements" ON cash_movements
-    FOR INSERT WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM profiles 
-            WHERE id = auth.uid() AND role IN ('admin', 'vendedor')
-        )
-    );
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Administradores y vendedores pueden insertar movimientos de caja" ON cash_movements;
+  CREATE POLICY "Administradores y vendedores pueden insertar movimientos de caja" ON cash_movements
+      FOR INSERT WITH CHECK (
+          EXISTS (
+              SELECT 1 FROM profiles 
+              WHERE id = auth.uid() AND role IN ('admin', 'vendedor')
+          )
+      );
+END $$;
 
 -- Cash closures (reportes y cierres)
-CREATE TYPE IF NOT EXISTS cash_closure_type AS ENUM ('Z', 'X');
+DO $$ BEGIN
+    CREATE TYPE cash_closure_type AS ENUM ('Z', 'X');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 CREATE TABLE IF NOT EXISTS cash_closures (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -393,22 +462,36 @@ CREATE INDEX IF NOT EXISTS idx_cash_closures_register ON cash_closures(register_
 CREATE INDEX IF NOT EXISTS idx_cash_closures_closed_at ON cash_closures(closed_at);
 
 -- updated_at trigger for cash_closures
+DROP TRIGGER IF EXISTS update_cash_closures_updated_at ON cash_closures;
 CREATE TRIGGER update_cash_closures_updated_at BEFORE UPDATE ON cash_closures
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 ALTER TABLE cash_closures ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Authenticated users can view cash closures" ON cash_closures
-    FOR SELECT USING (auth.role() = 'authenticated');
+-- Policies for cash_closures
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Usuarios autenticados pueden ver cierres de caja" ON cash_closures;
+  CREATE POLICY "Usuarios autenticados pueden ver cierres de caja" ON cash_closures
+      FOR SELECT USING (auth.role() = 'authenticated');
+END $$;
 
-CREATE POLICY IF NOT EXISTS "Admins and vendedores can insert cash closures" ON cash_closures
-    FOR INSERT WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM profiles 
-            WHERE id = auth.uid() AND role IN ('admin', 'vendedor')
-        )
-    );
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "Administradores y vendedores pueden insertar cierres de caja" ON cash_closures;
+  CREATE POLICY "Administradores y vendedores pueden insertar cierres de caja" ON cash_closures
+      FOR INSERT WITH CHECK (
+          EXISTS (
+              SELECT 1 FROM profiles 
+              WHERE id = auth.uid() AND role IN ('admin', 'vendedor')
+          )
+      );
+END $$;
 -- Optional extended product columns for brand/model/location and flags
+-- Ensure core columns exist (for migration from older schemas)
+ALTER TABLE products ADD COLUMN IF NOT EXISTS stock INTEGER DEFAULT 0;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS min_stock INTEGER DEFAULT 0;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_price DECIMAL(10,2) NOT NULL DEFAULT 0;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_price DECIMAL(10,2) NOT NULL DEFAULT 0;
+
 ALTER TABLE products ADD COLUMN IF NOT EXISTS brand text;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS model text;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS location text;

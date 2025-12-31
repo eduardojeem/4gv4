@@ -9,6 +9,7 @@ RETURNS TABLE (
   total_size_mb numeric,
   total_size_gb numeric
 ) 
+SET search_path = public
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -32,6 +33,7 @@ RETURNS TABLE (
   pretty_size text,
   row_count bigint
 ) 
+SET search_path = public
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -40,9 +42,9 @@ BEGIN
   SELECT 
     schemaname::text,
     tablename::text,
-    pg_total_relation_size(schemaname||'.'||tablename) as size_bytes,
-    ROUND(pg_total_relation_size(schemaname||'.'||tablename) / 1024.0 / 1024.0, 2) as size_mb,
-    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as pretty_size,
+    pg_total_relation_size(format('%I.%I', schemaname, tablename)) as size_bytes,
+    ROUND(pg_total_relation_size(format('%I.%I', schemaname, tablename)) / 1024.0 / 1024.0, 2) as size_mb,
+    pg_size_pretty(pg_total_relation_size(format('%I.%I', schemaname, tablename))) as pretty_size,
     COALESCE(
       (SELECT n_tup_ins - n_tup_del 
        FROM pg_stat_user_tables 
@@ -51,18 +53,19 @@ BEGIN
     ) as row_count
   FROM pg_tables t
   WHERE schemaname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
-  ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+  ORDER BY pg_total_relation_size(format('%I.%I', schemaname, tablename)) DESC;
 END;
 $$;
 
 -- Function to get storage usage by category
-CREATE OR REPLACE FUNCTION get_storage_usage()
+CREATE OR REPLACE FUNCTION public.get_storage_usage()
 RETURNS TABLE (
   category text,
   size_bytes bigint,
   size_mb numeric,
   percentage numeric
 ) 
+SET search_path = public
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
@@ -75,16 +78,16 @@ BEGIN
   RETURN QUERY
   WITH storage_data AS (
     SELECT 
-      'Tables' as category,
-      SUM(pg_total_relation_size(schemaname||'.'||tablename)) as size_bytes
+      'Tablas' as category,
+      SUM(pg_total_relation_size(format('%I.%I', schemaname, tablename))) as size_bytes
     FROM pg_tables 
     WHERE schemaname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
     
     UNION ALL
     
     SELECT 
-      'Indexes' as category,
-      SUM(pg_indexes_size(schemaname||'.'||tablename)) as size_bytes
+      'Índices' as category,
+      SUM(pg_indexes_size(format('%I.%I', schemaname, tablename))) as size_bytes
     FROM pg_tables 
     WHERE schemaname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
   )
@@ -92,7 +95,7 @@ BEGIN
     sd.category,
     sd.size_bytes,
     ROUND(sd.size_bytes / 1024.0 / 1024.0, 2) as size_mb,
-    ROUND((sd.size_bytes::numeric / total_db_size::numeric) * 100, 2) as percentage
+    ROUND((sd.size_bytes::numeric / NULLIF(total_db_size, 0)::numeric) * 100, 2) as percentage
   FROM storage_data sd
   ORDER BY sd.size_bytes DESC;
 END;
