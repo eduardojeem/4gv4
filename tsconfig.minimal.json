@@ -2,29 +2,22 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
-    "lib": [
-      "ES2020",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "jsx": "preserve",
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "noEmit": true,
     "strict": false,
     "skipLibCheck": true,
-    "noCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "src/*"
-      ]
+      "@/*": ["src/*"]
     },
     "allowJs": true,
     "incremental": false,
     "esModuleInterop": true,
     "isolatedModules": true,
-    "forceConsistentCasingInFileNames": false,
+    "forceConsistentCasingInFileNames": true,
     "plugins": [
       {
         "name": "next"
@@ -47,8 +40,6 @@
     "**/*.spec.tsx",
     "**/*.stories.ts",
     "**/*.stories.tsx",
-    "scripts",
-    "src/app/dashboard/pos/page.original.tsx",
-    "src/app/dashboard/reports/page.original.tsx"
+    "scripts"
   ]
 }

@@ -4,7 +4,7 @@
 // Core Components
 export { ProductCard } from '../product-card'
 export { ProductTable } from '../product-table'
-export { default as EnhancedProductList } from '../enhanced-product-list'
+export { default as EnhancedProductList } from '../enhanced-product-list-fixed'
 export { default as SimpleProductList } from '../simple-product-list'
 
 // Forms and Modals
@@ -29,7 +29,7 @@ export { ProductAlerts } from '../product-alerts'
 export { LowStockAlert } from '../low-stock-alert'
 
 // Shared Components
-export { ProductCardSkeletonGrid, ProductCardSkeleton } from '../product-card-skeleton'
+// ProductCardSkeleton removed as file is missing
 
 // Re-export types for convenience
 export type { Product, ProductAlert, Category, Supplier } from '../../../types/products'

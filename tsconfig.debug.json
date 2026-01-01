@@ -11,9 +11,8 @@
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "noEmit": true,
-    "strict": false,
+    "strict": true,
     "skipLibCheck": true,
-    "noCheck": true,
     "baseUrl": ".",
     "paths": {
       "@/*": [
@@ -21,10 +20,10 @@
       ]
     },
     "allowJs": true,
-    "incremental": false,
+    "incremental": true,
     "esModuleInterop": true,
     "isolatedModules": true,
-    "forceConsistentCasingInFileNames": false,
+    "forceConsistentCasingInFileNames": true,
     "plugins": [
       {
         "name": "next"
@@ -49,6 +48,14 @@
     "**/*.stories.tsx",
     "scripts",
     "src/app/dashboard/pos/page.original.tsx",
-    "src/app/dashboard/reports/page.original.tsx"
+    "src/app/dashboard/reports/page.original.tsx",
+    "src/components/dashboard/customers/NotificationCenter.tsx",
+    "src/components/admin/inventory/inventory-management.tsx",
+    "src/components/dashboard/product-configuration.tsx",
+    "src/components/dashboard/customers/CustomerHistory.tsx",
+    "src/components/dashboard/customers/CustomerDataDialog.tsx",
+    "src/components/dashboard/product-details-dialog-v2.tsx",
+    "src/components/admin/supplier-management.tsx",
+    "src/components/dashboard/customer-form.tsx"
   ]
 }

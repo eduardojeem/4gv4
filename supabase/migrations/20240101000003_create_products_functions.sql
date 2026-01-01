@@ -134,7 +134,9 @@ RETURNS TABLE (
     total_sold INTEGER,
     total_revenue DECIMAL,
     current_stock INTEGER
-) AS $$
+) 
+SET search_path = public
+AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -169,7 +171,9 @@ RETURNS TABLE (
     total_cost DECIMAL,
     created_at TIMESTAMP WITH TIME ZONE,
     notes TEXT
-) AS $$
+) 
+SET search_path = public
+AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -235,7 +239,9 @@ RETURNS TABLE (
     total_stock BIGINT,
     total_value DECIMAL,
     avg_payment_terms INTEGER
-) AS $$
+) 
+SET search_path = public
+AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -284,7 +290,9 @@ RETURNS TABLE (
     total_value DECIMAL,
     active_alerts INTEGER,
     created_at TIMESTAMP WITH TIME ZONE
-) AS $$
+) 
+SET search_path = public
+AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -420,7 +428,9 @@ RETURNS TABLE (
     exits INTEGER,
     net_movement INTEGER,
     turnover_rate DECIMAL
-) AS $$
+) 
+SET search_path = public
+AS $$
 BEGIN
     RETURN QUERY
     SELECT 

@@ -108,6 +108,7 @@ RETURNS TABLE (
   value text,
   description text
 ) 
+SET search_path = public
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$

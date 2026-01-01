@@ -33,7 +33,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 // import { Progress } from '@/components/ui/progress' // Comentado para evitar error de React
 import { Separator } from '@/components/ui/separator'
 import {
@@ -54,6 +54,8 @@ import {
 } from '@/components/ui/table'
 // import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
+import { resolveProductImageUrl } from '@/lib/images'
+import { formatCurrency } from '@/lib/currency'
 
 interface Product {
   id: string
@@ -69,6 +71,8 @@ interface Product {
   last_updated?: string
   status?: string
   image_url?: string
+  image?: string
+  images?: string[]
   description?: string
   barcode?: string
   weight?: number
@@ -119,8 +123,6 @@ const getMarginInfo = (product: Product) => {
     return { margin, marginPercentage, color: 'text-green-600', bgColor: 'bg-green-100', label: 'Margen alto' }
   }
 }
-
-import { formatCurrency } from '@/lib/currency'
 
 const formatDate = (dateString?: string) => {
   if (!dateString) return 'N/A'
@@ -402,6 +404,7 @@ export default function EnhancedProductList({
                   <TableCell>
                     <div className="flex items-center space-x-3">
                       <Avatar className="h-10 w-10">
+                        <AvatarImage src={resolveProductImageUrl(product.image || product.image_url || '')} alt={product.name} />
                         <AvatarFallback className="bg-muted">
                           <Package className="h-5 w-5" />
                         </AvatarFallback>
@@ -461,4 +464,3 @@ export default function EnhancedProductList({
     </div>
   )
 }
-import { GSIcon } from '@/components/ui/standardized-components'

@@ -19,9 +19,16 @@ export interface Product {
     stock: number
     min_stock: number
     image_url?: string
+    image?: string
     active: boolean
     created_at: string
     updated_at: string
+    // Original DB fields for compatibility
+    sale_price?: number
+    purchase_price?: number
+    stock_quantity?: number
+    is_active?: boolean
+    images?: string[]
 }
 
 export interface ProductFormData {
@@ -34,7 +41,9 @@ export interface ProductFormData {
     stock: number
     min_stock: number
     image_url?: string
+    image?: string
     active?: boolean
+    images?: string[]
 }
 
 export interface ProductsContextValue {
@@ -90,12 +99,35 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
 
             const { data, error: fetchError } = await supabase
                 .from('products')
-                .select('*')
+                .select('*, category:categories(name)')
                 .order('name', { ascending: true })
 
             if (fetchError) throw fetchError
 
-            setProducts(data || [])
+            const mappedProducts: Product[] = (data || []).map((item: any) => ({
+                id: item.id,
+                name: item.name,
+                description: item.description,
+                sku: item.sku,
+                category: item.category?.name || item.category_id || 'Uncategorized',
+                price: item.sale_price,
+                cost: item.purchase_price,
+                stock: item.stock_quantity,
+                min_stock: item.min_stock,
+                image_url: item.images?.[0] || null,
+                image: item.images?.[0] || null,
+                active: item.is_active,
+                created_at: item.created_at,
+                updated_at: item.updated_at,
+                // Keep originals
+                sale_price: item.sale_price,
+                purchase_price: item.purchase_price,
+                stock_quantity: item.stock_quantity,
+                is_active: item.is_active,
+                images: item.images
+            }))
+
+            setProducts(mappedProducts)
         } catch (err) {
             const error = err as Error
             setError(error)
@@ -110,28 +142,52 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
         try {
             setError(null)
 
+            const dbData = {
+                name: data.name,
+                description: data.description,
+                sku: data.sku,
+                category_id: data.category,
+                sale_price: data.price,
+                purchase_price: data.cost,
+                stock_quantity: data.stock,
+                min_stock: data.min_stock,
+                images: data.image ? [data.image] : (data.image_url ? [data.image_url] : []),
+                is_active: data.active ?? true
+            }
+
             const { data: newProduct, error: createError } = await supabase
                 .from('products')
-                .insert([{
-                    name: data.name,
-                    description: data.description,
-                    sku: data.sku,
-                    category: data.category,
-                    price: data.price,
-                    cost: data.cost,
-                    stock: data.stock,
-                    min_stock: data.min_stock,
-                    image_url: data.image_url,
-                    active: data.active ?? true
-                }])
-                .select()
+                .insert([dbData])
+                .select('*, category:categories(name)')
                 .single()
 
             if (createError) throw createError
 
-            setProducts(prev => [...prev, newProduct].sort((a, b) => a.name.localeCompare(b.name)))
+            const mappedProduct: Product = {
+                id: newProduct.id,
+                name: newProduct.name,
+                description: newProduct.description,
+                sku: newProduct.sku,
+                category: newProduct.category?.name || newProduct.category_id || 'Uncategorized',
+                price: newProduct.sale_price,
+                cost: newProduct.purchase_price,
+                stock: newProduct.stock_quantity,
+                min_stock: newProduct.min_stock,
+                image_url: newProduct.images?.[0] || null,
+                image: newProduct.images?.[0] || null,
+                active: newProduct.is_active,
+                created_at: newProduct.created_at,
+                updated_at: newProduct.updated_at,
+                sale_price: newProduct.sale_price,
+                purchase_price: newProduct.purchase_price,
+                stock_quantity: newProduct.stock_quantity,
+                is_active: newProduct.is_active,
+                images: newProduct.images
+            }
+
+            setProducts(prev => [...prev, mappedProduct].sort((a, b) => a.name.localeCompare(b.name)))
             toast.success('Producto creado exitosamente')
-            return newProduct
+            return mappedProduct
         } catch (err) {
             const error = err as Error
             setError(error)
@@ -148,20 +204,55 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
         try {
             setError(null)
 
+            const dbData: any = {}
+            if (data.name !== undefined) dbData.name = data.name
+            if (data.description !== undefined) dbData.description = data.description
+            if (data.sku !== undefined) dbData.sku = data.sku
+            if (data.category !== undefined) dbData.category_id = data.category
+            if (data.price !== undefined) dbData.sale_price = data.price
+            if (data.cost !== undefined) dbData.purchase_price = data.cost
+            if (data.stock !== undefined) dbData.stock_quantity = data.stock
+            if (data.min_stock !== undefined) dbData.min_stock = data.min_stock
+            if (data.image !== undefined) dbData.images = [data.image]
+            else if (data.image_url !== undefined) dbData.images = [data.image_url]
+            if (data.active !== undefined) dbData.is_active = data.active
+
             const { data: updatedProduct, error: updateError } = await supabase
                 .from('products')
-                .update(data)
+                .update(dbData)
                 .eq('id', id)
-                .select()
+                .select('*, category:categories(name)')
                 .single()
 
             if (updateError) throw updateError
 
+            const mappedProduct: Product = {
+                id: updatedProduct.id,
+                name: updatedProduct.name,
+                description: updatedProduct.description,
+                sku: updatedProduct.sku,
+                category: updatedProduct.category?.name || updatedProduct.category_id || 'Uncategorized',
+                price: updatedProduct.sale_price,
+                cost: updatedProduct.purchase_price,
+                stock: updatedProduct.stock_quantity,
+                min_stock: updatedProduct.min_stock,
+                image_url: updatedProduct.images?.[0] || null,
+                image: updatedProduct.images?.[0] || null,
+                active: updatedProduct.is_active,
+                created_at: updatedProduct.created_at,
+                updated_at: updatedProduct.updated_at,
+                sale_price: updatedProduct.sale_price,
+                purchase_price: updatedProduct.purchase_price,
+                stock_quantity: updatedProduct.stock_quantity,
+                is_active: updatedProduct.is_active,
+                images: updatedProduct.images
+            }
+
             setProducts(prev =>
-                prev.map(product => product.id === id ? updatedProduct : product)
+                prev.map(product => product.id === id ? mappedProduct : product)
             )
             toast.success('Producto actualizado exitosamente')
-            return updatedProduct
+            return mappedProduct
         } catch (err) {
             const error = err as Error
             setError(error)
@@ -220,20 +311,42 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
 
             const { data: updatedProduct, error: updateError } = await supabase
                 .from('products')
-                .update({ stock: newStock })
+                .update({ stock_quantity: newStock })
                 .eq('id', id)
-                .select()
+                .select('*, category:categories(name)')
                 .single()
 
             if (updateError) throw updateError
 
+            const mappedProduct: Product = {
+                id: updatedProduct.id,
+                name: updatedProduct.name,
+                description: updatedProduct.description,
+                sku: updatedProduct.sku,
+                category: updatedProduct.category?.name || updatedProduct.category_id || 'Uncategorized',
+                price: updatedProduct.sale_price,
+                cost: updatedProduct.purchase_price,
+                stock: updatedProduct.stock_quantity,
+                min_stock: updatedProduct.min_stock,
+                image_url: updatedProduct.images?.[0] || null,
+                image: updatedProduct.images?.[0] || null,
+                active: updatedProduct.is_active,
+                created_at: updatedProduct.created_at,
+                updated_at: updatedProduct.updated_at,
+                sale_price: updatedProduct.sale_price,
+                purchase_price: updatedProduct.purchase_price,
+                stock_quantity: updatedProduct.stock_quantity,
+                is_active: updatedProduct.is_active,
+                images: updatedProduct.images
+            }
+
             setProducts(prev =>
-                prev.map(p => p.id === id ? updatedProduct : p)
+                prev.map(p => p.id === id ? mappedProduct : p)
             )
 
             // Show warning if stock is low
-            if (newStock <= updatedProduct.min_stock) {
-                toast.warning(`Stock bajo: ${updatedProduct.name} (${newStock} unidades)`)
+            if (newStock <= mappedProduct.min_stock) {
+                toast.warning(`Stock bajo: ${mappedProduct.name} (${newStock} unidades)`)
             } else {
                 toast.success('Stock actualizado exitosamente')
             }
@@ -293,18 +406,65 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
                 { event: '*', schema: 'public', table: 'products' },
                 (payload) => {
                     if (payload.eventType === 'INSERT') {
-                        setProducts(prev => [...prev, payload.new as Product].sort((a, b) => a.name.localeCompare(b.name)))
+                        const newProduct = payload.new as any
+                        const mappedProduct: Product = {
+                            id: newProduct.id,
+                            name: newProduct.name,
+                            description: newProduct.description,
+                            sku: newProduct.sku,
+                            category: 'Uncategorized',
+                            price: newProduct.sale_price,
+                            cost: newProduct.purchase_price,
+                            stock: newProduct.stock_quantity,
+                            min_stock: newProduct.min_stock,
+                            image_url: newProduct.images?.[0] || null,
+                            image: newProduct.images?.[0] || null,
+                            active: newProduct.is_active,
+                            created_at: newProduct.created_at,
+                            updated_at: newProduct.updated_at,
+                            sale_price: newProduct.sale_price,
+                            purchase_price: newProduct.purchase_price,
+                            stock_quantity: newProduct.stock_quantity,
+                            is_active: newProduct.is_active,
+                            images: newProduct.images
+                        }
+                        setProducts(prev => [...prev, mappedProduct].sort((a, b) => a.name.localeCompare(b.name)))
                     } else if (payload.eventType === 'UPDATE') {
+                        const updatedProduct = payload.new as any
+                        const mappedProduct: Product = {
+                            id: updatedProduct.id,
+                            name: updatedProduct.name,
+                            description: updatedProduct.description,
+                            sku: updatedProduct.sku,
+                            category: 'Uncategorized',
+                            price: updatedProduct.sale_price,
+                            cost: updatedProduct.purchase_price,
+                            stock: updatedProduct.stock_quantity,
+                            min_stock: updatedProduct.min_stock,
+                            image_url: updatedProduct.images?.[0] || null,
+                            image: updatedProduct.images?.[0] || null,
+                            active: updatedProduct.is_active,
+                            created_at: updatedProduct.created_at,
+                            updated_at: updatedProduct.updated_at,
+                            sale_price: updatedProduct.sale_price,
+                            purchase_price: updatedProduct.purchase_price,
+                            stock_quantity: updatedProduct.stock_quantity,
+                            is_active: updatedProduct.is_active,
+                            images: updatedProduct.images
+                        }
+
                         setProducts(prev =>
-                            prev.map(product =>
-                                product.id === payload.new.id ? payload.new as Product : product
-                            )
+                            prev.map(product => {
+                                if (product.id === updatedProduct.id) {
+                                    return { ...mappedProduct, category: product.category }
+                                }
+                                return product
+                            })
                         )
                         // Check for low stock
-                        const updatedProduct = payload.new as Product
-                        if (updatedProduct.stock <= updatedProduct.min_stock && updatedProduct.active) {
-                            toast.warning(`⚠️ Stock bajo: ${updatedProduct.name}`, {
-                                description: `Solo quedan ${updatedProduct.stock} unidades`
+                        if (mappedProduct.stock <= mappedProduct.min_stock && mappedProduct.active) {
+                            toast.warning(`⚠️ Stock bajo: ${mappedProduct.name}`, {
+                                description: `Solo quedan ${mappedProduct.stock} unidades`
                             })
                         }
                     } else if (payload.eventType === 'DELETE') {

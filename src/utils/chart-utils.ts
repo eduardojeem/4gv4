@@ -57,7 +57,7 @@ export const useChartData = <T extends ChartDataPoint>(
 
     try {
       const data = await fetchData()
-      
+
       setState({
         isLoading: false,
         error: null,
@@ -84,7 +84,7 @@ export const useChartData = <T extends ChartDataPoint>(
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error))
-      
+
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -106,7 +106,7 @@ export const useChartData = <T extends ChartDataPoint>(
         if (cached) {
           const { data, timestamp } = JSON.parse(cached)
           const isStale = Date.now() - timestamp > (refreshInterval || 300000) // 5 minutes default
-          
+
           if (!isStale) {
             setState({
               isLoading: false,
@@ -157,28 +157,28 @@ export const transformChartData = {
     groupBy?: string
   ): ChartDataPoint[] => {
     if (groupBy) {
-      const grouped = data.reduce((acc, item) => {
-        const group = item[groupBy] as string
+      const grouped = data.reduce<Record<string, Record<string, unknown>[]>>((acc, item) => {
+        const group = String(item[groupBy])
         if (!acc[group]) acc[group] = []
         acc[group].push(item)
         return acc
-      }, {} as Record<string, Record<string, unknown>[]>)
+      }, {})
 
-      return Object.entries(grouped).flatMap(([group, items]: [string, any]) =>
-        (items as any[]).map(item => ({
-          date: item[dateKey],
-          value: item[valueKey],
+      return Object.entries(grouped).flatMap(([group, items]) =>
+        items.map(item => ({
+          date: item[dateKey] as string | number | Date,
+          value: item[valueKey] as string | number | Date,
           group,
           ...item
-        }))
+        } as ChartDataPoint))
       )
     }
 
     return data.map(item => ({
-      date: item[dateKey],
-      value: item[valueKey],
+      date: item[dateKey] as string | number | Date,
+      value: item[valueKey] as string | number | Date,
       ...item
-    }))
+    } as ChartDataPoint))
   },
 
   // Convert data for pie charts
@@ -191,7 +191,7 @@ export const transformChartData = {
       name: item[labelKey] as string,
       value: item[valueKey] as number,
       ...item
-    }))
+    } as ChartDataPoint))
   },
 
   // Aggregate data by period
@@ -201,7 +201,7 @@ export const transformChartData = {
     valueKey: string,
     period: 'day' | 'week' | 'month' | 'year' = 'day'
   ): ChartDataPoint[] => {
-    const grouped = data.reduce((acc, item) => {
+    const grouped = data.reduce<Record<string, { date: string; value: number; count: number }>>((acc, item) => {
       const date = new Date(item[dateKey] as string)
       let key: string
 
@@ -227,14 +227,14 @@ export const transformChartData = {
       if (!acc[key]) {
         acc[key] = { date: key, value: 0, count: 0 }
       }
-      
+
       acc[key].value += Number(item[valueKey]) || 0
       acc[key].count += 1
 
       return acc
-    }, {} as Record<string, { date: string; value: number; count: number }>)
+    }, {})
 
-    return Object.values(grouped).sort((a, b) =>
+    return Object.values(grouped).sort((a: { date: string }, b: { date: string }) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
     ) as ChartDataPoint[]
   },
@@ -242,7 +242,7 @@ export const transformChartData = {
   // Calculate percentage distribution
   toPercentage: (data: ChartDataPoint[], valueKey: string): ChartDataPoint[] => {
     const total = data.reduce((sum, item) => sum + (Number(item[valueKey]) || 0), 0)
-    
+
     return data.map(item => ({
       ...item,
       percentage: total > 0 ? ((Number(item[valueKey]) || 0) / total) * 100 : 0
@@ -261,20 +261,20 @@ export const chartColors = {
     '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b',
     '#10b981', '#06b6d4', '#ef4444', '#6366f1'
   ],
-  
+
   getColorPalette: (count: number, type: 'primary' | 'gradient' = 'gradient') => {
     const colors = chartColors[type]
     if (count <= colors.length) {
       return colors.slice(0, count)
     }
-    
+
     // Generate additional colors if needed
     const additional = []
     for (let i = colors.length; i < count; i++) {
       const hue = (i * 137.508) % 360 // Golden angle approximation
       additional.push(`hsl(${hue}, 70%, 50%)`)
     }
-    
+
     return [...colors, ...additional]
   }
 }
@@ -293,13 +293,13 @@ export const useChartResponsive = () => {
 
     updateDimensions()
     window.addEventListener('resize', updateDimensions)
-    
+
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
   const getChartSize = useMemo(() => {
     const { width } = dimensions
-    
+
     if (width < 640) { // sm
       return { width: '100%', height: 200 }
     } else if (width < 768) { // md
@@ -362,8 +362,8 @@ export const getSkeletonProps = (type: ChartConfig['type']) => {
 // Error handling for charts
 export const handleChartError = (error: Error, chartType: string) => {
   console.error(`Chart error (${chartType}):`, error)
-  
-  // You can extend this to send to error tracking service
+
+
   return {
     message: `Error loading ${chartType} chart`,
     details: error.message,

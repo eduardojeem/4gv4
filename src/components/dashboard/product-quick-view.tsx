@@ -9,25 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatCurrency } from '@/lib/currency'
-
-interface Product {
-  id: string
-  name: string
-  sku: string
-  description?: string
-  category: string
-  supplier: string
-  purchase_price: number
-  sale_price: number
-  stock_quantity: number
-  min_stock: number
-  max_stock: number
-  barcode?: string
-  image_url?: string
-  is_featured: boolean
-  created_at: string
-  updated_at: string
-}
+import type { Product } from '@/lib/types/product'
 
 interface ProductQuickViewProps {
   product: Product | null
@@ -79,9 +61,9 @@ export function ProductQuickView({
           <div className="flex items-start justify-between">
             <div className="flex items-start space-x-4">
               <div className="relative">
-                {product.image_url ? (
+                {product.image ? (
                   <img
-                    src={product.image_url}
+                    src={product.image}
                     alt={product.name}
                     className="w-20 h-20 object-cover rounded-xl shadow-lg ring-2 ring-gray-100"
                   />
@@ -90,7 +72,7 @@ export function ProductQuickView({
                     <Package className="h-8 w-8 text-gray-400" />
                   </div>
                 )}
-                {product.is_featured && (
+                {product.featured && (
                   <div className="absolute -top-2 -right-2">
                     <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white border-0 shadow-lg">
                       <Star className="h-3 w-3 mr-1" />
@@ -198,7 +180,7 @@ export function ProductQuickView({
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Stock Máximo</p>
                     <p className="text-lg font-semibold text-gray-700">
-                      {product.max_stock}
+                      {product.max_stock || 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -248,13 +230,15 @@ export function ProductQuickView({
                     <span className="text-sm">{formatDate(product.created_at)}</span>
                   </div>
                   
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 flex items-center">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Actualizado
-                    </span>
-                    <span className="text-sm">{formatDate(product.updated_at)}</span>
-                  </div>
+                  {product.updated_at && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600 flex items-center">
+                        <Calendar className="h-4 w-4 mr-2" />
+                        Actualizado
+                      </span>
+                      <span className="text-sm">{formatDate(product.updated_at)}</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

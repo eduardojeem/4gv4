@@ -251,7 +251,9 @@ CREATE INDEX idx_repair_images_image_type ON repair_images(image_type);
 
 -- Función para updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
@@ -260,7 +262,9 @@ $$ LANGUAGE plpgsql;
 
 -- Función para rastrear cambios de estado
 CREATE OR REPLACE FUNCTION track_status_change()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
   IF OLD.status IS DISTINCT FROM NEW.status THEN
     INSERT INTO repair_status_history (
@@ -290,7 +294,9 @@ $$ LANGUAGE plpgsql;
 
 -- Función para calcular progreso automático
 CREATE OR REPLACE FUNCTION calculate_repair_progress()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
   -- Calcular progreso basado en el estado
   NEW.progress = CASE NEW.status
@@ -336,7 +342,7 @@ CREATE OR REPLACE VIEW repairs_full AS
 SELECT 
   r.*,
   -- Customer info
-  c.first_name || ' ' || c.last_name as customer_name,
+  c.name as customer_name,
   c.phone as customer_phone,
   c.email as customer_email,
   -- Technician info

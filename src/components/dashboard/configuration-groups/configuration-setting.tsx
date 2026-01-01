@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, X, RotateCcw, AlertCircle } from 'lucide-react'
+import { RotateCcw, AlertCircle } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -108,7 +108,7 @@ export function ConfigurationSetting({
           <div className="flex items-center space-x-2">
             <Switch
               id={setting.id}
-              checked={currentValue}
+              checked={Boolean(currentValue)}
               onCheckedChange={handleValueChange}
             />
             <Label htmlFor={setting.id} className="text-sm font-normal">
@@ -119,13 +119,13 @@ export function ConfigurationSetting({
 
       case 'select':
         return (
-          <Select value={currentValue} onValueChange={handleValueChange}>
+          <Select value={String(currentValue || '')} onValueChange={handleValueChange}>
             <SelectTrigger>
               <SelectValue placeholder="Seleccionar opción" />
             </SelectTrigger>
             <SelectContent>
               {setting.options?.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
+                <SelectItem key={String(option.value)} value={String(option.value)}>
                   {option.label}
                 </SelectItem>
               ))}
@@ -137,7 +137,7 @@ export function ConfigurationSetting({
         return (
           <Textarea
             id={setting.id}
-            value={currentValue}
+            value={String(currentValue || '')}
             onChange={(e) => handleValueChange(e.target.value)}
             placeholder={`Ingrese ${setting.title.toLowerCase()}`}
             className={cn(validationError && 'border-red-500')}
@@ -149,7 +149,7 @@ export function ConfigurationSetting({
           <Input
             id={setting.id}
             type="number"
-            value={currentValue}
+            value={String(currentValue || '')}
             onChange={(e) => handleValueChange(Number(e.target.value))}
             min={setting.validation?.min}
             max={setting.validation?.max}
@@ -163,13 +163,13 @@ export function ConfigurationSetting({
             <Input
               id={setting.id}
               type="color"
-              value={currentValue}
+              value={String(currentValue || '')}
               onChange={(e) => handleValueChange(e.target.value)}
               className="w-16 h-10 p-1 border rounded"
             />
             <Input
               type="text"
-              value={currentValue}
+              value={String(currentValue || '')}
               onChange={(e) => handleValueChange(e.target.value)}
               placeholder="#000000"
               className={cn('flex-1', validationError && 'border-red-500')}
@@ -182,7 +182,7 @@ export function ConfigurationSetting({
           <Input
             id={setting.id}
             type="text"
-            value={currentValue}
+            value={String(currentValue ?? '')}
             onChange={(e) => handleValueChange(e.target.value)}
             placeholder={`Ingrese ${setting.title.toLowerCase()}`}
             className={cn(validationError && 'border-red-500')}

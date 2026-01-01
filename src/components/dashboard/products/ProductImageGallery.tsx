@@ -81,7 +81,7 @@ export function ProductImageGallery({
               <>
                 <motion.img
                   key={selectedIndex}
-                  src={currentImage}
+                  src={currentImage || ''}
                   alt={`${productName} - Imagen ${selectedIndex + 1}`}
                   className="w-full h-full object-cover"
                   initial={{ opacity: 0 }}

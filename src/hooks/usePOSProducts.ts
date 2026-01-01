@@ -131,7 +131,7 @@ export function usePOSProducts() {
           price: updatedProduct.sale_price,
           stock: updatedProduct.stock_quantity,
           description: updatedProduct.description || undefined,
-          image: updatedProduct.image_url || undefined,
+          image: updatedProduct.images?.[0] || undefined,
           is_active: updatedProduct.is_active
         }
         return newProducts
@@ -146,7 +146,7 @@ export function usePOSProducts() {
           stock: updatedProduct.stock_quantity,
           category: 'Sin categoría', // Se actualizará con la siguiente carga
           description: updatedProduct.description || undefined,
-          image: updatedProduct.image_url || undefined,
+          image: updatedProduct.images?.[0] || undefined,
           unit_measure: updatedProduct.unit_measure || 'unidad',
           is_active: updatedProduct.is_active
         }
@@ -224,7 +224,7 @@ export function usePOSProducts() {
         stock: product.stock_quantity,
         category: product.categories?.name || 'Sin categoría',
         description: product.description || undefined,
-        image: product.image_url || undefined,
+        image: product.images?.[0] || undefined,
         unit_measure: product.unit_measure || 'unidad',
         is_active: product.is_active,
         wholesalePrice: product.wholesale_price || undefined
@@ -277,7 +277,7 @@ export function usePOSProducts() {
         stock: data.stock_quantity,
         category: data.categories?.name || 'Sin categoría',
         description: data.description || undefined,
-        image: data.image_url || undefined,
+        image: data.images?.[0] || undefined,
         unit_measure: data.unit_measure || 'unidad',
         is_active: data.is_active,
         wholesalePrice: data.wholesale_price || undefined

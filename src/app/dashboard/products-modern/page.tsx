@@ -24,6 +24,8 @@ import {
   BulkActionsToolbar
 } from '@/components/dashboard/products-modern'
 import { exportProductsToCSV, downloadCSV } from '@/lib/products-dashboard-utils'
+import type { Database } from '@/lib/supabase/types'
+type Json = Database['public']['Tables']['products']['Row']['dimensions']
 
 export default function ModernProductsPage() {
   const {
@@ -160,7 +162,7 @@ export default function ModernProductsPage() {
     let errorCount = 0
 
     for (const product of selectedProducts) {
-      const result = await updateProduct(product.id, { is_active: true })
+      const result = await updateProduct(product.id, { is_active: true } as Database['public']['Tables']['products']['Update'])
       if (result.success) {
         successCount++
       } else {
@@ -185,7 +187,7 @@ export default function ModernProductsPage() {
     let errorCount = 0
 
     for (const product of selectedProducts) {
-      const result = await updateProduct(product.id, { is_active: false })
+      const result = await updateProduct(product.id, { is_active: false } as Database['public']['Tables']['products']['Update'])
       if (result.success) {
         successCount++
       } else {
@@ -369,6 +371,11 @@ export default function ModernProductsPage() {
             }
             
             if (editingProduct) {
+              // Convertir ProductFormData a formato compatible con Supabase
+              const transformedData: Database['public']['Tables']['products']['Update'] = {
+                ...data,
+                dimensions: data.dimensions as Json | null
+              }
               const result = await updateProduct(editingProduct.id, transformedData)
               if (result.success) {
                 toast.success('Producto actualizado')

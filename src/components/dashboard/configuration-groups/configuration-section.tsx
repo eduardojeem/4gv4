@@ -293,7 +293,7 @@ function ThemeSettingsPanel({
         <div className="flex flex-wrap gap-2">
           {schemes.map((opt) => (
             <button
-              key={opt.value}
+              key={String(opt.value)}
               type="button"
               onClick={() => handleSchemeChange(opt.value as string)}
               className={`flex items-center gap-2 rounded border px-3 py-2 transition-colors duration-200 ${colorScheme === opt.value ? 'border-primary bg-primary/10' : 'border-border hover:bg-muted'}`}

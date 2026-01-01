@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { action } from '@storybook/addon-actions'
+import { fn } from '@storybook/test'
 import { EnhancedProductList } from './EnhancedProductList'
 
 // Mock de datos de productos para las stories
@@ -149,8 +149,8 @@ export const Default: Story = {
     viewMode: 'table',
     enableSelection: true,
     enableBulkActions: true,
-    onProductAction: action('product-action'),
-    onBulkAction: action('bulk-action')
+    onProductAction: fn(),
+    onBulkAction: fn()
   }
 }
 
@@ -160,8 +160,8 @@ export const TableView: Story = {
     viewMode: 'table',
     enableSelection: true,
     enableBulkActions: true,
-    onProductAction: action('product-action'),
-    onBulkAction: action('bulk-action')
+    onProductAction: fn(),
+    onBulkAction: fn()
   },
   parameters: {
     docs: {
@@ -178,8 +178,8 @@ export const GridView: Story = {
     viewMode: 'grid',
     enableSelection: true,
     enableBulkActions: true,
-    onProductAction: action('product-action'),
-    onBulkAction: action('bulk-action')
+    onProductAction: fn(),
+    onBulkAction: fn()
   },
   parameters: {
     docs: {
@@ -196,7 +196,7 @@ export const WithoutSelection: Story = {
     viewMode: 'table',
     enableSelection: false,
     enableBulkActions: false,
-    onProductAction: action('product-action')
+    onProductAction: fn()
   },
   parameters: {
     docs: {
@@ -229,8 +229,8 @@ export const StockStates: Story = {
     viewMode: 'table',
     enableSelection: true,
     enableBulkActions: true,
-    onProductAction: action('product-action'),
-    onBulkAction: action('bulk-action')
+    onProductAction: fn(),
+    onBulkAction: fn()
   },
   parameters: {
     docs: {

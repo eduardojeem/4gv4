@@ -17,6 +17,8 @@ import { ProductQuickActions } from '@/components/dashboard/products/product-qui
 import { ProductAlerts } from '@/components/dashboard/products/product-alerts'
 import { Product, Category, Supplier } from '@/types/products'
 import { SortConfig } from '@/types/products-dashboard'
+import type { Database } from '@/lib/supabase/types'
+type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -91,6 +93,11 @@ export default function ProductsPage() {
 
       if (aValue === bValue) return 0
 
+      // Handle null/undefined values
+      if (aValue == null && bValue == null) return 0
+      if (aValue == null) return 1
+      if (bValue == null) return -1
+
       const comparison = aValue > bValue ? 1 : -1
       return sortConfig.direction === 'asc' ? comparison : -comparison
     })
@@ -119,7 +126,8 @@ export default function ProductsPage() {
     const duplicateData = {
       ...rest,
       name: `${product.name} (Copia)`,
-      sku: `${product.sku}-COPY`
+      sku: `${product.sku}-COPY`,
+      dimensions: product.dimensions as Json | null
     }
     await createProduct(duplicateData)
     toast.success('Producto duplicado')
@@ -345,10 +353,20 @@ export default function ProductsPage() {
           suppliers={suppliers as unknown as Supplier[]}
           onSave={async (data) => {
             if (editingProduct) {
-              await updateProduct(editingProduct.id, data)
+              // Convertir ProductFormData a formato compatible con Supabase
+              const supabaseData: Database['public']['Tables']['products']['Update'] = {
+                ...data,
+                dimensions: data.dimensions as Json | null
+              }
+              await updateProduct(editingProduct.id, supabaseData)
               toast.success('Producto actualizado')
             } else {
-              await createProduct(data)
+              // Convertir ProductFormData a formato compatible con Supabase para crear
+              const supabaseData = {
+                ...data,
+                dimensions: data.dimensions as Json | null
+              }
+              await createProduct(supabaseData)
               toast.success('Producto creado')
             }
             setEditingProduct(null)

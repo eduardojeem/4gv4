@@ -96,10 +96,10 @@ export const ProductCard = React.memo(function ProductCard({
       <CardContent className="p-0">
         {/* Image Section with Gradient Overlay */}
         <div className="relative aspect-square bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100 overflow-hidden">
-          {product.image_url && !imageError ? (
+          {product.image && !imageError ? (
             <>
               <Image
-                src={product.image_url}
+                src={product.image}
                 alt={product.name}
                 fill
                 className={cn(
@@ -340,7 +340,7 @@ export const ProductCard = React.memo(function ProductCard({
     prevProps.product.name === nextProps.product.name &&
     prevProps.product.sale_price === nextProps.product.sale_price &&
     prevProps.product.stock_quantity === nextProps.product.stock_quantity &&
-    prevProps.product.image_url === nextProps.product.image_url &&
+    prevProps.product.image === nextProps.product.image &&
     prevProps.product.is_active === nextProps.product.is_active
   )
 })

@@ -2,6 +2,7 @@
  * Type definitions for the Modern Products Dashboard
  */
 
+export type { ProductAlert }
 import { Product, ProductFilters as BaseProductFilters, ProductAlert, Category, Supplier } from './products'
 
 // Extended filter interface for dashboard

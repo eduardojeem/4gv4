@@ -6,6 +6,8 @@ import { useRepairs } from "@/hooks/use-repairs";
 import { useProductRealTimeSync } from "@/hooks/useRealTimeSync";
 import { suggestReservations, inferComponentType } from "@/services/inventory-repair-sync";
 import type { Product } from "@/types/product-unified";
+import type { Database } from '@/lib/supabase/types'
+type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { ProductStock } from "@/services/inventory-repair-sync";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -275,8 +277,11 @@ export default function InventoryPage() {
 
       let result;
       if (serviceForm.id) {
-        // Editar
-        result = await updateProduct(serviceForm.id, productData);
+        // Editar - Convertir a formato compatible con Supabase
+        const supabaseData: Database['public']['Tables']['products']['Update'] = {
+          ...productData
+        }
+        result = await updateProduct(serviceForm.id, supabaseData);
       } else {
         // Crear
         result = await createProduct({

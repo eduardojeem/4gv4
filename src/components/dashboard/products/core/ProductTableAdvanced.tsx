@@ -11,11 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { 
-  Edit, 
-  Trash2, 
-  Eye, 
-  ArrowUpDown, 
+import {
+  Edit,
+  Trash2,
+  Eye,
+  ArrowUpDown,
   Search,
   Filter,
   Download
@@ -51,7 +51,7 @@ interface ProductTableAdvancedProps {
   className?: string;
 }
 
-type SortField = 'name' | 'price' | 'category' | 'stock' | 'createdAt';
+type SortField = 'name' | 'price' | 'category' | 'stock' | 'createdAt' | 'updatedAt';
 type SortDirection = 'asc' | 'desc';
 
 const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
@@ -80,8 +80,8 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
   const filteredAndSortedProducts = React.useMemo(() => {
     const filtered = products.filter(product => {
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           product.description?.toLowerCase().includes(searchTerm.toLowerCase());
+        product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.description?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = !categoryFilter || product.category === categoryFilter;
       return matchesSearch && matchesCategory;
     });
@@ -141,7 +141,7 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
               className="pl-8"
             />
           </div>
-          
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
@@ -154,7 +154,7 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
                 Todas las categorías
               </DropdownMenuItem>
               {categories.map(category => (
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   key={category}
                   onClick={() => setCategoryFilter(category)}
                 >
@@ -164,7 +164,7 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        
+
         {onExport && (
           <Button variant="outline" size="sm" onClick={onExport}>
             <Download className="h-4 w-4 mr-2" />
@@ -187,11 +187,8 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
               {onSelectProduct && (
                 <TableHead className="w-12">
                   <Checkbox
-                    checked={isAllSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = isIndeterminate;
-                    }}
-                    onCheckedChange={onSelectAll}
+                    checked={isIndeterminate ? 'indeterminate' : isAllSelected}
+                    onCheckedChange={(checked) => onSelectAll?.()}
                     aria-label="Seleccionar todos los productos"
                   />
                 </TableHead>
@@ -231,7 +228,7 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
                       />
                     </TableCell>
                   )}
-                  
+
                   <TableCell className="font-medium">
                     <div>
                       <div className="font-semibold">{product.name}</div>
@@ -242,27 +239,27 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
                       )}
                     </div>
                   </TableCell>
-                  
+
                   <TableCell>
                     <code className="text-sm bg-muted px-2 py-1 rounded">
                       {product.sku || 'N/A'}
                     </code>
                   </TableCell>
-                  
+
                   <TableCell>
                     <Badge variant="outline">{product.category}</Badge>
                   </TableCell>
-                  
+
                   <TableCell className="text-right font-semibold">
                     ${product.price.toFixed(2)}
                   </TableCell>
-                  
+
                   <TableCell className="text-right">
                     <Badge variant={isLowStock ? "destructive" : "secondary"}>
                       {product.stock}
                     </Badge>
                   </TableCell>
-                  
+
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       {onView && (
@@ -302,10 +299,10 @@ const ProductTableAdvanced: React.FC<ProductTableAdvancedProps> = ({
             })}
           </TableBody>
         </Table>
-        
+
         {filteredAndSortedProducts.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
-            {searchTerm || categoryFilter ? 
+            {searchTerm || categoryFilter ?
               'No se encontraron productos que coincidan con los filtros' :
               'No se encontraron productos'
             }

@@ -46,6 +46,11 @@ export const ProductSchema = z.object({
     errorMap: () => ({ message: 'Estado debe ser activo o inactivo' })
   }),
   
+  image: z.string()
+    .url('URL de imagen inválida')
+    .optional()
+    .or(z.literal('')),
+    
   image_url: z.string()
     .url('URL de imagen inválida')
     .optional()
@@ -274,7 +279,7 @@ export async function validateProduct(
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      errors.push(...error.errors.map(e => `${e.path.join('.')}: ${e.message}`))
+      errors.push(...(error as z.ZodError).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`))
     }
   }
 
@@ -325,7 +330,7 @@ export function useProductValidation() {
       if (error instanceof z.ZodError) {
         return { 
           isValid: false, 
-          error: error.errors[0]?.message || 'Valor inválido' 
+          error: (error as z.ZodError).errors[0]?.message || 'Valor inválido' 
         }
       }
       return { isValid: false, error: 'Error de validación' }

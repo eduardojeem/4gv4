@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { action } from '@storybook/addon-actions'
+import { fn } from '@storybook/test'
 import { AdvancedProductFilters } from './AdvancedProductFilters'
 
 const meta: Meta<typeof AdvancedProductFilters> = {
@@ -51,21 +51,17 @@ El componente AdvancedProductFilters proporciona una interfaz avanzada de filtra
       action: 'filters-changed',
       description: 'Callback cuando cambian los filtros'
     },
-    onPresetChange: {
-      action: 'preset-changed',
-      description: 'Callback cuando se selecciona un preset'
-    },
-    onExportFilters: {
-      action: 'export-filters',
-      description: 'Callback para exportar configuración de filtros'
-    },
-    onImportFilters: {
-      action: 'import-filters',
-      description: 'Callback para importar configuración de filtros'
-    },
     className: {
       control: 'text',
       description: 'Clases CSS adicionales'
+    },
+    showPresets: {
+      control: 'boolean',
+      description: 'Mostrar filtros rápidos predefinidos'
+    },
+    collapsible: {
+      control: 'boolean',
+      description: 'Permitir colapsar el panel de filtros'
     }
   },
   decorators: [
@@ -83,20 +79,14 @@ type Story = StoryObj<typeof meta>
 // Story por defecto
 export const Default: Story = {
   args: {
-    onFiltersChange: action('filters-changed'),
-    onPresetChange: action('preset-changed'),
-    onExportFilters: action('export-filters'),
-    onImportFilters: action('import-filters')
+    onFiltersChange: fn()
   }
 }
 
 // Con filtros aplicados
 export const WithActiveFilters: Story = {
   args: {
-    onFiltersChange: action('filters-changed'),
-    onPresetChange: action('preset-changed'),
-    onExportFilters: action('export-filters'),
-    onImportFilters: action('import-filters')
+    onFiltersChange: fn()
   },
   parameters: {
     docs: {
@@ -110,10 +100,7 @@ export const WithActiveFilters: Story = {
 // Preset de stock bajo
 export const LowStockPreset: Story = {
   args: {
-    onFiltersChange: action('filters-changed'),
-    onPresetChange: action('preset-changed'),
-    onExportFilters: action('export-filters'),
-    onImportFilters: action('import-filters')
+    onFiltersChange: fn()
   },
   parameters: {
     docs: {
@@ -127,10 +114,7 @@ export const LowStockPreset: Story = {
 // Filtros de rango
 export const RangeFilters: Story = {
   args: {
-    onFiltersChange: action('filters-changed'),
-    onPresetChange: action('preset-changed'),
-    onExportFilters: action('export-filters'),
-    onImportFilters: action('import-filters')
+    onFiltersChange: fn()
   },
   parameters: {
     docs: {
@@ -144,10 +128,7 @@ export const RangeFilters: Story = {
 // Filtros de categoría y proveedor
 export const CategorySupplierFilters: Story = {
   args: {
-    onFiltersChange: action('filters-changed'),
-    onPresetChange: action('preset-changed'),
-    onExportFilters: action('export-filters'),
-    onImportFilters: action('import-filters')
+    onFiltersChange: fn()
   },
   parameters: {
     docs: {
@@ -161,10 +142,7 @@ export const CategorySupplierFilters: Story = {
 // Modo compacto
 export const Compact: Story = {
   args: {
-    onFiltersChange: action('filters-changed'),
-    onPresetChange: action('preset-changed'),
-    onExportFilters: action('export-filters'),
-    onImportFilters: action('import-filters'),
+    onFiltersChange: fn(),
     className: 'compact-mode'
   },
   parameters: {
@@ -179,7 +157,7 @@ export const Compact: Story = {
 // Solo búsqueda
 export const SearchOnly: Story = {
   args: {
-    onFiltersChange: action('filters-changed')
+    onFiltersChange: fn()
   },
   parameters: {
     docs: {
@@ -210,10 +188,7 @@ export const SearchOnly: Story = {
 // Con datos de ejemplo
 export const WithMockData: Story = {
   args: {
-    onFiltersChange: action('filters-changed'),
-    onPresetChange: action('preset-changed'),
-    onExportFilters: action('export-filters'),
-    onImportFilters: action('import-filters')
+    onFiltersChange: fn()
   },
   parameters: {
     docs: {
@@ -246,7 +221,7 @@ Esta story muestra el componente con datos de ejemplo para demostrar cómo se co
 // Estado de carga
 export const Loading: Story = {
   args: {
-    onFiltersChange: action('filters-changed')
+    onFiltersChange: fn()
   },
   parameters: {
     docs: {
@@ -280,10 +255,7 @@ export const Loading: Story = {
 // Responsive
 export const Responsive: Story = {
   args: {
-    onFiltersChange: action('filters-changed'),
-    onPresetChange: action('preset-changed'),
-    onExportFilters: action('export-filters'),
-    onImportFilters: action('import-filters')
+    onFiltersChange: fn()
   },
   parameters: {
     docs: {

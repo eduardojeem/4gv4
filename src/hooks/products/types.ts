@@ -1,33 +1,20 @@
 import type { Database } from '@/lib/supabase/types'
+import type { Product as UnifiedProduct, Category as UnifiedCategory, Supplier as UnifiedSupplier, ProductMovement as UnifiedProductMovement, ProductAlert as UnifiedProductAlert } from '@/types/product-unified'
 
-// Tipos base de la base de datos
-export type Product = Database['public']['Tables']['products']['Row'] & {
-  category?: Database['public']['Tables']['categories']['Row']
-  supplier?: Database['public']['Tables']['suppliers']['Row']
-  margin_amount?: number
-  margin_percentage?: number
-  stock_value?: number
-  stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'
-  // Added properties based on usage
-  price: number
-  stock: number
-  cost: number
-  createdAt: string
-  isFeatured?: boolean
-  minStock?: number
-}
-
-export type Category = Database['public']['Tables']['categories']['Row']
-export type Supplier = Database['public']['Tables']['suppliers']['Row']
-export type ProductMovement = Database['public']['Tables']['product_movements']['Row']
-export type ProductAlert = Database['public']['Tables']['product_alerts']['Row']
+// Re-export unified types
+export type Product = UnifiedProduct
+export type Category = UnifiedCategory
+export type Supplier = UnifiedSupplier
+export type ProductMovement = UnifiedProductMovement
+export type ProductAlert = UnifiedProductAlert
 
 // Interfaces para filtros y ordenamiento
 export interface ProductFilters {
   search?: string
   category?: string
   supplier?: string
-  stockStatus?: 'all' | 'in_stock' | 'low_stock' | 'out_of_stock'
+  stockStatus?: 'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | string[]
+  marginStatus?: string[]
   priceMin?: number
   priceMax?: number
   isActive?: boolean

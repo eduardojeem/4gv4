@@ -6,7 +6,22 @@
 -- =====================================================
 
 -- 1. Enable required extensions FIRST
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE SCHEMA IF NOT EXISTS extensions;
+GRANT USAGE ON SCHEMA extensions TO postgres, anon, authenticated, service_role;
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA extensions;
+
+-- Move to extensions schema if it was already in public (for backward compatibility)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_extension e 
+        JOIN pg_namespace n ON e.extnamespace = n.oid 
+        WHERE e.extname = 'pg_trgm' AND n.nspname = 'public'
+    ) THEN
+        ALTER EXTENSION pg_trgm SET SCHEMA extensions;
+    END IF;
+END $$;
 
 -- 2. Create customers table if not exists
 CREATE TABLE IF NOT EXISTS public.customers (
@@ -208,7 +223,7 @@ RETURNS TABLE (
     phone TEXT,
     similarity REAL
 ) 
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 BEGIN
     RETURN QUERY

@@ -484,11 +484,11 @@ function displayResults(results) {
 }
 
 // Ejecutar verificaciones si se llama directamente
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   runPostBuildChecks().catch(console.error);
 }
 
-module.exports = {
+export {
   runPostBuildChecks,
   CHECKS
 };

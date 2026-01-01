@@ -44,6 +44,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { DatePicker } from '@/components/ui/date-picker'
 import { cn } from '@/lib/utils'
 import { useProductFiltering } from '@/hooks/products'
+import { ProductFilters } from '@/hooks/products/types'
 
 interface AdvancedProductFiltersProps {
   className?: string
@@ -66,30 +67,43 @@ const marginStatusOptions = [
   { value: 'high', label: 'Margen Alto (>50%)', color: 'bg-blue-100 text-blue-800' }
 ]
 
-const filterPresets = [
+// Definición de tipo para los presets
+type FilterPreset = {
+  id: string
+  name: string
+  icon: any
+  getFilters: () => Partial<ProductFilters>
+}
+
+const filterPresets: FilterPreset[] = [
   {
     id: 'low_stock',
     name: 'Stock Bajo',
     icon: AlertTriangle,
-    filters: { stockStatus: ['low_stock', 'out_of_stock'] }
+    getFilters: () => ({ stockStatus: ['low_stock', 'out_of_stock'] })
   },
   {
     id: 'high_margin',
     name: 'Alto Margen',
     icon: TrendingUp,
-    filters: { marginStatus: ['good', 'high'] }
+    getFilters: () => ({ marginStatus: ['good', 'high'] })
   },
   {
     id: 'recent',
     name: 'Recientes',
     icon: Calendar,
-    filters: { dateRange: { days: 30 } }
+    getFilters: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setDate(start.getDate() - 30)
+      return { dateRange: { start, end } }
+    }
   },
   {
     id: 'expensive',
     name: 'Productos Caros',
     icon: GSIcon,
-    filters: { priceRange: { min: 100 } }
+    getFilters: () => ({ priceMin: 100 })
   }
 ]
 
@@ -118,12 +132,12 @@ export const AdvancedProductFilters = ({
     onFiltersChange
   })
 
-  const handlePresetClick = (preset: typeof filterPresets[0]) => {
+  const handlePresetClick = (preset: FilterPreset) => {
     if (activePreset === preset.id) {
       clearFilters()
       setActivePreset(null)
     } else {
-      updateFilters(preset.filters)
+      updateFilters(preset.getFilters())
       setActivePreset(preset.id)
     }
   }
@@ -235,10 +249,13 @@ export const AdvancedProductFilters = ({
                 id={`stock-${option.value}`}
                 checked={filters.stockStatus?.includes(option.value) || false}
                 onCheckedChange={(checked) => {
-                  const current = filters.stockStatus || []
+                  const current = Array.isArray(filters.stockStatus)
+                    ? filters.stockStatus
+                    : (filters.stockStatus && filters.stockStatus !== 'all' ? [filters.stockStatus] : [])
+
                   const updated = checked
                     ? [...current, option.value]
-                    : current.filter(s => s !== option.value)
+                    : current.filter((s: string) => s !== option.value)
                   handleFilterChange('stockStatus', updated.length > 0 ? updated : null)
                 }}
               />
@@ -315,7 +332,7 @@ export const AdvancedProductFilters = ({
                   const current = filters.marginStatus || []
                   const updated = checked
                     ? [...current, option.value]
-                    : current.filter(s => s !== option.value)
+                    : current.filter((s: string) => s !== option.value)
                   handleFilterChange('marginStatus', updated.length > 0 ? updated : null)
                 }}
               />

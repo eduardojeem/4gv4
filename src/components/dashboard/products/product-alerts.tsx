@@ -5,10 +5,10 @@ import { Badge } from '@/components/ui/badge'
 import { AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Product } from '@/types/products'
-import { InventoryAlert } from '@/types/products-dashboard'
+import { ProductAlert } from '@/types/product-unified'
 
 interface ProductAlertsProps {
-    alerts: InventoryAlert[]
+    alerts: ProductAlert[]
     products: Product[]
     onFilterChange: (filtered: Product[]) => void
 }

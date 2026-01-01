@@ -43,7 +43,7 @@ const alertIcons = {
   new_product: CheckCircle
 }
 
-const alertColors = {
+const alertColors: Record<string, string> = {
   low_stock: 'text-yellow-600 bg-yellow-50 border-yellow-200',
   out_of_stock: 'text-red-600 bg-red-50 border-red-200',
   no_supplier: 'text-orange-600 bg-orange-50 border-orange-200',
@@ -54,10 +54,11 @@ const alertColors = {
   missing_image: 'text-blue-600 bg-blue-50 border-blue-200',
   inactive_with_sales: 'text-purple-600 bg-purple-50 border-purple-200',
   price_change: 'text-green-600 bg-green-50 border-green-200',
-  new_product: 'text-emerald-600 bg-emerald-50 border-emerald-200'
+  new_product: 'text-emerald-600 bg-emerald-50 border-emerald-200',
+  expiring: 'text-orange-600 bg-orange-50 border-orange-200'
 }
 
-const alertTitles = {
+const alertTitles: Record<string, string> = {
   low_stock: 'Stock Bajo',
   out_of_stock: 'Sin Stock',
   no_supplier: 'Sin Proveedor',
@@ -68,7 +69,8 @@ const alertTitles = {
   missing_image: 'Sin Imagen',
   inactive_with_sales: 'Producto Inactivo con Ventas',
   price_change: 'Cambio de Precio',
-  new_product: 'Nuevo Producto'
+  new_product: 'Nuevo Producto',
+  expiring: 'Producto por Vencer'
 }
 
 export function ProductNotifications({ 

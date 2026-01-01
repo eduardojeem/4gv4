@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,7 +20,7 @@ interface AdminLayoutProps {
     children: React.ReactNode
 }
 
-export function AdminLayout({ children }: AdminLayoutProps) {
+function AdminLayoutContent({ children }: AdminLayoutProps) {
     const [searchOpen, setSearchOpen] = useState(false)
     const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration'])
     const { hasPermission, isAdmin } = useAuth()
@@ -243,5 +243,45 @@ function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
         </svg>
+    )
+}
+
+// Loading fallback component
+function AdminLayoutFallback() {
+    return (
+        <div className="min-h-[calc(100vh-4rem)] grid grid-cols-1 lg:grid-cols-[240px_1fr]">
+            <aside className="border-r bg-background w-full lg:w-[240px] hidden lg:block">
+                <div className="flex items-center justify-between px-3 py-3 h-14 border-b">
+                    <div className="text-sm font-semibold">Panel Admin</div>
+                </div>
+                <nav className="space-y-2 p-2 flex-1 overflow-y-auto">
+                    <div className="animate-pulse space-y-2">
+                        {[...Array(6)].map((_, i) => (
+                            <div key={i} className="h-8 bg-gray-200 rounded"></div>
+                        ))}
+                    </div>
+                </nav>
+            </aside>
+            <section className="flex flex-col min-w-0">
+                <header className="border-b bg-background h-14 flex items-center px-4 gap-4">
+                    <div className="animate-pulse h-6 bg-gray-200 rounded w-48"></div>
+                </header>
+                <main className="flex-1 p-4">
+                    <div className="animate-pulse space-y-4">
+                        <div className="h-8 bg-gray-200 rounded w-64"></div>
+                        <div className="h-32 bg-gray-200 rounded"></div>
+                    </div>
+                </main>
+            </section>
+        </div>
+    )
+}
+
+// Main export with Suspense wrapper
+export function AdminLayout({ children }: AdminLayoutProps) {
+    return (
+        <Suspense fallback={<AdminLayoutFallback />}>
+            <AdminLayoutContent>{children}</AdminLayoutContent>
+        </Suspense>
     )
 }

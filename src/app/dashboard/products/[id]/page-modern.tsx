@@ -7,6 +7,7 @@ import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import { getPublicUrl } from '@/lib/supabase-storage'
 import type { Database } from '@/lib/supabase/types'
+type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { ProductModal } from '@/components/dashboard/product-modal'
 import { toast } from 'sonner'
 import { ProductDetailHeader } from '@/components/dashboard/products/ProductDetailHeader'
@@ -577,11 +578,10 @@ export default function ProductDetailPageModern() {
             onSave={async (data) => {
               try {
                 // Transform dimensions to ensure compatibility
-                const transformedData = {
+                // Convertir ProductFormData a formato compatible con Supabase
+                const transformedData: Database['public']['Tables']['products']['Update'] = {
                   ...data,
-                  dimensions: data.dimensions && typeof data.dimensions === 'object' 
-                    ? data.dimensions as any
-                    : data.dimensions
+                  dimensions: data.dimensions as Json | null
                 }
                 await updateProduct(product.id, transformedData)
                 setEditModalOpen(false)

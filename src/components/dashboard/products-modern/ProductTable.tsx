@@ -133,10 +133,7 @@ export function ProductTable({
               {/* Select All Checkbox */}
               <TableHead className="w-12">
                 <Checkbox
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someSelected
-                  }}
+                  checked={allSelected ? true : (someSelected ? 'indeterminate' : false)}
                   onCheckedChange={onSelectAll}
                   aria-label={allSelected ? 'Deseleccionar todos los productos' : 'Seleccionar todos los productos'}
                   className="border-gray-400"
@@ -243,9 +240,9 @@ export function ProductTable({
                   {/* Image */}
                   <TableCell>
                     <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100 shadow-sm group-hover:shadow-md transition-shadow">
-                      {product.image_url ? (
+                      {product.image ? (
                         <Image
-                          src={product.image_url}
+                          src={product.image}
                           alt={product.name}
                           fill
                           className="object-cover transition-transform duration-200 hover:scale-110"

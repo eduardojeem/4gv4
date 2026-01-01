@@ -9,7 +9,9 @@ CREATE OR REPLACE FUNCTION public.log_auth_event(
     p_ip_address INET DEFAULT NULL,
     p_user_agent TEXT DEFAULT NULL,
     p_details JSONB DEFAULT '{}'::jsonb
-) RETURNS UUID AS $$
+) RETURNS UUID 
+SET search_path = public
+AS $$
 DECLARE
     log_id UUID;
     event_severity TEXT;
@@ -69,7 +71,9 @@ CREATE OR REPLACE FUNCTION public.log_data_event(
     p_new_values JSONB DEFAULT NULL,
     p_ip_address INET DEFAULT NULL,
     p_user_agent TEXT DEFAULT NULL
-) RETURNS UUID AS $$
+) RETURNS UUID 
+SET search_path = public
+AS $$
 DECLARE
     log_id UUID;
     event_severity TEXT;
@@ -126,7 +130,9 @@ CREATE OR REPLACE FUNCTION public.log_system_event(
     p_details JSONB DEFAULT '{}'::jsonb,
     p_severity TEXT DEFAULT 'low',
     p_ip_address INET DEFAULT NULL
-) RETURNS UUID AS $$
+) RETURNS UUID 
+SET search_path = public
+AS $$
 DECLARE
     log_id UUID;
 BEGIN
@@ -158,7 +164,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Función para limpiar logs antiguos (mantenimiento)
 CREATE OR REPLACE FUNCTION public.cleanup_old_audit_logs(
     p_days_to_keep INTEGER DEFAULT 90
-) RETURNS INTEGER AS $$
+) RETURNS INTEGER 
+SET search_path = public
+AS $$
 DECLARE
     deleted_count INTEGER;
 BEGIN
@@ -191,7 +199,9 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Función para obtener estadísticas de seguridad
 CREATE OR REPLACE FUNCTION public.get_security_stats(
     p_hours INTEGER DEFAULT 24
-) RETURNS JSONB AS $$
+) RETURNS JSONB 
+SET search_path = public
+AS $$
 DECLARE
     stats JSONB;
     total_events INTEGER;

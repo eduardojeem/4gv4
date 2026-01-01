@@ -47,7 +47,10 @@ export function ProductVariants({
     setIsAddingVariant(false)
   }
 
-  const handleEditVariant = (updatedVariant: ProductVariant) => {
+  const handleEditVariant = (updatedVariant: ProductVariant | Omit<ProductVariant, 'id'>) => {
+    // Si viene sin ID (lo cual no debería pasar en edición, pero por tipos...), lo ignoramos o manejamos
+    if (!('id' in updatedVariant)) return;
+    
     const updatedVariants = localVariants.map(v => 
       v.id === updatedVariant.id ? updatedVariant : v
     )

@@ -2,7 +2,9 @@
 -- This replaces multiple client-side queries with a single database call
 
 CREATE OR REPLACE FUNCTION get_supplier_stats()
-RETURNS json AS $$
+RETURNS json 
+SET search_path = public
+AS $$
 DECLARE
   result json;
 BEGIN

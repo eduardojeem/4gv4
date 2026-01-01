@@ -12,14 +12,14 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { 
-  Search, 
-  Filter, 
-  Plus, 
-  MoreVertical, 
-  Edit, 
-  Trash2, 
-  Eye, 
+import {
+  Search,
+  Filter,
+  Plus,
+  MoreVertical,
+  Edit,
+  Trash2,
+  Eye,
   Star,
   Building2,
   Phone,
@@ -57,13 +57,24 @@ interface SupplierData {
     type: string
   }>
   contacts?: Array<{
+    id?: string
     name: string
     email: string
     phone: string
     position: string
+    isPrimary?: boolean
   }>
   tags?: string[]
-  paymentTerms?: string
+  paymentTerms?: string | {
+    paymentMethod: string
+    creditLimit: number
+    paymentDays: number
+    discountPercent: number
+    discountDays: number
+    currency: string
+  }
+  notes?: string
+  isActive?: boolean
   creditLimit?: number
   createdAt?: string
   updatedAt?: string
@@ -229,15 +240,15 @@ const statusOptions = [
   { value: 'pending', label: 'Pendiente', icon: Clock }
 ]
 
-export default function SupplierList({ 
-  suppliers = mockSuppliers, 
-  onSupplierCreate, 
-  onSupplierUpdate, 
+export default function SupplierList({
+  suppliers = mockSuppliers,
+  onSupplierCreate,
+  onSupplierUpdate,
   onSupplierDelete,
-  onSupplierSelect 
+  onSupplierSelect
 }: SupplierListProps) {
-  // Reemplazar la línea: const [searchTerm, setSearchTerm] = useState('')
-  const { searchTerm, debouncedSearchTerm, setSearchTerm } = useSearchDebounce('', 300)
+  const [searchTerm, setSearchTerm] = useState('')
+  const debouncedSearchTerm = useDebounce(searchTerm, 300)
   const [selectedCategory, setSelectedCategory] = useState('Todos')
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [sortBy, setSortBy] = useState<'name' | 'rating' | 'createdAt'>('name')
@@ -251,10 +262,10 @@ export default function SupplierList({
   const filteredAndSortedSuppliers = useMemo(() => {
     const filtered = suppliers.filter(supplier => {
       const matchesSearch = supplier.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-                           supplier.businessName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-                           supplier.email.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-                           supplier.tags?.some((tag: string) => tag.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
-      
+        supplier.businessName?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        supplier.email?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        supplier.tags?.some((tag: string) => tag.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
+
       const matchesCategory = selectedCategory === 'Todos' || supplier.category === selectedCategory
       const matchesStatus = selectedStatus === 'all' || supplier.status === selectedStatus
 
@@ -495,7 +506,7 @@ export default function SupplierList({
               <div>
                 <p className="text-sm font-medium">Calificación Promedio</p>
                 <p className="text-2xl font-bold">
-                  {(suppliers.reduce((acc, s) => acc + s.rating, 0) / suppliers.length).toFixed(1)}
+                  {(suppliers.reduce((acc, s) => acc + (s.rating || 0), 0) / suppliers.length).toFixed(1)}
                 </p>
               </div>
             </div>
@@ -527,21 +538,21 @@ export default function SupplierList({
           </Card>
         ) : (
           <div className={
-             viewMode === 'grid' 
-               ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-               : "space-y-2"
-           }>
-             {filteredAndSortedSuppliers.map((supplier) => (
-               viewMode === 'grid' 
-                 ? <div key={supplier.id} className="p-4 border rounded-lg">
-                     <h3 className="font-medium">{supplier.name}</h3>
-                     <p className="text-sm text-muted-foreground">{supplier.email}</p>
-                   </div>
-                 : <div key={supplier.id} className="p-2 border rounded">
-                     <span className="font-medium">{supplier.name}</span>
-                   </div>
-             ))}
-           </div>
+            viewMode === 'grid'
+              ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+              : "space-y-2"
+          }>
+            {filteredAndSortedSuppliers.map((supplier) => (
+              viewMode === 'grid'
+                ? <div key={supplier.id} className="p-4 border rounded-lg">
+                  <h3 className="font-medium">{supplier.name}</h3>
+                  <p className="text-sm text-muted-foreground">{supplier.email}</p>
+                </div>
+                : <div key={supplier.id} className="p-2 border rounded">
+                  <span className="font-medium">{supplier.name}</span>
+                </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

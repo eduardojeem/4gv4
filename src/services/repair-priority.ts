@@ -18,7 +18,8 @@ function normalize(value: number, min: number, max: number) {
   return (clamped - min) / (max - min);
 }
 
-export function calculatePriorityScore(repair: RepairOrder, config: PriorityConfig): number {
+export function calculatePriorityScore(repair: RepairOrder, config?: PriorityConfig): number {
+  const effectiveConfig = config || defaultPriorityConfig;
   const now = Date.now();
   const created = new Date(repair.createdAt).getTime();
   const waitHours = Math.max(0, (now - created) / (1000 * 60 * 60));
@@ -29,13 +30,13 @@ export function calculatePriorityScore(repair: RepairOrder, config: PriorityConf
   const complexityNorm = normalize(repair.technicalComplexity ?? 1, 1, 5);
 
   let score =
-    urgency * config.weights.urgencyWeight +
-    waitTimeNorm * config.weights.waitTimeWeight +
-    historicalNorm * config.weights.historicalValueWeight +
-    complexityNorm * config.weights.technicalComplexityWeight;
+    urgency * effectiveConfig.weights.urgencyWeight +
+    waitTimeNorm * effectiveConfig.weights.waitTimeWeight +
+    historicalNorm * effectiveConfig.weights.historicalValueWeight +
+    complexityNorm * effectiveConfig.weights.technicalComplexityWeight;
 
   // apply rules
-  for (const rule of config.rules) {
+  for (const rule of effectiveConfig.rules) {
     const { condition, effect } = rule;
     const matchesStage = condition.stage ? repair.stage === condition.stage : true;
     const matchesModel = condition.deviceModelIncludes
@@ -55,8 +56,9 @@ export function calculatePriorityScore(repair: RepairOrder, config: PriorityConf
   return score;
 }
 
-export function sortRepairsByPriority(repairs: RepairOrder[], config: PriorityConfig): RepairOrder[] {
-  return [...repairs].sort((a, b) => calculatePriorityScore(b, config) - calculatePriorityScore(a, config));
+export function sortRepairsByPriority(repairs: RepairOrder[], config?: PriorityConfig): RepairOrder[] {
+  const effectiveConfig = config || defaultPriorityConfig;
+  return [...repairs].sort((a, b) => calculatePriorityScore(b, effectiveConfig) - calculatePriorityScore(a, effectiveConfig));
 }
 
 export class PriorityLogStore {
@@ -93,7 +95,7 @@ export function availabilityPenalty(repair: RepairOrder, products: ProductStock[
 
 export function calculatePriorityScoreWithInventory(
   repair: RepairOrder,
-  config: PriorityConfig,
+  config: PriorityConfig | undefined,
   products: ProductStock[]
 ): number {
   const base = calculatePriorityScore(repair, config);

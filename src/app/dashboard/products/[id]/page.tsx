@@ -35,6 +35,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/lib/supabase/types'
+type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { ProductModal } from '@/components/dashboard/product-modal'
 import Image from 'next/image'
 import { resolveProductImageUrl } from '@/lib/images'
@@ -783,7 +784,12 @@ export default function ProductDetailPage() {
             suppliers={normalizedSuppliers}
             onSave={async (data) => {
               try {
-                await updateProduct(product.id, data)
+                // Convertir ProductFormData a formato compatible con Supabase
+                const supabaseData: Database['public']['Tables']['products']['Update'] = {
+                  ...data,
+                  dimensions: data.dimensions as Json | null
+                }
+                await updateProduct(product.id, supabaseData)
                 setEditModalOpen(false)
                 toast({
                   title: "Producto actualizado",

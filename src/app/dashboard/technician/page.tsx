@@ -101,7 +101,11 @@ export default function TechnicianPanel() {
   const handleFormSubmit = async (data: RepairFormData) => {
     try {
       if (selectedRepair) {
-        await updateRepair(selectedRepair.id, data as unknown as Repair)
+        // Convertir RepairFormData a RepairUpdateData
+        const updateData: any = {
+          ...data
+        }
+        await updateRepair(selectedRepair.id, updateData)
         toast.success('Reparación actualizada correctamente')
       } else {
         const d = data.devices[0]
@@ -120,7 +124,20 @@ export default function TechnicianPanel() {
           estimated_cost: d.estimatedCost || 0,
           metadata: d.accessPassword ? { device_password: d.accessPassword } : undefined
         }
-        const created = await createRepair(payload)
+        
+        // Convertir a RepairCreateData para el hook
+        const createData: any = {
+          customer_name: data.customerName,
+          customer_phone: data.customerPhone,
+          device_brand: d.brand,
+          device_model: d.model,
+          issue_description: d.issue,
+          priority: data.priority,
+          urgency,
+          estimated_cost: d.estimatedCost || 0
+        }
+        
+        const created = await createRepair(createData)
         if (created?.id && Array.isArray(d.images) && d.images.length > 0) {
           await addImages(created.id, d.images, 'general')
         }
@@ -156,6 +173,7 @@ export default function TechnicianPanel() {
       model: selectedRepair.model,
       issue: selectedRepair.issue,
       description: selectedRepair.description,
+      accessType: 'none' as const,
       technician: selectedRepair.technician?.id || '',
       estimatedCost: selectedRepair.estimatedCost,
       images: []

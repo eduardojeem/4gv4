@@ -482,7 +482,7 @@ function EssentialsPanel({
             <div>
               <label className="block text-muted-foreground mb-1">Nombre de la Empresa</label>
               <Input
-                value={companyName.value ?? ''}
+                value={String(companyName.value ?? '')}
                 onChange={(e) => onSettingChange(companyName.id, e.target.value)}
                 placeholder="Mi Empresa"
               />

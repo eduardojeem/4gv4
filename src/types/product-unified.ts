@@ -37,6 +37,7 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   description?: string | null
   max_stock?: number
   featured?: boolean
+  image?: string
   
   // Additional legacy fields
   recent_movements?: ProductMovement[]

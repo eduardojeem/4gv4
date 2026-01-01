@@ -52,6 +52,7 @@ export function BackupTestingDashboard() {
   const [suites, setSuites] = useState<TestSuite[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedTest, setSelectedTest] = useState<string | null>(null)
+  const [selectedExecution, setSelectedExecution] = useState<string | null>(null)
 
   useEffect(() => {
     loadDashboardData()

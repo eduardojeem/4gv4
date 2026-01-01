@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { usePromotions } from '@/hooks/use-promotions'
-import type { Promotion } from '@/types/promotion'
+import type { Promotion, PromotionType } from '@/types/promotion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

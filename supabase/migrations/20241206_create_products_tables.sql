@@ -181,7 +181,9 @@ CREATE INDEX IF NOT EXISTS idx_product_alerts_created_at ON product_alerts(creat
 
 -- Función para actualizar updated_at automáticamente
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
@@ -203,7 +205,9 @@ CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products
 
 -- Función para crear movimiento de inventario automáticamente
 CREATE OR REPLACE FUNCTION create_stock_movement()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
   IF OLD.stock_quantity IS DISTINCT FROM NEW.stock_quantity THEN
     INSERT INTO product_movements (
@@ -237,7 +241,9 @@ CREATE TRIGGER auto_create_stock_movement AFTER UPDATE ON products
 
 -- Función para crear alertas de stock bajo
 CREATE OR REPLACE FUNCTION check_low_stock()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
   -- Alerta de stock bajo
   IF NEW.stock_quantity <= NEW.min_stock AND NEW.stock_quantity > 0 THEN

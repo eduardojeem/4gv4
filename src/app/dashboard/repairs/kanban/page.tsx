@@ -91,15 +91,14 @@ export default function OptimizedRepairsKanbanPage() {
       deviceModel: `${repair.brand} ${repair.model}`,
       issueDescription: repair.issue,
       createdAt: repair.createdAt,
-      updatedAt: repair.updatedAt,
+      updatedAt: repair.lastUpdate,
       urgency: repair.priority === 'high' ? 5 : repair.priority === 'medium' ? 3 : 1,
       technicalComplexity: 3, // Default value
       historicalValue: repair.finalCost || repair.estimatedCost || 0,
       stage: repair.dbStatus as RepairOrder['stage'],
       technician: repair.technician ? {
         id: repair.technician.id,
-        name: repair.technician.name,
-        avatar: repair.technician.avatar
+        name: repair.technician.name
       } : undefined,
       deviceType: repair.deviceType
     }))

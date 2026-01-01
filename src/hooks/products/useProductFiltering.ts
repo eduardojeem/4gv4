@@ -77,8 +77,8 @@ export function useProductFiltering(
   const dataRanges = useMemo(() => {
     if (products.length === 0) return null
 
-    const prices = products.map(p => p.price || 0).filter(p => p > 0)
-    const stocks = products.map(p => p.stock || 0)
+    const prices = products.map(p => p.sale_price || 0).filter(p => p > 0)
+    const stocks = products.map(p => p.stock_quantity || 0)
     const margins = products.map(p => p.margin_percentage || 0).filter(m => m > 0)
 
     return {
@@ -169,8 +169,9 @@ export function useProductFiltering(
 
   // Aplicar filtros de búsqueda con memoización avanzada
   const searchFilteredProducts = useAdvancedMemoization(
-    (products: Product[], searchTerm: string, config: SearchConfig = { fields: ['name', 'sku', 'description'], minLength: 2, debounceMs: 300 }) => {
+    (productsArg: any, searchTerm: string, config: SearchConfig = { fields: ['name', 'sku', 'description'], minLength: 2, debounceMs: 300 }) => {
       const startTime = performance.now()
+      const products = productsArg as Product[]
 
       try {
         setLastError(null)
@@ -265,18 +266,42 @@ export function useProductFiltering(
         result = result.filter((product: Product) => product.supplier === filters.supplier)
       }
 
-      if (filters.stockStatus) {
+      if (filters.stockStatus && filters.stockStatus !== 'all') {
         result = result.filter((product: Product) => {
-          switch (filters.stockStatus) {
-            case 'in_stock':
-              return product.stock > 0
-            case 'low_stock':
-              return product.stock > 0 && product.stock <= (product.minStock || 10)
-            case 'out_of_stock':
-              return product.stock === 0
-            default:
-              return true
+          const checkStatus = (status: string) => {
+            switch (status) {
+              case 'in_stock':
+                return product.stock_quantity > 0
+              case 'low_stock':
+                return product.stock_quantity > 0 && product.stock_quantity <= (product.min_stock || 10)
+              case 'out_of_stock':
+                return product.stock_quantity === 0
+              default:
+                return true
+            }
           }
+
+          if (Array.isArray(filters.stockStatus)) {
+            if (filters.stockStatus.length === 0) return true
+            return filters.stockStatus.some(checkStatus)
+          }
+
+          return checkStatus(filters.stockStatus as string)
+        })
+      }
+
+      if (filters.marginStatus && filters.marginStatus.length > 0) {
+        result = result.filter((product: Product) => {
+          const margin = product.margin_percentage || ((product.sale_price - product.purchase_price) / product.sale_price) * 100 || 0
+          return filters.marginStatus!.some(status => {
+            switch (status) {
+              case 'low': return margin < 10
+              case 'medium': return margin >= 10 && margin < 20
+              case 'good': return margin >= 20 && margin < 50
+              case 'high': return margin >= 50
+              default: return false
+            }
+          })
         })
       }
 
@@ -285,13 +310,13 @@ export function useProductFiltering(
       }
 
       if (typeof filters.featured === 'boolean') {
-        result = result.filter((product: Product) => product.isFeatured === filters.featured)
+        result = result.filter((product: Product) => product.featured === filters.featured)
       }
 
       if (filters.priceRange) {
         result = result.filter((product: Product) =>
-          product.price >= filters.priceRange!.min &&
-          product.price <= filters.priceRange!.max
+          product.sale_price >= filters.priceRange!.min &&
+          product.sale_price <= filters.priceRange!.max
         )
       }
 
@@ -318,23 +343,23 @@ export function useProductFiltering(
       // Filtros de rango de precio avanzados
       if (advancedFilters.priceRange) {
         result = result.filter((product: Product) =>
-          product.price >= advancedFilters.priceRange!.min &&
-          product.price <= advancedFilters.priceRange!.max
+          product.sale_price >= advancedFilters.priceRange!.min &&
+          product.sale_price <= advancedFilters.priceRange!.max
         )
       }
 
       // Filtros de stock
       if (advancedFilters.stockRange) {
         result = result.filter((product: Product) =>
-          product.stock >= advancedFilters.stockRange!.min &&
-          product.stock <= advancedFilters.stockRange!.max
+          product.stock_quantity >= advancedFilters.stockRange!.min &&
+          product.stock_quantity <= advancedFilters.stockRange!.max
         )
       }
 
       // Filtros de margen
       if (advancedFilters.marginRange) {
         result = result.filter((product: Product) => {
-          const margin = ((product.price - product.cost) / product.price) * 100
+          const margin = ((product.sale_price - product.purchase_price) / product.sale_price) * 100
           return margin >= advancedFilters.marginRange!.min &&
             margin <= advancedFilters.marginRange!.max
         })
@@ -343,7 +368,7 @@ export function useProductFiltering(
       // Filtros de fecha
       if (advancedFilters.dateRange) {
         result = result.filter((product: Product) => {
-          const productDate = new Date(product.createdAt)
+          const productDate = new Date(product.created_at)
           const start = advancedFilters.dateRange?.start
           const end = advancedFilters.dateRange?.end
           return (start ? productDate >= start : true) &&
@@ -395,11 +420,11 @@ export function useProductFiltering(
       stats.byStockStatus[status] = (stats.byStockStatus[status] || 0) + 1
 
       // Ranges
-      if (p.price < stats.priceRange.min) stats.priceRange.min = p.price
-      if (p.price > stats.priceRange.max) stats.priceRange.max = p.price
+      if (p.sale_price < stats.priceRange.min) stats.priceRange.min = p.sale_price
+      if (p.sale_price > stats.priceRange.max) stats.priceRange.max = p.sale_price
 
-      if (p.stock < stats.stockRange.min) stats.stockRange.min = p.stock
-      if (p.stock > stats.stockRange.max) stats.stockRange.max = p.stock
+      if (p.stock_quantity < stats.stockRange.min) stats.stockRange.min = p.stock_quantity
+      if (p.stock_quantity > stats.stockRange.max) stats.stockRange.max = p.stock_quantity
     })
 
     // Fix infinity if no products

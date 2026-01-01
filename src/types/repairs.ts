@@ -132,6 +132,7 @@ export interface RepairOrder {
   customerPhone?: string
   customerEmail?: string
   deviceModel?: string
+  deviceType?: string
   issueDescription?: string
   urgency?: number
   historicalValue?: number
@@ -140,6 +141,10 @@ export interface RepairOrder {
   updatedAt?: string
   stage?: string
   estimatedDurationHours?: number
+  technician?: {
+    id: string
+    name: string
+  }
 }
 
 export interface PriorityRuleCondition {
@@ -155,6 +160,8 @@ export interface PriorityRuleEffect {
 }
 
 export interface PriorityRule {
+  id: string
+  name: string
   condition: PriorityRuleCondition
   effect: PriorityRuleEffect
 }

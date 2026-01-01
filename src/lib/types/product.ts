@@ -13,4 +13,6 @@ export interface Product {
   description?: string
   featured?: boolean
   barcode?: string
+  max_stock?: number
+  updated_at?: string
 }

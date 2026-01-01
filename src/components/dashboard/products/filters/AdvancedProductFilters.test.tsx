@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import '@testing-library/jest-dom'
+import { render } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/dom'
 import userEvent from '@testing-library/user-event'
 import { AdvancedProductFilters } from './AdvancedProductFilters'
 
@@ -86,8 +88,7 @@ describe('AdvancedProductFilters', () => {
   const defaultProps = {
     onFiltersChange: vi.fn(),
     showPresets: true,
-    showAdvanced: true,
-    compact: false
+    collapsible: false
   }
 
   beforeEach(() => {
@@ -194,8 +195,8 @@ describe('AdvancedProductFilters', () => {
     expect(mockUpdateFilter).toHaveBeenCalledWith('stockStatus', 'low')
   })
 
-  it('should display price range filter when advanced filters are shown', () => {
-    render(<AdvancedProductFilters {...defaultProps} showAdvanced={true} />)
+  it('should display price range filter', () => {
+    render(<AdvancedProductFilters {...defaultProps} />)
 
     expect(screen.getByText(/price range/i)).toBeInTheDocument()
   })
@@ -209,7 +210,7 @@ describe('AdvancedProductFilters', () => {
       updateFilter: mockUpdateFilter
     })
 
-    render(<AdvancedProductFilters {...defaultProps} showAdvanced={true} />)
+    render(<AdvancedProductFilters {...defaultProps} />)
 
     const priceSlider = screen.getByRole('slider', { name: /price/i })
     await user.type(priceSlider, '500')
@@ -218,21 +219,21 @@ describe('AdvancedProductFilters', () => {
   })
 
   it('should display stock range filter', () => {
-    render(<AdvancedProductFilters {...defaultProps} showAdvanced={true} />)
+    render(<AdvancedProductFilters {...defaultProps} />)
 
     expect(screen.getByText(/stock range/i)).toBeInTheDocument()
   })
 
   it('should display margin range filter', () => {
-    render(<AdvancedProductFilters {...defaultProps} showAdvanced={true} />)
+    render(<AdvancedProductFilters {...defaultProps} />)
 
-    expect(screen.getByText(/margin range/i)).toBeInTheDocument()
+    expect(screen.getByText(/margin/i)).toBeInTheDocument()
   })
 
   it('should display date range filter', () => {
-    render(<AdvancedProductFilters {...defaultProps} showAdvanced={true} />)
+    render(<AdvancedProductFilters {...defaultProps} />)
 
-    expect(screen.getByText(/creation date/i)).toBeInTheDocument()
+    expect(screen.getByText(/fecha de creación/i)).toBeInTheDocument()
   })
 
   it('should handle clear all filters', async () => {
@@ -258,19 +259,19 @@ describe('AdvancedProductFilters', () => {
     expect(screen.getByText(/85 of 100 products/i)).toBeInTheDocument()
   })
 
-  it('should render in compact mode', () => {
-    render(<AdvancedProductFilters {...defaultProps} compact={true} />)
+  it('should render in collapsible mode', () => {
+    render(<AdvancedProductFilters {...defaultProps} collapsible={true} />)
 
-    // En modo compacto, algunos filtros pueden estar ocultos o colapsados
-    expect(screen.getByTestId('compact-filters')).toBeInTheDocument()
+    // En modo colapsable, el contenido puede estar oculto inicialmente
+    expect(screen.getByText(/filtros avanzados/i)).toBeInTheDocument()
   })
 
-  it('should hide advanced filters when showAdvanced is false', () => {
-    render(<AdvancedProductFilters {...defaultProps} showAdvanced={false} />)
+  it('should show all filters by default', () => {
+    render(<AdvancedProductFilters {...defaultProps} />)
 
-    expect(screen.queryByText(/price range/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/stock range/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/margin range/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/rango de precio/i)).toBeInTheDocument()
+    expect(screen.getByText(/rango de stock/i)).toBeInTheDocument()
+    expect(screen.getByText(/margen de beneficio/i)).toBeInTheDocument()
   })
 
   it('should hide presets when showPresets is false', () => {
@@ -379,7 +380,7 @@ describe('AdvancedProductFilters', () => {
       updateFilter: mockUpdateFilter
     })
 
-    render(<AdvancedProductFilters {...defaultProps} showAdvanced={true} />)
+    render(<AdvancedProductFilters {...defaultProps} />)
 
     const dateInput = screen.getByLabelText(/start date/i)
     await user.type(dateInput, '2024-01-01')

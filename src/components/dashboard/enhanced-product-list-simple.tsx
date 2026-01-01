@@ -55,6 +55,8 @@ interface Product {
   last_updated?: string
   status?: string
   image_url?: string
+  image?: string
+  images?: string[]
   description?: string
   barcode?: string
   weight?: number
@@ -368,7 +370,7 @@ export default function EnhancedProductList({
                   <TableCell>
                     <div className="flex items-center space-x-3">
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={resolveProductImageUrl(product.image_url || '')} alt={product.name} />
+                        <AvatarImage src={resolveProductImageUrl(product.image || product.image_url || '')} alt={product.name} />
                         <AvatarFallback className="bg-muted">
                           <Package className="h-5 w-5" />
                         </AvatarFallback>

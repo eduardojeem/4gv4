@@ -26,7 +26,8 @@ export const productGenerator = (): fc.Arbitrary<Product> => {
     max_stock: fc.option(fc.integer({ min: 0, max: 2000 }), { nil: null }),
     unit_measure: fc.constantFrom('unidad', 'kg', 'litro', 'metro', 'caja', 'paquete'),
     barcode: fc.option(fc.string({ minLength: 8, maxLength: 13 }), { nil: null }),
-    images: fc.option(fc.array(fc.webUrl(), { maxLength: 5 }), { nil: undefined }),
+    images: fc.option(fc.array(fc.webUrl(), { maxLength: 5 }), { nil: null }),
+    image: fc.option(fc.webUrl(), { nil: null }),
     image_url: fc.option(fc.webUrl(), { nil: null }),
     is_active: fc.boolean(),
     featured: fc.option(fc.boolean(), { nil: undefined }),
@@ -248,7 +249,7 @@ export const productWithMultipleImagesGenerator = (): fc.Arbitrary<Product> => {
 export const productWithoutImagesGenerator = (): fc.Arbitrary<Product> => {
   return productGenerator().map(product => ({
     ...product,
-    images: undefined,
+    images: null,
     image_url: null
   }))
 }

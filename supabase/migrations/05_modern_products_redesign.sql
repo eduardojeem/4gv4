@@ -274,7 +274,9 @@ CREATE INDEX IF NOT EXISTS idx_products_fulltext ON products USING GIN(
 
 -- Función para generar slug automáticamente
 CREATE OR REPLACE FUNCTION generate_product_slug(product_name TEXT, product_id UUID)
-RETURNS TEXT AS $
+RETURNS TEXT 
+SET search_path = public
+AS $
 DECLARE
   base_slug TEXT;
   final_slug TEXT;
@@ -300,7 +302,9 @@ $ LANGUAGE plpgsql;
 
 -- Función para calcular porcentaje de descuento
 CREATE OR REPLACE FUNCTION calculate_discount_percentage(sale_price NUMERIC, compare_price NUMERIC)
-RETURNS INTEGER AS $
+RETURNS INTEGER 
+SET search_path = public
+AS $
 BEGIN
   IF compare_price IS NULL OR compare_price <= 0 OR sale_price >= compare_price THEN
     RETURN 0;
@@ -312,7 +316,9 @@ $ LANGUAGE plpgsql IMMUTABLE;
 
 -- Función para actualizar stock_status automáticamente
 CREATE OR REPLACE FUNCTION update_product_stock_status()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER 
+SET search_path = public
+AS $
 BEGIN
   IF NEW.stock_quantity <= 0 THEN
     NEW.stock_status := 'out_of_stock';
@@ -328,7 +334,9 @@ $ LANGUAGE plpgsql;
 
 -- Función para actualizar discount_percentage automáticamente
 CREATE OR REPLACE FUNCTION update_product_discount()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER 
+SET search_path = public
+AS $
 BEGIN
   NEW.discount_percentage := calculate_discount_percentage(NEW.sale_price, NEW.compare_at_price);
   RETURN NEW;
@@ -337,7 +345,9 @@ $ LANGUAGE plpgsql;
 
 -- Función para generar slug automáticamente
 CREATE OR REPLACE FUNCTION auto_generate_slug()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER 
+SET search_path = public
+AS $
 BEGIN
   IF NEW.slug IS NULL OR NEW.slug = '' THEN
     NEW.slug := generate_product_slug(NEW.name, NEW.id);
@@ -528,7 +538,9 @@ RETURNS TABLE (
   is_trending BOOLEAN,
   promotion_label TEXT,
   relevance_score REAL
-) AS $
+) 
+SET search_path = public
+AS $
 BEGIN
   RETURN QUERY
   SELECT 

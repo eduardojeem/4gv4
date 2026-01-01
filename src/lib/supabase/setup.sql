@@ -325,7 +325,9 @@ CREATE TRIGGER on_auth_user_created
 
 -- Función para actualizar timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;

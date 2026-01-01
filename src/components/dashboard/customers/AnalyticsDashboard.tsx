@@ -42,7 +42,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerMetrics, UseCustomerMetricsOptions } from '@/hooks/use-customer-metrics'
-import { formatters } from '@/lib/formatters'
+import { formatters, formatValue } from '@/lib/formatters'
 import { ChartWrapper, RevenueChart, CustomerGrowthChart, SegmentDistributionChart } from '@/components/charts/ChartWrapper'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 
@@ -244,7 +244,7 @@ export function AnalyticsDashboard({
                   </div>
                   <div className="mt-4">
                     <h3 className="text-2xl font-bold">
-                      {formatters[metric.format as keyof typeof formatters](metric.value)}
+                      {formatValue(metric.value, metric.format as keyof typeof formatters)}
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
                       {metric.title}
@@ -497,7 +497,7 @@ function SimpleAnalyticsView({
                 <span className="text-sm font-medium">{metric.title}</span>
               </div>
               <div className="text-xl font-bold">
-                {formatters[metric.format as keyof typeof formatters](metric.value)}
+                {formatValue(metric.value, metric.format as keyof typeof formatters)}
               </div>
             </CardContent>
           </Card>
@@ -543,7 +543,7 @@ function RealtimeAnalyticsView({
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                 </div>
                 <div className="text-xl font-bold">
-                  {formatters[metric.format](metric.value)}
+                  {formatValue(metric.value, metric.format as keyof typeof formatters)}
                 </div>
                 <div className="text-sm text-muted-foreground">{metric.title}</div>
               </CardContent>

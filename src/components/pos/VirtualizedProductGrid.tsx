@@ -24,16 +24,18 @@ const VirtualizedProductGrid = memo(({
   const shouldVirtualize = products.length > 50
 
   const {
-    visibleItems,
+    virtualItems,
     totalHeight,
-    offsetY,
-    handleScroll
+    containerProps
   } = useVirtualList({
     itemHeight,
     containerHeight,
     items: products,
     overscan: 5
   })
+
+  // Calculate generic offset for the chunk of visible items
+  const offsetY = virtualItems.length > 0 ? virtualItems[0].offsetTop : 0
 
   if (!shouldVirtualize) {
     // Renderizado normal para listas pequeñas
@@ -47,9 +49,8 @@ const VirtualizedProductGrid = memo(({
   // Renderizado virtualizado para listas grandes
   return (
     <div
-      className={`relative overflow-auto ${className}`}
-      style={{ height: containerHeight }}
-      onScroll={handleScroll}
+      className={`relative ${className}`}
+      {...containerProps}
     >
       <div style={{ height: totalHeight, position: 'relative' }}>
         <div
@@ -61,11 +62,11 @@ const VirtualizedProductGrid = memo(({
             right: 0
           }}
         >
-          <div className={viewMode === 'grid' 
-            ? 'grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4' 
+          <div className={viewMode === 'grid'
+            ? 'grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 sm:gap-3 md:gap-4'
             : 'space-y-2'
           }>
-            {visibleItems.map(({ item: product, index }) => (
+            {virtualItems.map(({ item: product, index }: { item: any, index: number }) => (
               <div key={`${product.id}-${index}`}>
                 {renderProduct(product, index)}
               </div>

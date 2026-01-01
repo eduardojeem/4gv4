@@ -126,7 +126,9 @@ CREATE INDEX IF NOT EXISTS idx_product_alerts_read ON product_alerts(read);
 
 -- FUNCION: Actualizar updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER 
+SET search_path = public
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;

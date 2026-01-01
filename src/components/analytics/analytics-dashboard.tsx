@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { formatCurrency } from '@/lib/currency'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -130,24 +130,8 @@ export default function AnalyticsDashboard() {
   const [performanceData, setPerformanceData] = useState<ChartData[]>([])
   const [predictiveData, setPredictiveData] = useState<ChartData[]>([])
 
-  // Cargar datos iniciales
-  useEffect(() => {
-    loadDashboardData()
-  }, [filters, loadDashboardData])
-
-  // Actualización automática cada 30 segundos
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!isRefreshing) {
-        refreshData()
-      }
-    }, 30000)
-
-    return () => clearInterval(interval)
-  }, [isRefreshing, refreshData])
-
   // Función para cargar datos del dashboard
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     setIsLoading(true)
     try {
       await Promise.all([
@@ -165,7 +149,30 @@ export default function AnalyticsDashboard() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [filters])
+
+  // Función para refrescar datos
+  const refreshData = useCallback(async () => {
+    setIsRefreshing(true)
+    await loadDashboardData()
+    setIsRefreshing(false)
+  }, [loadDashboardData])
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    loadDashboardData()
+  }, [loadDashboardData])
+
+  // Actualización automática cada 30 segundos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isRefreshing) {
+        refreshData()
+      }
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [isRefreshing, refreshData])
 
   // Cargar métricas principales
   const loadMetrics = async () => {
@@ -413,13 +420,6 @@ export default function AnalyticsDashboard() {
     }
     
     return data
-  }
-
-  // Función para refrescar datos
-  const refreshData = async () => {
-    setIsRefreshing(true)
-    await loadDashboardData()
-    setIsRefreshing(false)
   }
 
   // Función para exportar datos

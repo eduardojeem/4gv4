@@ -13,7 +13,8 @@ import {
   Package,
   AlertTriangle,
   TrendingDown,
-  CheckCircle
+  CheckCircle,
+  Trash2
 } from "lucide-react"
 
 interface ProductItem {
@@ -31,6 +32,7 @@ interface VirtualizedProductGridProps {
   selectedProducts: string[]
   onSelectionChange: (productIds: string[]) => void
   onEdit: (product: ProductItem) => void
+  onDelete: (id: string) => void
   onView: (product: ProductItem) => void
   itemHeight?: number
   containerHeight?: number
@@ -69,6 +71,7 @@ const VirtualProductCard = memo(({
   isSelected, 
   onSelect, 
   onEdit, 
+  onDelete,
   onView 
 }: {
   product: ProductItem
@@ -77,6 +80,7 @@ const VirtualProductCard = memo(({
   isSelected: boolean
   onSelect: (checked: boolean) => void
   onEdit: (product: ProductItem) => void
+  onDelete: (id: string) => void
   onView: (product: ProductItem) => void
 }) => {
   const stockStatus = getStockStatus(product.stock)
@@ -183,6 +187,15 @@ const VirtualProductCard = memo(({
                 <Edit className="mr-1 h-3 w-3" />
                 Editar
               </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => onDelete(product.id)}
+                className="flex-1 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="mr-1 h-3 w-3" />
+                Eliminar
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -283,8 +296,13 @@ export const VirtualizedProductGrid = memo(({
       {/* Header con selección masiva */}
       <div className="flex items-center gap-3 p-4 bg-white/50 rounded-lg border border-slate-200">
         <Checkbox
-          checked={selectedProducts.length === products.length}
-          indeterminate={selectedProducts.length > 0 && selectedProducts.length < products.length}
+          checked={
+            selectedProducts.length === products.length 
+              ? true 
+              : selectedProducts.length > 0 
+                ? 'indeterminate' 
+                : false
+          }
           onCheckedChange={handleSelectAll}
         />
         <span className="text-sm font-medium text-slate-700">
@@ -325,6 +343,7 @@ export const VirtualizedProductGrid = memo(({
                   isSelected={selectedProducts.includes(virtualItem.item.id)}
                   onSelect={(checked) => handleSelectProduct(virtualItem.item.id, checked)}
                   onEdit={onEdit}
+                  onDelete={onDelete}
                   onView={onView}
                 />
               ))}
