@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Package, AlertTriangle } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { VirtualizedProductGrid } from './VirtualizedProductList';
-import type { Product } from '../types';
+import type { Product } from '@/types/product-unified';
 
 interface POSProductGridProps {
   products: Product[];
@@ -25,8 +25,8 @@ const ProductCard = memo<{
   product: Product;
   onAddToCart: (product: Product) => void;
 }>(({ product, onAddToCart }) => {
-  const isLowStock = product.stock <= (product.minStock || 5);
-  const isOutOfStock = product.stock <= 0;
+  const isLowStock = (product.stock_quantity || 0) <= (product.min_stock || 5);
+  const isOutOfStock = (product.stock_quantity || 0) <= 0;
 
   return (
     <Card className={`cursor-pointer transition-all hover:shadow-md ${
@@ -56,7 +56,7 @@ const ProductCard = memo<{
             
             <div className="flex items-center justify-between mb-2">
               <span className="text-lg font-bold text-primary">
-                {formatCurrency(product.price)}
+                {formatCurrency(product.sale_price || 0)}
               </span>
               
               <div className="flex items-center gap-1">
@@ -67,7 +67,7 @@ const ProductCard = memo<{
                   variant={isOutOfStock ? 'destructive' : isLowStock ? 'secondary' : 'outline'}
                   className="text-xs"
                 >
-                  {product.stock}
+                  {product.stock_quantity || 0}
                 </Badge>
               </div>
             </div>
@@ -101,8 +101,11 @@ export const POSProductGrid: React.FC<POSProductGridProps> = memo(({
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           product.barcode?.includes(searchTerm);
-      const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
+                           (product.sku && product.sku.includes(searchTerm)) ||
+                           (product.barcode && product.barcode.includes(searchTerm));
+      const matchesCategory = selectedCategory === 'all' || 
+                             product.category_id === selectedCategory ||
+                             (product.category && product.category.id === selectedCategory);
       
       return matchesSearch && matchesCategory;
     });

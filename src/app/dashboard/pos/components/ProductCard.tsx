@@ -7,17 +7,17 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/currency'
 import { formatStockStatus } from '@/lib/inventory-manager'
-import type { Product } from '../types'
+import type { Product } from '@/types/product-unified'
 
 interface ProductCardProps {
-  product: any
-  addToCart: (product: any) => void
+  product: Product
+  addToCart: (product: Product) => void
   formatCurrency: (amount: number) => string
   viewMode?: 'grid' | 'list'
   inventoryManager?: any
   isWholesale?: boolean
   wholesaleDiscountRate?: number
-  onQuickAdd?: (product: any, quantity: number) => void
+  onQuickAdd?: (product: Product, quantity: number) => void
   cartQuantity?: number
   showStock?: boolean
   showBarcode?: boolean
@@ -36,12 +36,16 @@ export const ProductCard = memo(({
   showStock = true,
   showBarcode = false
 }: ProductCardProps) => {
-  const stockStatus = inventoryManager ? formatStockStatus(product.stock) : formatStockStatus(product.stock, product.minStock || 5)
-  const isOutOfStock = product.stock === 0
+  const stock = product.stock_quantity || 0
+  const minStock = product.min_stock || 5
+  const price = product.sale_price || 0
   
-  const hasExplicitWholesale = typeof product.wholesalePrice === 'number' && product.wholesalePrice > 0
-  const computedWholesale = Math.round(product.price * (1 - (wholesaleDiscountRate / 100)))
-  const appliedPrice = isWholesale ? (hasExplicitWholesale ? product.wholesalePrice! : computedWholesale) : product.price
+  const stockStatus = inventoryManager ? formatStockStatus(stock) : formatStockStatus(stock, minStock)
+  const isOutOfStock = stock === 0
+  
+  const hasExplicitWholesale = typeof product.wholesale_price === 'number' && product.wholesale_price > 0
+  const computedWholesale = Math.round(price * (1 - (wholesaleDiscountRate / 100)))
+  const appliedPrice = isWholesale ? (hasExplicitWholesale ? product.wholesale_price! : computedWholesale) : price
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -53,7 +57,7 @@ export const ProductCard = memo(({
   }
 
   const handleQuickAdd = (quantity: number) => {
-    if (onQuickAdd && quantity > 0 && quantity <= product.stock) {
+    if (onQuickAdd && quantity > 0 && quantity <= stock) {
       onQuickAdd(product, quantity)
     }
   }
@@ -88,13 +92,13 @@ export const ProductCard = memo(({
                       'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                     }`}
                   >
-                    {product.stock} un.
+                    {stock} un.
                   </Badge>
                 )}
               </div>
               
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="truncate">{product.category}</span>
+                <span className="truncate">{product.category?.name || product.category_id}</span>
                 {product.sku && (
                   <>
                     <span className="w-1 h-1 rounded-full bg-border" />
@@ -112,7 +116,7 @@ export const ProductCard = memo(({
                 </div>
                 {isWholesale && (
                   <div className="text-[10px] text-muted-foreground line-through">
-                    {formatCurrency(product.price)}
+                    {formatCurrency(price)}
                   </div>
                 )}
               </div>
@@ -208,7 +212,7 @@ export const ProductCard = memo(({
               {product.featured && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500 flex-shrink-0 mt-0.5" />}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1 truncate">
-              {product.category}
+              {product.category?.name || product.category_id}
             </p>
           </div>
 
@@ -218,7 +222,7 @@ export const ProductCard = memo(({
               <div className="flex flex-col">
                 {isWholesale && (
                   <span className="text-[10px] text-muted-foreground line-through leading-none mb-0.5">
-                    {formatCurrency(product.price)}
+                    {formatCurrency(price)}
                   </span>
                 )}
                 <span className="text-lg font-bold text-primary leading-none">
@@ -229,7 +233,7 @@ export const ProductCard = memo(({
               {/* Indicador de stock sutil si es normal */}
               {showStock && stockStatus && stockStatus.status === 'ok' && (
                 <span className="text-[10px] text-muted-foreground font-medium bg-muted/50 px-1.5 py-0.5 rounded-sm">
-                  {product.stock} un.
+                  {stock} un.
                 </span>
               )}
             </div>

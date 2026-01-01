@@ -1,19 +1,7 @@
-export interface Product {
-  id: string
-  name: string
-  sku: string
-  barcode?: string
-  price: number
-  stock: number
-  minStock?: number
-  category: string
-  description?: string
-  image?: string
-  unit_measure?: string
-  is_active?: boolean
-  wholesalePrice?: number
-  featured?: boolean
-}
+import type { Product as UnifiedProduct } from '@/types/product-unified'
+
+// Use the unified Product type for consistency
+export type Product = UnifiedProduct
 
 export interface Customer {
   id: string

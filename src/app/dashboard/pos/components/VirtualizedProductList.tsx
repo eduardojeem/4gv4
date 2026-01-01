@@ -5,7 +5,7 @@ import { List } from 'react-window'
 import { formatCurrency } from '@/lib/currency'
 
 import { ProductCard } from './ProductCard'
-import type { Product } from '../types'
+import type { Product } from '@/types/product-unified'
 
 interface VirtualizedProductListProps {
   products: Product[]
