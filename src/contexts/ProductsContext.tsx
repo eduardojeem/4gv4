@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { resolveProductImageUrl } from '@/lib/images'
 
 // ============================================================================
 // Types
@@ -18,8 +19,12 @@ export interface Product {
     cost?: number
     stock: number
     min_stock: number
-    image_url?: string
-    image?: string
+    // Standardized image field
+    image?: string | null
+    // Legacy compatibility
+    image_url?: string | null
+    images?: string[] | null
+    
     active: boolean
     created_at: string
     updated_at: string
@@ -28,7 +33,6 @@ export interface Product {
     purchase_price?: number
     stock_quantity?: number
     is_active?: boolean
-    images?: string[]
 }
 
 export interface ProductFormData {
@@ -40,10 +44,12 @@ export interface ProductFormData {
     cost?: number
     stock: number
     min_stock: number
+    // Standardized image handling
+    images?: string[]
+    // Legacy support
     image_url?: string
     image?: string
     active?: boolean
-    images?: string[]
 }
 
 export interface ProductsContextValue {

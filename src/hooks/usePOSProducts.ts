@@ -1,30 +1,19 @@
 'use client'
 
+// Force re-evaluation - remove this comment if HMR issues occur
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/lib/supabase/types'
+import type { Product as UnifiedProduct, Category as UnifiedCategory } from '@/types/product-unified'
 import { config } from '@/lib/config'
 import { useProductRealTimeSync } from './useRealTimeSync'
 
-type Product = Database['public']['Tables']['products']['Row'] & {
-  category?: Database['public']['Tables']['categories']['Row']
+type DbProductRow = Database['public']['Tables']['products']['Row']
+type DbCategoryRow = Database['public']['Tables']['categories']['Row']
+type Product = DbProductRow & {
+  category?: DbCategoryRow
   supplier?: Database['public']['Tables']['suppliers']['Row']
   stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'
-}
-
-interface POSProduct {
-  id: string
-  name: string
-  sku: string
-  barcode?: string
-  price: number
-  stock: number
-  category: string
-  description?: string
-  image?: string
-  unit_measure?: string
-  is_active: boolean
-  wholesalePrice?: number
 }
 
 interface CartItem {
@@ -50,20 +39,21 @@ interface SaleData {
   notes?: string
 }
 
-// Datos mock para fallback
-const mockProducts: POSProduct[] = [
+// Datos mock para fallback (forma unificada)
+const mockProducts: UnifiedProduct[] = [
   {
     id: '1',
     name: 'Smartphone Samsung Galaxy A54',
     description: 'Smartphone con cámara de 50MP y pantalla Super AMOLED',
     sku: 'SAM-A54-128',
     barcode: '7891234567890',
-    price: 2500000,
-    stock: 15,
-    category: 'Electrónicos',
+    sale_price: 2500000,
+    stock_quantity: 15,
+    category_id: 'electronics',
     image: '📱',
     unit_measure: 'unidad',
-    is_active: true
+    is_active: true,
+    purchase_price: 0
   },
   {
     id: '2',
@@ -71,12 +61,13 @@ const mockProducts: POSProduct[] = [
     description: 'Auriculares inalámbricos con cancelación de ruido',
     sku: 'SONY-WH1000',
     barcode: '7891234567891',
-    price: 850000,
-    stock: 8,
-    category: 'Electrónicos',
+    sale_price: 850000,
+    stock_quantity: 8,
+    category_id: 'electronics',
     image: '🎧',
     unit_measure: 'unidad',
-    is_active: true
+    is_active: true,
+    purchase_price: 0
   },
   {
     id: '11',
@@ -84,12 +75,13 @@ const mockProducts: POSProduct[] = [
     description: 'Teclado gaming con switches mecánicos',
     sku: 'LOG-MX-KEYS',
     barcode: '7891234567899',
-    price: 450000,
-    stock: 12,
-    category: 'Accesorios',
+    sale_price: 450000,
+    stock_quantity: 12,
+    category_id: 'accessories',
     image: '⌨️',
     unit_measure: 'unidad',
-    is_active: true
+    is_active: true,
+    purchase_price: 0
   },
   {
     id: '12',
@@ -97,17 +89,18 @@ const mockProducts: POSProduct[] = [
     description: 'Mouse óptico para gaming con RGB',
     sku: 'RAZ-DEATHADDER',
     barcode: '7891234567900',
-    price: 280000,
-    stock: 20,
-    category: 'Accesorios',
+    sale_price: 280000,
+    stock_quantity: 20,
+    category_id: 'accessories',
     image: '🖱️',
     unit_measure: 'unidad',
-    is_active: true
+    is_active: true,
+    purchase_price: 0
   }
 ]
 
 export function usePOSProducts() {
-  const [products, setProducts] = useState<POSProduct[]>([])
+  const [products, setProducts] = useState<UnifiedProduct[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -128,27 +121,29 @@ export function usePOSProducts() {
         newProducts[productIndex] = {
           ...newProducts[productIndex],
           name: updatedProduct.name,
-          price: updatedProduct.sale_price,
-          stock: updatedProduct.stock_quantity,
+          sale_price: updatedProduct.sale_price,
+          stock_quantity: updatedProduct.stock_quantity,
           description: updatedProduct.description || undefined,
-          image: updatedProduct.images?.[0] || undefined,
-          is_active: updatedProduct.is_active
+          image: (updatedProduct as any).images?.[0] || (updatedProduct as any).image_url || undefined,
+          is_active: updatedProduct.is_active,
+          purchase_price: (updatedProduct as any).cost_price || (newProducts[productIndex] as any).purchase_price || 0
         }
         return newProducts
       } else if (updatedProduct.is_active) {
         // Agregar nuevo producto activo
-        const newProduct: POSProduct = {
+        const newProduct: UnifiedProduct = {
           id: updatedProduct.id,
           name: updatedProduct.name,
           sku: updatedProduct.sku,
           barcode: updatedProduct.barcode || undefined,
-          price: updatedProduct.sale_price,
-          stock: updatedProduct.stock_quantity,
-          category: 'Sin categoría', // Se actualizará con la siguiente carga
+          sale_price: updatedProduct.sale_price,
+          stock_quantity: updatedProduct.stock_quantity,
+          category_id: updatedProduct.category_id || null as any,
           description: updatedProduct.description || undefined,
-          image: updatedProduct.images?.[0] || undefined,
+          image: (updatedProduct as any).images?.[0] || (updatedProduct as any).image_url || undefined,
           unit_measure: updatedProduct.unit_measure || 'unidad',
-          is_active: updatedProduct.is_active
+          is_active: updatedProduct.is_active,
+          purchase_price: (updatedProduct as any).cost_price || 0
         }
         return [...prevProducts, newProduct]
       }
@@ -163,7 +158,7 @@ export function usePOSProducts() {
       setProducts(prevProducts => 
         prevProducts.map(product => 
           product.id === stockMovement.product_id
-            ? { ...product, stock: stockMovement.new_stock || product.stock }
+            ? { ...product, stock_quantity: stockMovement.new_stock ?? product.stock_quantity }
             : product
         )
       )
@@ -182,10 +177,10 @@ export function usePOSProducts() {
     setError(null)
     
     try {
-      console.log('Iniciando fetchProducts desde Supabase...')
+      console.log('🔍 [usePOSProducts] Iniciando fetchProducts desde Supabase...')
       
       // FORZAR USO DE SUPABASE - No usar datos mock
-      console.log('Conectando a Supabase para obtener productos...')
+      console.log('🔗 [usePOSProducts] Conectando a Supabase para obtener productos...')
       
       const { data, error } = await supabase
         .from('products')
@@ -199,41 +194,47 @@ export function usePOSProducts() {
         .eq('is_active', true)
         .order('name')
 
-      console.log('Respuesta de Supabase:', { data, error })
+      console.log('📊 [usePOSProducts] Respuesta de Supabase:', { 
+        dataLength: data?.length || 0, 
+        error: error?.message || null,
+        hasData: !!data,
+        firstProduct: data?.[0]?.name || 'N/A'
+      })
 
       if (error) {
-        console.error('Error de Supabase:', error)
+        console.error('❌ [usePOSProducts] Error de Supabase:', error)
         throw new Error(`Error de base de datos: ${error.message}`)
       }
 
       if (!data || data.length === 0) {
-        console.log('No se encontraron productos en la base de datos')
+        console.log('⚠️ [usePOSProducts] No se encontraron productos en la base de datos')
         setProducts([])
         setError('No hay productos disponibles. Agregue productos a la base de datos.')
         return
       }
 
-      console.log(`Procesando ${data.length} productos...`)
+      console.log(`✅ [usePOSProducts] Procesando ${data.length} productos...`)
 
-      const posProducts: POSProduct[] = data.map(product => ({
+      const posProducts: UnifiedProduct[] = data.map((product: any) => ({
         id: product.id,
         name: product.name,
         sku: product.sku,
         barcode: product.barcode || undefined,
-        price: product.sale_price,
-        stock: product.stock_quantity,
-        category: product.categories?.name || 'Sin categoría',
+        sale_price: product.sale_price,
+        stock_quantity: product.stock_quantity,
+        category_id: product.category_id,
+        category: product.categories ? { id: product.categories.id, name: product.categories.name } as UnifiedCategory : undefined,
         description: product.description || undefined,
-        image: product.images?.[0] || undefined,
+        image: (product.images?.[0]) || product.image_url || undefined,
         unit_measure: product.unit_measure || 'unidad',
         is_active: product.is_active,
-        wholesalePrice: product.wholesale_price || undefined
+        purchase_price: product.cost_price || 0
       }))
 
-      console.log('Productos procesados:', posProducts.length)
+      console.log('✅ [usePOSProducts] Productos procesados exitosamente:', posProducts.length)
       setProducts(posProducts)
     } catch (err) {
-      console.error('Error completo en fetchProducts:', err)
+      console.error('❌ [usePOSProducts] Error completo en fetchProducts:', err)
       setProducts([])
       setError(`Error al cargar productos: ${err instanceof Error ? err.message : 'Error desconocido'}`)
     } finally {
@@ -242,7 +243,7 @@ export function usePOSProducts() {
   }, [supabase])
 
   // Función para buscar producto por código de barras
-  const findProductByBarcode = useCallback(async (barcode: string): Promise<POSProduct | null> => {
+  const findProductByBarcode = useCallback(async (barcode: string): Promise<UnifiedProduct | null> => {
     try {
       // FORZAR USO DE SUPABASE
       console.log('Buscando producto por código de barras en Supabase:', barcode)
@@ -273,14 +274,15 @@ export function usePOSProducts() {
         name: data.name,
         sku: data.sku,
         barcode: data.barcode || undefined,
-        price: data.sale_price,
-        stock: data.stock_quantity,
-        category: data.categories?.name || 'Sin categoría',
+        sale_price: data.sale_price,
+        stock_quantity: data.stock_quantity,
+        category_id: data.category_id,
+        category: data.categories ? { id: data.category_id, name: data.categories.name } as UnifiedCategory : undefined,
         description: data.description || undefined,
-        image: data.images?.[0] || undefined,
+        image: (data.images?.[0]) || (data as any).image_url || undefined,
         unit_measure: data.unit_measure || 'unidad',
         is_active: data.is_active,
-        wholesalePrice: data.wholesale_price || undefined
+        purchase_price: (data as any).cost_price || 0
       }
     } catch (err) {
       console.error('Error buscando producto por código de barras:', err)
@@ -289,10 +291,10 @@ export function usePOSProducts() {
   }, [supabase])
 
   // Función para agregar producto al carrito
-  const addToCart = useCallback((product: POSProduct, quantity: number = 1) => {
+  const addToCart = useCallback((product: UnifiedProduct, quantity: number = 1) => {
     if (quantity <= 0) return false
-    if (quantity > product.stock) {
-      setError(`Stock insuficiente. Disponible: ${product.stock}`)
+    if (quantity > (product.stock_quantity || 0)) {
+      setError(`Stock insuficiente. Disponible: ${product.stock_quantity || 0}`)
       return false
     }
 
@@ -301,8 +303,8 @@ export function usePOSProducts() {
       
       if (existingItem) {
         const newQuantity = existingItem.quantity + quantity
-        if (newQuantity > product.stock) {
-          setError(`Stock insuficiente. Disponible: ${product.stock}`)
+        if (newQuantity > (product.stock_quantity || 0)) {
+          setError(`Stock insuficiente. Disponible: ${product.stock_quantity || 0}`)
           return prevCart
         }
         
@@ -320,10 +322,10 @@ export function usePOSProducts() {
           id: product.id,
           name: product.name,
           sku: product.sku,
-          price: product.price,
+          price: product.sale_price || 0,
           quantity,
-          stock: product.stock,
-          subtotal: quantity * product.price
+          stock: product.stock_quantity || 0,
+          subtotal: quantity * (product.sale_price || 0)
         }
         return [...prevCart, newItem]
       }
@@ -343,8 +345,8 @@ export function usePOSProducts() {
     const product = products.find(p => p.id === productId)
     if (!product) return
 
-    if (quantity > product.stock) {
-      setError(`Stock insuficiente. Disponible: ${product.stock}`)
+    if (quantity > (product.stock_quantity || 0)) {
+      setError(`Stock insuficiente. Disponible: ${product.stock_quantity || 0}`)
       return
     }
 
@@ -479,8 +481,9 @@ export function usePOSProducts() {
         product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (product.barcode && product.barcode.includes(searchTerm))
 
+      const categoryName = product.category?.name || ''
       const matchesCategory = selectedCategory === 'all' || 
-        product.category === selectedCategory
+        categoryName === selectedCategory
 
       return matchesSearch && matchesCategory
     })
@@ -488,7 +491,7 @@ export function usePOSProducts() {
 
   // Categorías disponibles
   const categories = useMemo(() => {
-    const uniqueCategories = Array.from(new Set(products.map(p => p.category)))
+    const uniqueCategories = Array.from(new Set(products.map(p => p.category?.name).filter(Boolean))) as string[]
     return uniqueCategories.sort()
   }, [products])
 

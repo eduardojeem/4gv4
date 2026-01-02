@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useMemo, useCallback } from 'react'
-import { List } from 'react-window'
 import { formatCurrency } from '@/lib/currency'
+import { useVirtualList } from '@/hooks/use-virtual-list'
 
 import { ProductCard } from './ProductCard'
 import type { Product } from '@/types/product-unified'
@@ -35,26 +35,9 @@ interface ItemData {
   wholesaleDiscountRate?: number
 }
 
-interface GridRowProps {
-  productRows: Product[][]
-  onAddToCart: (product: Product) => void
-  onQuickAdd?: (product: Product, quantity: number) => void
-  getCartQuantity: (productId: string) => number
-  showStock: boolean
-  showBarcode: boolean
-  inventoryManager?: any
-  isWholesale?: boolean
-  wholesaleDiscountRate?: number
-}
-
 const ProductRow = ({ index, style, ...props }: {
   index: number
   style: React.CSSProperties
-  ariaAttributes: {
-    "aria-posinset": number
-    "aria-setsize": number
-    role: "listitem"
-  }
 } & ItemData) => {
   const { 
     products, 
@@ -111,27 +94,12 @@ export const VirtualizedProductList: React.FC<VirtualizedProductListProps> = ({
   isWholesale,
   wholesaleDiscountRate
 }) => {
-  // Memoize row props to prevent unnecessary re-renders
-  const rowProps = useMemo((): ItemData => ({
-    products,
-    onAddToCart,
-    onQuickAdd,
-    getCartQuantity,
-    viewMode: viewMode as 'grid' | 'list',
-    showStock,
-    showBarcode,
-    inventoryManager,
-    isWholesale,
-    wholesaleDiscountRate
-  }), [products, onAddToCart, onQuickAdd, getCartQuantity, viewMode, showStock, showBarcode, inventoryManager, isWholesale, wholesaleDiscountRate])
-
-  // Memoized item count
-  const itemCount = useMemo(() => products.length, [products.length])
-
-  // Optimized item size calculation
-  const getItemSize = useCallback(() => {
-    return viewMode === 'grid' ? itemHeight + 16 : itemHeight
-  }, [viewMode, itemHeight])
+  const { virtualItems, containerProps, innerProps } = useVirtualList({
+    items: products,
+    itemHeight: viewMode === 'grid' ? itemHeight + 16 : itemHeight,
+    containerHeight: height,
+    overscan: 5
+  })
 
   if (products.length === 0) {
     return (
@@ -145,15 +113,28 @@ export const VirtualizedProductList: React.FC<VirtualizedProductListProps> = ({
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <List
-        style={{ height }}
-        rowCount={itemCount}
-        rowHeight={getItemSize()}
-        rowProps={rowProps}
-        rowComponent={ProductRow}
-        overscanCount={5} // Pre-render 5 items above and below visible area
-      />
+    <div className="border rounded-lg overflow-hidden bg-background">
+      <div {...containerProps}>
+        <div {...innerProps}>
+          {virtualItems.map(({ index, offsetTop }) => (
+            <ProductRow
+              key={index}
+              index={index}
+              style={{ position: 'absolute', top: offsetTop, width: '100%', height: itemHeight }}
+              products={products}
+              onAddToCart={onAddToCart}
+              onQuickAdd={onQuickAdd}
+              getCartQuantity={getCartQuantity}
+              viewMode={viewMode}
+              showStock={showStock}
+              showBarcode={showBarcode}
+              inventoryManager={inventoryManager}
+              isWholesale={isWholesale}
+              wholesaleDiscountRate={wholesaleDiscountRate}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -183,56 +164,12 @@ export const VirtualizedProductGrid: React.FC<VirtualizedProductListProps> = ({
     return rows
   }, [products])
 
-  const rowProps = useMemo((): GridRowProps => ({
-    productRows,
-    onAddToCart,
-    onQuickAdd,
-    getCartQuantity,
-    showStock,
-    showBarcode,
-  }), [productRows, onAddToCart, onQuickAdd, getCartQuantity, showStock, showBarcode])
-
-  const GridRow = ({ index, style, ariaAttributes, ...props }: {
-    index: number
-    style: React.CSSProperties
-    ariaAttributes: {
-      "aria-posinset": number
-      "aria-setsize": number
-      role: "listitem"
-    }
-  } & GridRowProps) => {
-    const { productRows, onAddToCart, onQuickAdd, getCartQuantity, showStock, showBarcode, inventoryManager, isWholesale, wholesaleDiscountRate } = props
-    const row = productRows[index]
-
-    if (!row) {
-      return (
-        <div style={style} />
-      )
-    }
-
-    return (
-      <div style={style}>
-        <div className="grid grid-cols-3 gap-4 p-4">
-          {row.map((product: Product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              addToCart={onAddToCart}
-              formatCurrency={formatCurrency}
-              onQuickAdd={onQuickAdd}
-              cartQuantity={getCartQuantity(product.id)}
-              viewMode="grid"
-              showStock={showStock}
-              showBarcode={showBarcode}
-              inventoryManager={inventoryManager}
-              isWholesale={isWholesale}
-              wholesaleDiscountRate={wholesaleDiscountRate}
-            />
-          ))}
-        </div>
-      </div>
-    )
-  }
+  const { virtualItems, containerProps, innerProps } = useVirtualList({
+    items: productRows,
+    itemHeight: ITEM_HEIGHT,
+    containerHeight: height,
+    overscan: 2
+  })
 
   if (products.length === 0) {
     return (
@@ -246,15 +183,41 @@ export const VirtualizedProductGrid: React.FC<VirtualizedProductListProps> = ({
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <List
-        style={{ height }}
-        rowCount={productRows.length}
-        rowHeight={ITEM_HEIGHT}
-        rowProps={rowProps}
-        rowComponent={GridRow}
-        overscanCount={2}
-      />
+    <div className="border rounded-lg overflow-hidden bg-background">
+      <div {...containerProps}>
+        <div {...innerProps}>
+          {virtualItems.map(({ index, item: row, offsetTop }) => (
+            <div
+              key={index}
+              style={{
+                position: 'absolute',
+                top: offsetTop,
+                width: '100%',
+                height: ITEM_HEIGHT
+              }}
+            >
+              <div className="grid grid-cols-3 gap-4 p-4">
+                {row.map((product: Product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    addToCart={onAddToCart}
+                    formatCurrency={formatCurrency}
+                    onQuickAdd={onQuickAdd}
+                    cartQuantity={getCartQuantity(product.id)}
+                    viewMode="grid"
+                    showStock={showStock}
+                    showBarcode={showBarcode}
+                    inventoryManager={inventoryManager}
+                    isWholesale={isWholesale}
+                    wholesaleDiscountRate={wholesaleDiscountRate}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

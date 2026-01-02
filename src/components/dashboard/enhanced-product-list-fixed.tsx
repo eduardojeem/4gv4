@@ -404,7 +404,7 @@ export default function EnhancedProductList({
                   <TableCell>
                     <div className="flex items-center space-x-3">
                       <Avatar className="h-10 w-10">
-                        <AvatarImage src={resolveProductImageUrl(product.image || product.image_url || '')} alt={product.name} />
+                        <AvatarImage src={resolveProductImageUrl(product.images?.[0] || product.image || product.image_url || '')} alt={product.name} />
                         <AvatarFallback className="bg-muted">
                           <Package className="h-5 w-5" />
                         </AvatarFallback>

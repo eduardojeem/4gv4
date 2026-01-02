@@ -198,8 +198,12 @@ export const ProductCard = memo(({
 
       <CardContent className="p-0 h-full flex flex-col">
         {/* Imagen / Icono Grande */}
-        <div className="h-24 bg-muted/20 flex items-center justify-center text-5xl border-b border-border/40 group-hover:bg-muted/40 transition-colors">
-          {product.image || '📦'}
+        <div className="h-24 bg-muted/20 flex items-center justify-center text-5xl border-b border-border/40 group-hover:bg-muted/40 transition-colors overflow-hidden">
+          {product.image && (product.image.startsWith('http') || product.image.startsWith('/') || product.image.startsWith('data:')) ? (
+             <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+          ) : (
+             product.image || '📦'
+          )}
         </div>
         
         <div className="p-3 flex flex-col flex-1 gap-2">
