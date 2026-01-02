@@ -23,7 +23,7 @@ const CHECKS = {
     'performance'
   ],
   maxFileSize: 500 * 1024, // 500KB
-  maxTotalSize: 5 * 1024 * 1024, // 5MB
+  maxTotalSize: 8 * 1024 * 1024, // 8MB
   accessibilityChecks: true,
   performanceChecks: true
 };
