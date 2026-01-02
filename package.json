@@ -30,7 +30,7 @@
     "performance:audit": "node scripts/performance-audit.js",
     "deploy:staging": "npm run build:production && npm run test:all && echo 'Ready for staging deployment'",
     "deploy:production": "npm run build:production && npm run test:all && npm run analyze && echo 'Ready for production deployment'",
-    "postbuild": "node scripts/post-build-checks.js",
+    "postbuild": "node scripts/post-build-checks.mjs",
     "grant:superadmin": "node scripts/grant-super-admin.js --email=jeem101595@gmail.com",
     "verify:supabase": "npx tsx scripts/verify-supabase.ts",
     "setup:repairs": "node scripts/setup-repairs.js",

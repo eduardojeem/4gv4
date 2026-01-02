@@ -40,7 +40,7 @@ Este plan implementa la optimización sistemática del bundle de Next.js para re
   - Asegurar que todos los tests pasen, preguntar al usuario si surgen dudas.
 
 - [ ] 4. Optimizar dependencias grandes
-  - [-] 4.1 Analizar y optimizar imports de librerías
+  - [x] 4.1 Analizar y optimizar imports de librerías
     - Identificar las 10 dependencias más grandes
     - Implementar tree shaking para Radix UI, Recharts, etc.
     - Reemplazar imports completos con imports específicos

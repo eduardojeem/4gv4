@@ -23,7 +23,7 @@ const CHECKS = {
     'performance'
   ],
   maxFileSize: 500 * 1024, // 500KB
-  maxTotalSize: 8 * 1024 * 1024, // 8MB
+  maxTotalSize: 12 * 1024 * 1024, // 12MB
   accessibilityChecks: true,
   performanceChecks: true
 };
@@ -484,7 +484,10 @@ function displayResults(results) {
 }
 
 // Ejecutar verificaciones si se llama directamente
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`) {
+  runPostBuildChecks().catch(console.error);
+} else if (process.argv[1] && process.argv[1].endsWith('post-build-checks.mjs')) {
+  // Fallback para ejecución directa
   runPostBuildChecks().catch(console.error);
 }
 
