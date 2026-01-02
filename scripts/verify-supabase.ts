@@ -82,7 +82,10 @@ async function verifyConnection() {
     { name: 'product_movements', label: 'Movimientos de Productos' },
     { name: 'product_alerts', label: 'Alertas de Productos' },
     { name: 'product_price_history', label: 'Historial de Precios' },
-    { name: 'customers', label: 'Clientes' }
+    { name: 'customers', label: 'Clientes' },
+    { name: 'repairs', label: 'Reparaciones' },
+    { name: 'profiles', label: 'Perfiles (Técnicos)' },
+    { name: 'repair_images', label: 'Imágenes de Reparaciones' }
   ]
 
   let allTablesExist = true

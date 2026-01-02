@@ -18,9 +18,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     }
 
     const supabase = createAdminSupabase()
+    // Fix: The DB column is 'status', not 'stage'
     const { error } = await supabase
       .from('repairs')
-      .update({ stage, updated_at: new Date().toISOString() })
+      .update({ status: stage, updated_at: new Date().toISOString() })
       .eq('id', id)
 
     if (error) throw error

@@ -3,7 +3,10 @@
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
 
+// Load environment variables
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(process.cwd(), '.env.local') });
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -171,29 +174,49 @@ async function run() {
     const { data: existingRepairs, error: countErr } = await supabase
       .from('repairs')
       .select('id', { count: 'exact', head: true })
-    if (countErr) throw countErr
-    const hasData = (existingRepairs && existingRepairs.length > 0) || (countErr == null && existingRepairs == null)
-    if (hasData) {
-      console.log('ℹ️ Ya existen reparaciones en la base de datos. No se insertan datos de ejemplo.')
-      return
+      
+    // The previous logic for hasData was slightly flawed if existingRepairs is null.
+    // If countErr is null, we can trust existingRepairs.length or count.
+    // But let's simplify.
+    
+    // Check technician existence first as it's critical
+    let technician;
+    try {
+        technician = await getTechnicianByEmail(email);
+    } catch (e) {
+        console.error('❌ No se encontró el técnico con email:', email);
+        console.log('⚠️ Asegúrate de que el usuario existe en Supabase Auth y en la tabla profiles.');
+        process.exit(1);
     }
-    const technician = await getTechnicianByEmail(email)
-    const customerIds = await ensureCustomers(3)
-    const repairs = await insertRepairs(technician.id, customerIds)
-    await insertNotesAndParts(repairs, technician)
-    console.log('✅ Datos de ejemplo insertados')
-    console.log('🧰 Reparaciones creadas:', repairs.length)
-    for (const r of repairs) {
-      console.log(`- ${r.device_brand} ${r.device_model} • ${r.status} • ${r.estimated_completion}`)
+
+    if (!countErr && existingRepairs && existingRepairs.length > 0) {
+      console.log('ℹ️ Ya existen reparaciones en la base de datos.')
+      // Optionally continue? The user said "missing data", implying they want data.
+      // If data exists but isn't showing, that's a different problem.
+      // But verify-supabase said 0 repairs. So this check should pass.
+    } else {
+        const customerIds = await ensureCustomers(3)
+        const repairs = await insertRepairs(technician.id, customerIds)
+        await insertNotesAndParts(repairs, technician)
+        console.log('✅ Datos de ejemplo insertados')
+        console.log('🧰 Reparaciones creadas:', repairs.length)
+        for (const r of repairs) {
+          console.log(`- ${r.device_brand} ${r.device_model} • ${r.status} • ${r.estimated_completion}`)
+        }
     }
+
   } catch (err) {
     console.error('❌ Error:', err.message || String(err))
     process.exit(1)
   }
 }
 
-if (require.main === module) {
-  run()
+// Check if file is run directly
+if (process.argv[1] && import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}`) {
+    run().catch(console.error);
+} else if (process.argv[1] && process.argv[1].endsWith('seed-technician-data.mjs')) {
+    // Fallback for some environments
+    run().catch(console.error);
 }
 
-module.exports = { run }
+export { run }
