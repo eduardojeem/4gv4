@@ -251,7 +251,7 @@ function SortableRepairCard({ repair, onEdit }: SortableRepairCardProps) {
     })
 
     const style = {
-        transform: CSS.Transform.toString(transform),
+        transform: CSS.Transform?.toString(transform),
         transition,
     }
 
