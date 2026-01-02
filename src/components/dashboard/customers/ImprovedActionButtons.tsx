@@ -12,15 +12,15 @@
  * - Animaciones suaves
  */
 
-import React from "react"
-import { motion } from "framer-motion"
-import { Button } from "@/components/ui/button"
+import React from 'react'
+import { motion  } from '../../ui/motion'
+import { Button } from '@/components/ui/button'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
+} from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,7 +28,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from '@/components/ui/dropdown-menu'
 import {
   UserPlus,
   Download,
@@ -41,8 +41,8 @@ import {
   Grid,
   List,
   Calendar
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface ImprovedActionButtonsProps {
   onAddCustomer?: () => void

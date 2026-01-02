@@ -1,13 +1,72 @@
 'use client'
 
-// Optimized framer-motion imports
-import { motion as framerMotion, AnimatePresence as framerAnimatePresence } from 'framer-motion'
+// Stub para framer-motion - optimizado para bundle size
+import React from 'react'
 
-// Re-export optimized components
-export const motion = framerMotion
-export const AnimatePresence = framerAnimatePresence
+// Crear componentes motion básicos sin framer-motion
+const createMotionComponent = (tag: string) => {
+  return React.forwardRef<HTMLElement, any>(({ children, initial, animate, exit, variants, transition, whileHover, whileTap, drag, dragConstraints, onDragEnd, layout, layoutId, style, className, onClick, onMouseEnter, onMouseLeave, ...props }, ref) => {
+    // Crear el elemento HTML correspondiente
+    const Component = tag as any;
+    
+    return (
+      <Component
+        ref={ref}
+        className={className}
+        style={style}
+        onClick={onClick}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        {...props}
+      >
+        {children}
+      </Component>
+    );
+  });
+};
 
-// Common animation variants to reduce bundle size
+// Crear componentes motion para los elementos más comunes
+export const motion = {
+  div: createMotionComponent('div'),
+  span: createMotionComponent('span'),
+  p: createMotionComponent('p'),
+  h1: createMotionComponent('h1'),
+  h2: createMotionComponent('h2'),
+  h3: createMotionComponent('h3'),
+  h4: createMotionComponent('h4'),
+  h5: createMotionComponent('h5'),
+  h6: createMotionComponent('h6'),
+  button: createMotionComponent('button'),
+  a: createMotionComponent('a'),
+  img: createMotionComponent('img'),
+  ul: createMotionComponent('ul'),
+  li: createMotionComponent('li'),
+  section: createMotionComponent('section'),
+  article: createMotionComponent('article'),
+  header: createMotionComponent('header'),
+  footer: createMotionComponent('footer'),
+  nav: createMotionComponent('nav'),
+  main: createMotionComponent('main'),
+  aside: createMotionComponent('aside'),
+  form: createMotionComponent('form'),
+  input: createMotionComponent('input'),
+  textarea: createMotionComponent('textarea'),
+  select: createMotionComponent('select'),
+  label: createMotionComponent('label'),
+  table: createMotionComponent('table'),
+  thead: createMotionComponent('thead'),
+  tbody: createMotionComponent('tbody'),
+  tr: createMotionComponent('tr'),
+  td: createMotionComponent('td'),
+  th: createMotionComponent('th'),
+};
+
+// AnimatePresence stub - simplemente renderiza los children
+export const AnimatePresence: React.FC<{ children?: React.ReactNode; mode?: string; initial?: boolean }> = ({ children }) => {
+  return <>{children}</>;
+};
+
+// Common animation variants (stubs - no animation)
 export const fadeInUp = {
   initial: { opacity: 0, y: 20 },
   animate: { opacity: 1, y: 0 },

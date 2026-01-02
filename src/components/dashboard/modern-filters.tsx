@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, memo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useState, memo } from 'react'
+import { motion, AnimatePresence  } from '../ui/motion'
 import { 
   Search, 
   Filter, 
@@ -10,24 +10,24 @@ import {
   List,
   SlidersHorizontal,
   ChevronDown
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from '@/components/ui/select'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover"
-import { Separator } from "@/components/ui/separator"
+} from '@/components/ui/popover'
+import { Separator } from '@/components/ui/separator'
 
 interface FilterOption {
   value: string

@@ -40,7 +40,7 @@ import {
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { createSupabaseClient } from '@/lib/supabase/client'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence  } from '../../ui/motion'
 
 interface CustomerSelectorV2Props {
     value?: string

@@ -10,14 +10,14 @@
  * - Sistema de pestañas reorganizado
  */
 
-import React, { useState } from "react"
-import { motion } from "framer-motion"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Separator } from "@/components/ui/separator"
-import { CustomerCreditInfo } from "./CustomerCreditInfo"
+import React, { useState } from 'react'
+import { motion  } from '../../ui/motion'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Separator } from '@/components/ui/separator'
+import { CustomerCreditInfo } from './CustomerCreditInfo'
 import {
   FileText,
   User,
@@ -40,11 +40,11 @@ import {
   Building,
   Star,
   Edit
-} from "lucide-react"
+} from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerData, useCustomerPurchases } from '@/hooks/useCustomerData'
-import { CustomerDetailHeader } from "./CustomerDetailHeader"
-import { CustomerDetailMetrics } from "./CustomerDetailMetrics"
+import { CustomerDetailHeader } from './CustomerDetailHeader'
+import { CustomerDetailMetrics } from './CustomerDetailMetrics'
 
 interface CustomerDetailProps {
   customer: Customer

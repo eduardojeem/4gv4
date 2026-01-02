@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
+import { motion  } from '../../../../components/ui/motion'
 import { 
   ArrowLeft, 
   Edit, 

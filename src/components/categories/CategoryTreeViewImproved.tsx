@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence  } from '../ui/motion'
 import {
     ChevronRight, ChevronDown, Tag, Edit, Trash2,
     ToggleLeft, ToggleRight, Package, Plus, Search,

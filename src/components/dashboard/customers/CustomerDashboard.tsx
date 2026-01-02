@@ -13,14 +13,14 @@
  * - Gestión de estados y paginación
  */
 
-import React, { useMemo, useState, useEffect, Suspense, lazy, useCallback } from "react"
-import dynamic from "next/dynamic"
-import { motion } from "framer-motion"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
+import React, { useMemo, useState, useEffect, Suspense, lazy, useCallback } from 'react'
+import dynamic from 'next/dynamic'
+import { motion  } from '../../ui/motion'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { 
   Users, 
   TrendingUp, 
@@ -32,38 +32,38 @@ import {
   Bell,
   CreditCard,
   MessageSquare
-} from "lucide-react"
+} from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
-import { ImprovedMetricCard } from "./ImprovedMetricCard"
+import { ImprovedMetricCard } from './ImprovedMetricCard'
 // Componentes cargados dinámicamente para reducir el peso inicial
 // Componente mejorado de lista de clientes
 const CustomerListView = dynamic(() => import("./CustomerListView").then(m => ({ default: m.CustomerListView })), { ssr: false })
 const CustomerDetail = dynamic(() => import("./CustomerDetail").then(m => m.CustomerDetail), { ssr: false })
 const CustomerHistory = dynamic(() => import("./CustomerHistory").then(m => m.CustomerHistory), { ssr: false })
 const CustomerFilters = dynamic(() => import("./CustomerFilters").then(m => m.CustomerFilters), { ssr: false })
-import { CustomerModal } from "./CustomerModal"
+import { CustomerModal } from './CustomerModal'
 // Componente consolidado de analíticas
 const AnalyticsDashboard = lazy(() => import("./AnalyticsDashboard").then(m => ({ default: m.AnalyticsDashboard })))
 // Componente consolidado de segmentación
 const SegmentationSystem = lazy(() => import("./SegmentationSystem").then(m => ({ default: m.SegmentationSystem })))
 const CustomerCommunications = lazy(() => import("./advanced/CustomerCommunications").then(m => ({ default: m.CustomerCommunications })))
 const NotificationCenter = dynamic(() => import("./NotificationCenter").then(m => m.NotificationCenter), { ssr: false })
-import { useCustomerState, Customer } from "@/hooks/use-customer-state"
-import { useCustomerActions } from "@/hooks/use-customer-actions"
-import { Pagination } from "@/components/ui/pagination"
-import { prefetchCustomerPurchases, prefetchSimilarCustomers } from "@/hooks/useCustomerData"
-import { Skeleton } from "@/components/ui/skeleton"
-import { useKeyboardShortcuts, customerDashboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
-import { KeyboardShortcutsIndicator } from "@/components/ui/keyboard-shortcuts-indicator"
-import { toast } from "sonner"
-import { useCustomersWithCredits } from "@/hooks/use-customer-credits"
-import { UpcomingInstallments } from "@/components/dashboard/credits/UpcomingInstallments"
-import { useCredits } from "@/hooks/use-credits"
-import { Input } from "@/components/ui/input"
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
-import { SearchStats, SearchInsights } from "./SearchStats"
-import searchService from "@/services/search-service"
-import { formatCurrency } from "@/lib/currency"
+import { useCustomerState, Customer } from '@/hooks/use-customer-state'
+import { useCustomerActions } from '@/hooks/use-customer-actions'
+import { Pagination } from '@/components/ui/pagination'
+import { prefetchCustomerPurchases, prefetchSimilarCustomers } from '@/hooks/useCustomerData'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useKeyboardShortcuts, customerDashboardShortcuts } from '@/hooks/use-keyboard-shortcuts'
+import { KeyboardShortcutsIndicator } from '@/components/ui/keyboard-shortcuts-indicator'
+import { toast } from 'sonner'
+import { useCustomersWithCredits } from '@/hooks/use-customer-credits'
+import { UpcomingInstallments } from '@/components/dashboard/credits/UpcomingInstallments'
+import { useCredits } from '@/hooks/use-credits'
+import { Input } from '@/components/ui/input'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { SearchStats, SearchInsights } from './SearchStats'
+import searchService from '@/services/search-service'
+import { formatCurrency } from '@/lib/currency'
 
 
 // Tipos para la navegación

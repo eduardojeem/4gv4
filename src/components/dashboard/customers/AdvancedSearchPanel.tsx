@@ -11,12 +11,12 @@
  * - Métricas de rendimiento
  */
 
-import React, { useState, useMemo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
+import React, { useState, useMemo } from 'react'
+import { motion, AnimatePresence  } from '../../ui/motion'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
 import { 
   Search, 
   TrendingUp, 
@@ -32,10 +32,10 @@ import {
   Filter,
   BarChart3,
   Lightbulb
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Customer } from "@/hooks/use-customer-state"
-import searchService from "@/services/search-service"
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Customer } from '@/hooks/use-customer-state'
+import searchService from '@/services/search-service'
 
 interface AdvancedSearchPanelProps {
   query: string

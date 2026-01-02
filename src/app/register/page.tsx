@@ -15,7 +15,7 @@ import { config, isDemoNoDb } from '@/lib/config'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
 import { useConnectionStatus } from '@/hooks/use-connection-status'
-import { motion } from 'framer-motion'
+import { motion  } from '../../components/ui/motion'
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({

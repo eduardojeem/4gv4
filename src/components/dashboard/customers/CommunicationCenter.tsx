@@ -1,19 +1,19 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
-import { useDebounce } from "@/hooks/use-debounce"
-import { motion } from "framer-motion"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import React, { useState, useMemo } from 'react'
+import { useDebounce } from '@/hooks/use-debounce'
+import { motion  } from '../../ui/motion'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { 
   MessageSquare, 
   Mail, 
@@ -29,9 +29,9 @@ import {
   Clock,
   CheckCheck,
   MessageCircle
-} from "lucide-react"
-import { Customer } from "@/hooks/use-customer-state"
-import { toast } from "sonner"
+} from 'lucide-react'
+import { Customer } from '@/hooks/use-customer-state'
+import { toast } from 'sonner'
 
 interface Message {
   id: string

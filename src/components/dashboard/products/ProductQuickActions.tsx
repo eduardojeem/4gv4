@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { Product } from '@/types/products'
 import { toast } from 'sonner'
-import { motion } from 'framer-motion'
+import { motion  } from '../../ui/motion'
 
 interface ProductQuickActionsProps {
   product: Product

@@ -79,33 +79,80 @@ const nextConfig: NextConfig = {
     if (!dev) {
       config.devtool = false;
       
-      // Configurar splitChunks para mejor división de código
+      // Configurar splitChunks para mejor división de código - MÁS AGRESIVO
       config.optimization.splitChunks = {
         chunks: 'all',
-        minSize: 20000,
-        maxSize: 244000,
+        minSize: 10000,      // Reducido de 20000
+        maxSize: 150000,     // Reducido de 244000
+        minChunks: 1,        // Reducido de 2
+        maxAsyncRequests: 30, // Aumentado de 6
+        maxInitialRequests: 30, // Aumentado de 4
         cacheGroups: {
           // Chunk para React y Next.js
           framework: {
             test: /[\\/]node_modules[\\/](react|react-dom|next)[\\/]/,
             name: 'framework',
             chunks: 'all',
-            priority: 40,
+            priority: 50,
             enforce: true,
           },
-          // Chunk para librerías UI grandes
-          ui: {
-            test: /[\\/]node_modules[\\/](@radix-ui|framer-motion|recharts)[\\/]/,
-            name: 'ui-libs',
+          // Chunk específico para Recharts (muy pesado)
+          recharts: {
+            test: /[\\/]node_modules[\\/]recharts[\\/]/,
+            name: 'recharts',
+            chunks: 'all',
+            priority: 45,
+            enforce: true,
+          },
+          // Chunk específico para Framer Motion (muy pesado)
+          framerMotion: {
+            test: /[\\/]node_modules[\\/]framer-motion[\\/]/,
+            name: 'framer-motion',
+            chunks: 'all',
+            priority: 44,
+            enforce: true,
+          },
+          // Chunk para Radix UI
+          radixUI: {
+            test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
+            name: 'radix-ui',
+            chunks: 'all',
+            priority: 40,
+          },
+          // Chunk para date-fns
+          dateFns: {
+            test: /[\\/]node_modules[\\/]date-fns[\\/]/,
+            name: 'date-fns',
+            chunks: 'all',
+            priority: 35,
+          },
+          // Chunk para Supabase
+          supabase: {
+            test: /[\\/]node_modules[\\/]@supabase[\\/]/,
+            name: 'supabase',
             chunks: 'all',
             priority: 30,
           },
-          // Chunk para utilidades
-          utils: {
-            test: /[\\/]node_modules[\\/](date-fns|lodash|zod|html2canvas|dompurify)[\\/]/,
-            name: 'utils',
+          // Chunk para DND Kit
+          dndKit: {
+            test: /[\\/]node_modules[\\/]@dnd-kit[\\/]/,
+            name: 'dnd-kit',
             chunks: 'all',
             priority: 25,
+          },
+          // Chunk para utilidades pesadas
+          heavyUtils: {
+            test: /[\\/]node_modules[\\/](html2canvas|jspdf|xlsx|dompurify)[\\/]/,
+            name: 'heavy-utils',
+            chunks: 'all',
+            priority: 24,
+          },
+          // Chunk para Zod
+          zod: {
+            test: /[\\/]node_modules[\\/]zod[\\/]/,
+            name: 'zod',
+            chunks: 'all',
+            priority: 23,
           },
           // Chunk para iconos
           icons: {
@@ -114,27 +161,53 @@ const nextConfig: NextConfig = {
             chunks: 'all',
             priority: 20,
           },
-          // Supabase
-          supabase: {
-            test: /[\\/]node_modules[\\/]@supabase[\\/]/,
-            name: 'supabase',
+          // Chunk para utilidades generales
+          utils: {
+            test: /[\\/]node_modules[\\/](lodash|sonner|swr)[\\/]/,
+            name: 'utils',
             chunks: 'all',
             priority: 15,
           },
-          // Vendor general
+          // Vendor general (más pequeño)
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendors',
             chunks: 'all',
             priority: 10,
+            maxSize: 100000, // Limitar tamaño del chunk vendor
           },
-          // Código común de la aplicación
+          // Código común de la aplicación - más agresivo
           common: {
             name: 'common',
             minChunks: 2,
             chunks: 'all',
             priority: 5,
             reuseExistingChunk: true,
+            maxSize: 80000,
+          },
+          // Chunk específico para páginas de dashboard
+          dashboard: {
+            test: /[\\/]src[\\/]app[\\/]dashboard[\\/]/,
+            name: 'dashboard-pages',
+            chunks: 'all',
+            priority: 8,
+            maxSize: 100000,
+          },
+          // Chunk específico para páginas de admin
+          admin: {
+            test: /[\\/]src[\\/]app[\\/]admin[\\/]/,
+            name: 'admin-pages',
+            chunks: 'all',
+            priority: 7,
+            maxSize: 100000,
+          },
+          // Chunk específico para componentes de dashboard
+          dashboardComponents: {
+            test: /[\\/]src[\\/]components[\\/]dashboard[\\/]/,
+            name: 'dashboard-components',
+            chunks: 'all',
+            priority: 6,
+            maxSize: 80000,
           },
         },
       };
@@ -149,6 +222,12 @@ const nextConfig: NextConfig = {
         ...config.resolve.alias,
         'lodash': 'lodash-es',
       };
+
+      // Configurar module concatenation para mejor tree shaking
+      config.optimization.concatenateModules = true;
+      
+      // Configurar side effects para mejor tree shaking
+      config.optimization.sideEffects = false;
     }
 
     return config;

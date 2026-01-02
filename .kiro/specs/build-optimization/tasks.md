@@ -17,12 +17,12 @@ Este plan implementa la optimización sistemática del bundle de Next.js para re
   - **Valida: Requisitos 1.3, 3.4, 5.1, 5.2**
 
 - [ ] 2. Implementar división de código por rutas
-  - [ ] 2.1 Configurar lazy loading para secciones principales (dashboard, admin, pos)
+  - [-] 2.1 Configurar lazy loading para secciones principales (dashboard, admin, pos)
     - Implementar dynamic imports para layouts principales
     - Configurar code splitting por rutas
     - _Requisitos: 2.1, 2.2_
 
-  - [ ] 2.2 Implementar división de componentes grandes
+  - [-] 2.2 Implementar división de componentes grandes
     - Identificar componentes > 50KB
     - Aplicar dynamic imports a componentes pesados
     - _Requisitos: 2.3_

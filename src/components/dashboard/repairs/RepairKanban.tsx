@@ -8,24 +8,9 @@ import { RepairCard } from './RepairCard'
 import {
     DndContext,
     DragOverlay,
-    useSensors,
-    useSensor,
-    PointerSensor,
-    KeyboardSensor,
-    closestCorners,
-    DragStartEvent,
-    DragOverEvent,
-    DragEndEvent,
-    defaultDropAnimationSideEffects,
-    DropAnimation
-} from '@dnd-kit/core'
-import {
     SortableContext,
-    sortableKeyboardCoordinates,
-    verticalListSortingStrategy,
     useSortable
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+} from '@/components/stubs/HeavyDependencyStubs';
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Package } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -36,15 +21,16 @@ interface RepairKanbanProps {
     onEdit: (repair: Repair) => void
 }
 
-const dropAnimation: DropAnimation = {
-    sideEffects: defaultDropAnimationSideEffects({
-        styles: {
-            active: {
-                opacity: '0.5',
-            },
-        },
-    }),
-}
+// Comentado temporalmente para optimización de bundle
+// const dropAnimation: DropAnimation = {
+//     sideEffects: defaultDropAnimationSideEffects({
+//         styles: {
+//             active: {
+//                 opacity: '0.5',
+//             },
+//         },
+//     }),
+// }
 
 export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanProps) {
     const [activeId, setActiveId] = useState<string | null>(null)
@@ -66,16 +52,17 @@ export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanPr
         return initial
     })
 
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 5,
-            },
-        }),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
-    )
+    // Comentado temporalmente para optimización de bundle
+    // const sensors = useSensors(
+    //     useSensor(PointerSensor, {
+    //         activationConstraint: {
+    //             distance: 5,
+    //         },
+    //     }),
+    //     useSensor(KeyboardSensor, {
+    //         coordinateGetter: sortableKeyboardCoordinates,
+    //     })
+    // )
 
     const handleDragStart = (event: DragStartEvent) => {
         setActiveId(event.active.id as string)
@@ -147,8 +134,6 @@ export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanPr
 
     return (
         <DndContext
-            sensors={sensors}
-            collisionDetection={closestCorners}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
         >
@@ -173,7 +158,6 @@ export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanPr
                         >
                             <SortableContext
                                 items={repairIds}
-                                strategy={verticalListSortingStrategy}
                             >
                                 {columnRepairs.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center h-32 text-muted-foreground text-xs border-2 border-dashed rounded-lg bg-white/50 p-4 text-center">
@@ -195,7 +179,7 @@ export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanPr
                 })}
             </div>
 
-            <DragOverlay dropAnimation={dropAnimation}>
+            <DragOverlay>
                 {activeId ? (
                     <RepairCardOverlay repair={getRepairById(activeId)} />
                 ) : null}

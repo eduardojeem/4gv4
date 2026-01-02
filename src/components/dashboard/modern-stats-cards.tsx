@@ -1,15 +1,15 @@
 'use client'
 
-import { motion, useMotionValue, useTransform, animate } from "framer-motion"
-import { useEffect, memo } from "react"
+import { motion, useMotionValue, useTransform, animate  } from '../ui/motion'
+import { useEffect, memo } from 'react'
 import { 
   TrendingUp, 
   TrendingDown, 
   ArrowUpRight, 
   ArrowDownRight,
   Minus
-} from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
+} from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 
 // Hook para animación de contador
 const useAnimatedCounter = (value: number, duration: number = 1) => {

@@ -15,11 +15,11 @@
  * - Búsqueda por patrones (email, teléfono, etc.)
  */
 
-import React, { useState, useEffect, useRef, useMemo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { motion, AnimatePresence  } from '../../ui/motion'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { 
   Search, 
   X, 
@@ -36,11 +36,11 @@ import {
   Filter,
   Zap,
   Star
-} from "lucide-react"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CustomerPreview } from "./CustomerPreview"
-import { cn } from "@/lib/utils"
-import { Customer } from "@/hooks/use-customer-state"
+} from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { CustomerPreview } from './CustomerPreview'
+import { cn } from '@/lib/utils'
+import { Customer } from '@/hooks/use-customer-state'
 
 interface SearchSuggestion {
   value: string

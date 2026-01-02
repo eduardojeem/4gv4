@@ -1,19 +1,19 @@
 "use client"
 
-import { memo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { ModernProductGrid } from "./modern-product-grid"
-import { VirtualizedProductGrid } from "./virtualized-product-grid"
+import { memo } from 'react'
+import { motion, AnimatePresence  } from '../ui/motion'
+import { ModernProductGrid } from './modern-product-grid'
+import { VirtualizedProductGrid } from './virtualized-product-grid'
 import { 
   MoreHorizontal, 
   Eye, 
   Edit, 
   Trash2, 
   Package
-} from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
+} from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -22,13 +22,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from '@/components/ui/table'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from '@/components/ui/dropdown-menu'
 
 interface Product {
   id: string

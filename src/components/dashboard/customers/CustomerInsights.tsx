@@ -1,10 +1,10 @@
 "use client"
 
-import React from "react"
-import { motion } from "framer-motion"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
+import React from 'react'
+import { motion  } from '../../ui/motion'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import {
   TrendingUp,
   TrendingDown,
@@ -19,7 +19,7 @@ import {
   BarChart3,
   PieChart,
   LineChart
-} from "lucide-react"
+} from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 
 interface CustomerInsightsProps {

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from '../ui/motion';
 import { Scan, Keyboard, History, X, Check, AlertCircle, Zap } from 'lucide-react'
 import { useBarcodeScanner, BarcodeResult } from '@/hooks/useBarcodeScanner'
 import { cn } from '@/lib/utils'

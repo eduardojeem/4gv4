@@ -1,34 +1,34 @@
 "use client"
 
-import React, { useState, useCallback } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Slider } from "@/components/ui/slider"
-import { Separator } from "@/components/ui/separator"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
-import { Checkbox } from "@/components/ui/checkbox"
+import React, { useState, useCallback } from 'react'
+import { motion, AnimatePresence  } from '../../ui/motion'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { Slider } from '@/components/ui/slider'
+import { Separator } from '@/components/ui/separator'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
+import { Checkbox } from '@/components/ui/checkbox'
 import { 
   Filter, X, Calendar as CalendarIcon, 
   ChevronDown, Star, MapPin,
   Users, TrendingUp, Clock, Zap, Settings2,
   Grid, List
-} from "lucide-react"
-import { ImprovedSearchBar } from "./ImprovedSearchBar"
-import { ImprovedActionButtons } from "./ImprovedActionButtons"
+} from 'lucide-react'
+import { ImprovedSearchBar } from './ImprovedSearchBar'
+import { ImprovedActionButtons } from './ImprovedActionButtons'
 import { GSIcon } from '@/components/ui/standardized-components'
-import { CustomerFilters as CustomerFiltersType, Customer } from "@/hooks/use-customer-state"
-import { useDebounce } from "@/hooks/use-debounce"
-import { CustomerDataDialog } from "./CustomerDataDialog"
-import { customerService } from "@/services/customer-service"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { toast } from "sonner"
+import { CustomerFilters as CustomerFiltersType, Customer } from '@/hooks/use-customer-state'
+import { useDebounce } from '@/hooks/use-debounce'
+import { CustomerDataDialog } from './CustomerDataDialog'
+import { customerService } from '@/services/customer-service'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { toast } from 'sonner'
 
 interface CustomerFiltersProps {
   filters: CustomerFiltersType

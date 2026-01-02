@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion  } from '../ui/motion'
 import { 
   User, Shield, Database, CheckCircle, XCircle, 
   RefreshCw, AlertTriangle, Settings, Copy

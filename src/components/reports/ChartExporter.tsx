@@ -5,7 +5,7 @@ import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import * as XLSX from 'xlsx'
-import { motion } from 'framer-motion'
+import { motion  } from '../ui/motion'
 import { 
   Download, 
   FileImage, 

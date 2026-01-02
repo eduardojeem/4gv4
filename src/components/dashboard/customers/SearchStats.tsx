@@ -10,10 +10,10 @@
  * - Search suggestions
  */
 
-import React from "react"
-import { motion } from "framer-motion"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
+import React from 'react'
+import { motion  } from '../../ui/motion'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { 
   Search, 
   TrendingUp, 
@@ -21,8 +21,8 @@ import {
   Target,
   Zap,
   Users
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface SearchStatsProps {
   totalResults: number

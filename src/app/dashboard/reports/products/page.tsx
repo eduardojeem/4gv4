@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion  } from '../../../../components/ui/motion'
 import Link from 'next/link'
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import { XLSX, jsPDF, showDisabledFeatureMessage } from '@/components/stubs/HeavyDependencyStubs';
+// Comentado temporalmente para optimización de bundle
+// import autoTable from 'jspdf-autotable'
 import {
   BarChart3,
   Download,

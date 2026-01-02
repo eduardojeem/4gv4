@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion  } from '../ui/motion'
 import { X, Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Scan } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import {

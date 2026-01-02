@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { motion  } from '../../../ui/motion'
 import {
   TrendingUp,
   TrendingDown,

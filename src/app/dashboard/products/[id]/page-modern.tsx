@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence  } from '../../../../components/ui/motion'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import { getPublicUrl } from '@/lib/supabase-storage'

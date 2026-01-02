@@ -4,7 +4,7 @@ import { ArrowLeft, Edit, Trash2, Share2, Copy, Check, Star, StarOff } from 'luc
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion  } from '../../ui/motion'
 import { Product } from '@/types/products'
 
 interface ProductDetailHeaderProps {

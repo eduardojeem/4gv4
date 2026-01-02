@@ -12,17 +12,17 @@
  * - Gráfico de tendencia (sparkline)
  */
 
-import React from "react"
-import { motion } from "framer-motion"
-import { Card, CardContent } from "@/components/ui/card"
+import React from 'react'
+import { motion  } from '../../ui/motion'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { TrendingUp, TrendingDown, Minus, Info } from "lucide-react"
-import { cn } from "@/lib/utils"
+} from '@/components/ui/tooltip'
+import { TrendingUp, TrendingDown, Minus, Info } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface ImprovedMetricCardProps {
   title: string

@@ -1,7 +1,7 @@
 "use client"
 
-import { memo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { memo } from 'react'
+import { motion, AnimatePresence  } from '../ui/motion'
 import { 
   Eye, 
   Edit, 
@@ -12,17 +12,17 @@ import {
   TrendingDown,
   AlertTriangle,
   CheckCircle
-} from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+} from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Checkbox } from "@/components/ui/checkbox"
+} from '@/components/ui/dropdown-menu'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface Product {
   id: string

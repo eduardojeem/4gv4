@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion  } from '../ui/motion'
 import {
     Tag, Edit, Trash2, MoreVertical, Package,
     ChevronRight, ToggleLeft, ToggleRight, ArrowUpDown,

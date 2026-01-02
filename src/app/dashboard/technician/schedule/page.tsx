@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { Repair } from '@/types/repairs'
-import { DndContext, DragEndEvent } from '@dnd-kit/core'
+import { DndContext } from '@/components/stubs/HeavyDependencyStubs';
 import { CalendarDays, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 
 type Slot = { start: Date; end: Date }

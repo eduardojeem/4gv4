@@ -7,11 +7,11 @@
  * Muestra las nuevas funcionalidades implementadas
  */
 
-import React, { useState } from "react"
-import { motion } from "framer-motion"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import React, { useState } from 'react'
+import { motion  } from '../../ui/motion'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { 
   Search, 
   Sparkles, 
@@ -21,9 +21,9 @@ import {
   Target,
   Users,
   ArrowRight
-} from "lucide-react"
-import { ImprovedSearchBar } from "./ImprovedSearchBar"
-import { Customer } from "@/hooks/use-customer-state"
+} from 'lucide-react'
+import { ImprovedSearchBar } from './ImprovedSearchBar'
+import { Customer } from '@/hooks/use-customer-state'
 
 // Mock data para la demostración
 const mockCustomers: Customer[] = [
