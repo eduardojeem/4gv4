@@ -31,7 +31,21 @@ import {
   HardDrive,
   Cpu
 } from 'lucide-react'
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart } from 'recharts/es6/chart/LineChart'
+import { Line } from 'recharts/es6/cartesian/Line'
+import { AreaChart } from 'recharts/es6/chart/AreaChart'
+import { Area } from 'recharts/es6/cartesian/Area'
+import { BarChart } from 'recharts/es6/chart/BarChart'
+import { Bar } from 'recharts/es6/cartesian/Bar'
+import { PieChart } from 'recharts/es6/chart/PieChart'
+import { Pie } from 'recharts/es6/polar/Pie'
+import { Cell } from 'recharts/es6/component/Cell'
+import { XAxis } from 'recharts/es6/cartesian/XAxis'
+import { YAxis } from 'recharts/es6/cartesian/YAxis'
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { Legend } from 'recharts/es6/component/Legend'
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { useAPIOptimization } from '@/lib/api/optimization'
 
 interface MetricCardProps {

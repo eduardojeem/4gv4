@@ -1,6 +1,11 @@
 'use client'
 
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import { PieChart } from 'recharts/es6/chart/PieChart'
+import { Pie } from 'recharts/es6/polar/Pie'
+import { Cell } from 'recharts/es6/component/Cell'
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
+import { Tooltip } from 'recharts/es6/component/Tooltip'
+import { Legend } from 'recharts/es6/component/Legend'
 
 // Mock data - In real app, this would come from Supabase
 const data = [
