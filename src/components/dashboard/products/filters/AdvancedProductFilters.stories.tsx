@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react'
-import { fn } from '@storybook/test'
+ 
 import { AdvancedProductFilters } from './AdvancedProductFilters'
 
 const meta: Meta<typeof AdvancedProductFilters> = {
@@ -79,14 +79,14 @@ type Story = StoryObj<typeof meta>
 // Story por defecto
 export const Default: Story = {
   args: {
-    onFiltersChange: fn()
+    onFiltersChange: () => {}
   }
 }
 
 // Con filtros aplicados
 export const WithActiveFilters: Story = {
   args: {
-    onFiltersChange: fn()
+    onFiltersChange: () => {}
   },
   parameters: {
     docs: {
@@ -100,7 +100,7 @@ export const WithActiveFilters: Story = {
 // Preset de stock bajo
 export const LowStockPreset: Story = {
   args: {
-    onFiltersChange: fn()
+    onFiltersChange: () => {}
   },
   parameters: {
     docs: {
@@ -114,7 +114,7 @@ export const LowStockPreset: Story = {
 // Filtros de rango
 export const RangeFilters: Story = {
   args: {
-    onFiltersChange: fn()
+    onFiltersChange: () => {}
   },
   parameters: {
     docs: {
@@ -128,7 +128,7 @@ export const RangeFilters: Story = {
 // Filtros de categoría y proveedor
 export const CategorySupplierFilters: Story = {
   args: {
-    onFiltersChange: fn()
+    onFiltersChange: () => {}
   },
   parameters: {
     docs: {
@@ -142,7 +142,7 @@ export const CategorySupplierFilters: Story = {
 // Modo compacto
 export const Compact: Story = {
   args: {
-    onFiltersChange: fn(),
+    onFiltersChange: () => {},
     className: 'compact-mode'
   },
   parameters: {
