@@ -35,6 +35,7 @@
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+tsconfig.*.tsbuildinfo
 
 # Storybook
 *storybook.log
@@ -46,6 +47,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 *.log
+tailwindcss-*.log
 
 # Runtime data
 pids
@@ -109,8 +111,10 @@ Thumbs.db
 *.swo
 *~
 
-# Kiro IDE files
-.kiro/
+# Kiro IDE files (keep specs but ignore other kiro files)
+.kiro/settings/
+.kiro/cache/
+.kiro/logs/
 
 # Bundle analysis
 bundle-analysis/
@@ -146,6 +150,16 @@ supabase/.temp/
 # Temporary SQL files for development/testing
 check_promotions_table.sql
 verify_columns.sql
+*.temp.sql
+*-temp.sql
+
+# Development and debug files (root level)
+/build-debug.js
+/check-schema.js
+/debug-*.js
+/seed-*.js
+/setup-*.js
+/disable-*.sql
 
 # Backup/improved versions of files (keep only the active version)
 *-improved.*
@@ -156,3 +170,10 @@ verify_columns.sql
 
 # Development documentation (keep main docs)
 PROMOTION_SYSTEM.md
+
+# Additional development files
+tsconfig.*.json
+!tsconfig.json
+!tsconfig.test.json
+next.config.*.ts
+!next.config.ts
