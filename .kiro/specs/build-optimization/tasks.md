@@ -17,17 +17,17 @@ Este plan implementa la optimización sistemática del bundle de Next.js para re
   - **Valida: Requisitos 1.3, 3.4, 5.1, 5.2**
 
 - [ ] 2. Implementar división de código por rutas
-  - [-] 2.1 Configurar lazy loading para secciones principales (dashboard, admin, pos)
+  - [x] 2.1 Configurar lazy loading para secciones principales (dashboard, admin, pos)
     - Implementar dynamic imports para layouts principales
     - Configurar code splitting por rutas
     - _Requisitos: 2.1, 2.2_
 
-  - [-] 2.2 Implementar división de componentes grandes
+  - [x] 2.2 Implementar división de componentes grandes
     - Identificar componentes > 50KB
     - Aplicar dynamic imports a componentes pesados
     - _Requisitos: 2.3_
 
-  - [ ] 2.3 Crear chunks para utilidades compartidas
+  - [x] 2.3 Crear chunks para utilidades compartidas
     - Configurar chunks para librerías comunes
     - Optimizar shared chunks
     - _Requisitos: 2.4_
@@ -36,11 +36,11 @@ Este plan implementa la optimización sistemática del bundle de Next.js para re
   - **Propiedad 2: División Efectiva de Código**
   - **Valida: Requisitos 2.1, 2.2, 2.3, 2.4**
 
-- [ ] 3. Checkpoint - Verificar división de código
+- [x] 3. Checkpoint - Verificar división de código
   - Asegurar que todos los tests pasen, preguntar al usuario si surgen dudas.
 
 - [ ] 4. Optimizar dependencias grandes
-  - [ ] 4.1 Analizar y optimizar imports de librerías
+  - [-] 4.1 Analizar y optimizar imports de librerías
     - Identificar las 10 dependencias más grandes
     - Implementar tree shaking para Radix UI, Recharts, etc.
     - Reemplazar imports completos con imports específicos

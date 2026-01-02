@@ -79,135 +79,207 @@ const nextConfig: NextConfig = {
     if (!dev) {
       config.devtool = false;
       
-      // Configurar splitChunks para mejor división de código - MÁS AGRESIVO
+      // Configurar splitChunks ULTRA AGRESIVO para chunks compartidos optimizados
       config.optimization.splitChunks = {
         chunks: 'all',
-        minSize: 10000,      // Reducido de 20000
-        maxSize: 150000,     // Reducido de 244000
-        minChunks: 1,        // Reducido de 2
-        maxAsyncRequests: 30, // Aumentado de 6
-        maxInitialRequests: 30, // Aumentado de 4
+        minSize: 5000,       // Muy pequeño para máxima granularidad
+        maxSize: 80000,      // Chunks más pequeños
+        minChunks: 1,        
+        maxAsyncRequests: 50, // Permitir muchos chunks async
+        maxInitialRequests: 50, // Permitir muchos chunks iniciales
         cacheGroups: {
-          // Chunk para React y Next.js
-          framework: {
-            test: /[\\/]node_modules[\\/](react|react-dom|next)[\\/]/,
-            name: 'framework',
+          // Framework core - React/Next.js separados
+          react: {
+            test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
+            name: 'react',
             chunks: 'all',
-            priority: 50,
+            priority: 60,
             enforce: true,
           },
-          // Chunk específico para Recharts (muy pesado)
+          nextjs: {
+            test: /[\\/]node_modules[\\/]next[\\/]/,
+            name: 'nextjs',
+            chunks: 'all',
+            priority: 55,
+            enforce: true,
+          },
+          
+          // Librerías pesadas separadas individualmente
           recharts: {
             test: /[\\/]node_modules[\\/]recharts[\\/]/,
             name: 'recharts',
             chunks: 'all',
-            priority: 45,
+            priority: 50,
             enforce: true,
           },
-          // Chunk específico para Framer Motion (muy pesado)
-          framerMotion: {
-            test: /[\\/]node_modules[\\/]framer-motion[\\/]/,
-            name: 'framer-motion',
+          
+          // Radix UI dividido por componentes
+          radixCore: {
+            test: /[\\/]node_modules[\\/]@radix-ui[\\/]react-(accordion|alert-dialog|avatar|checkbox|collapsible)[\\/]/,
+            name: 'radix-core',
+            chunks: 'all',
+            priority: 45,
+          },
+          radixNavigation: {
+            test: /[\\/]node_modules[\\/]@radix-ui[\\/]react-(dialog|dropdown-menu|navigation-menu|popover)[\\/]/,
+            name: 'radix-navigation',
             chunks: 'all',
             priority: 44,
-            enforce: true,
           },
-          // Chunk para Radix UI
-          radixUI: {
-            test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
-            name: 'radix-ui',
+          radixForm: {
+            test: /[\\/]node_modules[\\/]@radix-ui[\\/]react-(label|radio-group|select|slider|switch|tabs)[\\/]/,
+            name: 'radix-form',
             chunks: 'all',
-            priority: 40,
+            priority: 43,
           },
-          // Chunk para date-fns
+          radixOther: {
+            test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
+            name: 'radix-other',
+            chunks: 'all',
+            priority: 42,
+          },
+          
+          // Date utilities
           dateFns: {
             test: /[\\/]node_modules[\\/]date-fns[\\/]/,
             name: 'date-fns',
             chunks: 'all',
-            priority: 35,
+            priority: 40,
           },
-          // Chunk para Supabase
-          supabase: {
+          
+          // Supabase dividido
+          supabaseAuth: {
+            test: /[\\/]node_modules[\\/]@supabase[\\/](auth-|gotrue-)[\\/]/,
+            name: 'supabase-auth',
+            chunks: 'all',
+            priority: 38,
+          },
+          supabaseCore: {
             test: /[\\/]node_modules[\\/]@supabase[\\/]/,
-            name: 'supabase',
+            name: 'supabase-core',
             chunks: 'all',
-            priority: 30,
+            priority: 37,
           },
-          // Chunk para DND Kit
-          dndKit: {
-            test: /[\\/]node_modules[\\/]@dnd-kit[\\/]/,
-            name: 'dnd-kit',
-            chunks: 'all',
-            priority: 25,
-          },
-          // Chunk para utilidades pesadas
-          heavyUtils: {
-            test: /[\\/]node_modules[\\/](html2canvas|jspdf|xlsx|dompurify)[\\/]/,
-            name: 'heavy-utils',
-            chunks: 'all',
-            priority: 24,
-          },
-          // Chunk para Zod
+          
+          // Validation
           zod: {
             test: /[\\/]node_modules[\\/]zod[\\/]/,
             name: 'zod',
             chunks: 'all',
-            priority: 23,
+            priority: 35,
           },
-          // Chunk para iconos
-          icons: {
-            test: /[\\/]node_modules[\\/](lucide-react|@radix-ui\/react-icons)[\\/]/,
-            name: 'icons',
+          
+          // Icons separados
+          lucideIcons: {
+            test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+            name: 'lucide-icons',
             chunks: 'all',
-            priority: 20,
+            priority: 30,
           },
-          // Chunk para utilidades generales
-          utils: {
-            test: /[\\/]node_modules[\\/](lodash|sonner|swr)[\\/]/,
-            name: 'utils',
+          
+          // Utilities pequeñas
+          sonner: {
+            test: /[\\/]node_modules[\\/]sonner[\\/]/,
+            name: 'sonner',
+            chunks: 'all',
+            priority: 25,
+          },
+          swr: {
+            test: /[\\/]node_modules[\\/]swr[\\/]/,
+            name: 'swr',
+            chunks: 'all',
+            priority: 24,
+          },
+          
+          // Vendor general dividido por tamaño
+          vendorLarge: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendor-large',
             chunks: 'all',
             priority: 15,
+            minSize: 30000,
+            maxSize: 60000,
           },
-          // Vendor general (más pequeño)
-          vendor: {
+          vendorMedium: {
             test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
+            name: 'vendor-medium',
+            chunks: 'all',
+            priority: 14,
+            minSize: 10000,
+            maxSize: 30000,
+          },
+          vendorSmall: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendor-small',
+            chunks: 'all',
+            priority: 13,
+            maxSize: 10000,
+          },
+          
+          // Código de aplicación dividido por funcionalidad
+          dashboardPages: {
+            test: /[\\/]src[\\/]app[\\/]dashboard[\\/]/,
+            name: 'dashboard-pages',
+            chunks: 'all',
+            priority: 12,
+            maxSize: 50000,
+          },
+          adminPages: {
+            test: /[\\/]src[\\/]app[\\/]admin[\\/]/,
+            name: 'admin-pages',
+            chunks: 'all',
+            priority: 11,
+            maxSize: 50000,
+          },
+          
+          // Componentes divididos por área
+          dashboardComponents: {
+            test: /[\\/]src[\\/]components[\\/]dashboard[\\/]/,
+            name: 'dashboard-components',
             chunks: 'all',
             priority: 10,
-            maxSize: 100000, // Limitar tamaño del chunk vendor
+            maxSize: 40000,
           },
-          // Código común de la aplicación - más agresivo
+          adminComponents: {
+            test: /[\\/]src[\\/]components[\\/]admin[\\/]/,
+            name: 'admin-components',
+            chunks: 'all',
+            priority: 9,
+            maxSize: 40000,
+          },
+          uiComponents: {
+            test: /[\\/]src[\\/]components[\\/]ui[\\/]/,
+            name: 'ui-components',
+            chunks: 'all',
+            priority: 8,
+            maxSize: 30000,
+          },
+          
+          // Shared utilities
+          sharedUtils: {
+            test: /[\\/]src[\\/](lib|utils|contexts|hooks)[\\/]/,
+            name: 'shared-utils',
+            chunks: 'all',
+            priority: 7,
+            maxSize: 25000,
+          },
+          
+          // Common code - muy granular
           common: {
             name: 'common',
             minChunks: 2,
             chunks: 'all',
             priority: 5,
             reuseExistingChunk: true,
-            maxSize: 80000,
+            maxSize: 20000,
           },
-          // Chunk específico para páginas de dashboard
-          dashboard: {
-            test: /[\\/]src[\\/]app[\\/]dashboard[\\/]/,
-            name: 'dashboard-pages',
-            chunks: 'all',
-            priority: 8,
-            maxSize: 100000,
-          },
-          // Chunk específico para páginas de admin
-          admin: {
-            test: /[\\/]src[\\/]app[\\/]admin[\\/]/,
-            name: 'admin-pages',
-            chunks: 'all',
-            priority: 7,
-            maxSize: 100000,
-          },
-          // Chunk específico para componentes de dashboard
-          dashboardComponents: {
-            test: /[\\/]src[\\/]components[\\/]dashboard[\\/]/,
-            name: 'dashboard-components',
-            chunks: 'all',
-            priority: 6,
-            maxSize: 80000,
+          
+          // Default fallback
+          default: {
+            minChunks: 2,
+            priority: 1,
+            reuseExistingChunk: true,
+            maxSize: 15000,
           },
         },
       };

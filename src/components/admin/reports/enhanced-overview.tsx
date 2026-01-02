@@ -10,10 +10,13 @@ import {
   Users, Activity, TrendingUp, TrendingDown, 
   RefreshCw, Download, AlertTriangle, CheckCircle, Clock
 } from 'lucide-react'
-import { 
-  LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, 
-  Tooltip, ResponsiveContainer
-} from 'recharts'
+import { LineChart as RechartsLineChart } from 'recharts/es6/chart/LineChart';
+import { Line } from 'recharts/es6/cartesian/Line';
+import { XAxis } from 'recharts/es6/cartesian/XAxis';
+import { YAxis } from 'recharts/es6/cartesian/YAxis';
+import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
+import { Tooltip } from 'recharts/es6/component/Tooltip';
+import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
 import { SystemMetrics } from '@/hooks/use-admin-dashboard'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatCurrency } from '@/lib/currency'
