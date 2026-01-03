@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useDeferredValue } from 'react'
+import { createClient } from '@/lib/supabase/client'
 import { 
   Users, 
   Shield, 
@@ -287,8 +288,6 @@ function RolePermissions({ role }: { role: UserRole }) {
     </Card>
   )
 }
-
-import { createClient } from '@/lib/supabase/client'
 
 // Componente principal de gestión de usuarios
 export default function UserManagement() {
