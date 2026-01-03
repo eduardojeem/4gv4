@@ -11,6 +11,7 @@ import {
 interface RepairListVirtualizedProps {
   repairs: Repair[];
   onEdit: (repair: Repair) => void;
+  onView?: (repair: Repair) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: RepairStatus) => void;
 }
@@ -18,6 +19,7 @@ interface RepairListVirtualizedProps {
 export function RepairListVirtualized({
   repairs,
   onEdit,
+  onView,
   onDelete,
   onStatusChange,
 }: RepairListVirtualizedProps) {
@@ -74,6 +76,7 @@ export function RepairListVirtualized({
                   <RepairRow
                     repair={repair}
                     onEdit={onEdit}
+                    onView={onView}
                     onDelete={onDelete}
                     onStatusChange={onStatusChange}
                   />

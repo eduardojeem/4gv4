@@ -34,11 +34,11 @@ export function PatternDrawer({ value, onChange, disabled }: PatternDrawerProps)
   const DOT_SPACING = CANVAS_SIZE / (GRID_SIZE + 1)
 
   // Generate grid points
-  const gridPoints = useCallback((): Point[] => {
-    const points: Point[] = []
+  const points = React.useMemo((): Point[] => {
+    const pts: Point[] = []
     for (let row = 0; row < GRID_SIZE; row++) {
       for (let col = 0; col < GRID_SIZE; col++) {
-        points.push({
+        pts.push({
           x: DOT_SPACING * (col + 1),
           y: DOT_SPACING * (row + 1),
           row,
@@ -46,10 +46,8 @@ export function PatternDrawer({ value, onChange, disabled }: PatternDrawerProps)
         })
       }
     }
-    return points
+    return pts
   }, [DOT_SPACING, GRID_SIZE])
-
-  const points = gridPoints()
 
   // Draw the canvas
   const drawCanvas = useCallback(() => {
@@ -275,26 +273,64 @@ export function PatternDrawer({ value, onChange, disabled }: PatternDrawerProps)
 
   // Parse existing value
   useEffect(() => {
-    if (value && value.includes('(') && value.includes(')')) {
-      const match = value.match(/\(([^)]+)\)/)
-      if (match) {
-        const patternString = match[1]
-        const pointCodes = patternString.split('-')
-        const parsedPoints: Point[] = []
-        
-        pointCodes.forEach(code => {
-          if (code.length === 2) {
-            const row = parseInt(code[0]) - 1
-            const col = parseInt(code[1]) - 1
-            const point = points.find(p => p.row === row && p.col === col)
-            if (point) parsedPoints.push(point)
-          }
-        })
-        
-        if (parsedPoints.length > 0) {
-          setSelectedPoints(parsedPoints)
+    if (!value) return
+
+    const parsedPoints: Point[] = []
+
+    // 1. Try format: "Description (11-12-13)" or "(11-12-13)"
+    const parenMatch = value.match(/\(([^)]+)\)/)
+    if (parenMatch) {
+      const patternString = parenMatch[1]
+      const pointCodes = patternString.split(/[-\s,]+/) // split by - or space or comma
+      
+      pointCodes.forEach(code => {
+        if (code.length === 2) {
+          // Format RowCol (1-based)
+          const row = parseInt(code[0]) - 1
+          const col = parseInt(code[1]) - 1
+          const point = points.find(p => p.row === row && p.col === col)
+          if (point) parsedPoints.push(point)
         }
-      }
+      })
+    } 
+    // 2. Try simple numeric sequence format: "1235789" or "1-2-3"
+    else {
+        // Clean string: remove spaces, dashes, commas
+        const cleanVal = value.replace(/[^0-9]/g, '')
+        const nums = value.match(/\d+/g)
+        
+        // Strategy A: If contains numbers > 9, assume RowCol format (e.g. "11 12 13")
+        const hasDoubleDigits = nums?.some(n => parseInt(n) > 9)
+        
+        if (hasDoubleDigits && nums) {
+             nums.forEach(n => {
+                 const num = parseInt(n)
+                 if (num >= 11 && num <= 33) {
+                     const s = num.toString()
+                     const row = parseInt(s[0]) - 1
+                     const col = parseInt(s[1]) - 1
+                     const point = points.find(p => p.row === row && p.col === col)
+                     if (point) parsedPoints.push(point)
+                 }
+             })
+        }
+        // Strategy B: If single digits 1-9 (e.g. "12357" or "1-2-3-5")
+        else if (cleanVal.length >= 2) {
+             const chars = cleanVal.split('')
+             chars.forEach(char => {
+                 const num = parseInt(char)
+                 if (num >= 1 && num <= 9) {
+                     const row = Math.floor((num - 1) / 3)
+                     const col = (num - 1) % 3
+                     const point = points.find(p => p.row === row && p.col === col)
+                     if (point) parsedPoints.push(point)
+                 }
+             })
+        }
+    }
+
+    if (parsedPoints.length > 0) {
+      setSelectedPoints(parsedPoints)
     }
   }, [value, points])
 
@@ -344,17 +380,28 @@ export function PatternDrawer({ value, onChange, disabled }: PatternDrawerProps)
           </div>
         </div>
 
-        {selectedPoints.length > 0 && (
+        {selectedPoints.length > 0 ? (
           <div className="space-y-2">
             <div className="text-xs font-medium text-purple-700">
               Patrón dibujado: {selectedPoints.length} punto{selectedPoints.length !== 1 ? 's' : ''}
             </div>
             {value && (
-              <div className="text-xs text-muted-foreground bg-purple-50 rounded p-2 border border-purple-200">
+              <div className="text-xs text-muted-foreground bg-purple-50 rounded p-2 border border-purple-200 break-all">
                 {value}
               </div>
             )}
           </div>
+        ) : (
+          value && (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-amber-600">
+                Formato no visualizable
+              </div>
+              <div className="text-xs text-muted-foreground bg-amber-50 rounded p-2 border border-amber-200 break-all">
+                {value}
+              </div>
+            </div>
+          )
         )}
 
         <div className="flex gap-2">

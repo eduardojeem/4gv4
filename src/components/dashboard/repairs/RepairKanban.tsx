@@ -8,9 +8,21 @@ import { RepairCard } from './RepairCard'
 import {
     DndContext,
     DragOverlay,
+    useSensors,
+    useSensor,
+    PointerSensor,
+    KeyboardSensor,
+    DragStartEvent,
+    DragEndEvent,
+    DropAnimation,
+    defaultDropAnimationSideEffects,
+} from '@dnd-kit/core';
+import {
     SortableContext,
-    useSortable
-} from '@/components/stubs/HeavyDependencyStubs';
+    useSortable,
+    sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Package } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -19,20 +31,20 @@ interface RepairKanbanProps {
     repairs: Repair[]
     onStatusChange: (id: string, status: RepairStatus) => Promise<void>
     onEdit: (repair: Repair) => void
+    onView?: (repair: Repair) => void
 }
 
-// Comentado temporalmente para optimización de bundle
-// const dropAnimation: DropAnimation = {
-//     sideEffects: defaultDropAnimationSideEffects({
-//         styles: {
-//             active: {
-//                 opacity: '0.5',
-//             },
-//         },
-//     }),
-// }
+const dropAnimation: DropAnimation = {
+    sideEffects: defaultDropAnimationSideEffects({
+        styles: {
+            active: {
+                opacity: '0.5',
+            },
+        },
+    }),
+}
 
-export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanProps) {
+export function RepairKanban({ repairs, onStatusChange, onEdit, onView }: RepairKanbanProps) {
     const [activeId, setActiveId] = useState<string | null>(null)
     const [kanbanOrder, setKanbanOrder] = useState<Record<RepairStatus, string[]>>(() => {
         const initial: Record<RepairStatus, string[]> = {
@@ -52,17 +64,16 @@ export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanPr
         return initial
     })
 
-    // Comentado temporalmente para optimización de bundle
-    // const sensors = useSensors(
-    //     useSensor(PointerSensor, {
-    //         activationConstraint: {
-    //             distance: 5,
-    //         },
-    //     }),
-    //     useSensor(KeyboardSensor, {
-    //         coordinateGetter: sortableKeyboardCoordinates,
-    //     })
-    // )
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 5,
+            },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    )
 
     const handleDragStart = (event: DragStartEvent) => {
         setActiveId(event.active.id as string)
@@ -134,6 +145,7 @@ export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanPr
 
     return (
         <DndContext
+            sensors={sensors}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
         >
@@ -170,6 +182,7 @@ export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanPr
                                             key={repair.id}
                                             repair={repair}
                                             onEdit={onEdit}
+                                            onView={onView}
                                         />
                                     ))
                                 )}
@@ -179,7 +192,7 @@ export function RepairKanban({ repairs, onStatusChange, onEdit }: RepairKanbanPr
                 })}
             </div>
 
-            <DragOverlay>
+            <DragOverlay dropAnimation={dropAnimation}>
                 {activeId ? (
                     <RepairCardOverlay repair={getRepairById(activeId)} />
                 ) : null}
@@ -232,9 +245,10 @@ function KanbanColumn({ id, title, icon: Icon, count, color, bg, columnBg, child
 interface SortableRepairCardProps {
     repair: Repair
     onEdit: (repair: Repair) => void
+    onView?: (repair: Repair) => void
 }
 
-function SortableRepairCard({ repair, onEdit }: SortableRepairCardProps) {
+function SortableRepairCard({ repair, onEdit, onView }: SortableRepairCardProps) {
     const {
         attributes,
         listeners,
@@ -273,7 +287,7 @@ function SortableRepairCard({ repair, onEdit }: SortableRepairCardProps) {
             style={style}
             {...attributes}
             {...listeners}
-            onClick={() => onEdit(repair)}
+            onClick={() => onView ? onView(repair) : onEdit(repair)}
             className="cursor-grab active:cursor-grabbing"
         >
             <RepairCardContent repair={repair} />

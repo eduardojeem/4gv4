@@ -266,10 +266,10 @@ export interface Database {
           estimated_cost: number | null
           final_cost: number | null
           status: 'recibido' | 'diagnostico' | 'reparacion' | 'listo' | 'entregado'
-          received_date: string
+          received_at: string
           estimated_completion: string | null
-          completed_date: string | null
-          delivered_date: string | null
+          completed_at: string | null
+          delivered_at: string | null
           notes: string | null
           created_at: string
           updated_at: string
@@ -285,10 +285,10 @@ export interface Database {
           estimated_cost?: number | null
           final_cost?: number | null
           status?: 'recibido' | 'diagnostico' | 'reparacion' | 'listo' | 'entregado'
-          received_date?: string
+          received_at?: string
           estimated_completion?: string | null
-          completed_date?: string | null
-          delivered_date?: string | null
+          completed_at?: string | null
+          delivered_at?: string | null
           notes?: string | null
           created_at?: string
           updated_at?: string
@@ -304,10 +304,10 @@ export interface Database {
           estimated_cost?: number | null
           final_cost?: number | null
           status?: 'recibido' | 'diagnostico' | 'reparacion' | 'listo' | 'entregado'
-          received_date?: string
+          received_at?: string
           estimated_completion?: string | null
-          completed_date?: string | null
-          delivered_date?: string | null
+          completed_at?: string | null
+          delivered_at?: string | null
           notes?: string | null
           created_at?: string
           updated_at?: string

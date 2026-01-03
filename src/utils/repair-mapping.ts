@@ -1,6 +1,7 @@
 import { Repair, RepairPriority, RepairUrgency, DeviceType, RepairStatus } from '@/types/repairs'
 
 interface SupabaseCustomer {
+    id?: string
     name?: string
     first_name?: string
     last_name?: string
@@ -64,6 +65,7 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
     return {
         id: r.id,
         customer: {
+            id: r.customer?.id,
             name: r.customer?.name || r.customer?.first_name + ' ' + r.customer?.last_name || 'Cliente Desconocido',
             phone: r.customer?.phone || '',
             email: r.customer?.email || ''

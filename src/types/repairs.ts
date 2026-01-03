@@ -27,6 +27,7 @@ export type RepairUrgency = 'normal' | 'urgent'
 export type DeviceType = 'smartphone' | 'tablet' | 'laptop' | 'desktop' | 'accessory' | 'other'
 
 export interface Customer {
+  id?: string
   name: string
   phone: string
   email: string

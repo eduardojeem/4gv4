@@ -53,7 +53,7 @@ import { QuickCustomerModal } from './repairs/QuickCustomerModal'
 import { PatternDrawer } from './repairs/PatternDrawer'
 import { AppError } from '@/lib/errors'
 import { createClient } from '@/lib/supabase/client'
-import { uploadFile } from '@/lib/supabase-storage'
+// import { uploadFile } from '@/lib/supabase-storage'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { Repair } from '@/types/repairs'
 
@@ -277,6 +277,12 @@ export function RepairFormDialogV2({
               <CardContent>
                 <CustomerSelectorV3
                   value={watch('existingCustomerId')}
+                  initialCustomer={initialData?.existingCustomerId ? {
+                    id: initialData.existingCustomerId,
+                    name: initialData.customerName || '',
+                    phone: initialData.customerPhone || '',
+                    email: initialData.customerEmail || ''
+                  } : undefined}
                   onChange={(customerId, customerData) => {
                     setValue('existingCustomerId', customerId)
                     // Auto-fill customer data if available
@@ -575,7 +581,7 @@ export function RepairFormDialogV2({
                       {/* Description */}
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">
-                          Descripción Detallada {!quickMode && <span className="text-red-500">*</span>}
+                          Descripción Detallada
                         </Label>
                         <Textarea
                           {...register(`devices.${index}.description`)}
@@ -753,24 +759,41 @@ export function RepairFormDialogV2({
                           name={`devices.${index}.images`}
                           control={control}
                           render={({ field }) => {
-                            const supabase = createClient()
+                            // Función mejorada para subir archivos a través de API (evita problemas de RLS)
                             const onUploadFiles = async (files: File[]): Promise<string[]> => {
                               const urls: string[] = []
+                              
                               for (const file of files) {
-                                const ext = file.name.split('.').pop() || 'jpg'
-                                const filename = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-                                const path = `uploads/${filename}`
-                                
-                                const result = await uploadFile('repair-images', path, file, { upsert: true })
-                                
-                                if (result.success && result.url) {
-                                  urls.push(result.url)
-                                } else {
-                                  console.warn('Failed to upload image:', result.error)
-                                  // Show user-friendly error for first failure
-                                  if (urls.length === 0 && result.error?.includes('not found')) {
-                                    toast.error('Image storage not configured. Images will be skipped.')
+                                try {
+                                  const ext = file.name.split('.').pop() || 'jpg'
+                                  const filename = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+                                  const path = `uploads/${filename}`
+                                  
+                                  // Usar FormData para enviar el archivo a nuestra API
+                                  const formData = new FormData()
+                                  formData.append('file', file)
+                                  formData.append('bucket', 'repair-images')
+                                  formData.append('path', path)
+
+                                  const response = await fetch('/api/upload', {
+                                    method: 'POST',
+                                    body: formData
+                                  })
+
+                                  if (!response.ok) {
+                                    throw new Error(`Upload failed with status: ${response.status}`)
                                   }
+
+                                  const result = await response.json()
+                                  
+                                  if (result.success && result.url) {
+                                    urls.push(result.url)
+                                  } else {
+                                    throw new Error(result.error || 'Unknown upload error')
+                                  }
+                                } catch (error) {
+                                  console.error('Failed to upload image:', error)
+                                  toast.error('Error al subir imagen. Intente nuevamente.')
                                 }
                               }
                               return urls

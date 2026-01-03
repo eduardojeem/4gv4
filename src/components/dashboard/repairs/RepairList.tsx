@@ -12,6 +12,7 @@ interface RepairListProps {
     repairs: Repair[]
     onStatusChange?: (id: string, status: RepairStatus) => void
     onEdit: (repair: Repair) => void
+    onView?: (repair: Repair) => void
     onDelete?: (id: string) => void
     isLoading?: boolean
     virtualized?: boolean // Forzar virtualización (default: auto cuando >500 items)
@@ -21,6 +22,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
     repairs,
     onStatusChange,
     onEdit,
+    onView,
     onDelete,
     isLoading,
     virtualized
@@ -62,6 +64,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
                 <RepairListVirtualized
                     repairs={repairs}
                     onEdit={onEdit}
+                    onView={onView}
                     onDelete={onDelete || (() => {})}
                     onStatusChange={onStatusChange || (() => {})}
                 />
@@ -104,6 +107,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
                             repair={repair}
                             onStatusChange={onStatusChange}
                             onEdit={onEdit}
+                            onView={onView}
                             onDelete={onDelete}
                         />
                     ))}

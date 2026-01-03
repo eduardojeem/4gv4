@@ -81,7 +81,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 .from('repairs')
                 .select(`
           *,
-          customer:customers(name, phone, email),
+          customer:customers(id, name, phone, email),
           technician:profiles(id, full_name),
           images:repair_images(id, image_url, description)
         `)
@@ -126,7 +126,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     urgency: data.urgency,
                     technician_id: data.technician_id,
                     estimated_cost: data.estimated_cost,
-                    received_date: new Date().toISOString()
+                    received_at: new Date().toISOString()
                 }])
                 .select(`
           *,

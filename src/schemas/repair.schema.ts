@@ -103,8 +103,9 @@ export const DeviceSchema = z.object({
   
   description: z
     .string()
-    .min(10, 'Proporciona más detalles sobre el problema (mínimo 10 caracteres)')
-    .max(1000, 'La descripción es demasiado larga (máximo 1000 caracteres)'),
+    .max(1000, 'La descripción es demasiado larga (máximo 1000 caracteres)')
+    .optional()
+    .or(z.literal('')),
   
   accessType: AccessTypeEnum.optional().default('none'),
   

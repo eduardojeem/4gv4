@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
@@ -29,11 +29,12 @@ interface RepairRowProps {
   repair: Repair
   onStatusChange?: (id: string, status: RepairStatus) => void
   onEdit: (repair: Repair) => void
+  onView?: (repair: Repair) => void
   onDelete?: (id: string) => void
 }
 
 export const RepairRow = memo<RepairRowProps>(
-  function RepairRow({ repair, onStatusChange, onEdit, onDelete }) {
+  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete }) {
     const StatusIcon = statusConfig[repair.status].icon
     const priority = priorityConfig[repair.priority]
     
@@ -56,7 +57,7 @@ export const RepairRow = memo<RepairRowProps>(
     return (
       <TableRow
         className="group hover:bg-muted/60 dark:hover:bg-muted/40 transition-colors cursor-pointer border-b border-border dark:border-muted/30"
-        onClick={() => onEdit(repair)}
+        onClick={() => onView ? onView(repair) : onEdit(repair)}
       >
         <TableCell className="font-mono text-xs font-medium">
           <span className="text-muted-foreground dark:text-muted-foreground/80">#</span>
@@ -178,6 +179,10 @@ export const RepairRow = memo<RepairRowProps>(
             <DropdownMenuContent align="end" className="w-48 dark:bg-popover/95 dark:border-muted/50 backdrop-blur-sm">
               <DropdownMenuLabel className="text-foreground dark:text-foreground">Acciones</DropdownMenuLabel>
               <DropdownMenuSeparator className="dark:bg-muted/50" />
+              <DropdownMenuItem onClick={() => onView ? onView(repair) : onEdit(repair)} className="dark:hover:bg-muted/50">
+                <Eye className="mr-2 h-4 w-4" />
+                Ver detalle
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onEdit(repair)} className="dark:hover:bg-muted/50">
                 <Edit className="mr-2 h-4 w-4" />
                 Editar reparación

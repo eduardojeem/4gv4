@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, Suspense } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import type { DateRange } from 'react-day-picker'
 
@@ -34,6 +34,7 @@ import { QuickAccessNav } from '@/components/dashboard/repairs/QuickAccessNav'
 import { RepairViewSelector } from '@/components/dashboard/repairs/RepairViewSelector'
 import { RepairEmptyState } from '@/components/dashboard/repairs/RepairEmptyState'
 import { RepairDeleteDialog } from '@/components/dashboard/repairs/RepairDeleteDialog'
+import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
@@ -61,7 +62,7 @@ const Calendar = dynamic(
   }
 )
 
-export default function RepairsPage() {
+function RepairsPageContent() {
   const router = useRouter()
   const {
     repairs,
@@ -95,11 +96,31 @@ export default function RepairsPage() {
   const [viewMode, setViewMode] = useState<'table' | 'kanban' | 'calendar'>('table')
   const [calendarDate, setCalendarDate] = useState<Date | undefined>(undefined)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<RepairFormMode>('add')
   const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined)
+  const [detailRepair, setDetailRepair] = useState<Repair | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [pageSize, setPageSize] = useState<number>(20)
   const [searchOpen, setSearchOpen] = useState(false)
+  const searchParams = useSearchParams()
+
+  // Handle URL query parameters for direct edit
+  useEffect(() => {
+    if (isLoading || repairs.length === 0) return
+
+    const editId = searchParams.get('id')
+    const isEdit = searchParams.get('edit') === 'true'
+
+    if (editId && isEdit && !isDialogOpen) {
+      const repairToEdit = repairs.find(r => r.id === editId)
+      if (repairToEdit) {
+        setSelectedRepair(repairToEdit)
+        setDialogMode('edit')
+        setIsDialogOpen(true)
+      }
+    }
+  }, [isLoading, repairs, searchParams, isDialogOpen])
 
   // Preload: Precargar componentes pesados para mejorar UX
   const preload = useComponentPreload({
@@ -154,6 +175,11 @@ export default function RepairsPage() {
     setDialogMode('edit')
     setSelectedRepair(repair)
     setIsDialogOpen(true)
+  }, [])
+
+  const handleViewRepair = useCallback((repair: Repair) => {
+    setDetailRepair(repair)
+    setIsDetailOpen(true)
   }, [])
 
   const handleDeleteClick = useCallback((id: string) => {
@@ -251,6 +277,7 @@ export default function RepairsPage() {
 
   // Helper to map Repair to RepairFormData for editing
   const initialFormData: Partial<RepairFormData> | undefined = selectedRepair ? {
+    existingCustomerId: selectedRepair.customer.id,
     customerName: selectedRepair.customer.name,
     customerPhone: selectedRepair.customer.phone,
     customerEmail: selectedRepair.customer.email,
@@ -356,6 +383,7 @@ export default function RepairsPage() {
             repairs={visibleRepairs}
             onStatusChange={updateStatus}
             onEdit={handleEditRepair}
+            onView={handleViewRepair}
             onDelete={handleDeleteClick}
             isLoading={false}
           />
@@ -365,6 +393,7 @@ export default function RepairsPage() {
               repairs={uiFiltered}
               onStatusChange={async (id, status) => { await updateStatus(id, status) }}
               onEdit={handleEditRepair}
+              onView={handleViewRepair}
             />
           </div>
         ) : (
@@ -437,11 +466,36 @@ export default function RepairsPage() {
         }, [uiFiltered])}
       />
 
+      <RepairDetailDialog
+        open={isDetailOpen}
+        repair={detailRepair}
+        onClose={() => setIsDetailOpen(false)}
+        onEdit={(repair) => {
+            setIsDetailOpen(false)
+            handleEditRepair(repair)
+        }}
+      />
+
       <RepairDeleteDialog
         open={!!deleteId}
         onOpenChange={(open) => !open && setDeleteId(null)}
         onConfirm={handleConfirmDelete}
       />
     </div>
+  )
+}
+
+export default function RepairsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">Cargando página...</p>
+        </div>
+      </div>
+    }>
+      <RepairsPageContent />
+    </Suspense>
   )
 }

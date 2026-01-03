@@ -29,8 +29,16 @@ import { useCustomerSearch } from '@/hooks/use-customer-search'
 import type { Customer } from '@/hooks/use-customer-state'
 import { CustomerDetailModal } from './CustomerDetailModal'
 
+interface MinimalCustomer {
+    id: string
+    name: string
+    phone?: string
+    email?: string
+}
+
 interface CustomerSelectorV3Props {
     value?: string
+    initialCustomer?: MinimalCustomer | Customer
     onChange: (customerId: string, customerData?: Customer) => void
     error?: string
     disabled?: boolean
@@ -40,6 +48,7 @@ interface CustomerSelectorV3Props {
 
 export function CustomerSelectorV3({ 
     value, 
+    initialCustomer,
     onChange, 
     error, 
     disabled,
@@ -69,7 +78,7 @@ export function CustomerSelectorV3({
     })
 
     // Find selected customer
-    const selectedCustomer = getCustomerById(value || '')
+    const selectedCustomer = getCustomerById(value || '') || (value && initialCustomer?.id === value ? (initialCustomer as Customer) : undefined)
 
     const handleSelect = useCallback((customerId: string) => {
         const customer = getCustomerById(customerId)

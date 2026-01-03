@@ -826,7 +826,7 @@ export default function POSPage() {
                 
                 if (markRepairDelivered) {
                   updatePayload.status = 'entregado'
-                  updatePayload.delivered_date = new Date().toISOString()
+                  updatePayload.delivered_at = new Date().toISOString()
                 }
                 
                 if (finalCostFromSale) {
