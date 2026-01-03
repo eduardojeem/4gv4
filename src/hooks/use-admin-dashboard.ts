@@ -168,9 +168,21 @@ const mockSecurityLogs: SecurityLog[] = [
 ]
 
 export function useAdminDashboard() {
-  const [users, setUsers] = useState<User[]>(mockUsers)
-  const [metrics, setMetrics] = useState<SystemMetrics>(mockMetrics)
-  const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>(mockSecurityLogs)
+  // Estado inicial vacío
+  const [users, setUsers] = useState<User[]>([])
+  const [metrics, setMetrics] = useState<SystemMetrics>({
+    totalUsers: 0,
+    activeUsers: 0,
+    totalSales: 0,
+    totalProducts: 0,
+    systemHealth: 100,
+    databaseSize: 'Unknown',
+    uptime: '0',
+    lastBackup: new Date().toISOString(),
+    errorRate: 0,
+    responseTime: 0
+  })
+  const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([])
   const [settings, setSettings] = useState<SystemSettings>({
     companyName: process.env.NEXT_PUBLIC_COMPANY_NAME || '4G celulares',
     companyEmail: 'info@4gcelulares.com',
@@ -192,24 +204,8 @@ export function useAdminDashboard() {
   })
 
   const [isLoading, setIsLoading] = useState(false)
-
-  // Estado inicial vacío
-  const [users, setUsers] = useState<User[]>([])
-  const [metrics, setMetrics] = useState<SystemMetrics>({
-    totalUsers: 0,
-    activeUsers: 0,
-    totalSales: 0,
-    totalProducts: 0,
-    systemHealth: 100,
-    databaseSize: 'Unknown',
-    uptime: '0',
-    lastBackup: new Date().toISOString(),
-    errorRate: 0,
-    responseTime: 0
-  })
-  const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([])
   
-  const supabase = createClient() // Necesitamos importar createClient
+  const supabase = createClient()
 
   useEffect(() => {
     const fetchData = async () => {
