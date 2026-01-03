@@ -134,31 +134,86 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
     return withRetry(
       async () => {
         try {
-          // Prepare update data
-          const { id: _, customerCode, registration_date, last_visit, last_activity, ...updateData } = customerData
+          // Prepare update data with enhanced cleaning
+          const { id: _, customerCode, registration_date, last_visit, last_activity, ...rawUpdateData } = customerData
 
-          const response = await customerService.updateCustomer(id, updateData as any)
+          // Enhanced data cleaning to handle [REDACTED] and other edge cases
+          const cleanUpdateData = Object.fromEntries(
+            Object.entries(rawUpdateData).map(([key, value]) => {
+              // Handle string values
+              if (typeof value === 'string') {
+                const trimmed = value.trim()
+                // Filter out redacted values, empty strings, and invalid placeholders
+                if (!trimmed || 
+                    trimmed.includes('[REDACTED]') || 
+                    trimmed === 'undefined' || 
+                    trimmed === 'null' ||
+                    trimmed === 'N/A' ||
+                    trimmed === '--') {
+                  return [key, undefined]
+                }
+                return [key, trimmed]
+              }
+              
+              // Handle arrays
+              if (Array.isArray(value)) {
+                const filtered = value.filter(item => 
+                  item && 
+                  typeof item === 'string' && 
+                  item.trim() && 
+                  !item.includes('[REDACTED]')
+                )
+                return [key, filtered.length > 0 ? filtered : undefined]
+              }
+              
+              // Handle numbers
+              if (typeof value === 'number') {
+                return [key, isNaN(value) ? undefined : value]
+              }
+              
+              // Handle other types
+              return [key, value]
+            })
+          ).reduce((acc, [key, value]) => {
+            // Only include defined values
+            if (value !== undefined) {
+              acc[key] = value
+            }
+            return acc
+          }, {} as Record<string, any>)
+
+          console.log('Cleaned update data:', cleanUpdateData) // Debug log
+
+          const response = await customerService.updateCustomer(id, cleanUpdateData as any)
 
           if (!response.success) {
             throw new AppError(
               ErrorCode.DATABASE_ERROR,
               response.error || "Error al actualizar cliente",
-              { customerId: id, updateData }
+              { customerId: id, updateData: cleanUpdateData }
             )
           }
 
           logger.info('Customer updated successfully', {
             customerId: id,
-            updatedFields: Object.keys(updateData)
+            updatedFields: Object.keys(cleanUpdateData)
           })
 
           toast.success("Cliente actualizado exitosamente")
           return { success: true, customer: response.data }
         } catch (error: any) {
+          const errorDetails = error instanceof Error ? {
+            message: error.message,
+            stack: error.stack,
+            ...((error as any).code ? { code: (error as any).code } : {}),
+            ...((error as any).details ? { details: (error as any).details } : {}),
+            ...((error as any).hint ? { hint: (error as any).hint } : {})
+          } : error
+
           const appError = error instanceof AppError ? error : new AppError(
             ErrorCode.DATABASE_ERROR,
             "Error al actualizar cliente",
-            { originalError: error, customerId: id, customerData }
+            { originalError: errorDetails, customerId: id, customerData }
           )
 
           logger.error('Customer update failed', appError)
@@ -452,6 +507,134 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
     }
   }, [])
 
+  const toggleCustomerStatus = useCallback(async (id: string) => {
+    return withRetry(
+      async () => {
+        try {
+          const response = await customerService.toggleCustomerStatus(id)
+
+          if (!response.success) {
+            throw new AppError(
+              ErrorCode.DATABASE_ERROR,
+              response.error || "Error al cambiar estado del cliente",
+              { customerId: id }
+            )
+          }
+
+          logger.info('Customer status toggled successfully', {
+            customerId: id,
+            newStatus: response.data?.status
+          })
+
+          const statusText = response.data?.status === 'active' ? 'activado' : 'desactivado'
+          toast.success(`Cliente ${statusText} exitosamente`)
+          return { success: true, customer: response.data }
+        } catch (error: any) {
+          const appError = error instanceof AppError ? error : new AppError(
+            ErrorCode.DATABASE_ERROR,
+            "Error al cambiar estado del cliente",
+            { originalError: error, customerId: id }
+          )
+
+          logger.error('Customer status toggle failed', appError)
+          toast.error(appError.message)
+          return { success: false, error: appError }
+        }
+      },
+      {
+        maxAttempts: 2,
+        baseDelay: 1000
+      }
+    )
+  }, [])
+
+  const updateCustomerStatus = useCallback(async (id: string, status: 'active' | 'inactive' | 'suspended') => {
+    return withRetry(
+      async () => {
+        try {
+          const response = await customerService.updateCustomerStatus(id, status)
+
+          if (!response.success) {
+            throw new AppError(
+              ErrorCode.DATABASE_ERROR,
+              response.error || "Error al actualizar estado del cliente",
+              { customerId: id, status }
+            )
+          }
+
+          logger.info('Customer status updated successfully', {
+            customerId: id,
+            newStatus: status
+          })
+
+          const statusText = {
+            'active': 'activado',
+            'inactive': 'desactivado',
+            'suspended': 'suspendido'
+          }[status]
+
+          toast.success(`Cliente ${statusText} exitosamente`)
+          return { success: true, customer: response.data }
+        } catch (error: any) {
+          const appError = error instanceof AppError ? error : new AppError(
+            ErrorCode.DATABASE_ERROR,
+            "Error al actualizar estado del cliente",
+            { originalError: error, customerId: id, status }
+          )
+
+          logger.error('Customer status update failed', appError)
+          toast.error(appError.message)
+          return { success: false, error: appError }
+        }
+      },
+      {
+        maxAttempts: 2,
+        baseDelay: 1000
+      }
+    )
+  }, [])
+
+  const bulkUpdateCustomerStatus = useCallback(async (
+    customerIds: string[],
+    status: 'active' | 'inactive' | 'suspended'
+  ) => {
+    try {
+      const response = await customerService.bulkUpdateCustomerStatus(customerIds, status)
+
+      if (!response.success) {
+        throw new AppError(
+          ErrorCode.DATABASE_ERROR,
+          response.error || "Error en actualización masiva de estado",
+          { customerIds, status }
+        )
+      }
+
+      logger.info('Bulk status update successful', {
+        count: customerIds.length,
+        newStatus: status
+      })
+
+      const statusText = {
+        'active': 'activados',
+        'inactive': 'desactivados',
+        'suspended': 'suspendidos'
+      }[status]
+
+      toast.success(`${response.updated || customerIds.length} cliente(s) ${statusText}`)
+      return { success: true, updated: response.updated }
+    } catch (error: any) {
+      const appError = error instanceof AppError ? error : new AppError(
+        ErrorCode.DATABASE_ERROR,
+        "Error en actualización masiva de estado",
+        { originalError: error, customerIds, status }
+      )
+
+      logger.error('Bulk status update failed', appError)
+      toast.error(appError.message)
+      return { success: false, error: appError }
+    }
+  }, [])
+
   const removeTag = useCallback(async (customerId: string, tag: string) => {
     try {
       const supabase = createClient()
@@ -500,6 +683,11 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
     createCustomer,
     updateCustomer,
     deleteCustomer,
+
+    // Status management
+    toggleCustomerStatus,
+    updateCustomerStatus,
+    bulkUpdateCustomerStatus,
 
     // Import/Export
     exportCustomers,

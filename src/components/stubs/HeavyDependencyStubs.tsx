@@ -1,6 +1,36 @@
 // Stubs para dependencias pesadas removidas temporalmente
 // Esto permite que el build funcione sin las dependencias pesadas
 
+// Tipos para DND Kit
+export interface DragStartEvent {
+  active: {
+    id: string | number;
+    data?: any;
+  };
+}
+
+export interface DragOverEvent {
+  active: {
+    id: string | number;
+    data?: any;
+  };
+  over?: {
+    id: string | number;
+    data?: any;
+  } | null;
+}
+
+export interface DragEndEvent {
+  active: {
+    id: string | number;
+    data?: any;
+  };
+  over?: {
+    id: string | number;
+    data?: any;
+  } | null;
+}
+
 // Stub para XLSX
 export const XLSX = {
   utils: {
@@ -48,7 +78,17 @@ export const html2canvas = (element: HTMLElement, options?: any) => {
 };
 
 // Stub para DND Kit
-export const DndContext = ({ children }: { children: React.ReactNode }) => {
+export const DndContext = ({ 
+  children, 
+  onDragStart, 
+  onDragOver, 
+  onDragEnd 
+}: { 
+  children: React.ReactNode;
+  onDragStart?: (event: DragStartEvent) => void;
+  onDragOver?: (event: DragOverEvent) => void;
+  onDragEnd?: (event: DragEndEvent) => void;
+}) => {
   return <div>{children}</div>;
 };
 

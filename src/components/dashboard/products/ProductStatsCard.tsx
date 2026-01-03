@@ -14,7 +14,7 @@ import {
   BarChart3
 } from 'lucide-react'
 import { Product } from '@/types/products'
-import { motion  } from '../../ui/motion'
+import { motion } from 'framer-motion'
 
 interface ProductStatsCardProps {
   product: Product

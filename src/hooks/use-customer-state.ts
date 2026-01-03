@@ -100,9 +100,6 @@ const initialFilters: CustomerFilters = {
   tags: []
 }
 
-// Mock data removed - using Supabase
-const mockCustomers: Customer[] = []
-
 export function useCustomerState() {
   const [state, setState] = useState<CustomerState>({
     customers: [],

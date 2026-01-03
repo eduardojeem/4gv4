@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useIntervalManager } from '@/hooks/use-interval-manager'
+import { createClient } from '@/lib/supabase/client'
+
 
 export interface User {
   id: string
@@ -192,131 +193,76 @@ export function useAdminDashboard() {
 
   const [isLoading, setIsLoading] = useState(false)
 
-  // Actualización de métricas con pausa/desaceleración según visibilidad de pestaña
-  const [isTabVisible, setIsTabVisible] = useState<boolean>(typeof document !== 'undefined' ? !document.hidden : true)
+  // Estado inicial vacío
+  const [users, setUsers] = useState<User[]>([])
+  const [metrics, setMetrics] = useState<SystemMetrics>({
+    totalUsers: 0,
+    activeUsers: 0,
+    totalSales: 0,
+    totalProducts: 0,
+    systemHealth: 100,
+    databaseSize: 'Unknown',
+    uptime: '0',
+    lastBackup: new Date().toISOString(),
+    errorRate: 0,
+    responseTime: 0
+  })
+  const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([])
+  
+  const supabase = createClient() // Necesitamos importar createClient
 
   useEffect(() => {
-    const onVisibility = () => setIsTabVisible(!document.hidden)
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [])
+    const fetchData = async () => {
+      setIsLoading(true)
+      try {
+        // Fetch Users (from profiles or similar)
+        // Asumiendo que existe una tabla 'profiles' o 'users' pública
+        // Si no existe, esto fallará y capturaremos el error
+        const { data: usersData, error: usersError } = await supabase
+          .from('profiles') // Intentar con profiles
+          .select('*')
+        
+        if (!usersError && usersData) {
+            const mappedUsers: User[] = usersData.map((u: any) => ({
+                id: u.id,
+                name: u.full_name || u.name || 'Sin Nombre',
+                email: u.email || '',
+                role: u.role || 'vendedor',
+                status: u.status || 'active',
+                lastLogin: u.last_sign_in_at || new Date().toISOString(),
+                createdAt: u.created_at || new Date().toISOString(),
+                permissions: [], // TODO: map permissions
+                phone: u.phone,
+                department: u.department
+            }))
+            setUsers(mappedUsers)
+        }
 
-  useIntervalManager(() => {
-    setMetrics(prev => ({
-      ...prev,
-      systemHealth: Math.max(95, Math.min(100, prev.systemHealth + (Math.random() - 0.5) * 2)),
-      responseTime: Math.max(80, Math.min(200, prev.responseTime + (Math.random() - 0.5) * 20)),
-      errorRate: Math.max(0, Math.min(0.1, prev.errorRate + (Math.random() - 0.5) * 0.01))
-    }))
-  }, {
-    interval: isTabVisible ? 5000 : 20000,
-    enabled: true,
-    immediate: false
-  })
+        // Fetch Metrics
+        const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true })
+        const { data: salesData } = await supabase.from('sales').select('total_amount')
+        
+        const totalSales = salesData?.reduce((acc, curr) => acc + (curr.total_amount || 0), 0) || 0
 
-  const createUser = useCallback(async (userData: Partial<User>) => {
-    setIsLoading(true)
-    try {
-      // Simular API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
+        setMetrics(prev => ({
+            ...prev,
+            totalUsers: usersData?.length || 0,
+            activeUsers: usersData?.filter((u: any) => (u.status || 'active') === 'active').length || 0,
+            totalProducts: productsCount || 0,
+            totalSales: totalSales,
+            systemHealth: 100 // Hardcoded for now
+        }))
 
-      const newUser: User = {
-        id: Date.now().toString(),
-        name: userData.name || '',
-        email: userData.email || '',
-        role: userData.role || 'vendedor',
-        status: 'active',
-        lastLogin: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        permissions: userData.permissions || [],
-        phone: userData.phone,
-        department: userData.department
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error)
+      } finally {
+        setIsLoading(false)
       }
-
-      setUsers(prev => [...prev, newUser])
-      setMetrics(prev => ({ ...prev, totalUsers: prev.totalUsers + 1, activeUsers: prev.activeUsers + 1 }))
-
-      return { success: true, user: newUser }
-    } catch (error) {
-      return { success: false, error: 'Error al crear usuario' }
-    } finally {
-      setIsLoading(false)
     }
+
+    fetchData()
   }, [])
 
-  const updateUser = useCallback(async (userId: string, userData: Partial<User>) => {
-    setIsLoading(true)
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      setUsers(prev => prev.map(user =>
-        user.id === userId ? { ...user, ...userData } : user
-      ))
-
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: 'Error al actualizar usuario' }
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  const deleteUser = useCallback(async (userId: string) => {
-    setIsLoading(true)
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      setUsers(prev => prev.filter(user => user.id !== userId))
-      setMetrics(prev => ({ ...prev, totalUsers: prev.totalUsers - 1 }))
-
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: 'Error al eliminar usuario' }
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  const updateSettings = useCallback(async (newSettings: Partial<SystemSettings>) => {
-    setIsLoading(true)
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      setSettings(prev => ({ ...prev, ...newSettings }))
-
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: 'Error al guardar configuración' }
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  const performSystemAction = useCallback(async (action: string) => {
-    setIsLoading(true)
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      // Simular diferentes acciones
-      switch (action) {
-        case 'backup':
-          setMetrics(prev => ({ ...prev, lastBackup: new Date().toISOString() }))
-          break
-        case 'clearCache':
-          setMetrics(prev => ({ ...prev, responseTime: Math.max(80, prev.responseTime * 0.8) }))
-          break
-        case 'checkIntegrity':
-          setMetrics(prev => ({ ...prev, systemHealth: Math.min(100, prev.systemHealth + 2) }))
-          break
-      }
-
-      return { success: true, message: `Acción ${action} completada exitosamente` }
-    } catch (error) {
-      return { success: false, error: `Error al ejecutar ${action}` }
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
 
   const getFilteredUsers = useCallback((filters: { role?: string; status?: string; search?: string }) => {
     return users.filter(user => {
@@ -346,6 +292,32 @@ export function useAdminDashboard() {
       return acc
     }, {}),
   }), [users])
+
+  const createUser = useCallback(async (userData: Partial<User>) => {
+    // TODO: Implement real user creation logic (likely requires server-side admin API)
+    return { success: false, error: 'User creation not implemented yet in this version' }
+  }, [])
+
+  const updateUser = useCallback(async (userId: string, userData: Partial<User>) => {
+    // TODO: Implement real user update logic
+    return { success: false, error: 'User update not implemented yet in this version' }
+  }, [])
+
+  const deleteUser = useCallback(async (userId: string) => {
+    // TODO: Implement real user deletion logic
+    return { success: false, error: 'User deletion not implemented yet in this version' }
+  }, [])
+
+  const updateSettings = useCallback(async (newSettings: Partial<SystemSettings>) => {
+    // TODO: Implement real settings update logic
+    setSettings(prev => ({ ...prev, ...newSettings }))
+    return { success: true }
+  }, [])
+
+  const performSystemAction = useCallback(async (action: string) => {
+    // TODO: Implement real system actions
+    return { success: true, message: `Action ${action} simulated` }
+  }, [])
 
   return {
     users,

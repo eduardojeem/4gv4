@@ -39,65 +39,7 @@ interface SaleData {
   notes?: string
 }
 
-// Datos mock para fallback (forma unificada)
-const mockProducts: UnifiedProduct[] = [
-  {
-    id: '1',
-    name: 'Smartphone Samsung Galaxy A54',
-    description: 'Smartphone con cámara de 50MP y pantalla Super AMOLED',
-    sku: 'SAM-A54-128',
-    barcode: '7891234567890',
-    sale_price: 2500000,
-    stock_quantity: 15,
-    category_id: 'electronics',
-    image: '📱',
-    unit_measure: 'unidad',
-    is_active: true,
-    purchase_price: 0
-  },
-  {
-    id: '2',
-    name: 'Auriculares Bluetooth Sony',
-    description: 'Auriculares inalámbricos con cancelación de ruido',
-    sku: 'SONY-WH1000',
-    barcode: '7891234567891',
-    sale_price: 850000,
-    stock_quantity: 8,
-    category_id: 'electronics',
-    image: '🎧',
-    unit_measure: 'unidad',
-    is_active: true,
-    purchase_price: 0
-  },
-  {
-    id: '11',
-    name: 'Teclado Mecánico Logitech',
-    description: 'Teclado gaming con switches mecánicos',
-    sku: 'LOG-MX-KEYS',
-    barcode: '7891234567899',
-    sale_price: 450000,
-    stock_quantity: 12,
-    category_id: 'accessories',
-    image: '⌨️',
-    unit_measure: 'unidad',
-    is_active: true,
-    purchase_price: 0
-  },
-  {
-    id: '12',
-    name: 'Mouse Gaming Razer',
-    description: 'Mouse óptico para gaming con RGB',
-    sku: 'RAZ-DEATHADDER',
-    barcode: '7891234567900',
-    sale_price: 280000,
-    stock_quantity: 20,
-    category_id: 'accessories',
-    image: '🖱️',
-    unit_measure: 'unidad',
-    is_active: true,
-    purchase_price: 0
-  }
-]
+
 
 export function usePOSProducts() {
   const [products, setProducts] = useState<UnifiedProduct[]>([])

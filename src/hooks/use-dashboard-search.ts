@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { createSupabaseClient } from '@/lib/supabase/client'
 
 interface SearchResult {
     title: string
@@ -22,7 +23,7 @@ interface SearchFilters {
 export function useDashboardSearch() {
     const router = useRouter()
 
-    const search = useCallback((input: { query: string; filters: SearchFilters }): SearchResult[] => {
+    const search = useCallback(async (input: { query: string; filters: SearchFilters }): Promise<SearchResult[]> => {
         const { query, filters } = input
         const results: SearchResult[] = []
 
@@ -30,86 +31,75 @@ export function useDashboardSearch() {
             return results
         }
 
-        const lowerQuery = query.toLowerCase()
+        const supabase = createSupabaseClient()
         const filterType = filters.type || 'todos'
 
-        // Mock data - En producción, esto debería consultar Supabase
-        // Búsqueda en productos
-        if (filterType === 'todos' || filterType === 'productos') {
-            const mockProducts = [
-                { id: 1, name: 'iPhone 14 Pro', sku: 'IP14P-128', price: 999 },
-                { id: 2, name: 'Samsung Galaxy S23', sku: 'SGS23-256', price: 899 },
-                { id: 3, name: 'Cargador USB-C', sku: 'CHG-USBC', price: 25 },
-                { id: 4, name: 'Funda iPhone', sku: 'CASE-IP14', price: 15 },
-                { id: 5, name: 'Protector de pantalla', sku: 'SCREEN-PROT', price: 10 },
-            ]
+        try {
+            // Búsqueda en productos
+            if (filterType === 'todos' || filterType === 'productos') {
+                const { data: products } = await supabase
+                    .from('products')
+                    .select('id, name, sku, sale_price')
+                    .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
+                    .limit(5)
 
-            mockProducts
-                .filter(p =>
-                    p.name.toLowerCase().includes(lowerQuery) ||
-                    p.sku.toLowerCase().includes(lowerQuery)
-                )
-                .forEach(p => {
+                products?.forEach(p => {
                     results.push({
                         title: p.name,
-                        subtitle: `SKU: ${p.sku} · $${p.price}`,
-                        href: `/dashboard/products?search=${p.sku}`,
+                        subtitle: `SKU: ${p.sku} · $${p.sale_price}`,
+                        href: `/dashboard/products/${p.id}`,
                         type: 'producto'
                     })
                 })
-        }
+            }
 
-        // Búsqueda en clientes
-        if (filterType === 'todos' || filterType === 'clientes') {
-            const mockCustomers = [
-                { id: 1, name: 'Juan Pérez', email: 'juan@email.com', phone: '555-0001' },
-                { id: 2, name: 'María González', email: 'maria@email.com', phone: '555-0002' },
-                { id: 3, name: 'Carlos Rodríguez', email: 'carlos@email.com', phone: '555-0003' },
-                { id: 4, name: 'Ana Martínez', email: 'ana@email.com', phone: '555-0004' },
-            ]
+            // Búsqueda en clientes
+            if (filterType === 'todos' || filterType === 'clientes') {
+                const { data: customers } = await supabase
+                    .from('customers')
+                    .select('id, first_name, last_name, email, phone')
+                    .or(`first_name.ilike.%${query}%,last_name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`)
+                    .limit(5)
 
-            mockCustomers
-                .filter(c =>
-                    c.name.toLowerCase().includes(lowerQuery) ||
-                    c.email.toLowerCase().includes(lowerQuery) ||
-                    c.phone.includes(lowerQuery)
-                )
-                .forEach(c => {
+                customers?.forEach(c => {
+                    const name = `${c.first_name || ''} ${c.last_name || ''}`.trim()
                     results.push({
-                        title: c.name,
-                        subtitle: `${c.email} · ${c.phone}`,
-                        href: `/dashboard/customers?search=${c.name}`,
+                        title: name || 'Sin nombre',
+                        subtitle: `${c.email || ''} · ${c.phone || ''}`,
+                        href: `/dashboard/customers/${c.id}`,
                         type: 'cliente'
                     })
                 })
-        }
+            }
 
-        // Búsqueda en reparaciones
-        if (filterType === 'todos' || filterType === 'reparaciones') {
-            const mockRepairs = [
-                { id: 1, device: 'iPhone 13', client: 'Juan Pérez', status: 'En proceso' },
-                { id: 2, device: 'Samsung S22', client: 'María González', status: 'Completado' },
-                { id: 3, device: 'iPad Air', client: 'Carlos Rodríguez', status: 'Pendiente' },
-            ]
+            // Búsqueda en reparaciones
+            if (filterType === 'todos' || filterType === 'reparaciones') {
+                const { data: repairs } = await supabase
+                    .from('repairs')
+                    .select(`
+                        id, 
+                        device_model, 
+                        status, 
+                        customer:customers(first_name, last_name)
+                    `)
+                    .ilike('device_model', `%${query}%`)
+                    .limit(5)
 
-            mockRepairs
-                .filter(r =>
-                    r.device.toLowerCase().includes(lowerQuery) ||
-                    r.client.toLowerCase().includes(lowerQuery) ||
-                    `#${r.id}`.includes(lowerQuery)
-                )
-                .forEach(r => {
+                repairs?.forEach((r: any) => {
+                    const customerName = r.customer ? `${r.customer.first_name || ''} ${r.customer.last_name || ''}`.trim() : 'Desconocido'
                     results.push({
-                        title: `Reparación #${r.id} - ${r.device}`,
-                        subtitle: `Cliente: ${r.client} · Estado: ${r.status}`,
+                        title: `Reparación - ${r.device_model || 'Dispositivo'}`,
+                        subtitle: `Cliente: ${customerName} · Estado: ${r.status}`,
                         href: `/dashboard/repairs?id=${r.id}`,
                         type: 'reparacion'
                     })
                 })
+            }
+        } catch (error) {
+            console.error('Error en búsqueda global:', error)
         }
 
-        // Limitar resultados
-        return results.slice(0, 10)
+        return results
     }, [])
 
     const navigateToResult = useCallback((href: string) => {

@@ -88,135 +88,8 @@ interface SupplierListProps {
   onSupplierSelect?: (supplier: SupplierData) => void
 }
 
-// Mock data para demostración
-const mockSuppliers: SupplierData[] = [
-  {
-    id: '1',
-    name: 'TechDistributor SA',
-    businessName: 'TechDistributor S.A. de C.V.',
-    taxId: 'TDS123456789',
-    email: 'ventas@techdistributor.com',
-    phone: '+52 55 1234 5678',
-    website: 'https://techdistributor.com',
-    description: 'Distribuidor especializado en productos tecnológicos y electrónicos',
-    category: 'Tecnología',
-    status: 'active',
-    rating: 4.5,
-    addresses: [{
-      street: 'Av. Insurgentes Sur 1234, Col. Del Valle',
-      city: 'Ciudad de México',
-      state: 'CDMX',
-      zipCode: '03100',
-      country: 'México',
-      type: 'both'
-    }],
-    contacts: [{
-      id: '1',
-      name: 'Juan Pérez',
-      position: 'Gerente de Ventas',
-      email: 'juan.perez@techdistributor.com',
-      phone: '+52 55 1234 5678',
-      isPrimary: true
-    }],
-    paymentTerms: {
-      paymentMethod: 'transfer',
-      creditLimit: 100000,
-      paymentDays: 30,
-      discountPercent: 2,
-      discountDays: 10,
-      currency: 'MXN'
-    },
-    tags: ['Tecnología', 'Electrónicos', 'Confiable'],
-    notes: 'Proveedor principal para productos tecnológicos',
-    isActive: true,
-    createdAt: '2024-01-15',
-    updatedAt: '2024-01-20'
-  },
-  {
-    id: '2',
-    name: 'Moda Express',
-    businessName: 'Moda Express S.A. de C.V.',
-    taxId: 'MEX987654321',
-    email: 'contacto@modaexpress.com',
-    phone: '+52 55 9876 5432',
-    website: 'https://modaexpress.com',
-    description: 'Proveedor de ropa y accesorios de moda',
-    category: 'Ropa y Accesorios',
-    status: 'active',
-    rating: 4.2,
-    addresses: [{
-      street: 'Calle Madero 567, Centro Histórico',
-      city: 'Ciudad de México',
-      state: 'CDMX',
-      zipCode: '06000',
-      country: 'México',
-      type: 'both'
-    }],
-    contacts: [{
-      id: '1',
-      name: 'María González',
-      position: 'Directora Comercial',
-      email: 'maria.gonzalez@modaexpress.com',
-      phone: '+52 55 9876 5432',
-      isPrimary: true
-    }],
-    paymentTerms: {
-      paymentMethod: 'credit',
-      creditLimit: 50000,
-      paymentDays: 45,
-      discountPercent: 1.5,
-      discountDays: 15,
-      currency: 'MXN'
-    },
-    tags: ['Moda', 'Ropa', 'Accesorios'],
-    notes: 'Buena calidad y precios competitivos',
-    isActive: true,
-    createdAt: '2024-01-10',
-    updatedAt: '2024-01-18'
-  },
-  {
-    id: '3',
-    name: 'HomeStyle Imports',
-    businessName: 'HomeStyle Imports S.A. de C.V.',
-    taxId: 'HSI456789123',
-    email: 'info@homestyle.com',
-    phone: '+52 55 5555 1234',
-    website: 'https://homestyle.com',
-    description: 'Importador de productos para el hogar y decoración',
-    category: 'Hogar y Jardín',
-    status: 'pending',
-    rating: 3.8,
-    addresses: [{
-      street: 'Blvd. Manuel Ávila Camacho 890, Lomas de Chapultepec',
-      city: 'Ciudad de México',
-      state: 'CDMX',
-      zipCode: '11000',
-      country: 'México',
-      type: 'both'
-    }],
-    contacts: [{
-      id: '1',
-      name: 'Carlos Rodríguez',
-      position: 'Gerente General',
-      email: 'carlos.rodriguez@homestyle.com',
-      phone: '+52 55 5555 1234',
-      isPrimary: true
-    }],
-    paymentTerms: {
-      paymentMethod: 'check',
-      creditLimit: 25000,
-      paymentDays: 60,
-      discountPercent: 0,
-      discountDays: 0,
-      currency: 'USD'
-    },
-    tags: ['Hogar', 'Decoración', 'Importación'],
-    notes: 'En proceso de evaluación',
-    isActive: false,
-    createdAt: '2024-01-05',
-    updatedAt: '2024-01-12'
-  }
-]
+// Mock data removed
+const mockSuppliers: SupplierData[] = []
 
 const supplierCategories = [
   'Todos',
@@ -241,7 +114,7 @@ const statusOptions = [
 ]
 
 export default function SupplierList({
-  suppliers = mockSuppliers,
+  suppliers = [],
   onSupplierCreate,
   onSupplierUpdate,
   onSupplierDelete,

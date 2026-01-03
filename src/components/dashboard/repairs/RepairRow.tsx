@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
-import { statusConfig, priorityConfig } from '@/data/mock-repairs'
+import { statusConfig, priorityConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { formatDistanceToNow } from 'date-fns'

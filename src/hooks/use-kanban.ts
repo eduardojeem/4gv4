@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { createSupabaseClient } from '@/lib/supabase/client'
-import { Repair, RepairStatus, statusConfig, uiToSupabaseStatus } from '@/data/mock-repairs'
-
-const isDemoMode = () => process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+import { Repair, RepairStatus } from '@/types/repairs'
 
 export function useKanban(
     repairs: Repair[],

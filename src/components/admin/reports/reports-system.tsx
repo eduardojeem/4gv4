@@ -47,57 +47,9 @@ interface ReportTemplate {
   color: string
 }
 
-// Datos mock
-const mockReports: Report[] = [
-  {
-    id: '1',
-    name: 'Reporte de Ventas Mensual',
-    description: 'Análisis completo de ventas del mes actual',
-    type: 'sales',
-    category: 'Ventas',
-    lastGenerated: new Date(),
-    size: '2.4 MB',
-    status: 'ready',
-    downloadCount: 45,
-    schedule: 'monthly'
-  },
-  {
-    id: '2',
-    name: 'Inventario Actual',
-    description: 'Estado actual del inventario y alertas de stock',
-    type: 'inventory',
-    category: 'Inventario',
-    lastGenerated: new Date(Date.now() - 86400000),
-    size: '1.8 MB',
-    status: 'ready',
-    downloadCount: 23,
-    schedule: 'daily'
-  },
-  {
-    id: '3',
-    name: 'Análisis de Usuarios',
-    description: 'Estadísticas de usuarios activos y comportamiento',
-    type: 'users',
-    category: 'Usuarios',
-    lastGenerated: new Date(Date.now() - 3600000),
-    size: '956 KB',
-    status: 'generating',
-    downloadCount: 12,
-    schedule: 'weekly'
-  },
-  {
-    id: '4',
-    name: 'Estado Financiero',
-    description: 'Resumen financiero y análisis de rentabilidad',
-    type: 'financial',
-    category: 'Finanzas',
-    lastGenerated: new Date(Date.now() - 7200000),
-    size: '3.2 MB',
-    status: 'ready',
-    downloadCount: 67,
-    schedule: 'monthly'
-  }
-]
+// Datos mock (Eliminados)
+// const mockReports: Report[] = [] 
+
 
 const reportTemplates: ReportTemplate[] = [
   {

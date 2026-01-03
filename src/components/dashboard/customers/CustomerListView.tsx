@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useMemo } from 'react'
-import { motion, AnimatePresence  } from '../../ui/motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -51,10 +51,12 @@ import {
   MessageCircle,
   TrendingUp,
   Activity,
-  Clock
+  Clock,
+  Power,
+  PowerOff
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
-import { StatusBadge } from '@/components/ui/StatusBadge'
+import { StatusBadge, StatusToggle, BulkStatusSelector } from '@/components/ui/StatusBadge'
 import { formatters } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 
@@ -68,6 +70,8 @@ interface CustomerListViewProps {
   onViewCustomer: (customer: Customer) => void
   onEditCustomer: (customer: Customer) => void
   onDeleteCustomer: (customer: Customer) => void
+  onToggleCustomerStatus?: (customer: Customer) => void
+  onBulkStatusChange?: (customerIds: string[], status: 'active' | 'inactive' | 'suspended') => void
   loading?: boolean
 }
 
@@ -85,6 +89,8 @@ export function CustomerListView({
   onViewCustomer,
   onEditCustomer,
   onDeleteCustomer,
+  onToggleCustomerStatus,
+  onBulkStatusChange,
   loading = false
 }: CustomerListViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('table')
@@ -196,10 +202,28 @@ export function CustomerListView({
           {/* Acciones de selección */}
           {selectedCustomers.length > 0 && (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={onClearSelection}>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onClearSelection}
+                className="hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
                 Limpiar ({selectedCustomers.length})
               </Button>
-              <Button variant="destructive" size="sm">
+              
+              {/* Selector de estado masivo */}
+              {onBulkStatusChange && (
+                <BulkStatusSelector
+                  selectedCount={selectedCustomers.length}
+                  onStatusChange={(status) => onBulkStatusChange(selectedCustomers, status)}
+                />
+              )}
+              
+              <Button 
+                variant="destructive" 
+                size="sm"
+                className="hover:bg-red-600 dark:hover:bg-red-700"
+              >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Eliminar
               </Button>
@@ -231,6 +255,7 @@ export function CustomerListView({
               onViewCustomer={onViewCustomer}
               onEditCustomer={onEditCustomer}
               onDeleteCustomer={onDeleteCustomer}
+              onToggleCustomerStatus={onToggleCustomerStatus}
               loading={loading}
             />
           </motion.div>
@@ -249,6 +274,7 @@ export function CustomerListView({
               onViewCustomer={onViewCustomer}
               onEditCustomer={onEditCustomer}
               onDeleteCustomer={onDeleteCustomer}
+              onToggleCustomerStatus={onToggleCustomerStatus}
               loading={loading}
             />
           </motion.div>
@@ -272,6 +298,7 @@ function TableView({
   onViewCustomer,
   onEditCustomer,
   onDeleteCustomer,
+  onToggleCustomerStatus,
   loading
 }: {
   customers: Customer[]
@@ -286,6 +313,7 @@ function TableView({
   onViewCustomer: (customer: Customer) => void
   onEditCustomer: (customer: Customer) => void
   onDeleteCustomer: (customer: Customer) => void
+  onToggleCustomerStatus?: (customer: Customer) => void
   loading: boolean
 }) {
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -294,63 +322,66 @@ function TableView({
   }
 
   return (
-    <Card>
+    <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
       <CardContent className="p-0">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">
+            <TableRow className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <TableHead className="w-12 bg-gray-50 dark:bg-gray-800/50">
                 <Checkbox
                   checked={allSelected || someSelected}
                   onCheckedChange={onSelectAll}
+                  className="border-gray-300 dark:border-gray-600"
                 />
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
                 onClick={() => onSort('name')}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                   Cliente
                   <SortIcon field="name" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
                 onClick={() => onSort('email')}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                   Contacto
                   <SortIcon field="email" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
                 onClick={() => onSort('status')}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                   Estado
                   <SortIcon field="status" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
                 onClick={() => onSort('lifetime_value')}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                   Valor
                   <SortIcon field="lifetime_value" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
                 onClick={() => onSort('last_activity')}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                   Última Actividad
                   <SortIcon field="last_activity" />
                 </div>
               </TableHead>
-              <TableHead className="w-20">Acciones</TableHead>
+              <TableHead className="w-20 bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300">
+                Acciones
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -360,26 +391,27 @@ function TableView({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className="group hover:bg-muted/50 transition-colors cursor-pointer"
+                className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer border-b border-gray-100 dark:border-gray-800"
                 onClick={() => onViewCustomer(customer)}
               >
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <Checkbox
                     checked={selectedCustomers.includes(customer.id)}
                     onCheckedChange={() => onCustomerToggle(customer.id)}
+                    className="border-gray-300 dark:border-gray-600"
                   />
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
+                    <Avatar className="h-8 w-8 ring-2 ring-gray-100 dark:ring-gray-700">
                       <AvatarImage src={customer.avatar} />
-                      <AvatarFallback>
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs font-medium">
                         {customer.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <div className="font-medium">{customer.name}</div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{customer.name}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
                         {customer.customerCode}
                       </div>
                     </div>
@@ -387,21 +419,29 @@ function TableView({
                 </TableCell>
                 <TableCell>
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail className="h-3 w-3" />
+                    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <Mail className="h-3 w-3 text-gray-400 dark:text-gray-500" />
                       {customer.email}
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="h-3 w-3" />
+                    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <Phone className="h-3 w-3 text-gray-400 dark:text-gray-500" />
                       {customer.phone}
                     </div>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <div className="space-y-2">
-                    <StatusBadge status={customer.status} size="sm" />
+                    {onToggleCustomerStatus ? (
+                      <StatusToggle
+                        status={customer.status}
+                        onToggle={() => onToggleCustomerStatus(customer)}
+                        size="sm"
+                      />
+                    ) : (
+                      <StatusBadge status={customer.status} size="sm" />
+                    )}
                     {customer.segment && (
-                      <Badge variant="outline" className="text-xs">
+                      <Badge variant="outline" className="text-xs border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
                         {customer.segment}
                       </Badge>
                     )}
@@ -409,20 +449,20 @@ function TableView({
                 </TableCell>
                 <TableCell>
                   <div className="space-y-1">
-                    <div className="font-medium">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">
                       {formatters.currency(customer.lifetime_value || 0)}
                     </div>
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
                       {customer.total_purchases || 0} compras
                     </div>
                   </div>
                 </TableCell>
                 <TableCell>
                   <div className="space-y-1">
-                    <div className="text-sm">
+                    <div className="text-sm text-gray-700 dark:text-gray-300">
                       {formatters.date(customer.last_activity)}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
                       {getRelativeTime(customer.last_activity)}
                     </div>
                   </div>
@@ -433,6 +473,7 @@ function TableView({
                     onView={() => onViewCustomer(customer)}
                     onEdit={() => onEditCustomer(customer)}
                     onDelete={() => onDeleteCustomer(customer)}
+                    onToggleStatus={onToggleCustomerStatus ? () => onToggleCustomerStatus(customer) : undefined}
                   />
                 </TableCell>
               </motion.tr>
@@ -452,6 +493,7 @@ function GridView({
   onViewCustomer,
   onEditCustomer,
   onDeleteCustomer,
+  onToggleCustomerStatus,
   loading
 }: {
   customers: Customer[]
@@ -460,6 +502,7 @@ function GridView({
   onViewCustomer: (customer: Customer) => void
   onEditCustomer: (customer: Customer) => void
   onDeleteCustomer: (customer: Customer) => void
+  onToggleCustomerStatus?: (customer: Customer) => void
   loading: boolean
 }) {
   return (
@@ -478,6 +521,7 @@ function GridView({
             onView={() => onViewCustomer(customer)}
             onEdit={() => onEditCustomer(customer)}
             onDelete={() => onDeleteCustomer(customer)}
+            onToggleStatus={onToggleCustomerStatus ? () => onToggleCustomerStatus(customer) : undefined}
           />
         </motion.div>
       ))}
@@ -492,7 +536,8 @@ function CustomerCard({
   onToggle,
   onView,
   onEdit,
-  onDelete
+  onDelete,
+  onToggleStatus
 }: {
   customer: Customer
   selected: boolean
@@ -500,11 +545,14 @@ function CustomerCard({
   onView: () => void
   onEdit: () => void
   onDelete: () => void
+  onToggleStatus?: () => void
 }) {
   return (
     <Card className={cn(
       "group hover:shadow-lg transition-all duration-200 cursor-pointer",
-      selected && "ring-2 ring-blue-500 shadow-lg"
+      "border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900",
+      "hover:border-gray-300 dark:hover:border-gray-600",
+      selected && "ring-2 ring-blue-500 dark:ring-blue-400 shadow-lg border-blue-200 dark:border-blue-600"
     )}>
       <CardContent className="p-4">
         {/* Header con checkbox y acciones */}
@@ -513,57 +561,67 @@ function CustomerCard({
             checked={selected}
             onCheckedChange={onToggle}
             onClick={(e) => e.stopPropagation()}
+            className="border-gray-300 dark:border-gray-600"
           />
           <CustomerActions
             customer={customer}
             onView={onView}
             onEdit={onEdit}
             onDelete={onDelete}
+            onToggleStatus={onToggleStatus}
           />
         </div>
 
         {/* Avatar y nombre */}
         <div className="flex items-center gap-3 mb-4" onClick={onView}>
-          <Avatar className="h-12 w-12">
+          <Avatar className="h-12 w-12 ring-2 ring-gray-100 dark:ring-gray-700">
             <AvatarImage src={customer.avatar} />
-            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-medium">
               {customer.name.split(' ').map(n => n[0]).join('').toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold truncate">{customer.name}</h3>
-            <p className="text-sm text-muted-foreground">{customer.customerCode}</p>
+            <h3 className="font-semibold truncate text-gray-900 dark:text-gray-100">{customer.name}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{customer.customerCode}</p>
           </div>
         </div>
 
         {/* Información de contacto */}
         <div className="space-y-2 mb-4">
-          <div className="flex items-center gap-2 text-sm">
-            <Mail className="h-3 w-3 text-muted-foreground" />
+          <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <Mail className="h-3 w-3 text-gray-400 dark:text-gray-500" />
             <span className="truncate">{customer.email}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Phone className="h-3 w-3 text-muted-foreground" />
+          <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <Phone className="h-3 w-3 text-gray-400 dark:text-gray-500" />
             <span>{customer.phone}</span>
           </div>
           {customer.city && (
-            <div className="flex items-center gap-2 text-sm">
-              <MapPin className="h-3 w-3 text-muted-foreground" />
+            <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <MapPin className="h-3 w-3 text-gray-400 dark:text-gray-500" />
               <span className="truncate">{customer.city}</span>
             </div>
           )}
         </div>
 
         {/* Estados y badges */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          <StatusBadge status={customer.status} size="sm" />
+        <div className="flex flex-wrap gap-2 mb-4" onClick={(e) => e.stopPropagation()}>
+          {onToggleStatus ? (
+            <StatusToggle
+              status={customer.status}
+              onToggle={onToggleStatus}
+              size="sm"
+            />
+          ) : (
+            <StatusBadge status={customer.status} size="sm" />
+          )}
           {customer.segment && (
-            <Badge variant="outline" className="text-xs">
+            <Badge variant="outline" className="text-xs border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
               {customer.segment}
             </Badge>
           )}
           {customer.customer_type === 'premium' && (
-            <Badge className="text-xs bg-gradient-to-r from-yellow-400 to-orange-500">
+            <Badge className="text-xs bg-gradient-to-r from-yellow-400 to-orange-500 border-0 text-white">
               <Star className="h-3 w-3 mr-1" />
               Premium
             </Badge>
@@ -571,22 +629,22 @@ function CustomerCard({
         </div>
 
         {/* Métricas */}
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-2 gap-4 text-sm mb-4">
           <div>
-            <div className="text-muted-foreground">Valor Total</div>
-            <div className="font-semibold">
+            <div className="text-gray-500 dark:text-gray-400">Valor Total</div>
+            <div className="font-semibold text-gray-900 dark:text-gray-100">
               {formatters.currency(customer.lifetime_value || 0)}
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground">Compras</div>
-            <div className="font-semibold">{customer.total_purchases || 0}</div>
+            <div className="text-gray-500 dark:text-gray-400">Compras</div>
+            <div className="font-semibold text-gray-900 dark:text-gray-100">{customer.total_purchases || 0}</div>
           </div>
         </div>
 
         {/* Última actividad */}
-        <div className="mt-4 pt-4 border-t">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
             <Clock className="h-3 w-3" />
             <span>Última actividad: {getRelativeTime(customer.last_activity)}</span>
           </div>
@@ -601,12 +659,14 @@ function CustomerActions({
   customer,
   onView,
   onEdit,
-  onDelete
+  onDelete,
+  onToggleStatus
 }: {
   customer: Customer
   onView: () => void
   onEdit: () => void
   onDelete: () => void
+  onToggleStatus?: () => void
 }) {
   return (
     <DropdownMenu>
@@ -614,31 +674,67 @@ function CustomerActions({
         <Button
           variant="ghost"
           size="sm"
-          className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-100 dark:hover:bg-gray-800"
           onClick={(e) => e.stopPropagation()}
         >
           <MoreVertical className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onView}>
-          <Eye className="h-4 w-4 mr-2" />
+      <DropdownMenuContent 
+        align="end"
+        className="w-48 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-lg"
+      >
+        <DropdownMenuItem 
+          onClick={onView}
+          className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+        >
+          <Eye className="h-4 w-4" />
           Ver Detalle
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={onEdit}>
-          <Edit className="h-4 w-4 mr-2" />
+        <DropdownMenuItem 
+          onClick={onEdit}
+          className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+        >
+          <Edit className="h-4 w-4" />
           Editar
         </DropdownMenuItem>
-        <DropdownMenuItem>
-          <History className="h-4 w-4 mr-2" />
+        <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+          <History className="h-4 w-4" />
           Historial
         </DropdownMenuItem>
-        <DropdownMenuItem>
-          <MessageCircle className="h-4 w-4 mr-2" />
+        <DropdownMenuItem className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+          <MessageCircle className="h-4 w-4" />
           Contactar
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={onDelete} className="text-destructive">
-          <Trash2 className="h-4 w-4 mr-2" />
+        
+        {/* Separador */}
+        <div className="h-px bg-gray-100 dark:bg-gray-800 my-1" />
+        
+        {/* Acciones de estado */}
+        {onToggleStatus && (
+          <DropdownMenuItem 
+            onClick={onToggleStatus}
+            className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+          >
+            {customer.status === 'active' ? (
+              <>
+                <PowerOff className="h-4 w-4 text-orange-500" />
+                <span>Desactivar Cliente</span>
+              </>
+            ) : (
+              <>
+                <Power className="h-4 w-4 text-green-500" />
+                <span>Activar Cliente</span>
+              </>
+            )}
+          </DropdownMenuItem>
+        )}
+        
+        <DropdownMenuItem 
+          onClick={onDelete} 
+          className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
+        >
+          <Trash2 className="h-4 w-4" />
           Eliminar
         </DropdownMenuItem>
       </DropdownMenuContent>

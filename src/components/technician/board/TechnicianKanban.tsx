@@ -10,7 +10,10 @@ import {
     DndContext,
     DragOverlay,
     SortableContext,
-    useSortable
+    useSortable,
+    DragStartEvent,
+    DragOverEvent,
+    DragEndEvent
 } from '@/components/stubs/HeavyDependencyStubs';
 
 interface TechnicianKanbanProps {
@@ -237,7 +240,7 @@ function SortableRepairCard({ repair, onEdit }: SortableRepairCardProps) {
     })
 
     const style = {
-        transform: CSS.Transform.toString(transform),
+        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
         transition,
     }
 

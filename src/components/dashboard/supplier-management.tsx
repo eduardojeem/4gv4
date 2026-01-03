@@ -69,99 +69,63 @@ interface SupplierFormData {
   notes: string
 }
 
-const mockSuppliers: Supplier[] = [
-  {
-    id: '1',
-    name: 'TechDistribuidor SA',
-    contact: 'Juan Pérez',
-    email: 'juan@techdist.com',
-    phone: '+1234567890',
-    address: 'Av. Principal 123',
-    city: 'Ciudad de México',
-    country: 'México',
-    taxId: 'RFC123456789',
-    isActive: true,
-    rating: 4.5,
-    paymentTerms: '30 días',
-    deliveryTime: 5,
-    minimumOrder: 1000,
-    lastSync: new Date('2024-01-15T10:30:00'),
-    syncStatus: 'success',
-    products: 245,
-    notes: 'Proveedor confiable con buenos precios',
-    createdAt: new Date('2023-06-01'),
-    updatedAt: new Date('2024-01-15')
-  },
-  {
-    id: '2',
-    name: 'Electrónicos del Norte',
-    contact: 'María García',
-    email: 'maria@electronicos.com',
-    phone: '+1234567891',
-    address: 'Calle Comercio 456',
-    city: 'Monterrey',
-    country: 'México',
-    taxId: 'RFC987654321',
-    isActive: true,
-    rating: 4.2,
-    paymentTerms: '15 días',
-    deliveryTime: 3,
-    minimumOrder: 500,
-    lastSync: new Date('2024-01-14T15:45:00'),
-    syncStatus: 'success',
-    products: 189,
-    notes: 'Especialista en accesorios',
-    createdAt: new Date('2023-08-15'),
-    updatedAt: new Date('2024-01-14')
-  },
-  {
-    id: '3',
-    name: 'Importadora Global',
-    contact: 'Carlos López',
-    email: 'carlos@global.com',
-    phone: '+1234567892',
-    address: 'Zona Industrial 789',
-    city: 'Guadalajara',
-    country: 'México',
-    taxId: 'RFC456789123',
-    isActive: false,
-    rating: 3.8,
-    paymentTerms: '45 días',
-    deliveryTime: 10,
-    minimumOrder: 2000,
-    lastSync: new Date('2024-01-10T08:20:00'),
-    syncStatus: 'error',
-    products: 67,
-    notes: 'Problemas recientes con entregas',
-    createdAt: new Date('2023-04-20'),
-    updatedAt: new Date('2024-01-10')
-  },
-  {
-    id: '4',
-    name: 'Mayorista Central',
-    contact: 'Ana Rodríguez',
-    email: 'ana@mayorista.com',
-    phone: '+1234567893',
-    address: 'Centro Comercial 321',
-    city: 'Puebla',
-    country: 'México',
-    taxId: 'RFC789123456',
-    isActive: true,
-    rating: 4.8,
-    paymentTerms: '20 días',
-    deliveryTime: 2,
-    minimumOrder: 300,
-    lastSync: new Date('2024-01-16T12:00:00'),
-    syncStatus: 'success',
-    products: 312,
-    notes: 'Excelente servicio y rapidez',
-    createdAt: new Date('2023-09-10'),
-    updatedAt: new Date('2024-01-16')
-  }
-]
+// TODO: Cargar datos reales desde Supabase
+const mockSuppliers: Supplier[] = []
+
+import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
 export function SupplierManagement() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>(mockSuppliers)
+  const supabase = createClient()
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    fetchSuppliers()
+  }, [])
+
+  const fetchSuppliers = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .order('name')
+
+      if (error) throw error
+
+      if (data) {
+        const formattedSuppliers: Supplier[] = data.map(supplier => ({
+          id: supplier.id,
+          name: supplier.name,
+          contact: supplier.contact_name || '',
+          email: supplier.contact_email || '',
+          phone: supplier.phone || '',
+          address: supplier.address || '',
+          city: '', // Not in DB
+          country: 'México', // Default
+          taxId: supplier.tax_id || '',
+          isActive: supplier.is_active ?? true,
+          rating: 5,
+          paymentTerms: '30 días',
+          deliveryTime: 5,
+          minimumOrder: 0,
+          lastSync: new Date(),
+          syncStatus: 'success',
+          products: 0,
+          notes: '',
+          createdAt: supplier.created_at ? new Date(supplier.created_at) : new Date(),
+          updatedAt: supplier.updated_at ? new Date(supplier.updated_at) : new Date()
+        }))
+        setSuppliers(formattedSuppliers)
+      }
+    } catch (error) {
+      console.error('Error fetching suppliers:', error)
+      toast.error('Error al cargar proveedores')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)

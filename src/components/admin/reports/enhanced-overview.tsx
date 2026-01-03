@@ -64,6 +64,10 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
   const [isRealTime, setIsRealTime] = useState(true)
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isClient, setIsClient] = useState(false)
+  const [salesData, setSalesData] = useState<ChartData[]>([])
+  const [activities, setActivities] = useState<ActivityItem[]>([])
+  const [alerts, setAlerts] = useState<AlertItem[]>([])
+  const supabase = createClient()
 
   useEffect(() => {
     setIsClient(true)
@@ -73,6 +77,75 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
       setCurrentTime(new Date())
     }, 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch Sales for Chart
+        const { data: sales } = await supabase
+          .from('sales')
+          .select('created_at, total_amount')
+          .order('created_at', { ascending: true })
+
+        if (sales) {
+          const groupedSales: Record<string, number> = {}
+          sales.forEach(sale => {
+            const date = new Date(sale.created_at)
+            const monthName = format(date, 'MMM', { locale: es })
+            groupedSales[monthName] = (groupedSales[monthName] || 0) + (sale.total_amount || 0)
+          })
+
+          const chartData = Object.entries(groupedSales).map(([name, ventas]) => ({
+            name: name.charAt(0).toUpperCase() + name.slice(1),
+            ventas
+          }))
+          setSalesData(chartData)
+        }
+
+        // Fetch Recent Activities (Sales)
+        const { data: recentSales } = await supabase
+          .from('sales')
+          .select('id, created_at, total_amount, client:clients(name)')
+          .order('created_at', { ascending: false })
+          .limit(5)
+
+        if (recentSales) {
+          const newActivities: ActivityItem[] = recentSales.map(sale => ({
+            id: sale.id,
+            user: sale.client?.name || 'Cliente Casual',
+            action: 'Venta completada',
+            amount: sale.total_amount,
+            time: format(new Date(sale.created_at), 'HH:mm', { locale: es }),
+            type: 'success'
+          }))
+          setActivities(newActivities)
+        }
+
+        // Fetch Alerts (Low Stock)
+        const { data: lowStockProducts } = await supabase
+          .from('products')
+          .select('id, name, stock_quantity, min_stock')
+          
+        if (lowStockProducts) {
+          const stockAlerts = lowStockProducts
+            .filter(p => (p.stock_quantity || 0) <= (p.min_stock || 0))
+            .map(p => ({
+              id: p.id,
+              type: 'warning' as const,
+              message: `Stock bajo: ${p.name} (${p.stock_quantity})`,
+              priority: 'high' as const
+            }))
+            .slice(0, 5)
+          setAlerts(stockAlerts)
+        }
+
+      } catch (error) {
+        console.error('Error fetching overview data:', error)
+      }
+    }
+
+    fetchData()
   }, [])
 
   

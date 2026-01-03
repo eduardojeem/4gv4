@@ -8,7 +8,7 @@
  */
 
 import React from 'react'
-import { motion  } from '../../ui/motion'
+import { motion } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

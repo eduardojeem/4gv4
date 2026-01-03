@@ -320,6 +320,69 @@ export interface Database {
           }
         ]
       }
+      posts: {
+        Row: {
+          id: string
+          title: string
+          content: string
+          excerpt: string | null
+          category: string | null
+          tags: string[] | null
+          status: 'draft' | 'published' | 'archived'
+          published_at: string | null
+          updated_at: string
+          created_at: string
+          user_id: string | null
+          featured: boolean
+          image_url: string | null
+          views_count: number
+          likes_count: number
+          comments_count: number
+          shares_count: number
+          read_time: number
+        }
+        Insert: {
+          id?: string
+          title: string
+          content: string
+          excerpt?: string | null
+          category?: string | null
+          tags?: string[] | null
+          status?: 'draft' | 'published' | 'archived'
+          published_at?: string | null
+          updated_at?: string
+          created_at?: string
+          user_id?: string | null
+          featured?: boolean
+          image_url?: string | null
+          views_count?: number
+          likes_count?: number
+          comments_count?: number
+          shares_count?: number
+          read_time?: number
+        }
+        Update: {
+          id?: string
+          title?: string
+          content?: string
+          excerpt?: string | null
+          category?: string | null
+          tags?: string[] | null
+          status?: 'draft' | 'published' | 'archived'
+          published_at?: string | null
+          updated_at?: string
+          created_at?: string
+          user_id?: string | null
+          featured?: boolean
+          image_url?: string | null
+          views_count?: number
+          likes_count?: number
+          comments_count?: number
+          shares_count?: number
+          read_time?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       products_detailed: {

@@ -4,7 +4,8 @@ import {
   createCustomerSchema, 
   updateCustomerSchema,
   validateCustomerData,
-  getValidationErrors
+  getValidationErrors,
+  preprocessCustomerData
 } from '@/lib/validations/customer'
 
 export interface CreateCustomerRequest {
@@ -213,12 +214,39 @@ class CustomerService {
     try {
       const queryId = String(id)
 
+      // Debug: Check session
+      const { data: { session }, error: sessionError } = await this.supabase.auth.getSession()
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+      } else if (!session) {
+        console.warn('Warning: Attempting update without active session')
+      } else {
+        console.log('Updating with user:', session.user.id)
+      }
+
+      // Pre-process data to remove invalid values
+      const preprocessedData = preprocessCustomerData(customerData)
+      console.log('Preprocessed data:', preprocessedData) // Debug log
+
+      // Clean and prepare the data
+      const cleanedData = this.cleanCustomerData(preprocessedData)
+      console.log('Final cleaned data:', cleanedData) // Debug log
+
+      // Only proceed if we have valid data to update
+      if (Object.keys(cleanedData).length === 0) {
+        return {
+          success: false,
+          error: 'No hay datos válidos para actualizar'
+        }
+      }
+
       // Validate input data
-      const validation = validateCustomerData(updateCustomerSchema, customerData)
+      const validation = validateCustomerData(updateCustomerSchema, cleanedData)
       
       if (!validation.success) {
         const errors = getValidationErrors(validation.errors)
         const errorMessage = Object.values(errors).join(', ')
+        console.error('Validation errors:', errors) // Debug log
         return {
           success: false,
           error: `Validación fallida: ${errorMessage}`
@@ -227,10 +255,15 @@ class CustomerService {
 
       const validatedData = validation.data
 
-      const dbData = {
-        ...validatedData,
-        updated_at: new Date().toISOString()
-      }
+      // Filtrar campos undefined para no enviarlos a la base de datos
+      const dbData = Object.fromEntries(
+        Object.entries({
+          ...validatedData,
+          updated_at: new Date().toISOString()
+        }).filter(([_, value]) => value !== undefined && value !== '')
+      )
+
+      console.log('Data to be sent to DB:', dbData) // Debug log
 
       const { data, error } = await this.supabase
         .from('customers')
@@ -239,7 +272,15 @@ class CustomerService {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('Supabase error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        }) 
+        throw error
+      }
 
       return {
         success: true,
@@ -248,11 +289,73 @@ class CustomerService {
     } catch (error: unknown) {
       console.error('Error updating customer:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      return {
-        success: false,
-        error: errorMessage || 'Error al actualizar cliente'
+      // If error is an object with code/details, include them in the error message or return them
+      const fullError = error instanceof Error ? error : new Error(errorMessage)
+      if ((error as any).code) (fullError as any).code = (error as any).code
+      if ((error as any).details) (fullError as any).details = (error as any).details
+      
+      throw fullError // Re-throw to be caught by the hook which now handles error details
+    }
+  }
+
+  private cleanCustomerData(data: Partial<CreateCustomerRequest>): Partial<CreateCustomerRequest> {
+    const cleaned: Partial<CreateCustomerRequest> = {}
+
+    // Lista de valores que deben ser filtrados
+    const invalidValues = ['[REDACTED]', 'undefined', 'null', 'N/A', '--', '']
+
+    // Limpiar strings - convertir cadenas inválidas a undefined
+    const stringFields = ['name', 'email', 'phone', 'whatsapp', 'address', 'city', 'company', 'position', 'ruc', 'payment_terms', 'notes', 'birthday']
+    
+    stringFields.forEach(field => {
+      const value = data[field as keyof CreateCustomerRequest] as string
+      if (value !== undefined) {
+        const trimmed = value.trim()
+        // Filtrar valores que son placeholders, cadenas vacías o valores inválidos
+        if (trimmed && !invalidValues.some(invalid => trimmed.includes(invalid))) {
+          cleaned[field as keyof CreateCustomerRequest] = trimmed as any
+        }
+      }
+    })
+
+    // Manejar campos numéricos
+    if (data.credit_limit !== undefined) {
+      const num = Number(data.credit_limit)
+      cleaned.credit_limit = isNaN(num) ? 0 : num
+    }
+    if (data.discount_percentage !== undefined) {
+      const num = Number(data.discount_percentage)
+      cleaned.discount_percentage = isNaN(num) ? 0 : num
+    }
+
+    // Manejar enums - solo si tienen valores válidos
+    if (data.customer_type && !invalidValues.includes(data.customer_type)) {
+      cleaned.customer_type = data.customer_type
+    }
+    if (data.segment && !invalidValues.includes(data.segment)) {
+      cleaned.segment = data.segment
+    }
+    if (data.preferred_contact && !invalidValues.includes(data.preferred_contact)) {
+      cleaned.preferred_contact = data.preferred_contact
+    }
+
+    // Manejar arrays - filtrar elementos inválidos
+    if (data.tags && Array.isArray(data.tags) && data.tags.length > 0) {
+      const validTags = data.tags.filter(tag => 
+        tag && 
+        typeof tag === 'string' && 
+        tag.trim() && 
+        !invalidValues.some(invalid => tag.includes(invalid))
+      )
+      if (validTags.length > 0) {
+        cleaned.tags = validTags
       }
     }
+
+    console.log('Original data:', data) // Debug log
+    console.log('Cleaned data:', cleaned) // Debug log
+
+    return cleaned
   }
 
   async deleteCustomer(id: string | number): Promise<{ success: boolean; error?: string }> {
@@ -512,6 +615,107 @@ class CustomerService {
       return {
         success: true,
         data: []
+      }
+    }
+  }
+
+  async toggleCustomerStatus(id: string | number): Promise<CustomerResponse> {
+    try {
+      const queryId = String(id)
+
+      // First get current status
+      const { data: currentData, error: fetchError } = await this.supabase
+        .from('customers')
+        .select('status')
+        .eq('id', queryId)
+        .single()
+
+      if (fetchError) throw fetchError
+
+      // Toggle status
+      const newStatus = currentData.status === 'active' ? 'inactive' : 'active'
+
+      const { data, error } = await this.supabase
+        .from('customers')
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', queryId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      return {
+        success: true,
+        data: this.mapSupabaseToCustomer(data)
+      }
+    } catch (error: unknown) {
+      console.error('Error toggling customer status:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      return {
+        success: false,
+        error: errorMessage || 'Error al cambiar estado del cliente'
+      }
+    }
+  }
+
+  async updateCustomerStatus(id: string | number, status: 'active' | 'inactive' | 'suspended'): Promise<CustomerResponse> {
+    try {
+      const queryId = String(id)
+
+      const { data, error } = await this.supabase
+        .from('customers')
+        .update({ 
+          status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', queryId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      return {
+        success: true,
+        data: this.mapSupabaseToCustomer(data)
+      }
+    } catch (error: unknown) {
+      console.error('Error updating customer status:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      return {
+        success: false,
+        error: errorMessage || 'Error al actualizar estado del cliente'
+      }
+    }
+  }
+
+  async bulkUpdateCustomerStatus(ids: (string | number)[], status: 'active' | 'inactive' | 'suspended'): Promise<{ success: boolean; updated?: number; error?: string }> {
+    try {
+      const queryIds = ids.map(id => String(id))
+
+      const { data, error } = await this.supabase
+        .from('customers')
+        .update({ 
+          status,
+          updated_at: new Date().toISOString()
+        })
+        .in('id', queryIds)
+        .select('id')
+
+      if (error) throw error
+
+      return {
+        success: true,
+        updated: data?.length || 0
+      }
+    } catch (error: unknown) {
+      console.error('Error bulk updating customer status:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      return {
+        success: false,
+        error: errorMessage || 'Error al actualizar estado de clientes'
       }
     }
   }

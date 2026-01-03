@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { 
   Search, 
   Plus, 
@@ -48,8 +48,11 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/components/ui/use-toast'
+import { Skeleton } from '@/components/ui/skeleton'
 
-// Tipos de datos
+// Tipos de datos adaptados a Supabase
 interface Post {
   id: string
   title: string
@@ -76,141 +79,14 @@ interface Post {
   image?: string
 }
 
-// Datos de ejemplo
-const mockPosts: Post[] = [
-  {
-    id: '1',
-    title: 'Guía Completa de Gestión de Inventario para Pequeñas Empresas',
-    content: 'En este artículo exploramos las mejores prácticas para gestionar el inventario de manera eficiente...',
-    excerpt: 'Descubre las estrategias más efectivas para optimizar tu inventario y reducir costos operativos.',
-    author: {
-      name: 'María González',
-      avatar: '/avatars/maria.jpg',
-      role: 'Especialista en Inventario'
-    },
-    category: 'Gestión',
-    tags: ['inventario', 'gestión', 'pequeñas empresas', 'optimización'],
-    status: 'published',
-    publishedAt: '2024-01-15T10:30:00Z',
-    updatedAt: '2024-01-15T10:30:00Z',
-    metrics: {
-      views: 1250,
-      likes: 89,
-      comments: 23,
-      shares: 15
-    },
-    featured: true,
-    readTime: 8,
-    image: '/posts/inventory-guide.jpg'
-  },
-  {
-    id: '2',
-    title: 'Tendencias en Sistemas POS para 2024',
-    content: 'Los sistemas de punto de venta están evolucionando rápidamente...',
-    excerpt: 'Explora las últimas innovaciones en tecnología POS que están transformando el retail.',
-    author: {
-      name: 'Carlos Rodríguez',
-      avatar: '/avatars/carlos.jpg',
-      role: 'Analista de Tecnología'
-    },
-    category: 'Tecnología',
-    tags: ['pos', 'tecnología', 'tendencias', 'retail'],
-    status: 'published',
-    publishedAt: '2024-01-14T14:20:00Z',
-    updatedAt: '2024-01-14T14:20:00Z',
-    metrics: {
-      views: 890,
-      likes: 67,
-      comments: 18,
-      shares: 12
-    },
-    featured: false,
-    readTime: 6,
-    image: '/posts/pos-trends.jpg'
-  },
-  {
-    id: '3',
-    title: 'Cómo Mejorar la Experiencia del Cliente en tu Tienda',
-    content: 'La experiencia del cliente es fundamental para el éxito de cualquier negocio...',
-    excerpt: 'Estrategias probadas para crear experiencias memorables que fidelicen a tus clientes.',
-    author: {
-      name: 'Ana Martínez',
-      avatar: '/avatars/ana.jpg',
-      role: 'Consultora de CX'
-    },
-    category: 'Marketing',
-    tags: ['experiencia cliente', 'servicio', 'fidelización', 'ventas'],
-    status: 'published',
-    publishedAt: '2024-01-13T09:15:00Z',
-    updatedAt: '2024-01-13T09:15:00Z',
-    metrics: {
-      views: 2100,
-      likes: 156,
-      comments: 42,
-      shares: 28
-    },
-    featured: true,
-    readTime: 10,
-    image: '/posts/customer-experience.jpg'
-  },
-  {
-    id: '4',
-    title: 'Análisis de Datos de Ventas: Métricas Clave',
-    content: 'Los datos de ventas contienen información valiosa para la toma de decisiones...',
-    excerpt: 'Aprende a interpretar las métricas más importantes para impulsar tu negocio.',
-    author: {
-      name: 'Luis Fernández',
-      avatar: '/avatars/luis.jpg',
-      role: 'Analista de Datos'
-    },
-    category: 'Analytics',
-    tags: ['datos', 'ventas', 'métricas', 'análisis'],
-    status: 'draft',
-    publishedAt: '',
-    updatedAt: '2024-01-12T16:45:00Z',
-    metrics: {
-      views: 0,
-      likes: 0,
-      comments: 0,
-      shares: 0
-    },
-    featured: false,
-    readTime: 12,
-    image: '/posts/sales-analytics.jpg'
-  },
-  {
-    id: '5',
-    title: 'Automatización de Procesos en el Retail',
-    content: 'La automatización está revolucionando la forma en que operan las tiendas...',
-    excerpt: 'Descubre cómo la automatización puede reducir costos y mejorar la eficiencia.',
-    author: {
-      name: 'Patricia Silva',
-      avatar: '/avatars/patricia.jpg',
-      role: 'Especialista en Automatización'
-    },
-    category: 'Tecnología',
-    tags: ['automatización', 'retail', 'eficiencia', 'procesos'],
-    status: 'published',
-    publishedAt: '2024-01-11T11:30:00Z',
-    updatedAt: '2024-01-11T11:30:00Z',
-    metrics: {
-      views: 756,
-      likes: 45,
-      comments: 12,
-      shares: 8
-    },
-    featured: false,
-    readTime: 7,
-    image: '/posts/automation.jpg'
-  }
-]
-
 const categories = ['Todos', 'Gestión', 'Tecnología', 'Marketing', 'Analytics', 'Ventas']
 const statusOptions = ['Todos', 'Publicado', 'Borrador', 'Archivado']
 
 export default function PostsPage() {
+  const { toast } = useToast()
   // Estados principales
-  const [posts, setPosts] = useState<Post[]>(mockPosts)
+  const [posts, setPosts] = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('Todos')
   const [selectedStatus, setSelectedStatus] = useState('Todos')
@@ -220,6 +96,7 @@ export default function PostsPage() {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Estados para nuevo post
   const [newPost, setNewPost] = useState<{ title: string; content: string; excerpt: string; category: string; tags: string; status: Post['status']; featured: boolean }>({
@@ -231,6 +108,63 @@ export default function PostsPage() {
     status: 'draft',
     featured: false
   })
+
+  // Cargar posts desde Supabase
+  const fetchPosts = async () => {
+    try {
+      setLoading(true)
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      if (data) {
+        const mappedPosts: Post[] = data.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          content: item.content,
+          excerpt: item.excerpt || '',
+          // TODO: Integrar con tabla de perfiles real cuando exista
+          author: {
+            name: 'Admin', 
+            avatar: '',
+            role: 'Admin'
+          },
+          category: item.category || 'General',
+          tags: item.tags || [],
+          status: item.status as Post['status'],
+          publishedAt: item.published_at || item.created_at,
+          updatedAt: item.updated_at,
+          metrics: {
+            views: item.views_count || 0,
+            likes: item.likes_count || 0,
+            comments: item.comments_count || 0,
+            shares: item.shares_count || 0
+          },
+          featured: item.featured || false,
+          readTime: item.read_time || Math.ceil((item.content?.length || 0) / 500) || 1,
+          image: item.image_url
+        }))
+        setPosts(mappedPosts)
+      }
+    } catch (error) {
+      console.error('Error fetching posts:', error)
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los posts.",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchPosts()
+  }, [])
 
   // Obtener todas las etiquetas únicas
   const allTags = useMemo(() => {
@@ -338,49 +272,95 @@ export default function PostsPage() {
     }
 
     return (
-      <Badge variant={variants[status as keyof typeof variants]}>
-        {labels[status as keyof typeof labels]}
+      <Badge variant={variants[status as keyof typeof variants] || 'outline'}>
+        {labels[status as keyof typeof labels] || status}
       </Badge>
     )
   }
 
-  const handleCreatePost = () => {
-    const post: Post = {
-      id: Date.now().toString(),
-      title: newPost.title,
-      content: newPost.content,
-      excerpt: newPost.excerpt,
-      author: {
-        name: 'Usuario Actual',
-        avatar: '/avatars/current-user.jpg',
-        role: 'Editor'
-      },
-      category: newPost.category,
-      tags: newPost.tags.split(',').map(tag => tag.trim()).filter(Boolean),
-      status: newPost.status,
-      publishedAt: newPost.status === 'published' ? new Date().toISOString() : '',
-      updatedAt: new Date().toISOString(),
-      metrics: {
-        views: 0,
-        likes: 0,
-        comments: 0,
-        shares: 0
-      },
-      featured: newPost.featured,
-      readTime: Math.ceil(newPost.content.length / 200) // Estimación simple
-    }
+  const handleCreatePost = async () => {
+    try {
+      setIsSubmitting(true)
+      const supabase = createClient()
+      
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      const postData = {
+        title: newPost.title,
+        content: newPost.content,
+        excerpt: newPost.excerpt,
+        category: newPost.category,
+        tags: newPost.tags.split(',').map(tag => tag.trim()).filter(Boolean),
+        status: newPost.status,
+        featured: newPost.featured,
+        user_id: user?.id,
+        published_at: newPost.status === 'published' ? new Date().toISOString() : null,
+        read_time: Math.ceil(newPost.content.length / 500) || 1
+      }
 
-    setPosts(prev => [post, ...prev])
-    setNewPost({
-      title: '',
-      content: '',
-      excerpt: '',
-      category: '',
-      tags: '',
-      status: 'draft',
-      featured: false
-    })
-    setIsCreatePostOpen(false)
+      const { error } = await supabase
+        .from('posts')
+        .insert(postData)
+        .select()
+
+      if (error) throw error
+
+      toast({
+        title: "Post creado",
+        description: "El post se ha creado exitosamente."
+      })
+
+      // Recargar posts
+      fetchPosts()
+
+      // Limpiar formulario
+      setNewPost({
+        title: '',
+        content: '',
+        excerpt: '',
+        category: '',
+        tags: '',
+        status: 'draft',
+        featured: false
+      })
+      setIsCreatePostOpen(false)
+
+    } catch (error) {
+      console.error('Error creating post:', error)
+      toast({
+        title: "Error",
+        description: "No se pudo crear el post. Asegúrate de estar autenticado.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDeletePost = async (id: string) => {
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+
+      toast({
+        title: "Post eliminado",
+        description: "El post ha sido eliminado correctamente."
+      })
+      
+      setPosts(prev => prev.filter(p => p.id !== id))
+    } catch (error) {
+      console.error('Error deleting post:', error)
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el post.",
+        variant: "destructive"
+      })
+    }
   }
 
   const removeTag = (tagToRemove: string) => {
@@ -392,6 +372,30 @@ export default function PostsPage() {
     setSelectedCategory('Todos')
     setSelectedStatus('Todos')
     setSelectedTags([])
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-10 w-48" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} className="h-32 w-full" />
+          ))}
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-12 w-full" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <Skeleton key={i} className="h-64 w-full" />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -485,8 +489,8 @@ export default function PostsPage() {
                 <Button variant="outline" onClick={() => setIsCreatePostOpen(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={handleCreatePost} disabled={!newPost.title || !newPost.content}>
-                  Crear Post
+                <Button onClick={handleCreatePost} disabled={!newPost.title || !newPost.content || isSubmitting}>
+                  {isSubmitting ? 'Creando...' : 'Crear Post'}
                 </Button>
               </div>
             </div>
@@ -751,7 +755,7 @@ export default function PostsPage() {
                           <Share2 className="h-4 w-4 mr-2" />
                           Compartir
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
+                        <DropdownMenuItem className="text-red-600" onClick={() => handleDeletePost(post.id)}>
                           <Trash2 className="h-4 w-4 mr-2" />
                           Eliminar
                         </DropdownMenuItem>
@@ -922,7 +926,7 @@ export default function PostsPage() {
                           <Share2 className="h-4 w-4 mr-2" />
                           Compartir
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
+                        <DropdownMenuItem className="text-red-600" onClick={() => handleDeletePost(post.id)}>
                           <Trash2 className="h-4 w-4 mr-2" />
                           Eliminar
                         </DropdownMenuItem>
@@ -937,7 +941,7 @@ export default function PostsPage() {
       )}
 
       {/* Mensaje cuando no hay resultados */}
-      {filteredPosts.length === 0 && (
+      {filteredPosts.length === 0 && !loading && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />

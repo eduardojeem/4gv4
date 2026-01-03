@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useMemo } from 'react'
-import { motion, AnimatePresence  } from '../../ui/motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

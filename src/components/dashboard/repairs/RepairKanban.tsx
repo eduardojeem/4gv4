@@ -2,7 +2,7 @@
 
 import React, { useState, memo } from 'react'
 import { Repair, RepairStatus } from '@/types/repairs'
-import { statusConfig } from '@/data/mock-repairs'
+import { statusConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
 import { RepairCard } from './RepairCard'
 import {

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { Repair, DbRepairStatus } from '@/types/repairs'
-import { mockRepairs } from '@/data/mock-repairs'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 
 const isDemoMode = () => process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
@@ -143,22 +142,18 @@ export function useTechnicianBoard() {
         })
 
         // Update DB
-        if (!isDemoMode()) {
-            const supabase = createSupabaseClient()
-            const { error } = await supabase
-                .from('repairs')
-                .update({ status })
-                .eq('id', draggedRepairId)
+        const supabase = createSupabaseClient()
+        const { error } = await supabase
+            .from('repairs')
+            .update({ status })
+            .eq('id', draggedRepairId)
 
-            if (error) {
-                console.error('Error updating status:', error)
-                toast.error('Error al actualizar estado. Se revertirán los cambios.')
-                fetchRepairs() // Revert
-            } else {
-                toast.success(`Movido a ${status}`)
-            }
+        if (error) {
+            console.error('Error updating status:', error)
+            toast.error('Error al actualizar estado. Se revertirán los cambios.')
+            fetchRepairs() // Revert
         } else {
-            toast.success(`Movido a ${status} (Demo)`)
+            toast.success(`Movido a ${status}`)
         }
 
         setDraggedRepairId(null)
@@ -180,12 +175,6 @@ interface RepairUpdateData {
 
     // Update Repair (for Dialog)
     const updateRepair = async (id: string, data: RepairUpdateData) => {
-        if (isDemoMode()) {
-            setRepairs(prev => prev.map(r => r.id === id ? { ...r, ...data } : r))
-            toast.success('Reparación actualizada (Demo)')
-            return
-        }
-
         const supabase = createSupabaseClient()
         const { error } = await supabase
             .from('repairs')

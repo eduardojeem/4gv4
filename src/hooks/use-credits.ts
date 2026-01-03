@@ -97,19 +97,6 @@ export function useCredits() {
     const loadData = useCallback(async () => {
         setLoading(true)
         try {
-            if (!config.supabase.isConfigured) {
-                // Mock Data Fallback
-                setCredits([
-                    { id: 'c1', customer_id: 'cli-001', principal: 1500000, interest_rate: 12, term_months: 12, start_date: new Date().toISOString(), status: 'active', customer_name: 'Cliente 1' },
-                    { id: 'c2', customer_id: 'cli-002', principal: 900000, interest_rate: 0, term_months: 6, start_date: new Date().toISOString(), status: 'completed', customer_name: 'Cliente 2' }
-                ])
-                setInstallments([
-                    { id: 'i1', credit_id: 'c1', installment_number: 1, due_date: new Date().toISOString(), amount: 150000, status: 'pending' },
-                    { id: 'i2', credit_id: 'c1', installment_number: 2, due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), amount: 150000, status: 'pending' }
-                ])
-                setPayments([])
-                return
-            }
             const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress } = await fetchData(supabase as SupabaseClient)
 
             // Normalization Logic (Copied from original page.tsx to maintain logic parity)

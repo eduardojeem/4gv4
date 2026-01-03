@@ -2,14 +2,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { Repair, RepairStatus } from '@/types/repairs'
-import { mockRepairs } from '@/data/mock-repairs'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 import { useErrorHandler } from './use-error-handler'
 import { useDebounce } from './use-debounce'
 import { measure, trackMetric } from '@/lib/performance'
 import type { RepairFormData } from '@/schemas'
-
-const isDemoMode = () => process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
 export function useRepairs() {
   const [repairs, setRepairs] = useState<Repair[]>([])
@@ -25,13 +22,6 @@ export function useRepairs() {
     try {
       await measure('fetchRepairs', async () => {
         try {
-          if (isDemoMode()) {
-            setRepairs(mockRepairs)
-            toast.info('Modo demostración: usando datos de ejemplo', {
-              duration: 3000
-            })
-            return
-          }
           let attempts = 0
           const maxAttempts = 3
           let lastError: unknown = null
@@ -47,8 +37,8 @@ export function useRepairs() {
                 const msg = (error as any)?.message || String(error)
                 const missing = msg.includes('relation "repairs" does not exist') || msg.includes("Could not find the table 'public.repairs'")
                 if (missing) {
-                  setRepairs(mockRepairs)
-                  toast.info('Modo demostración: usando datos de ejemplo', { duration: 3000 })
+                  setRepairs([])
+                  toast.info('Tabla repairs no encontrada', { duration: 3000 })
                   return
                 }
                 throw error
@@ -70,8 +60,8 @@ export function useRepairs() {
         } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
           handleError(errorMessage, { operation: 'fetchRepairs' })
-          setRepairs(mockRepairs)
-          toast.info('Usando datos de demostración', { duration: 3000 })
+          setRepairs([])
+          // toast.info('Error cargando datos', { duration: 3000 })
         }
       }, { itemCount: repairs.length })
     } finally {
@@ -81,17 +71,15 @@ export function useRepairs() {
 
   useEffect(() => {
     fetchRepairs()
-    if (!isDemoMode()) {
-      const supabase = createSupabaseClient()
-      const channel = (supabase as any)
-        .channel('repairs-all')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => {
-          fetchRepairs()
-        })
-        .subscribe()
-      return () => {
-        (supabase as any).removeChannel?.(channel)
-      }
+    const supabase = createSupabaseClient()
+    const channel = (supabase as any)
+      .channel('repairs-all')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => {
+        fetchRepairs()
+      })
+      .subscribe()
+    return () => {
+      (supabase as any).removeChannel?.(channel)
     }
   }, [fetchRepairs])
 

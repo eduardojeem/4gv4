@@ -49,12 +49,12 @@ export default function DashboardPage() {
     icon: LucideIcon
     color: 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'cyan'
   }>>([
-    { title: "Ventas del Día", value: "$2,847", change: { value: 12.5, label: "desde ayer", type: "increase" }, icon: Banknote, color: "green" },
-    { title: "Órdenes Activas", value: "23", change: { value: 15, label: "nuevas hoy", type: "increase" }, icon: ShoppingCart, color: "blue" },
-    { title: "Clientes Nuevos", value: "8", change: { value: 25, label: "esta semana", type: "increase" }, icon: Users, color: "purple" },
-    { title: "Productos Totales", value: "156", subtitle: "+4 esta semana", icon: Package, color: "cyan" },
-    { title: "Stock Bajo", value: "7", subtitle: "Requiere atención", change: { value: -10, label: "vs semana pasada", type: "decrease" }, icon: AlertTriangle, color: "orange" },
-    { title: "Reparaciones", value: "12", subtitle: "En proceso", icon: Activity, color: "red" }
+    { title: "Ventas del Día", value: "-", change: { value: 0, label: "cargando...", type: "increase" }, icon: Banknote, color: "green" },
+    { title: "Órdenes Activas", value: "-", change: { value: 0, label: "cargando...", type: "increase" }, icon: ShoppingCart, color: "blue" },
+    { title: "Clientes Nuevos", value: "-", change: { value: 0, label: "cargando...", type: "increase" }, icon: Users, color: "purple" },
+    { title: "Productos Totales", value: "-", subtitle: "cargando...", icon: Package, color: "cyan" },
+    { title: "Stock Bajo", value: "-", subtitle: "cargando...", change: { value: 0, label: "", type: "decrease" }, icon: AlertTriangle, color: "orange" },
+    { title: "Reparaciones", value: "-", subtitle: "cargando...", icon: Activity, color: "red" }
   ])
 
   const fetchDashboardStats = useCallback(async () => {
@@ -66,42 +66,58 @@ export default function DashboardPage() {
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
       const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
 
-      const activeOrdersCountQuery = supabase
-        .from('sales')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'pendiente')
-
-      const newCustomersCountQuery = supabase
-        .from('customers')
-        .select('id', { count: 'exact', head: true })
-        .gte('created_at', startOfWeek.toISOString())
-
-      const productsQuery = supabase
-        .from('products')
-        .select('id, stock_quantity, min_stock, is_active, sale_price')
-
-      const repairsActiveCountQuery = supabase
-        .from('repairs')
-        .select('id', { count: 'exact', head: true })
-        .in('status', ['recibido', 'diagnostico', 'reparacion', 'listo'])
-
+      // Parallel queries for better performance
       const [
-        { data: salesToday },
-        activeOrdersCountRes,
-        newCustomersCountRes,
-        { data: products },
-        repairsActiveCountRes
+        { data: salesToday, error: salesError },
+        { count: activeOrdersCount, error: ordersError },
+        { count: newCustomersCount, error: customersError },
+        { count: totalProductsCount, error: productsCountError },
+        { data: productsStock, error: productsStockError },
+        { count: repairsActiveCount, error: repairsError }
       ] = await Promise.all([
+        // Sales today
         supabase
           .from('sales')
           .select('total:total_amount,status,created_at')
           .gte('created_at', startOfDay.toISOString())
           .lte('created_at', endOfDay.toISOString()),
-        activeOrdersCountQuery,
-        newCustomersCountQuery,
-        productsQuery,
-        repairsActiveCountQuery
+        
+        // Active orders count
+        supabase
+          .from('sales')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pendiente'),
+          
+        // New customers this week
+        supabase
+          .from('customers')
+          .select('id', { count: 'exact', head: true })
+          .gte('created_at', startOfWeek.toISOString()),
+          
+        // Total products count
+        supabase
+          .from('products')
+          .select('id', { count: 'exact', head: true }),
+          
+        // Products for low stock calculation (optimized to fetch only needed fields)
+        supabase
+          .from('products')
+          .select('stock_quantity, min_stock')
+          .gt('stock_quantity', 0), // Only fetch items with stock to check if they are low
+
+        // Active repairs count
+        supabase
+          .from('repairs')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['recibido', 'diagnostico', 'reparacion', 'listo'])
       ])
+
+      if (salesError) throw salesError
+      if (ordersError) throw ordersError
+      if (customersError) throw customersError
+      if (productsCountError) throw productsCountError
+      if (productsStockError) throw productsStockError
+      if (repairsError) throw repairsError
 
       type SaleRow = { total: number; status: 'pendiente' | 'completada' | 'cancelada'; created_at: string }
       const salesRows = (salesToday || []) as unknown as SaleRow[]
@@ -109,19 +125,17 @@ export default function DashboardPage() {
         .filter(s => s.status === 'completada')
         .reduce((sum, s) => sum + (Number(s.total) || 0), 0)
 
-      const activeOrdersCount = activeOrdersCountRes.count || 0
-      const newCustomersCount = newCustomersCountRes.count || 0
+      const activeOrders = activeOrdersCount || 0
+      const newCustomers = newCustomersCount || 0
+      const totalProducts = totalProductsCount || 0
+      const repairsActive = repairsActiveCount || 0
 
-      type ProductLite = { stock_quantity?: number | null; min_stock?: number | null }
-      const productList = (products ?? []) as ProductLite[]
-      const totalProducts = productList.length
-      const lowStockCount = productList.filter(p => {
+      // Calculate low stock on client side (until we have an RPC for this)
+      const lowStockCount = (productsStock || []).filter(p => {
         const sq = Number(p.stock_quantity ?? 0)
         const ms = Number(p.min_stock ?? 5)
-        return sq <= ms && sq > 0
+        return sq <= ms
       }).length
-
-      const repairsActiveCount = repairsActiveCountRes.count || 0
 
       const nextStats = [
         {
@@ -133,14 +147,14 @@ export default function DashboardPage() {
         },
         {
           title: "Órdenes Activas",
-          value: String(activeOrdersCount),
+          value: String(activeOrders),
           change: { value: 0, label: "pendientes", type: "increase" as const },
           icon: ShoppingCart,
           color: "blue" as const
         },
         {
           title: "Clientes Nuevos",
-          value: String(newCustomersCount),
+          value: String(newCustomers),
           change: { value: 0, label: "últimos 7 días", type: "increase" as const },
           icon: Users,
           color: "purple" as const
@@ -148,7 +162,7 @@ export default function DashboardPage() {
         {
           title: "Productos Totales",
           value: String(totalProducts),
-          subtitle: "",
+          subtitle: "En catálogo",
           icon: Package,
           color: "cyan" as const
         },
@@ -156,13 +170,13 @@ export default function DashboardPage() {
           title: "Stock Bajo",
           value: String(lowStockCount),
           subtitle: "Requiere atención",
-          change: { value: -0, label: "", type: "decrease" as const },
+          change: { value: 0, label: "", type: "decrease" as const },
           icon: AlertTriangle,
           color: "orange" as const
         },
         {
           title: "Reparaciones",
-          value: String(repairsActiveCount),
+          value: String(repairsActive),
           subtitle: "En proceso",
           icon: Activity,
           color: "red" as const
@@ -170,6 +184,9 @@ export default function DashboardPage() {
       ]
 
       setStats(nextStats)
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error)
+      // Optionally set error state or show toast
     } finally {
       setLoadingStats(false)
     }

@@ -33,6 +33,12 @@ interface CustomerContextValue {
     createCustomer: (customerData: Partial<Customer>) => Promise<{ success: boolean; customer?: Customer; error?: any }>
     updateCustomer: (id: string, customerData: Partial<Customer>) => Promise<{ success: boolean; customer?: Customer; error?: any }>
     deleteCustomer: (id: string) => Promise<{ success: boolean; error?: any }>
+    
+    // Status management
+    toggleCustomerStatus: (id: string) => Promise<{ success: boolean; customer?: Customer; error?: any }>
+    updateCustomerStatus: (id: string, status: 'active' | 'inactive' | 'suspended') => Promise<{ success: boolean; customer?: Customer; error?: any }>
+    bulkUpdateCustomerStatus: (customerIds: string[], status: 'active' | 'inactive' | 'suspended') => Promise<{ success: boolean; updated?: number; error?: any }>
+    
     exportCustomers: (format: 'csv' | 'excel' | 'pdf', customers?: Customer[]) => Promise<{ success: boolean; error?: any }>
     importCustomers: (file: File) => Promise<{ success: boolean; imported?: number; error?: any }>
     sendMessage: (customerIds: string[], message: string, type: 'email' | 'sms' | 'whatsapp') => Promise<{ success: boolean; sent?: number; error?: any }>

@@ -10,7 +10,7 @@ import { Search, SlidersHorizontal } from 'lucide-react'
 interface GlobalSearchProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSearch?: (input: { query: string; filters: any }) => Array<{ title: string; subtitle?: string; href: string }>
+  onSearch?: (input: { query: string; filters: any }) => Promise<Array<{ title: string; subtitle?: string; href: string }>> | Array<{ title: string; subtitle?: string; href: string }>
 }
 
 export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps) {
@@ -18,19 +18,23 @@ export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps
   const [filters, setFilters] = useState<any>({ type: 'todos', status: 'todos' })
   const [results, setResults] = useState<Array<{ title: string; subtitle?: string; href: string }>>([])
   const [resultsCount, setResultsCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     if (!open) return
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       const normalized = query.trim()
       if (onSearch) {
+        setIsLoading(true)
         try {
-          const r = onSearch({ query: normalized, filters })
+          const r = await onSearch({ query: normalized, filters })
           setResults(r)
           setResultsCount(r.length)
         } catch (e) {
           setResults([])
           setResultsCount(0)
+        } finally {
+          setIsLoading(false)
         }
       } else {
         setResults([])

@@ -90,65 +90,8 @@ export interface User {
   permissions?: string[]
 }
 
-// Datos de ejemplo para usuarios
-const mockUsers: User[] = [
-  {
-    id: '1',
-    email: 'admin@empresa.com',
-    name: 'Juan Pérez',
-    avatar_url: '/avatars/01.svg',
-    role: 'super_admin',
-    is_active: true,
-    last_sign_in: new Date('2024-01-15T10:30:00'),
-    created_at: new Date('2024-01-01T00:00:00'),
-    updated_at: new Date('2024-01-15T10:30:00'),
-    phone: '+1234567890',
-    location: 'Madrid, España',
-    department: 'Administración'
-  },
-  {
-    id: '2',
-    email: 'manager@empresa.com',
-    name: 'María García',
-    avatar_url: '/avatars/02.svg',
-    role: 'manager',
-    is_active: true,
-    last_sign_in: new Date('2024-01-15T09:15:00'),
-    created_at: new Date('2024-01-02T00:00:00'),
-    updated_at: new Date('2024-01-15T09:15:00'),
-    phone: '+1234567891',
-    location: 'Barcelona, España',
-    department: 'Ventas'
-  },
-  {
-    id: '3',
-    email: 'empleado@empresa.com',
-    name: 'Carlos López',
-    avatar_url: '/avatars/03.svg',
-    role: 'employee',
-    is_active: true,
-    last_sign_in: new Date('2024-01-14T16:45:00'),
-    created_at: new Date('2024-01-03T00:00:00'),
-    updated_at: new Date('2024-01-14T16:45:00'),
-    phone: '+1234567892',
-    location: 'Valencia, España',
-    department: 'Almacén'
-  },
-  {
-    id: '4',
-    email: 'viewer@empresa.com',
-    name: 'Ana Martín',
-    avatar_url: '/avatars/04.svg',
-    role: 'viewer',
-    is_active: false,
-    last_sign_in: new Date('2024-01-10T14:20:00'),
-    created_at: new Date('2024-01-04T00:00:00'),
-    updated_at: new Date('2024-01-10T14:20:00'),
-    phone: '+1234567893',
-    location: 'Sevilla, España',
-    department: 'Contabilidad'
-  }
-]
+// Datos de ejemplo eliminados
+const mockUsers: User[] = []
 
 // Componente para mostrar el rol con icono
 function RoleBadge({ role }: { role: UserRole }) {
@@ -345,9 +288,13 @@ function RolePermissions({ role }: { role: UserRole }) {
   )
 }
 
+import { createClient } from '@/lib/supabase/client'
+
 // Componente principal de gestión de usuarios
 export default function UserManagement() {
-  const [users, setUsers] = useState<User[]>(mockUsers)
+  const supabase = createClient()
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const deferredSearch = useDeferredValue(searchTerm)
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all')
@@ -358,6 +305,48 @@ export default function UserManagement() {
   
   const { hasPermission, canManageUser } = useAuth()
   const { toast } = useToast()
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+        
+        if (error) throw error
+
+        if (data) {
+          const mappedUsers: User[] = data.map((profile: any) => ({
+            id: profile.id,
+            email: profile.email || '', 
+            name: profile.full_name || 'Sin nombre',
+            avatar_url: profile.avatar_url,
+            role: profile.role || 'viewer',
+            is_active: true, // Asumimos activo si existe perfil por ahora
+            last_sign_in: undefined,
+            created_at: new Date(profile.created_at || Date.now()),
+            updated_at: new Date(profile.updated_at || Date.now()),
+            phone: profile.phone,
+            location: '',
+            department: '',
+            permissions: []
+          }))
+          setUsers(mappedUsers)
+        }
+      } catch (error) {
+        console.error('Error fetching users:', error)
+        toast({
+          title: 'Error',
+          description: 'No se pudieron cargar los usuarios',
+          variant: 'destructive'
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUsers()
+  }, [])
 
   // Filtrar usuarios
   const filteredUsers = useMemo(() => {

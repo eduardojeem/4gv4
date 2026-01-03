@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,22 +10,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { createClient } from '@/lib/supabase/client'
 import { 
   AlertTriangle, 
   TrendingUp, 
   TrendingDown, 
   Package, 
   Plus, 
-  Minus, 
   RefreshCw,
   Bell,
-  Clock,
   CheckCircle,
   XCircle,
   ArrowUpDown,
-  Filter,
   Download,
-  Eye,
   Settings,
   BarChart3,
   History
@@ -98,132 +95,131 @@ const StockControl: React.FC = () => {
   const [filterType, setFilterType] = useState<string>('all')
   const [filterDate, setFilterDate] = useState<string>('')
   const [isLoading, setIsLoading] = useState(false)
+  
+  const supabase = createClient()
 
-  // Datos mock
-  const mockProducts: Product[] = [
-    {
-      id: '1',
-      name: 'iPhone 15 Pro',
-      sku: 'IPH15P-128',
-      category: 'Smartphones',
-      stock: 5,
-      minStock: 10,
-      maxStock: 100,
-      cost: 800,
-      price: 1200,
-      supplier: 'Apple Inc.'
-    },
-    {
-      id: '2',
-      name: 'Samsung Galaxy S24',
-      sku: 'SGS24-256',
-      category: 'Smartphones',
-      stock: 0,
-      minStock: 8,
-      maxStock: 80,
-      cost: 700,
-      price: 1100,
-      supplier: 'Samsung Electronics'
-    },
-    {
-      id: '3',
-      name: 'MacBook Air M3',
-      sku: 'MBA-M3-512',
-      category: 'Laptops',
-      stock: 15,
-      minStock: 5,
-      maxStock: 50,
-      cost: 1200,
-      price: 1800,
-      supplier: 'Apple Inc.'
-    }
-  ]
+  // Cargar datos de Supabase
+  const fetchData = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      // 1. Cargar Productos
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(name),
+          supplier:suppliers(name)
+        `)
+      
+      if (productsError) throw productsError
 
-  const mockMovements: StockMovement[] = [
-    {
-      id: '1',
-      productId: '1',
-      productName: 'iPhone 15 Pro',
-      productSku: 'IPH15P-128',
-      type: 'entrada',
-      quantity: 20,
-      previousStock: 5,
-      newStock: 25,
-      reason: 'Reposición de inventario',
-      reference: 'PO-2024-001',
-      userId: 'user1',
-      userName: 'Juan Pérez',
-      timestamp: new Date('2024-01-15T10:30:00'),
-      cost: 800,
-      supplier: 'Apple Inc.'
-    },
-    {
-      id: '2',
-      productId: '1',
-      productName: 'iPhone 15 Pro',
-      productSku: 'IPH15P-128',
-      type: 'salida',
-      quantity: 20,
-      previousStock: 25,
-      newStock: 5,
-      reason: 'Venta al cliente',
-      reference: 'VT-2024-045',
-      userId: 'user2',
-      userName: 'María García',
-      timestamp: new Date('2024-01-16T14:15:00')
-    },
-    {
-      id: '3',
-      productId: '2',
-      productName: 'Samsung Galaxy S24',
-      productSku: 'SGS24-256',
-      type: 'salida',
-      quantity: 8,
-      previousStock: 8,
-      newStock: 0,
-      reason: 'Venta al cliente',
-      reference: 'VT-2024-046',
-      userId: 'user2',
-      userName: 'María García',
-      timestamp: new Date('2024-01-16T16:20:00')
-    }
-  ]
+      const formattedProducts: Product[] = (productsData || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku || '',
+        category: p.category?.name || 'Sin Categoría',
+        stock: p.stock_quantity || p.stock || 0,
+        minStock: p.min_stock || 0,
+        maxStock: p.max_stock || 100,
+        cost: p.purchase_price || 0,
+        price: p.sale_price || 0,
+        supplier: p.supplier?.name || 'Sin Proveedor'
+      }))
+      
+      setProducts(formattedProducts)
 
-  const mockAlerts: StockAlert[] = [
-    {
-      id: '1',
-      productId: '1',
-      productName: 'iPhone 15 Pro',
-      productSku: 'IPH15P-128',
-      type: 'low_stock',
-      currentStock: 5,
-      threshold: 10,
-      severity: 'medium',
-      message: 'Stock por debajo del mínimo recomendado',
-      isActive: true,
-      createdAt: new Date('2024-01-16T16:25:00')
-    },
-    {
-      id: '2',
-      productId: '2',
-      productName: 'Samsung Galaxy S24',
-      productSku: 'SGS24-256',
-      type: 'out_of_stock',
-      currentStock: 0,
-      threshold: 8,
-      severity: 'critical',
-      message: 'Producto agotado - Requiere reposición inmediata',
-      isActive: true,
-      createdAt: new Date('2024-01-16T16:20:00')
+      // 2. Cargar Movimientos
+      const { data: movementsData, error: movementsError } = await supabase
+        .from('product_movements')
+        .select(`
+          *,
+          product:products(name, sku)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (movementsError && movementsError.code !== '42P01') { // Ignorar si la tabla no existe aún
+        console.error('Error loading movements:', movementsError)
+      }
+
+      if (movementsData) {
+        const formattedMovements: StockMovement[] = movementsData.map(m => ({
+          id: m.id,
+          productId: m.product_id,
+          productName: m.product?.name || 'Desconocido',
+          productSku: m.product?.sku || '',
+          type: (m.movement_type === 'entry' || m.movement_type === 'entrada') ? 'entrada' : 
+                (m.movement_type === 'exit' || m.movement_type === 'salida' || m.movement_type === 'sale') ? 'salida' : 'ajuste',
+          quantity: m.quantity,
+          previousStock: m.previous_stock,
+          newStock: m.new_stock,
+          reason: m.notes || m.movement_type,
+          reference: m.reference_id || '',
+          userId: m.user_id || 'system',
+          userName: 'Sistema', // Podríamos cargar el usuario si fuera necesario
+          timestamp: new Date(m.created_at),
+          cost: m.unit_cost,
+          supplier: '' // No siempre disponible en movimiento
+        }))
+        setMovements(formattedMovements)
+      }
+
+      // 3. Cargar Alertas (o generarlas basadas en stock bajo)
+      // Primero intentamos cargar de tabla de alertas
+      const { data: alertsData, error: alertsError } = await supabase
+        .from('product_alerts')
+        .select(`
+          *,
+          product:products(name, sku, stock_quantity)
+        `)
+        .eq('is_resolved', false)
+      
+      if (!alertsError && alertsData) {
+        const formattedAlerts: StockAlert[] = alertsData.map(a => ({
+          id: a.id,
+          productId: a.product_id,
+          productName: a.product?.name || 'Desconocido',
+          productSku: a.product?.sku || '',
+          type: a.alert_type as any,
+          currentStock: a.product?.stock_quantity || 0,
+          threshold: 5, // Valor por defecto o del producto si estuviera disponible en join
+          severity: a.alert_type === 'out_of_stock' ? 'critical' : 'medium',
+          message: a.message,
+          isActive: !a.is_resolved,
+          createdAt: new Date(a.created_at)
+        }))
+        setAlerts(formattedAlerts)
+      } else {
+        // Fallback: Generar alertas locales basadas en productos cargados
+        const localAlerts: StockAlert[] = formattedProducts
+          .filter(p => p.stock <= p.minStock)
+          .map(p => ({
+            id: `local-alert-${p.id}`,
+            productId: p.id,
+            productName: p.name,
+            productSku: p.sku,
+            type: p.stock === 0 ? 'out_of_stock' : 'low_stock',
+            currentStock: p.stock,
+            threshold: p.minStock,
+            severity: p.stock === 0 ? 'critical' : 'medium',
+            message: p.stock === 0 ? 'Producto agotado' : 'Stock bajo',
+            isActive: true,
+            createdAt: new Date()
+          }))
+        setAlerts(localAlerts)
+      }
+
+    } catch (error) {
+      console.error('Error fetching data:', error)
+    } finally {
+      setIsLoading(false)
     }
-  ]
+  }, [supabase])
 
   // Efectos
   useEffect(() => {
-    setProducts(mockProducts)
-    setMovements(mockMovements)
-    setAlerts(mockAlerts)
-  }, [])
+    fetchData()
+  }, [fetchData])
 
   // Funciones utilitarias
   const getAlertSeverityColor = (severity: string) => {
@@ -262,60 +258,88 @@ const StockControl: React.FC = () => {
 
     setIsLoading(true)
     
-    // Simular API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    try {
+      // Intentar usar RPC primero
+      const { error: rpcError } = await supabase.rpc('update_product_stock', {
+        product_id: selectedProduct.id,
+        quantity_change: movementType === 'salida' ? -movementQuantity : movementQuantity,
+        movement_type: movementType === 'entrada' ? 'entry' : movementType === 'salida' ? 'exit' : 'adjustment',
+        reason: movementReason,
+        notes: movementReason // Intentar ambos nombres de parámetro por si acaso
+      })
 
-    const newMovement: StockMovement = {
-      id: Date.now().toString(),
-      productId: selectedProduct.id,
-      productName: selectedProduct.name,
-      productSku: selectedProduct.sku,
-      type: movementType,
-      quantity: movementQuantity,
-      previousStock: selectedProduct.stock,
-      newStock: movementType === 'entrada' 
-        ? selectedProduct.stock + movementQuantity 
-        : selectedProduct.stock - movementQuantity,
-      reason: movementReason,
-      reference: movementReference,
-      userId: 'current-user',
-      userName: 'Usuario Actual',
-      timestamp: new Date(),
-      cost: movementCost || undefined,
-      supplier: movementSupplier || undefined
+      if (rpcError) {
+        console.warn('RPC update_product_stock failed, falling back to direct update:', rpcError)
+        
+        // Fallback: Actualización directa
+        const newStock = movementType === 'entrada' 
+          ? selectedProduct.stock + movementQuantity 
+          : selectedProduct.stock - movementQuantity
+        
+        const { error: updateError } = await supabase
+          .from('products')
+          .update({ stock_quantity: newStock }) // Probar stock_quantity
+          .eq('id', selectedProduct.id)
+
+        if (updateError) {
+           // Si falla stock_quantity, probar stock
+           const { error: updateError2 } = await supabase
+             .from('products')
+             .update({ stock: newStock })
+             .eq('id', selectedProduct.id)
+             
+           if (updateError2) throw updateError2
+        }
+      }
+
+      await fetchData() // Recargar datos
+
+      // Resetear formulario
+      setIsMovementDialogOpen(false)
+      setSelectedProduct(null)
+      setMovementQuantity(0)
+      setMovementReason('')
+      setMovementReference('')
+      setMovementCost(0)
+      setMovementSupplier('')
+
+    } catch (error) {
+      console.error('Error creating movement:', error)
+      alert('Error al crear movimiento. Por favor intente nuevamente.')
+    } finally {
+      setIsLoading(false)
     }
-
-    setMovements(prev => [newMovement, ...prev])
-    
-    // Actualizar stock del producto
-    setProducts(prev => prev.map(p => 
-      p.id === selectedProduct.id 
-        ? { ...p, stock: newMovement.newStock }
-        : p
-    ))
-
-    // Resetear formulario
-    setIsMovementDialogOpen(false)
-    setSelectedProduct(null)
-    setMovementQuantity(0)
-    setMovementReason('')
-    setMovementReference('')
-    setMovementCost(0)
-    setMovementSupplier('')
-    setIsLoading(false)
   }
 
-  const acknowledgeAlert = (alertId: string) => {
-    setAlerts(prev => prev.map(alert => 
-      alert.id === alertId 
-        ? { 
-            ...alert, 
-            isActive: false, 
-            acknowledgedAt: new Date(),
-            acknowledgedBy: 'Usuario Actual'
-          }
-        : alert
-    ))
+  const acknowledgeAlert = async (alertId: string) => {
+    if (alertId.startsWith('local-')) {
+       // Alerta local, solo ocultar de la vista actual
+       setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, isActive: false } : a))
+       return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('product_alerts')
+        .update({ is_resolved: true })
+        .eq('id', alertId)
+      
+      if (error) throw error
+      
+      // Actualizar estado local
+      setAlerts(prev => prev.map(alert => 
+        alert.id === alertId 
+          ? { 
+              ...alert, 
+              isActive: false, 
+              acknowledgedAt: new Date(),
+              acknowledgedBy: 'Usuario Actual'
+            }
+          : alert
+      ))
+    } catch (error) {
+      console.error('Error acknowledging alert:', error)
+    }
   }
 
   const filteredMovements = movements.filter(movement => {

@@ -97,120 +97,106 @@ interface Supplier {
   notes?: string
 }
 
-// Datos mock mejorados
-const mockCategories: Category[] = [
-  {
-    id: '1',
-    name: 'Electrónicos',
-    description: 'Dispositivos electrónicos y tecnología',
-    subcategories: ['Smartphones', 'Laptops', 'Tablets', 'Accesorios'],
-    productCount: 45,
-    isActive: true,
-    createdAt: '2024-01-15',
-    updatedAt: '2024-01-20',
-    color: '#3B82F6'
-  },
-  {
-    id: '2',
-    name: 'Ropa',
-    description: 'Vestimenta y accesorios de moda',
-    subcategories: ['Camisas', 'Pantalones', 'Zapatos', 'Accesorios'],
-    productCount: 23,
-    isActive: true,
-    createdAt: '2024-01-10',
-    updatedAt: '2024-01-18',
-    color: '#10B981'
-  },
-  {
-    id: '3',
-    name: 'Hogar',
-    description: 'Artículos para el hogar y decoración',
-    subcategories: ['Muebles', 'Decoración', 'Electrodomésticos', 'Jardín'],
-    productCount: 12,
-    isActive: false,
-    createdAt: '2024-01-05',
-    updatedAt: '2024-01-15',
-    color: '#F59E0B'
-  }
-]
+// Datos mock eliminados para usar Supabase
 
-const mockBrands: Brand[] = [
-  {
-    id: '1',
-    name: 'Apple',
-    description: 'Tecnología innovadora y diseño premium',
-    website: 'https://apple.com',
-    productCount: 15,
-    isActive: true,
-    createdAt: '2024-01-15',
-    updatedAt: '2024-01-20',
-    rating: 4.8
-  },
-  {
-    id: '2',
-    name: 'Samsung',
-    description: 'Electrónicos y tecnología avanzada',
-    website: 'https://samsung.com',
-    productCount: 12,
-    isActive: true,
-    createdAt: '2024-01-10',
-    updatedAt: '2024-01-18',
-    rating: 4.5
-  },
-  {
-    id: '3',
-    name: 'Nike',
-    description: 'Ropa deportiva y calzado',
-    website: 'https://nike.com',
-    productCount: 8,
-    isActive: true,
-    createdAt: '2024-01-05',
-    updatedAt: '2024-01-15',
-    rating: 4.6
-  }
-]
 
-const mockSuppliers: Supplier[] = [
-  {
-    id: '1',
-    name: 'TechDistributor SA',
-    contact: 'Juan Pérez',
-    email: 'juan@techdist.com',
-    phone: '+1234567890',
-    address: 'Av. Principal 123, Ciudad',
-    productCount: 25,
-    isActive: true,
-    createdAt: '2024-01-15',
-    updatedAt: '2024-01-20',
-    rating: 4.2,
-    paymentTerms: '30 días',
-    notes: 'Proveedor confiable con entregas puntuales'
-  },
-  {
-    id: '2',
-    name: 'Fashion Wholesale',
-    contact: 'María García',
-    email: 'maria@fashionwh.com',
-    phone: '+1234567891',
-    address: 'Calle Comercio 456, Ciudad',
-    productCount: 18,
-    isActive: true,
-    createdAt: '2024-01-10',
-    updatedAt: '2024-01-18',
-    rating: 4.0,
-    paymentTerms: '15 días',
-    notes: 'Especialista en productos de moda'
-  }
-]
+
+import { createClient } from '@/lib/supabase/client'
 
 export function ProductConfiguration() {
   const router = useRouter()
+  const supabase = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Estados principales
-  const [categories, setCategories] = useState<Category[]>(mockCategories)
-  const [brands, setBrands] = useState<Brand[]>(mockBrands)
-  const [suppliers, setSuppliers] = useState<Supplier[]>(mockSuppliers)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [brands, setBrands] = useState<Brand[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  
+  // Cargar datos desde Supabase
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch Categories
+        const { data: categoriesData, error: categoriesError } = await supabase
+          .from('categories')
+          .select('*')
+        
+        if (categoriesError) throw categoriesError
+        
+        if (categoriesData) {
+          const formattedCategories: Category[] = categoriesData.map(cat => ({
+            id: cat.id,
+            name: cat.name,
+            description: cat.description || '',
+            subcategories: [], // TODO: Implement subcategories logic
+            productCount: 0, // TODO: Implement product count
+            isActive: cat.is_active ?? true,
+            createdAt: cat.created_at || new Date().toISOString(),
+            updatedAt: cat.updated_at || new Date().toISOString(),
+            color: '#3B82F6' // Default color
+          }))
+          setCategories(formattedCategories)
+        }
+
+        // Fetch Suppliers
+        const { data: suppliersData, error: suppliersError } = await supabase
+          .from('suppliers')
+          .select('*')
+        
+        if (suppliersError) throw suppliersError
+
+        if (suppliersData) {
+          const formattedSuppliers: Supplier[] = suppliersData.map(sup => ({
+            id: sup.id,
+            name: sup.name,
+            contact: sup.contact_name || '',
+            email: sup.contact_email || '',
+            phone: sup.phone || '',
+            address: sup.address || '',
+            productCount: 0,
+            isActive: sup.is_active ?? true,
+            createdAt: sup.created_at || new Date().toISOString(),
+            updatedAt: sup.updated_at || new Date().toISOString(),
+            rating: 5,
+            paymentTerms: '',
+            notes: ''
+          }))
+          setSuppliers(formattedSuppliers)
+        }
+
+        // Fetch Brands (derived from products)
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select('brand')
+          .not('brand', 'is', null)
+        
+        if (productsError) throw productsError
+
+        if (productsData) {
+          const uniqueBrands = Array.from(new Set(productsData.map(p => p.brand).filter(Boolean))) as string[]
+          const formattedBrands: Brand[] = uniqueBrands.map((brandName, index) => ({
+            id: `brand-${index}`,
+            name: brandName,
+            description: '',
+            website: '',
+            productCount: 0,
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }))
+          setBrands(formattedBrands)
+        }
+
+      } catch (error) {
+        console.error('Error fetching configuration data:', error)
+        toast.error('Error al cargar datos de configuración')
+      }
+    }
+
+    fetchData()
+  }, [])
+  
   const [activeTab, setActiveTab] = useState('categories')
   
   // Estados de UI

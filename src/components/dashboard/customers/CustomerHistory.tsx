@@ -16,7 +16,7 @@
  */
 
 import React, { useState, useMemo } from 'react'
-import { motion, AnimatePresence  } from '../../ui/motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -145,69 +145,9 @@ interface HistoryItem {
 }
 
 // Datos de ejemplo (en una aplicación real, estos vendrían de la API)
-const mockRepairs: RepairRecord[] = [
-  {
-    id: '1',
-    date: '2024-01-15',
-    device: 'iPhone 14 Pro',
-    deviceType: 'phone',
-    issue: 'Pantalla rota',
-    status: 'completed',
-    cost: 250,
-    technician: 'Juan Pérez',
-    notes: 'Reemplazo completo de pantalla OLED'
-  },
-  {
-    id: '2',
-    date: '2024-02-20',
-    device: 'MacBook Air M2',
-    deviceType: 'laptop',
-    issue: 'Batería hinchada',
-    status: 'completed',
-    cost: 180,
-    technician: 'María García',
-    notes: 'Reemplazo de batería y verificación del sistema'
-  },
-  {
-    id: '3',
-    date: '2024-03-10',
-    device: 'iPad Pro 12.9"',
-    deviceType: 'tablet',
-    issue: 'No enciende',
-    status: 'in_progress',
-    cost: 320,
-    technician: 'Carlos López',
-    estimatedCompletion: '2024-03-15',
-    notes: 'Diagnóstico en proceso - posible problema de placa madre'
-  }
-]
+const mockRepairs: RepairRecord[] = []
 
-const mockPurchases: PurchaseRecord[] = [
-  {
-    id: '1',
-    date: '2024-01-20',
-    items: [
-      { name: 'Funda iPhone 14 Pro', quantity: 1, price: 25 },
-      { name: 'Protector de pantalla', quantity: 2, price: 15 }
-    ],
-    total: 55,
-    status: 'completed',
-    paymentMethod: 'Tarjeta de crédito',
-    invoiceNumber: 'INV-2024-001'
-  },
-  {
-    id: '2',
-    date: '2024-02-25',
-    items: [
-      { name: 'Cargador MacBook', quantity: 1, price: 80 },
-      { name: 'Mouse inalámbrico', quantity: 1, price: 45 }
-    ],
-    total: 125,
-    status: 'completed',
-    paymentMethod: 'Efectivo',
-    invoiceNumber: 'INV-2024-002'
-  }
-]
+const mockPurchases: PurchaseRecord[] = []
 
 function HistoryItemCard({ item, index, mode }: { item: HistoryItem; index: number; mode: string }) {
   const [expanded, setExpanded] = useState(false)

@@ -24,7 +24,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { motion, AnimatePresence  } from '../../ui/motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useCustomerSearch } from '@/hooks/use-customer-search'
 import type { Customer } from '@/hooks/use-customer-state'
 import { CustomerDetailModal } from './CustomerDetailModal'

@@ -10,44 +10,8 @@ import { formatCurrency } from '@/lib/currency'
 import { Plus, Minus, ShoppingCart } from 'lucide-react'
 import type { CartItem } from '@/types/promotion'
 
-// Mock products for demo
-const mockProducts = [
-  {
-    id: '1',
-    name: 'iPhone 15 Pro',
-    price: 1200000,
-    category_id: 'smartphones',
-    sku: 'IP15PRO'
-  },
-  {
-    id: '2',
-    name: 'Samsung Galaxy S24',
-    price: 950000,
-    category_id: 'smartphones',
-    sku: 'SGS24'
-  },
-  {
-    id: '3',
-    name: 'Funda Protectora',
-    price: 25000,
-    category_id: 'accessories',
-    sku: 'CASE001'
-  },
-  {
-    id: '4',
-    name: 'Cargador Inalámbrico',
-    price: 45000,
-    category_id: 'accessories',
-    sku: 'CHARGER001'
-  },
-  {
-    id: '5',
-    name: 'Auriculares Bluetooth',
-    price: 85000,
-    category_id: 'accessories',
-    sku: 'HEADPHONES001'
-  }
-]
+// Mock products for demo removed
+const mockProducts: any[] = []
 
 export default function PromotionsDemoPage() {
   const [cart, setCart] = useState<CartItem[]>([])

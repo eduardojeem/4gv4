@@ -10,7 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Image as ImageIcon, User, Wrench } from 'lucide-react'
 import { Repair } from '@/types/repairs'
-import { priorityConfig } from '@/data/mock-repairs'
+import { priorityConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
 
 interface RepairCardProps {

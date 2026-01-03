@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { motion  } from '../../ui/motion'
+import { motion } from 'framer-motion'
 import {
   Dialog,
   DialogContent,

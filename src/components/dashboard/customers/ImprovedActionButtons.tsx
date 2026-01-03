@@ -13,7 +13,7 @@
  */
 
 import React from 'react'
-import { motion  } from '../../ui/motion'
+import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import {
   Tooltip,

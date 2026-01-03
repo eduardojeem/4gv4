@@ -84,50 +84,177 @@ function StatCard({ title, value, change, changeType, icon }: StatCardProps) {
 }
 
 export function StatsOverview() {
-  const stats = [
+  const [stats, setStats] = useState([
     {
       title: 'Ventas del Día',
-      value: '$2,847',
-      change: '+12% desde ayer',
-      changeType: 'increase' as const,
+      value: '$0',
+      change: 'Calculando...',
+      changeType: 'neutral' as const,
       icon: <GSIcon className="h-4 w-4" />
     },
     {
       title: 'Órdenes Activas',
-      value: '23',
-      change: '+3 nuevas',
-      changeType: 'increase' as const,
+      value: '0',
+      change: 'Calculando...',
+      changeType: 'neutral' as const,
       icon: <ShoppingCart className="h-4 w-4" />
     },
     {
       title: 'Clientes Nuevos',
-      value: '8',
-      change: '+2 esta semana',
-      changeType: 'increase' as const,
+      value: '0',
+      change: 'Calculando...',
+      changeType: 'neutral' as const,
       icon: <Users className="h-4 w-4" />
     },
     {
       title: 'Reparaciones Pendientes',
-      value: '15',
-      change: '-2 desde ayer',
-      changeType: 'decrease' as const,
+      value: '0',
+      change: 'Calculando...',
+      changeType: 'neutral' as const,
       icon: <Wrench className="h-4 w-4" />
     },
     {
       title: 'Productos en Stock',
-      value: '342',
-      change: 'Stock normal',
+      value: '0',
+      change: 'Calculando...',
       changeType: 'neutral' as const,
       icon: <Package className="h-4 w-4" />
     },
     {
       title: 'Stock Bajo',
-      value: '7',
-      change: 'Requiere atención',
-      changeType: 'decrease' as const,
+      value: '0',
+      change: 'Calculando...',
+      changeType: 'neutral' as const,
       icon: <AlertTriangle className="h-4 w-4" />
     }
-  ]
+  ])
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const { formatCurrency } = await import('@/lib/currency')
+        const supabase = createClient()
+        
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const todayIso = today.toISOString()
+        
+        const yesterday = new Date(today)
+        yesterday.setDate(yesterday.getDate() - 1)
+        const yesterdayIso = yesterday.toISOString()
+
+        // Fetch parallel data
+        const [
+          salesToday,
+          salesYesterday,
+          activeOrders,
+          customersWeek,
+          repairsPending,
+          productsStock,
+          lowStock
+        ] = await Promise.all([
+          supabase.from('sales').select('total_amount').gte('created_at', todayIso),
+          supabase.from('sales').select('total_amount').gte('created_at', yesterdayIso).lt('created_at', todayIso),
+          supabase.from('sales').select('id', { count: 'exact' }).eq('status', 'pendiente'),
+          supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
+          supabase.from('repairs').select('id', { count: 'exact' }).in('status', ['recibido', 'diagnostico', 'reparacion']),
+          supabase.from('products').select('stock_quantity'),
+          supabase.from('products').select('id', { count: 'exact' }).lte('stock_quantity', 5) // Asumiendo 5 como bajo stock genérico o usar min_stock si es posible
+        ])
+
+        // Calculate Sales
+        const totalSalesToday = salesToday.data?.reduce((sum, sale) => sum + (Number(sale.total_amount) || 0), 0) || 0
+        const totalSalesYesterday = salesYesterday.data?.reduce((sum, sale) => sum + (Number(sale.total_amount) || 0), 0) || 0
+        
+        let salesChange = '0% desde ayer'
+        let salesChangeType: 'increase' | 'decrease' | 'neutral' = 'neutral'
+        
+        if (totalSalesYesterday > 0) {
+          const percent = ((totalSalesToday - totalSalesYesterday) / totalSalesYesterday) * 100
+          salesChange = `${percent > 0 ? '+' : ''}${percent.toFixed(0)}% desde ayer`
+          salesChangeType = percent > 0 ? 'increase' : percent < 0 ? 'decrease' : 'neutral'
+        } else if (totalSalesToday > 0) {
+          salesChange = '+100% desde ayer'
+          salesChangeType = 'increase'
+        }
+
+        // Products stats
+        const totalStock = productsStock.data?.reduce((sum, p) => sum + (p.stock_quantity || 0), 0) || 0
+        
+        setStats([
+          {
+            title: 'Ventas del Día',
+            value: formatCurrency(totalSalesToday),
+            change: salesChange,
+            changeType: salesChangeType,
+            icon: <GSIcon className="h-4 w-4" />
+          },
+          {
+            title: 'Órdenes Activas',
+            value: (activeOrders.count || 0).toString(),
+            change: 'Pendientes de pago',
+            changeType: 'neutral',
+            icon: <ShoppingCart className="h-4 w-4" />
+          },
+          {
+            title: 'Clientes Nuevos',
+            value: (customersWeek.count || 0).toString(),
+            change: 'Últimos 7 días',
+            changeType: 'increase',
+            icon: <Users className="h-4 w-4" />
+          },
+          {
+            title: 'Reparaciones Pendientes',
+            value: (repairsPending.count || 0).toString(),
+            change: 'En proceso',
+            changeType: 'neutral',
+            icon: <Wrench className="h-4 w-4" />
+          },
+          {
+            title: 'Productos en Stock',
+            value: totalStock.toString(),
+            change: 'Total unidades',
+            changeType: 'neutral',
+            icon: <Package className="h-4 w-4" />
+          },
+          {
+            title: 'Stock Bajo',
+            value: (lowStock.count || 0).toString(),
+            change: 'Requiere reabastecer',
+            changeType: 'decrease',
+            icon: <AlertTriangle className="h-4 w-4" />
+          }
+        ])
+
+      } catch (error) {
+        console.error('Error loading stats:', error)
+      }
+    }
+    
+    fetchStats()
+    
+    // Set up realtime subscription for updates
+    const setupRealtime = async () => {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      
+      const channel = supabase.channel('stats_changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => fetchStats())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => fetchStats())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => fetchStats())
+        .subscribe()
+        
+      return () => {
+        supabase.removeChannel(channel)
+      }
+    }
+    
+    const cleanupPromise = setupRealtime()
+    return () => {
+      cleanupPromise.then(cleanup => cleanup && cleanup())
+    }
+  }, [])
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -229,11 +356,7 @@ export function RecentActivity() {
       try {
         const { config } = await import('@/lib/config')
         if (!config.supabase.isConfigured) {
-          setItems([
-            { type: 'sale', description: 'Venta completada - iPhone 13 Pro', amount: '₲ 899.000', time: 'Hace 5 min', status: 'completed', icon: <ShoppingCart className="h-4 w-4" /> },
-            { type: 'repair', description: 'Reparación iniciada - Samsung Galaxy S21', amount: '₲ 120.000', time: 'Hace 15 min', status: 'in_progress', icon: <Wrench className="h-4 w-4" /> },
-            { type: 'customer', description: 'Nuevo cliente registrado', time: 'Hace 30 min', status: 'new', icon: <Users className="h-4 w-4" /> }
-          ])
+          setItems([])
           return
         }
         const { createClient } = await import('@/lib/supabase/client')
@@ -317,12 +440,10 @@ export function RecentActivity() {
           status: 'completed' | 'in_progress' | 'new' | 'updated'
           icon: React.ReactNode
         }>)
-      } catch {
-        setItems([
-          { type: 'sale', description: 'Venta completada', amount: '₲ 899.000', time: 'Hace 5 min', status: 'completed', icon: <ShoppingCart className="h-4 w-4" /> },
-          { type: 'repair', description: 'Reparación en progreso', amount: '₲ 120.000', time: 'Hace 15 min', status: 'in_progress', icon: <Wrench className="h-4 w-4" /> },
-          { type: 'customer', description: 'Nuevo cliente registrado', time: 'Hace 30 min', status: 'new', icon: <Users className="h-4 w-4" /> }
-        ])
+      } catch (error) {
+        console.error('Error loading recent activity:', error)
+        // Keep empty items or show error state, but do NOT show fake data on error
+        setItems([]) 
       }
     }
     load()

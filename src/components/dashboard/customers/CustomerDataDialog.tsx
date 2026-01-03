@@ -15,7 +15,7 @@
  */
 
 import React, { useState, useCallback } from 'react'
-import { motion, AnimatePresence  } from '../../ui/motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Dialog,
   DialogContent,

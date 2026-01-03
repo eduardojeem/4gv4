@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { motion  } from '../../../../components/ui/motion'
 import Link from 'next/link'
 import { XLSX, jsPDF, showDisabledFeatureMessage } from '@/components/stubs/HeavyDependencyStubs';
@@ -49,120 +49,62 @@ import { AreaChart } from 'recharts/es6/chart/AreaChart';
 import { format, subDays, subMonths, startOfMonth, endOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-// Datos mock para reportes
-const mockProductData = [
-  {
-    id: '1',
-    name: 'iPhone 14 Pro',
-    category: 'Smartphones',
-    sku: 'IPH14P-256-BLK',
-    stock_quantity: 15,
-    min_stock: 5,
-    sale_price: 1200000,
-    purchase_price: 950000,
-    total_sales: 45,
-    revenue: 54000000,
-    profit: 11250000,
-    margin: 20.8,
-    last_sale: '2024-01-15',
-    supplier: 'Apple Inc.',
-    status: 'active'
-  },
-  {
-    id: '2',
-    name: 'Samsung Galaxy S23',
-    category: 'Smartphones',
-    sku: 'SGS23-128-WHT',
-    stock_quantity: 8,
-    min_stock: 3,
-    sale_price: 950000,
-    purchase_price: 750000,
-    total_sales: 32,
-    revenue: 30400000,
-    profit: 6400000,
-    margin: 21.1,
-    last_sale: '2024-01-14',
-    supplier: 'Samsung',
-    status: 'active'
-  },
-  {
-    id: '3',
-    name: 'Protector de Pantalla',
-    category: 'Accesorios',
-    sku: 'PROT-TEMP-UNI',
-    stock_quantity: 150,
-    min_stock: 50,
-    sale_price: 25000,
-    purchase_price: 12000,
-    total_sales: 280,
-    revenue: 7000000,
-    profit: 3640000,
-    margin: 52.0,
-    last_sale: '2024-01-15',
-    supplier: 'Accesorios Plus',
-    status: 'active'
-  },
-  {
-    id: '4',
-    name: 'Cargador USB-C',
-    category: 'Accesorios',
-    sku: 'CHAR-USBC-20W',
-    stock_quantity: 45,
-    min_stock: 20,
-    sale_price: 35000,
-    purchase_price: 20000,
-    total_sales: 125,
-    revenue: 4375000,
-    profit: 1875000,
-    margin: 42.9,
-    last_sale: '2024-01-13',
-    supplier: 'Tech Supply',
-    status: 'active'
-  },
-  {
-    id: '5',
-    name: 'Funda iPhone 14',
-    category: 'Accesorios',
-    sku: 'CASE-IPH14-SIL',
-    stock_quantity: 2,
-    min_stock: 10,
-    sale_price: 45000,
-    purchase_price: 25000,
-    total_sales: 89,
-    revenue: 4005000,
-    profit: 1780000,
-    margin: 44.4,
-    last_sale: '2024-01-12',
-    supplier: 'Case World',
-    status: 'low_stock'
-  }
-]
+import { createClient } from '@/lib/supabase/client'
 
-const salesTrendData = [
-  { month: 'Jul', sales: 125, revenue: 45000000 },
-  { month: 'Ago', sales: 142, revenue: 52000000 },
-  { month: 'Sep', sales: 158, revenue: 58000000 },
-  { month: 'Oct', sales: 134, revenue: 49000000 },
-  { month: 'Nov', sales: 167, revenue: 62000000 },
-  { month: 'Dic', sales: 189, revenue: 71000000 },
-  { month: 'Ene', sales: 203, revenue: 78000000 }
-]
-
-const categoryData = [
-  { name: 'Smartphones', value: 65, color: '#3b82f6' },
-  { name: 'Accesorios', value: 35, color: '#10b981' }
-]
-
-const topProductsData = mockProductData
-  .sort((a, b) => b.revenue - a.revenue)
-  .slice(0, 5)
-  .map(product => ({
-    name: product.name.length > 15 ? product.name.substring(0, 15) + '...' : product.name,
-    revenue: product.revenue / 1000000,
-    sales: product.total_sales
-  }))
+// Datos mock eliminados
 
 export default function ProductReportsPage() {
+  const supabase = createClient()
+  const [loading, setLoading] = useState(true)
+  const [products, setProducts] = useState<any[]>([])
+  
+  // Datos para gráficas (inicialmente vacíos)
+  const salesTrendData: any[] = []
+  const categoryData: any[] = []
+  const topProductsData: any[] = []
+
+  // Cargar datos reales desde Supabase
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          // Add filters if needed
+        
+        if (error) throw error
+
+        if (data) {
+          // Transform data to match UI expectations if needed
+          // For now, we just use what we have or map it
+          const formattedProducts = data.map(p => ({
+            id: p.id,
+            name: p.name,
+            category: 'General', // Would need join with categories
+            sku: p.sku,
+            stock_quantity: p.stock_quantity,
+            min_stock: p.min_stock_level || 0,
+            sale_price: p.sale_price,
+            purchase_price: 0, // Not exposed publicly usually
+            total_sales: 0, // Would need to calculate from sales items
+            revenue: 0,
+            profit: 0,
+            margin: 0,
+            last_sale: null,
+            supplier: '', // Would need join
+            status: p.is_active ? 'active' : 'inactive'
+          }))
+          setProducts(formattedProducts)
+        }
+      } catch (error) {
+        console.error('Error loading product reports:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
   const [dateRange, setDateRange] = useState({
     from: subMonths(new Date(), 1),
     to: new Date()
@@ -174,7 +116,7 @@ export default function ProductReportsPage() {
 
   // Filtrar datos basado en los filtros seleccionados
   const filteredData = useMemo(() => {
-    return mockProductData.filter(product => {
+    return products.filter(product => {
       const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory
       const matchesStatus = selectedStatus === 'all' || product.status === selectedStatus
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

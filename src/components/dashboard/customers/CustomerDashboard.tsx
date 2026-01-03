@@ -15,7 +15,7 @@
 
 import React, { useMemo, useState, useEffect, Suspense, lazy, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { motion  } from '../../ui/motion'
+import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -39,17 +39,18 @@ import { ImprovedMetricCard } from './ImprovedMetricCard'
 // Componente mejorado de lista de clientes
 const CustomerListView = dynamic(() => import("./CustomerListView").then(m => ({ default: m.CustomerListView })), { ssr: false })
 const CustomerDetail = dynamic(() => import("./CustomerDetail").then(m => m.CustomerDetail), { ssr: false })
+const CustomerEditFormV2 = dynamic(() => import("./CustomerEditFormV2").then(m => m.CustomerEditFormV2), { ssr: false })
 const CustomerHistory = dynamic(() => import("./CustomerHistory").then(m => m.CustomerHistory), { ssr: false })
 const CustomerFilters = dynamic(() => import("./CustomerFilters").then(m => m.CustomerFilters), { ssr: false })
 import { CustomerModal } from './CustomerModal'
+import { CustomerEditDialog } from './CustomerEditDialog'
 // Componente consolidado de analíticas
 const AnalyticsDashboard = lazy(() => import("./AnalyticsDashboard").then(m => ({ default: m.AnalyticsDashboard })))
 // Componente consolidado de segmentación
 const SegmentationSystem = lazy(() => import("./SegmentationSystem").then(m => ({ default: m.SegmentationSystem })))
 const CustomerCommunications = lazy(() => import("./advanced/CustomerCommunications").then(m => ({ default: m.CustomerCommunications })))
 const NotificationCenter = dynamic(() => import("./NotificationCenter").then(m => m.NotificationCenter), { ssr: false })
-import { useCustomerState, Customer } from '@/hooks/use-customer-state'
-import { useCustomerActions } from '@/hooks/use-customer-actions'
+import { Customer } from '@/hooks/use-customer-state'
 import { Pagination } from '@/components/ui/pagination'
 import { prefetchCustomerPurchases, prefetchSimilarCustomers } from '@/hooks/useCustomerData'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -64,10 +65,11 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { SearchStats, SearchInsights } from './SearchStats'
 import searchService from '@/services/search-service'
 import { formatCurrency } from '@/lib/currency'
+import { useCustomers } from '@/contexts/CustomerContext'
 
 
 // Tipos para la navegación
-type ViewState = 'list' | 'detail' | 'history'
+type ViewState = 'list' | 'detail' | 'history' | 'edit'
 
 export function CustomerDashboard() {
   const { 
@@ -79,9 +81,13 @@ export function CustomerDashboard() {
     error, 
     pagination,
     setPage,
-    setItemsPerPage
-  } = useCustomerState()
-  const { updateFilters } = useCustomerActions()
+    setItemsPerPage,
+    updateFilters, 
+    toggleCustomerStatus, 
+    updateCustomer,
+    updateCustomerStatus, 
+    bulkUpdateCustomerStatus 
+  } = useCustomers()
   
   // Handle customer selection from search
   const handleCustomerSelectFromSearch = useCallback((customer: Customer) => {
@@ -112,7 +118,6 @@ export function CustomerDashboard() {
   const [viewMode, setViewMode] = useState<"table" | "grid" | "timeline">("table")
   const [activeTab, setActiveTab] = useState("customers")
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
   const [compactMode, setCompactMode] = useState(true)
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
   
@@ -153,40 +158,56 @@ export function CustomerDashboard() {
     }
   }, [creditSummaries])
 
-  const stats = useMemo(() => ([
-    {
-      title: "Total Clientes",
-      value: totalCustomers.toLocaleString(),
-      icon: <Users className="h-5 w-5" />,
-      change: "+12%",
-      changeType: "positive" as const,
-      gradient: "from-blue-500 to-cyan-500"
-    },
-    {
-      title: "Créditos Activos",
-      value: creditMetrics.totalActiveCredits.toLocaleString(),
-      icon: <CreditCard className="h-5 w-5" />,
-      change: "+18%",
-      changeType: "positive" as const,
-      gradient: "from-green-500 to-emerald-500"
-    },
-    {
-      title: "Clientes con Crédito",
-      value: creditMetrics.customersWithCredits.toLocaleString(),
-      icon: <UserCheck className="h-5 w-5" />,
-      change: "+15%",
-      changeType: "positive" as const,
-      gradient: "from-purple-500 to-violet-500"
-    },
-    {
-      title: "Saldo Pendiente",
-      value: `${creditMetrics.totalPendingAmount.toLocaleString()}`,
-      icon: <TrendingUp className="h-5 w-5" />,
-      change: creditMetrics.overduePayments > 0 ? "-5%" : "+8%",
-      changeType: creditMetrics.overduePayments > 0 ? "negative" as const : "positive" as const,
-      gradient: creditMetrics.overduePayments > 0 ? "from-red-500 to-orange-500" : "from-orange-500 to-red-500"
+  const stats = useMemo(() => {
+    // Función para formatear moneda
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat('es-ES', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      }).format(amount)
     }
-  ]), [totalCustomers, creditMetrics])
+
+    return [
+      {
+        title: "Total Clientes",
+        value: totalCustomers.toLocaleString(),
+        icon: <Users className="h-5 w-5" />,
+        change: "+12%",
+        changeType: "positive" as const,
+        gradient: "from-blue-500 to-cyan-500",
+        description: `${activeCustomers} activos de ${totalCustomers} total`
+      },
+      {
+        title: "Créditos Activos",
+        value: creditMetrics.totalActiveCredits.toLocaleString(),
+        icon: <CreditCard className="h-5 w-5" />,
+        change: "+18%",
+        changeType: "positive" as const,
+        gradient: "from-green-500 to-emerald-500",
+        description: `Créditos en estado activo`
+      },
+      {
+        title: "Clientes con Crédito",
+        value: creditMetrics.customersWithCredits.toLocaleString(),
+        icon: <UserCheck className="h-5 w-5" />,
+        change: "+15%",
+        changeType: "positive" as const,
+        gradient: "from-purple-500 to-violet-500",
+        description: `${Math.round((creditMetrics.customersWithCredits / totalCustomers) * 100)}% del total`
+      },
+      {
+        title: "Saldo Pendiente",
+        value: formatCurrency(creditMetrics.totalPendingAmount),
+        icon: <TrendingUp className="h-5 w-5" />,
+        change: creditMetrics.overduePayments > 0 ? "-5%" : "+8%",
+        changeType: creditMetrics.overduePayments > 0 ? "negative" as const : "positive" as const,
+        gradient: creditMetrics.overduePayments > 0 ? "from-red-500 to-orange-500" : "from-orange-500 to-red-500",
+        description: creditMetrics.overduePayments > 0 ? `${creditMetrics.overduePayments} pagos vencidos` : 'Pagos al día'
+      }
+    ]
+  }, [totalCustomers, activeCustomers, creditMetrics])
 
   const {
     credits,
@@ -374,9 +395,33 @@ export function CustomerDashboard() {
   }
 
   const handleEditCustomer = (customer: Customer) => {
-    // Aquí podrías abrir el modal de edición
     setSelectedCustomer(customer)
-    setShowEditModal(true)
+    setCurrentView('edit')
+  }
+
+  const handleToggleCustomerStatus = async (customer: Customer) => {
+    try {
+      const result = await toggleCustomerStatus(customer.id)
+      if (result.success) {
+        // Refresh the customer list or update local state
+        window.location.reload() // Simple refresh for now
+      }
+    } catch (error) {
+      console.error('Error toggling customer status:', error)
+    }
+  }
+
+  const handleBulkStatusChange = async (customerIds: string[], status: 'active' | 'inactive' | 'suspended') => {
+    try {
+      const result = await bulkUpdateCustomerStatus(customerIds, status)
+      if (result.success) {
+        // Clear selection and refresh
+        setSelectedCustomers([])
+        window.location.reload() // Simple refresh for now
+      }
+    } catch (error) {
+      console.error('Error updating bulk status:', error)
+    }
   }
 
   const handleRefresh = () => {
@@ -463,7 +508,7 @@ export function CustomerDashboard() {
   }, [selectedCustomer])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 p-3 sm:p-4 lg:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 p-3 sm:p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
         <motion.div
@@ -472,7 +517,7 @@ export function CustomerDashboard() {
           className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2 sm:p-3 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl shadow-lg">
+            <div className="p-2 sm:p-3 bg-gradient-to-br from-blue-600 to-indigo-700 dark:from-blue-500 dark:to-indigo-600 rounded-xl shadow-lg">
               <Users className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
             </div>
             <div>
@@ -486,14 +531,18 @@ export function CustomerDashboard() {
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-yellow-500" />
-              <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white border-0 text-xs sm:text-sm">
+              <Sparkles className="h-5 w-5 text-yellow-500 dark:text-yellow-400" />
+              <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 dark:from-yellow-500 dark:to-orange-600 text-white border-0 text-xs sm:text-sm">
                 IA Activada
               </Badge>
             </div>
-            <div className="flex items-center gap-2 bg-white/70 dark:bg-slate-800/70 px-2 py-1 rounded-lg">
+            <div className="flex items-center gap-2 bg-white/70 dark:bg-slate-800/70 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700">
               <span className="text-xs text-gray-700 dark:text-gray-300">Compacto</span>
-              <Switch checked={compactMode} onCheckedChange={setCompactMode} />
+              <Switch 
+                checked={compactMode} 
+                onCheckedChange={setCompactMode}
+                className="data-[state=checked]:bg-blue-600 dark:data-[state=checked]:bg-blue-500"
+              />
             </div>
           </div>
         </motion.div>
@@ -514,7 +563,7 @@ export function CustomerDashboard() {
               change={stat.change}
               changeType={stat.changeType}
               gradient={stat.gradient}
-              description={`Métrica de ${stat.title.toLowerCase()}`}
+              description={stat.description}
               compact={compactMode}
             />
           ))}
@@ -528,46 +577,46 @@ export function CustomerDashboard() {
         >
           <Tabs value={activeTab} onValueChange={setActiveTab} className={compactMode ? "space-y-3 sm:space-y-4" : "space-y-4 sm:space-y-6"}>
             {/* Mobile-Optimized Tab List */}
-            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl shadow-lg border-0 p-2">
+            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-2">
               <TabsList className={compactMode ? "grid w-full grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-1 bg-transparent h-auto p-0" : "grid w-full grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2 bg-transparent h-auto p-0"}>
                 <TabsTrigger 
                   value="customers" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
                 >
                   <Users className="h-4 w-4" />
                   <span className="hidden sm:inline">Clientes</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="analytics" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
                 >
                   <BarChart3 className="h-4 w-4" />
                   <span className="hidden sm:inline">Analíticas</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="segmentation" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
                 >
                   <PieChart className="h-4 w-4" />
                   <span className="hidden sm:inline">Segmentación</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="communications" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
                 >
                   <MessageSquare className="h-4 w-4" />
                   <span className="hidden sm:inline">Comunicaciones</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="metrics" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
                 >
                   <Activity className="h-4 w-4" />
                   <span className="hidden sm:inline">Métricas</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="notifications" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
                 >
                   <Bell className="h-4 w-4" />
                   <span className="hidden sm:inline">Notificaciones</span>
@@ -580,10 +629,10 @@ export function CustomerDashboard() {
               <div className={compactMode ? "space-y-3 sm:space-y-4" : "space-y-4 sm:space-y-6"}>
                 {currentView === 'list' && (
                   <>
-                    <Card className="border-0 shadow-lg bg-white/80 dark:bg-slate-800/70">
+                    <Card className="border border-gray-200 dark:border-gray-700 shadow-lg bg-white/80 dark:bg-slate-800/70">
                       <CardHeader className="pb-2">
-                        <CardTitle className="flex items-center gap-2">
-                          <CreditCard className="h-5 w-5 text-green-600" />
+                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                          <CreditCard className="h-5 w-5 text-green-600 dark:text-green-400" />
                           Créditos Activos
                         </CardTitle>
                       </CardHeader>
@@ -593,24 +642,24 @@ export function CustomerDashboard() {
                             placeholder="Buscar cliente"
                             value={creditSearchTerm}
                             onChange={(e) => setCreditSearchTerm(e.target.value)}
-                            className="lg:w-1/3"
+                            className="lg:w-1/3 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                           />
                           <Select value={selectedCreditCustomerId} onValueChange={setSelectedCreditCustomerId}>
-                            <SelectTrigger className="lg:w-1/3">
+                            <SelectTrigger className="lg:w-1/3 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
                               <SelectValue placeholder="Seleccionar cliente" />
                             </SelectTrigger>
-                            <SelectContent className="max-h-[300px]">
+                            <SelectContent className="max-h-[300px] bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
                               {customersWithActiveCredits.map(c => (
-                                <SelectItem key={c.id} value={c.id}>
+                                <SelectItem key={c.id} value={c.id} className="text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800">
                                   {c.name} • {c.email || c.phone || ""}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryCSV}>Exportar CSV</Button>
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryExcel}>Exportar Excel</Button>
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryPDF}>Exportar PDF</Button>
+                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryCSV} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">Exportar CSV</Button>
+                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryExcel} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">Exportar Excel</Button>
+                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryPDF} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">Exportar PDF</Button>
                           </div>
                         </div>
                         {selectedCreditCustomerId && (
@@ -741,6 +790,8 @@ export function CustomerDashboard() {
                         // Implementar lógica de eliminación
                         console.log('Delete customer:', customer.id)
                       }}
+                      onToggleCustomerStatus={handleToggleCustomerStatus}
+                      onBulkStatusChange={handleBulkStatusChange}
                       loading={loading}
                     />
                     
@@ -776,6 +827,26 @@ export function CustomerDashboard() {
                     customer={selectedCustomer}
                     onBack={handleBackToList}
                     onViewDetail={() => handleViewDetail(selectedCustomer)}
+                  />
+                )}
+
+                {currentView === 'edit' && selectedCustomer && (
+                  <CustomerEditFormV2
+                    customer={selectedCustomer}
+                    onSave={async (formData) => {
+                      try {
+                        const result = await updateCustomer(selectedCustomer.id, formData)
+                        if (result.success) {
+                          // Actualizar el cliente en la lista local si es necesible
+                          handleBackToList()
+                          // Refresh the customer list
+                          window.location.reload()
+                        }
+                      } catch (error) {
+                        console.error('Error updating customer:', error)
+                      }
+                    }}
+                    onCancel={handleBackToList}
                   />
                 )}
               </div>
@@ -819,19 +890,6 @@ export function CustomerDashboard() {
           isOpen={showCreateModal}
           mode="create"
           onClose={() => setShowCreateModal(false)}
-        />
-      )}
-
-      {/* Modal para editar cliente */}
-      {showEditModal && selectedCustomer && (
-        <CustomerModal
-          customer={selectedCustomer}
-          isOpen={showEditModal}
-          mode="edit"
-          onClose={() => {
-            setShowEditModal(false)
-            setSelectedCustomer(null)
-          }}
         />
       )}
 

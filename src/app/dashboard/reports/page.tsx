@@ -63,37 +63,145 @@ export default function ReportsPage() {
   const [productData, setProductData] = useState<ProductData[]>([])
   const [categoryData, setCategoryData] = useState<CategoryData[]>([])
 
-  // Mock data - en producción esto vendría de la base de datos
+  // Estado de carga
+  const [loading, setLoading] = useState(true)
+
+  // Cargar datos reales de Supabase
   useEffect(() => {
-    const mockSalesData: SalesData[] = [
-      { date: '2024-01-01', sales: 2500000, orders: 15, customers: 12 },
-      { date: '2024-01-02', sales: 3200000, orders: 22, customers: 18 },
-      { date: '2024-01-03', sales: 1800000, orders: 11, customers: 9 },
-      { date: '2024-01-04', sales: 4100000, orders: 28, customers: 24 },
-      { date: '2024-01-05', sales: 3600000, orders: 25, customers: 21 },
-      { date: '2024-01-06', sales: 2900000, orders: 19, customers: 16 },
-      { date: '2024-01-07', sales: 5200000, orders: 35, customers: 29 },
-    ]
+    const fetchReportsData = async () => {
+      try {
+        setLoading(true)
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        
+        // Obtener ventas de los últimos 30 días (o rango seleccionado)
+        const { data: sales, error: salesError } = await supabase
+          .from('sales')
+          .select('id, created_at, total_amount, status')
+          .gte('created_at', dateRange.from.toISOString())
+          .lte('created_at', dateRange.to.toISOString())
+          .order('created_at', { ascending: true })
 
-    const mockProductData: ProductData[] = [
-      { name: 'iPhone 15 Pro', sales: 12500000, quantity: 8 },
-      { name: 'Samsung Galaxy S24', sales: 9800000, quantity: 12 },
-      { name: 'MacBook Air M3', sales: 18500000, quantity: 4 },
-      { name: 'iPad Pro 12.9"', sales: 15200000, quantity: 6 },
-      { name: 'AirPods Pro', sales: 2800000, quantity: 15 },
-    ]
+        if (salesError) throw salesError
 
-    const mockCategoryData: CategoryData[] = [
-      { name: 'Smartphones', value: 45, color: '#8884d8' },
-      { name: 'Laptops', value: 25, color: '#82ca9d' },
-      { name: 'Tablets', value: 15, color: '#ffc658' },
-      { name: 'Accesorios', value: 15, color: '#ff7300' },
-    ]
+        // Obtener items de venta para análisis de productos y categorías
+        const { data: saleItems, error: itemsError } = await supabase
+          .from('sale_items')
+          .select(`
+            quantity,
+            total_price,
+            product:products (
+              name,
+              category:categories (
+                name
+              )
+            ),
+            sale:sales!inner (
+              created_at,
+              status
+            )
+          `)
+          .gte('sale.created_at', dateRange.from.toISOString())
+          .lte('sale.created_at', dateRange.to.toISOString())
+          .eq('sale.status', 'completada')
 
-    setSalesData(mockSalesData)
-    setProductData(mockProductData)
-    setCategoryData(mockCategoryData)
-  }, [])
+        if (itemsError) throw itemsError
+
+        // Obtener nuevos clientes en el periodo
+        const { data: newCustomers, error: customersError } = await supabase
+          .from('customers')
+          .select('created_at')
+          .gte('created_at', dateRange.from.toISOString())
+          .lte('created_at', dateRange.to.toISOString())
+        
+        if (customersError) throw customersError
+
+        // Procesar datos para el gráfico de ventas
+        const salesByDate: Record<string, { sales: number; orders: number; customers: number }> = {}
+        
+        // Inicializar con ventas
+        sales?.forEach(sale => {
+          if (sale.status !== 'completada') return
+          
+          const date = new Date(sale.created_at).toISOString().split('T')[0]
+          if (!salesByDate[date]) {
+            salesByDate[date] = { sales: 0, orders: 0, customers: 0 }
+          }
+          salesByDate[date].sales += Number(sale.total_amount) || 0
+          salesByDate[date].orders += 1
+        })
+
+        // Agregar datos de clientes
+        newCustomers?.forEach(customer => {
+          const date = new Date(customer.created_at).toISOString().split('T')[0]
+          if (!salesByDate[date]) {
+            salesByDate[date] = { sales: 0, orders: 0, customers: 0 }
+          }
+          salesByDate[date].customers += 1
+        })
+
+        const processedSalesData: SalesData[] = Object.entries(salesByDate).map(([date, data]) => ({
+          date,
+          sales: data.sales,
+          orders: data.orders,
+          customers: data.customers
+        })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+        setSalesData(processedSalesData)
+
+        // Procesar datos de productos
+        const productStats: Record<string, { sales: number; quantity: number }> = {}
+        const categoryStats: Record<string, number> = {}
+
+        saleItems?.forEach((item: any) => {
+          const productName = item.product?.name || 'Desconocido'
+          const categoryName = item.product?.category?.name || 'Sin categoría'
+          const total = Number(item.total_price) || 0
+          const quantity = item.quantity || 0
+
+          // Productos
+          if (!productStats[productName]) {
+            productStats[productName] = { sales: 0, quantity: 0 }
+          }
+          productStats[productName].sales += total
+          productStats[productName].quantity += quantity
+
+          // Categorías
+          categoryStats[categoryName] = (categoryStats[categoryName] || 0) + total
+        })
+
+        // Top 5 Productos
+        const processedProductData: ProductData[] = Object.entries(productStats)
+          .map(([name, stats]) => ({
+            name,
+            sales: stats.sales,
+            quantity: stats.quantity
+          }))
+          .sort((a, b) => b.sales - a.sales)
+          .slice(0, 5)
+
+        setProductData(processedProductData)
+
+        // Categorías
+        const processedCategoryData: CategoryData[] = Object.entries(categoryStats)
+          .map(([name, value], index) => ({
+            name,
+            value,
+            color: `hsl(${index * 45}, 70%, 50%)`
+          }))
+          .sort((a, b) => b.value - a.value)
+
+        setCategoryData(processedCategoryData)
+        
+      } catch (error) {
+        console.error('Error fetching reports data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchReportsData()
+  }, [dateRange])
 
   const formatPrice = (price: number) => {
     return `₱${(price / 1000000).toFixed(1)}M`
