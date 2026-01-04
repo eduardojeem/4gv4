@@ -113,8 +113,15 @@ export function useSuppliers() {
                 query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,contact_person.ilike.%${q}%`)
             }
             if (params?.status && params.status !== 'all') {
-                if (params.status === 'active') query = query.eq('is_active', true)
-                if (params.status === 'inactive') query = query.eq('is_active', false)
+                // Try status column first, fallback to is_active for backward compatibility
+                if (params.status === 'active') {
+                    query = query.or('status.eq.active,is_active.eq.true')
+                } else if (params.status === 'inactive') {
+                    query = query.or('status.eq.inactive,is_active.eq.false')
+                } else {
+                    // For pending/suspended, only use status column
+                    query = query.eq('status', params.status)
+                }
             }
             if (params?.businessType && params.businessType !== 'all') {
                 query = query.eq('business_type', params.businessType)
@@ -135,7 +142,7 @@ export function useSuppliers() {
 
             const dbSuppliers = data || []
             
-            // Map DB supplier to UI Supplier
+            // Map DB supplier to UI Supplier with backward compatibility
             const list: Supplier[] = dbSuppliers.map((s: any) => ({
                 id: s.id,
                 name: s.name,
@@ -148,7 +155,8 @@ export function useSuppliers() {
                 postal_code: s.postal_code || '',
                 website: s.website || '',
                 business_type: (s.business_type || 'distributor') as any, 
-                status: (s.is_active ? 'active' : 'inactive') as 'active' | 'inactive',
+                // Use status column if available, otherwise map from is_active
+                status: s.status || (s.is_active ? 'active' : 'inactive') as 'active' | 'inactive' | 'pending' | 'suspended',
                 rating: s.rating || 0,
                 products_count: s.products_count || 0,
                 total_orders: s.total_orders || 0,
