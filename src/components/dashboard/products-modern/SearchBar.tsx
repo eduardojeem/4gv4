@@ -26,7 +26,7 @@ export const SearchBar = React.memo(function SearchBar({
       <label htmlFor="product-search" className="sr-only">
         Buscar productos
       </label>
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden="true" />
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" aria-hidden="true" />
       <Input
         id="product-search"
         type="search"
@@ -35,7 +35,7 @@ export const SearchBar = React.memo(function SearchBar({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="pl-10 h-11 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+        className="pl-10 h-11 border-gray-200 dark:border-gray-700 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-900"
       />
     </div>
   )

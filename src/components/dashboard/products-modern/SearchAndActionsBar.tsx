@@ -38,7 +38,7 @@ export function SearchAndActionsBar({
   className
 }: SearchAndActionsBarProps) {
   return (
-    <Card className={cn('border-0 shadow-md', className)}>
+    <Card className={cn('border-0 shadow-md bg-white dark:bg-gray-800', className)}>
       <CardContent className="p-4">
         <div className="flex flex-col sm:flex-row gap-3">
           {/* Search Bar */}

@@ -418,7 +418,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       console.error('Error creating product:', err)
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Error desconocido' 
+        error: err instanceof Error ? err.message : (typeof err === 'object' ? JSON.stringify(err) : 'Error desconocido')
       }
     }
   }, [supabase, fetchProducts, fetchDashboardStats])

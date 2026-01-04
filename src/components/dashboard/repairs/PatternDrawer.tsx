@@ -11,6 +11,7 @@ interface PatternDrawerProps {
   value?: string
   onChange: (pattern: string) => void
   disabled?: boolean
+  minimal?: boolean
 }
 
 interface Point {
@@ -20,7 +21,7 @@ interface Point {
   col: number
 }
 
-export function PatternDrawer({ value, onChange, disabled }: PatternDrawerProps) {
+export function PatternDrawer({ value, onChange, disabled, minimal = false }: PatternDrawerProps) {
   const [isDrawing, setIsDrawing] = useState(false)
   const [selectedPoints, setSelectedPoints] = useState<Point[]>([])
   const [currentPath, setCurrentPath] = useState<string>('')
@@ -333,6 +334,34 @@ export function PatternDrawer({ value, onChange, disabled }: PatternDrawerProps)
       setSelectedPoints(parsedPoints)
     }
   }, [value, points])
+
+  if (minimal) {
+    return (
+      <div className="flex flex-col items-center">
+        <div className="relative bg-muted/20 rounded-xl p-2 border border-muted-foreground/20">
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_SIZE}
+            height={CANVAS_SIZE}
+            className={cn(
+              "cursor-default",
+              disabled && "opacity-90"
+            )}
+            style={{ 
+              width: '200px', 
+              height: '200px',
+              touchAction: 'none'
+            }}
+          />
+        </div>
+        {value && (
+          <div className="mt-2 text-sm font-medium text-center text-muted-foreground">
+            {value.split('(')[0].trim()}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <Card className="w-full">

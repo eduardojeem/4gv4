@@ -24,7 +24,7 @@ export const ViewModeSelector = React.memo(function ViewModeSelector({
     <div 
       role="group" 
       aria-label="Selector de modo de vista"
-      className={cn('flex items-center gap-1 border rounded-lg p-1 bg-gray-50', className)}
+      className={cn('flex items-center gap-1 border rounded-lg p-1 bg-gray-50 dark:bg-gray-800 dark:border-gray-700', className)}
     >
       <Button
         variant={viewMode === 'table' ? 'secondary' : 'ghost'}

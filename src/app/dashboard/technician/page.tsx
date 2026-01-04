@@ -24,6 +24,7 @@ import type { RepairFormData } from '@/schemas'
 import { Repair } from '@/types/repairs'
 import { toast } from 'sonner'
 import { RepairList } from '@/components/dashboard/repairs/RepairList'
+import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
 
 export default function TechnicianPanel() {
@@ -49,6 +50,8 @@ export default function TechnicianPanel() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<RepairFormMode>('edit')
   const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [detailRepair, setDetailRepair] = useState<Repair | null>(null)
 
   const filteredRepairs = useMemo(() => {
     if (!searchTerm) return repairs
@@ -98,14 +101,33 @@ export default function TechnicianPanel() {
     setIsDialogOpen(true)
   }
 
+  const handleViewRepair = (repair: Repair) => {
+    setDetailRepair(repair)
+    setIsDetailOpen(true)
+  }
+
   const handleFormSubmit = async (data: RepairFormData) => {
     try {
       if (selectedRepair) {
-        // Convertir RepairFormData a RepairUpdateData
-        const updateData: any = {
-          ...data
+        const d = data.devices[0]
+        const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
+
+        const updatePayload = {
+          customer_id: data.existingCustomerId,
+          device_brand: d.brand,
+          device_model: d.model,
+          device_type: d.deviceType,
+          problem_description: d.issue,
+          diagnosis: d.description,
+          access_type: d.accessType || 'none',
+          access_password: d.accessPassword || null,
+          priority: data.priority,
+          urgency,
+          technician_id: d.technician,
+          estimated_cost: d.estimatedCost,
         }
-        await updateRepair(selectedRepair.id, updateData)
+        
+        await updateRepair(selectedRepair.id, updatePayload as unknown as Repair)
         toast.success('Reparación actualizada correctamente')
       } else {
         const d = data.devices[0]
@@ -118,26 +140,15 @@ export default function TechnicianPanel() {
           model: d.model,
           issue: d.issue,
           description: d.description || '',
+          accessType: d.accessType || 'none',
+          accessPassword: d.accessPassword || undefined,
           priority: data.priority,
           urgency,
           technician_id: d.technician,
           estimated_cost: d.estimatedCost || 0,
-          metadata: d.accessPassword ? { device_password: d.accessPassword } : undefined
         }
         
-        // Convertir a RepairCreateData para el hook
-        const createData: any = {
-          customer_name: data.customerName,
-          customer_phone: data.customerPhone,
-          device_brand: d.brand,
-          device_model: d.model,
-          issue_description: d.issue,
-          priority: data.priority,
-          urgency,
-          estimated_cost: d.estimatedCost || 0
-        }
-        
-        const created = await createRepair(createData)
+        const created = await createRepair(payload)
         if (created?.id && Array.isArray(d.images) && d.images.length > 0) {
           await addImages(created.id, d.images, 'general')
         }
@@ -162,6 +173,7 @@ export default function TechnicianPanel() {
   }, [isDialogOpen])
 
   const initialFormData: Partial<RepairFormData> | undefined = selectedRepair ? {
+    existingCustomerId: selectedRepair.customer.id,
     customerName: selectedRepair.customer.name,
     customerPhone: selectedRepair.customer.phone,
     customerEmail: selectedRepair.customer.email,
@@ -173,7 +185,8 @@ export default function TechnicianPanel() {
       model: selectedRepair.model,
       issue: selectedRepair.issue,
       description: selectedRepair.description,
-      accessType: 'none' as const,
+      accessType: selectedRepair.accessType || 'none',
+      accessPassword: selectedRepair.accessPassword || '',
       technician: selectedRepair.technician?.id || '',
       estimatedCost: selectedRepair.estimatedCost,
       images: []
@@ -243,11 +256,16 @@ export default function TechnicianPanel() {
             onDragStart={onDragStart}
             onDropTo={onDropTo}
             onEdit={handleEditRepair}
+            onView={handleViewRepair}
             technicianIds={technicianIds}
             showMyRepairsOnly={showMyRepairsOnly}
           />
         ) : (
-          <RepairList repairs={filteredRepairs} onEdit={handleEditRepair} />
+          <RepairList 
+            repairs={filteredRepairs} 
+            onEdit={handleEditRepair} 
+            onView={handleViewRepair}
+          />
         )}
       </section>
 
@@ -258,6 +276,16 @@ export default function TechnicianPanel() {
         onSubmit={handleFormSubmit}
         initialData={initialFormData}
         technicians={technicianOptions}
+      />
+      
+      <RepairDetailDialog
+        open={isDetailOpen}
+        repair={detailRepair}
+        onClose={() => setIsDetailOpen(false)}
+        onEdit={(repair) => {
+            setIsDetailOpen(false)
+            handleEditRepair(repair)
+        }}
       />
     </div>
   )

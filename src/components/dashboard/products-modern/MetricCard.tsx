@@ -37,7 +37,7 @@ export const MetricCard = React.memo(function MetricCard({
       tabIndex={0}
       aria-label={`${title}: ${value}. ${subtitle}. Haz clic para filtrar`}
       className={cn(
-        'border-0 shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2',
+        'border-0 shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900',
         gradient,
         className
       )}

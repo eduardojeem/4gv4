@@ -274,11 +274,12 @@ export function RepairDetailDialog({
                       {repair.accessType === 'pattern' && repair.accessPassword && (
                         <div>
                           <p className="text-sm font-medium mb-2">Patrón de Desbloqueo</p>
-                          <div className="pointer-events-none transform scale-75 origin-top-left bg-background rounded-lg border p-2 w-fit">
+                          <div className="w-fit mx-auto bg-background rounded-lg p-2">
                              <PatternDrawer 
                                value={repair.accessPassword} 
                                onChange={() => {}} 
                                disabled={true} 
+                               minimal={true}
                              />
                           </div>
                         </div>
@@ -455,10 +456,16 @@ export function RepairDetailDialog({
           </ScrollArea>
         </Tabs>
         
-        <DialogFooter className="p-4 border-t bg-background">
+        <DialogFooter className="p-4 border-t bg-background flex justify-between sm:justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
             Cerrar
           </Button>
+          {onEdit && (
+            <Button onClick={() => onEdit(repair)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Editar
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

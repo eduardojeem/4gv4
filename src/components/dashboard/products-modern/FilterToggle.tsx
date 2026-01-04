@@ -29,7 +29,7 @@ export const FilterToggle = React.memo(function FilterToggle({
       aria-controls="filter-panel"
       className={cn(
         'h-11',
-        isOpen && 'bg-blue-50 border-blue-200',
+        isOpen && 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800',
         className
       )}
     >

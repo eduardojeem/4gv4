@@ -76,7 +76,7 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         model: r.device_model,
         issue: r.problem_description,
         description: r.diagnosis || r.solution || '',
-        accessType: (r.access_type as 'none' | 'pin' | 'password' | 'pattern' | 'biometric' | 'other') || 'none',
+        accessType: (r.access_type?.toLowerCase() as 'none' | 'pin' | 'password' | 'pattern' | 'biometric' | 'other') || 'none',
         accessPassword: r.access_password || undefined,
         status: r.status as RepairStatus, // Ahora usamos el estado directamente de la DB
         priority: (r.priority as RepairPriority) || 'medium',

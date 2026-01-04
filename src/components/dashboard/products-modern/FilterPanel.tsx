@@ -74,8 +74,8 @@ export function FilterPanel({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Filtros Avanzados</h3>
-          <p className="text-sm text-gray-600 mt-1" role="status" aria-live="polite">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Filtros Avanzados</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1" role="status" aria-live="polite">
             {filteredCount} {filteredCount === 1 ? 'producto' : 'productos'} encontrados
           </p>
         </div>
@@ -85,7 +85,7 @@ export function FilterPanel({
             size="sm"
             aria-label="Limpiar todos los filtros"
             onClick={onClearFilters}
-            className="text-gray-600 hover:text-gray-900"
+            className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
           >
             <X className="h-4 w-4 mr-2" />
             Limpiar

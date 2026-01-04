@@ -88,9 +88,13 @@ export default function ModernProductsPage() {
   }
 
   const handleProductDuplicate = async (product: Product) => {
+    // Exclude system fields and relations that shouldn't be duplicated
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id, created_at, updated_at, category, supplier, ...rest } = product as any
+
     const duplicatedData = {
-      ...product,
-      sku: `DUP-${product.sku}`,
+      ...rest,
+      sku: `DUP-${product.sku}-${Math.floor(Math.random() * 1000)}`,
       name: `${product.name} (Copia)`,
       dimensions: typeof product.dimensions === 'string' 
         ? JSON.parse(product.dimensions) 

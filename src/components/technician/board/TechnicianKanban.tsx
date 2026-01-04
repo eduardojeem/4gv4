@@ -1,20 +1,28 @@
 'use client'
 
 import { useState } from 'react'
-import { Repair, DbRepairStatus, RepairPriority } from '@/types/repairs'
-import { Card, CardContent } from '@/components/ui/card'
+import { Repair, DbRepairStatus, RepairStatus } from '@/types/repairs'
+import { statusConfig } from '@/config/repair-constants'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { Inbox, Activity, Wrench, CheckCircle, Package, Calendar, AlertCircle, XCircle } from 'lucide-react'
+import { Package } from 'lucide-react'
 import {
     DndContext,
     DragOverlay,
-    SortableContext,
-    useSortable,
     DragStartEvent,
     DragOverEvent,
-    DragEndEvent
-} from '@/components/stubs/HeavyDependencyStubs';
+    DragEndEvent,
+    useSensor,
+    useSensors,
+    PointerSensor,
+    closestCorners
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    useSortable
+} from '@dnd-kit/sortable';
+import { RepairCard } from '@/components/dashboard/repairs/RepairCard'
+import { CSS } from '@dnd-kit/utilities';
 
 interface TechnicianKanbanProps {
     repairs: Repair[]
@@ -23,36 +31,10 @@ interface TechnicianKanbanProps {
     onDropTo: (status: DbRepairStatus) => void
     draggedRepairId: string | null
     onEdit: (repair: Repair) => void
+    onView?: (repair: Repair) => void
     technicianIds: string[]
     showMyRepairsOnly?: boolean
 }
-
-const technicianColumns: Record<DbRepairStatus, { label: string, icon: any, color: string, bg: string }> = {
-    recibido: { label: 'Recibido', icon: Inbox, color: 'text-slate-600', bg: 'bg-slate-100' },
-    diagnostico: { label: 'Diagnóstico', icon: Activity, color: 'text-yellow-600', bg: 'bg-yellow-50' },
-    reparacion: { label: 'En Reparación', icon: Wrench, color: 'text-blue-600', bg: 'bg-blue-50' },
-    pausado: { label: 'Pausado', icon: AlertCircle, color: 'text-orange-600', bg: 'bg-orange-50' },
-    listo: { label: 'Listo', icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
-    entregado: { label: 'Entregado', icon: Package, color: 'text-gray-600', bg: 'bg-gray-50' },
-    cancelado: { label: 'Cancelado', icon: XCircle, color: 'text-red-600', bg: 'bg-red-50' }
-}
-
-const priorityConfig: Record<RepairPriority, { label: string, color: string }> = {
-    low: { label: 'Baja', color: 'bg-slate-200 text-slate-700' },
-    medium: { label: 'Media', color: 'bg-blue-100 text-blue-700' },
-    high: { label: 'Alta', color: 'bg-red-100 text-red-700' }
-}
-
-// Comentado temporalmente para optimización de bundle
-// const dropAnimation: DropAnimation = {
-//     sideEffects: defaultDropAnimationSideEffects({
-//         styles: {
-//             active: {
-//                 opacity: '0.5',
-//             },
-//         },
-//     }),
-// }
 
 export function TechnicianKanban({
     repairs,
@@ -61,21 +43,18 @@ export function TechnicianKanban({
     onDropTo,
     draggedRepairId,
     onEdit,
+    onView,
     showMyRepairsOnly
 }: TechnicianKanbanProps) {
     const [activeId, setActiveId] = useState<string | null>(null)
 
-    // Comentado temporalmente para optimización de bundle
-    // const sensors = useSensors(
-    //     useSensor(PointerSensor, {
-    //         activationConstraint: {
-    //             distance: 5,
-    //         },
-    //     }),
-    //     useSensor(KeyboardSensor, {
-    //         coordinateGetter: sortableKeyboardCoordinates,
-    //     })
-    // )
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        })
+    )
 
     const handleDragStart = (event: DragStartEvent) => {
         const { active } = event
@@ -101,7 +80,7 @@ export function TechnicianKanban({
         let newStatus: DbRepairStatus | undefined
 
         // Check if we dropped directly onto a column
-        if (overId in technicianColumns) {
+        if (overId in statusConfig) {
             newStatus = overId as DbRepairStatus
         } else {
             // Check if we dropped onto another card
@@ -123,13 +102,15 @@ export function TechnicianKanban({
 
     return (
         <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
         >
             <div className="flex h-full gap-4 overflow-x-auto pb-4">
-                {(Object.keys(technicianColumns) as DbRepairStatus[]).map((status) => {
-                    const config = technicianColumns[status]
+                {(Object.keys(statusConfig) as DbRepairStatus[]).map((status) => {
+                    const config = statusConfig[status]
                     const repairIds = kanbanOrder[status] || []
                     const columnRepairs = repairIds
                         .map(id => repairs.find(r => r.id === id))
@@ -143,14 +124,15 @@ export function TechnicianKanban({
                             icon={config.icon}
                             count={columnRepairs.length}
                             color={config.color}
-                            bg={config.bg}
-                            repairs={columnRepairs}
+                            bg={config.color}
+                            columnBg={config.columnBg}
                         >
                             <SortableContext
                                 items={repairIds}
                             >
                                 {columnRepairs.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center h-32 text-muted-foreground text-xs border-2 border-dashed rounded-lg bg-white/50 p-4 text-center">
+                                        <Package className="h-6 w-6 mb-2 opacity-50" />
                                         <p>{showMyRepairsOnly ? "No tienes reparaciones asignadas" : "Sin reparaciones"}</p>
                                     </div>
                                 ) : (
@@ -159,6 +141,7 @@ export function TechnicianKanban({
                                             key={repair.id}
                                             repair={repair}
                                             onEdit={onEdit}
+                                            onView={onView}
                                         />
                                     ))
                                 )}
@@ -184,11 +167,11 @@ interface KanbanColumnProps {
     count: number
     color: string
     bg: string
-    repairs: Repair[]
+    columnBg?: string
     children: React.ReactNode
 }
 
-function KanbanColumn({ id, title, icon: Icon, count, color, bg, children }: KanbanColumnProps) {
+function KanbanColumn({ id, title, icon: Icon, count, color, bg, columnBg, children }: KanbanColumnProps) {
     const { setNodeRef } = useSortable({
         id: id,
         data: {
@@ -199,11 +182,11 @@ function KanbanColumn({ id, title, icon: Icon, count, color, bg, children }: Kan
     return (
         <div
             ref={setNodeRef}
-            className="flex h-full min-w-[300px] flex-col rounded-lg bg-muted/30 p-2"
+            className={cn("flex h-full min-w-[300px] flex-col rounded-lg p-2", columnBg || "bg-muted/30")}
         >
             <div className={cn("mb-2 flex items-center justify-between rounded-md border p-3 shadow-sm", bg)}>
                 <div className="flex items-center gap-2 font-semibold">
-                    <Icon className={cn("h-4 w-4", color)} />
+                    <Icon className={cn("h-4 w-4", color.split(' ')[1])} />
                     <span>{title}</span>
                 </div>
                 <Badge variant="secondary" className="bg-white/50">
@@ -221,9 +204,10 @@ function KanbanColumn({ id, title, icon: Icon, count, color, bg, children }: Kan
 interface SortableRepairCardProps {
     repair: Repair
     onEdit: (repair: Repair) => void
+    onView?: (repair: Repair) => void
 }
 
-function SortableRepairCard({ repair, onEdit }: SortableRepairCardProps) {
+function SortableRepairCard({ repair, onEdit, onView }: SortableRepairCardProps) {
     const {
         attributes,
         listeners,
@@ -251,7 +235,7 @@ function SortableRepairCard({ repair, onEdit }: SortableRepairCardProps) {
                 style={style}
                 className="opacity-30"
             >
-                <RepairCardContent repair={repair} />
+                <RepairCard repair={repair} />
             </div>
         )
     }
@@ -262,10 +246,10 @@ function SortableRepairCard({ repair, onEdit }: SortableRepairCardProps) {
             style={style}
             {...attributes}
             {...listeners}
-            onClick={() => onEdit(repair)}
+            onClick={() => onView ? onView(repair) : onEdit(repair)}
             className="cursor-grab active:cursor-grabbing"
         >
-            <RepairCardContent repair={repair} />
+            <RepairCard repair={repair} />
         </div>
     )
 }
@@ -274,44 +258,7 @@ function RepairCardOverlay({ repair }: { repair?: Repair }) {
     if (!repair) return null
     return (
         <div className="cursor-grabbing rotate-2 scale-105 shadow-xl">
-            <RepairCardContent repair={repair} />
+            <RepairCard repair={repair} />
         </div>
-    )
-}
-
-function RepairCardContent({ repair }: { repair: Repair }) {
-    return (
-        <Card className={cn(
-            "hover:shadow-md transition-all border-l-4",
-            repair.urgency === 'urgent' ? 'border-l-red-500' : 'border-l-transparent'
-        )}>
-            <CardContent className="p-3 space-y-2">
-                <div className="flex justify-between items-start">
-                    <span className="font-medium text-sm truncate max-w-[150px]">{repair.device}</span>
-                    <Badge className={cn("text-[10px] px-1 py-0 h-5", priorityConfig[repair.priority].color)}>
-                        {priorityConfig[repair.priority].label}
-                    </Badge>
-                </div>
-
-                <p className="text-xs text-muted-foreground line-clamp-2 min-h-[2.5em]">
-                    {repair.issue}
-                </p>
-
-                {repair.urgency === 'urgent' && (
-                    <div className="flex items-center gap-1 text-xs text-red-600 font-medium">
-                        <AlertCircle className="h-3 w-3" />
-                        <span>Urgente</span>
-                    </div>
-                )}
-
-                <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t mt-2">
-                    <div className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(repair.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                    </div>
-                    <span className="font-mono text-[10px] bg-slate-100 px-1 rounded">{repair.id}</span>
-                </div>
-            </CardContent>
-        </Card>
     )
 }

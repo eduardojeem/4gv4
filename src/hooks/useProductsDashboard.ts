@@ -22,12 +22,19 @@ interface UseProductsDashboardProps {
 
 interface UseProductsDashboardReturn {
   // Filtered and processed data
-  displayedProducts: Product[]
+  displayedProducts: Product[] // All filtered products (for export, metrics)
+  paginatedProducts: Product[] // Current page products
   metrics: DashboardMetrics
   
   // UI State
   viewMode: ViewMode
   setViewMode: (mode: ViewMode) => void
+  currentPage: number
+  setCurrentPage: (page: number) => void
+  itemsPerPage: number
+  setItemsPerPage: (items: number) => void
+  totalPages: number
+  totalItems: number
   searchQuery: string
   setSearchQuery: (query: string) => void
   filters: DashboardFilters
@@ -58,6 +65,8 @@ export function useProductsDashboard({
 }: UseProductsDashboardProps): UseProductsDashboardReturn {
   // UI State
   const [viewMode, setViewMode] = useState<ViewMode>('table')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [filters, setFilters] = useState<DashboardFilters>({})
@@ -96,6 +105,19 @@ export function useProductsDashboard({
   const displayedProducts = useMemo(() => {
     return sortProducts(filteredProducts, sortConfig)
   }, [filteredProducts, sortConfig])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filters, searchQuery, sortConfig])
+
+  // Apply pagination
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return displayedProducts.slice(startIndex, startIndex + itemsPerPage)
+  }, [displayedProducts, currentPage, itemsPerPage])
+
+  const totalPages = Math.ceil(displayedProducts.length / itemsPerPage)
 
   // Calculate metrics from all products
   const metrics = useMemo(() => {
@@ -156,11 +178,18 @@ export function useProductsDashboard({
   return {
     // Data
     displayedProducts,
+    paginatedProducts,
     metrics,
     
     // UI State
     viewMode,
     setViewMode,
+    currentPage,
+    setCurrentPage,
+    itemsPerPage,
+    setItemsPerPage,
+    totalPages,
+    totalItems: displayedProducts.length,
     searchQuery,
     setSearchQuery,
     filters,

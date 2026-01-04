@@ -39,6 +39,10 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   featured?: boolean
   image?: string
   
+  // Offer fields
+  offer_price?: number
+  has_offer?: boolean
+
   // Additional legacy fields
   recent_movements?: ProductMovement[]
   alerts?: ProductAlert[]

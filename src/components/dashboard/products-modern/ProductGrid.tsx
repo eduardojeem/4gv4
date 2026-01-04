@@ -36,11 +36,11 @@ export function ProductGrid({
       <div className={cn('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6', className)}>
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="animate-pulse">
-            <div className="bg-gray-200 aspect-square rounded-t-lg" />
-            <div className="bg-gray-100 p-4 space-y-3 rounded-b-lg">
-              <div className="h-4 bg-gray-200 rounded w-3/4" />
-              <div className="h-3 bg-gray-200 rounded w-1/2" />
-              <div className="h-6 bg-gray-200 rounded w-2/3" />
+            <div className="bg-gray-200 dark:bg-gray-700 aspect-square rounded-t-lg" />
+            <div className="bg-gray-100 dark:bg-gray-800 p-4 space-y-3 rounded-b-lg">
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
+              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+              <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
             </div>
           </div>
         ))}
@@ -51,7 +51,7 @@ export function ProductGrid({
   if (products.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="text-gray-400 mb-4">
+        <div className="text-gray-400 dark:text-gray-600 mb-4">
           <svg
             className="w-24 h-24 mx-auto"
             fill="none"
@@ -66,10 +66,10 @@ export function ProductGrid({
             />
           </svg>
         </div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
           No se encontraron productos
         </h3>
-        <p className="text-gray-600 max-w-md">
+        <p className="text-gray-600 dark:text-gray-400 max-w-md">
           No hay productos que coincidan con los filtros aplicados. Intenta ajustar tus criterios de búsqueda.
         </p>
       </div>

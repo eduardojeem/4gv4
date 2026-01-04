@@ -39,9 +39,13 @@ export async function validateProductForm(
     errors.sku = 'El SKU solo puede contener letras, números, guiones y guiones bajos'
   } else if (!isEditing) {
     // Validar SKU único solo para productos nuevos
-    const isUnique = await checkSKUUnique(formData.sku)
-    if (!isUnique) {
-      errors.sku = 'Este SKU ya existe. Por favor usa otro código.'
+    try {
+      const isUnique = await checkSKUUnique(formData.sku)
+      if (!isUnique) {
+        errors.sku = 'Este SKU ya existe o hubo un error al verificarlo. Por favor intenta nuevamente.'
+      }
+    } catch (error) {
+      errors.sku = 'Error al verificar disponibilidad del SKU. Verifica tu conexión.'
     }
   }
 
@@ -192,14 +196,18 @@ async function checkSKUUnique(sku: string): Promise<boolean> {
     
     if (!response.ok) {
       console.error('Error checking SKU uniqueness')
-      return true // En caso de error, permitir continuar
+      // Si hay error en el servidor, asumimos que no es único para forzar reintento o precaución
+      // O mejor aún, lanzamos error para que el validador lo capture
+      throw new Error('Error verifying SKU uniqueness')
     }
     
     const data = await response.json()
     return data.isUnique
   } catch (error) {
     console.error('Error checking SKU:', error)
-    return true // En caso de error, permitir continuar
+    // En caso de error de red/servidor, retornamos false para prevenir duplicados accidentales
+    // y forzar al usuario a intentar nuevamente cuando la conexión se restablezca
+    return false 
   }
 }
 
