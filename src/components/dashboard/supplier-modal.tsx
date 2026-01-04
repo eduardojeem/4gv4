@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import {
   Building2, Mail, Phone, MapPin, Globe, Star,
-  Package, Truck, User, Sparkles, Tag
+  Package, Truck, User, Sparkles, Tag, AlertCircle
 } from 'lucide-react'
 import {
   Dialog,
@@ -20,12 +20,15 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { validateSupplier, formatValidationErrors, businessTypeLabels, statusLabels, type SupplierFormData } from '@/lib/validations/supplier'
+import type { UISupplier } from '@/lib/types/supplier-ui'
 
 interface SupplierModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (supplier: Partial<import('@/lib/types/supplier-ui').UISupplier>) => void
-  supplier?: Partial<import('@/lib/types/supplier-ui').UISupplier> | null
+  onSave: (supplier: Partial<UISupplier>) => Promise<void>
+  supplier?: Partial<UISupplier> | null
   mode: 'add' | 'edit'
   loading?: boolean
 }
@@ -40,7 +43,7 @@ const BUSINESS_TYPES = [
 
 export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading = false }: SupplierModalProps) {
   const [activeTab, setActiveTab] = useState('basic')
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<SupplierFormData>({
     name: '',
     contact_person: '',
     email: '',
@@ -51,11 +54,12 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
     postal_code: '',
     website: '',
     business_type: 'manufacturer',
-    status: 'active',
+    status: 'pending',
     rating: 0,
     notes: ''
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (supplier && mode === 'edit') {
@@ -70,7 +74,7 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
         postal_code: supplier.postal_code || '',
         website: supplier.website || '',
         business_type: supplier.business_type || 'manufacturer',
-        status: supplier.status || 'active',
+        status: supplier.status || 'pending',
         rating: supplier.rating || 0,
         notes: supplier.notes || ''
       })
@@ -86,7 +90,7 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
         postal_code: '',
         website: '',
         business_type: 'manufacturer',
-        status: 'active',
+        status: 'pending',
         rating: 0,
         notes: ''
       })
@@ -95,169 +99,130 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
     setActiveTab('basic')
   }, [supplier, mode, isOpen])
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: keyof SupplierFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }))
     }
   }
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {}
-
-    if (!formData.name.trim()) newErrors.name = 'Nombre requerido'
-    if (!formData.email.trim()) newErrors.email = 'Email requerido'
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Email inválido'
-    if (!formData.phone.trim()) newErrors.phone = 'Teléfono requerido'
-    if (!formData.contact_person.trim()) newErrors.contact_person = 'Contacto requerido'
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (validateForm()) {
-      onSave(formData as any)
+    
+    // Validate form data
+    const validation = validateSupplier(formData)
+    
+    if (!validation.success) {
+      const formattedErrors = formatValidationErrors(validation.errors)
+      setErrors(formattedErrors)
+      
+      // Switch to the tab with the first error
+      const firstErrorField = Object.keys(formattedErrors)[0]
+      if (['name', 'contact_person', 'email', 'phone'].includes(firstErrorField)) {
+        setActiveTab('basic')
+      } else if (['address', 'city', 'country', 'postal_code', 'website'].includes(firstErrorField)) {
+        setActiveTab('contact')
+      } else {
+        setActiveTab('business')
+      }
+      
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+      await onSave(validation.data)
+      onClose()
+    } catch (error) {
+      console.error('Error saving supplier:', error)
+      // Handle specific database errors
+      if (error instanceof Error) {
+        if (error.message.includes('duplicate key') || error.message.includes('23505')) {
+          setErrors({ email: 'Ya existe un proveedor con este email' })
+          setActiveTab('basic')
+        } else {
+          setErrors({ general: 'Error al guardar el proveedor. Intenta nuevamente.' })
+        }
+      }
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const renderStars = () => (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star
-          key={star}
-          className={`h-5 w-5 cursor-pointer transition-colors ${star <= formData.rating
-              ? 'fill-yellow-400 text-yellow-400'
-              : 'text-gray-300 hover:text-yellow-400'
-            }`}
-          onClick={() => handleInputChange('rating', star)}
-        />
-      ))}
-    </div>
-  )
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] w-full lg:max-w-6xl h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-950">
-        {/* Modern Header */}
-        <div className="bg-slate-900 dark:bg-slate-950 px-8 py-6 text-white border-b border-slate-800">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-slate-800 dark:bg-slate-900 rounded-xl border border-slate-700">
-                <Building2 className="h-6 w-6 text-blue-400" />
-              </div>
-              <div>
-                <DialogTitle className="text-2xl font-bold text-white tracking-tight">
-                  {mode === 'add' ? 'Nuevo Proveedor' : 'Editar Proveedor'}
-                </DialogTitle>
-                <DialogDescription className="text-slate-400 mt-1">
-                  {mode === 'add' ? 'Agregar un nuevo proveedor al sistema' : `Editar: ${supplier?.name}`}
-                </DialogDescription>
-              </div>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+        <div className="flex flex-col h-full">
+          {/* Header */}
+          <div className="flex items-center gap-4 pb-6 border-b">
+            <div className="p-3 bg-primary/10 rounded-lg">
+              <Building2 className="h-6 w-6 text-primary" />
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
-                <span className={`text-sm font-medium ${formData.status === 'active' ? 'text-green-400' : 'text-slate-400'}`}>
-                  {formData.status === 'active' ? 'Activo' : 'Inactivo'}
-                </span>
-                <Switch
-                  checked={formData.status === 'active'}
-                  onCheckedChange={(checked) => handleInputChange('status', checked ? 'active' : 'inactive')}
-                  className="data-[state=checked]:bg-green-500"
-                />
-              </div>
+            <div className="flex-1">
+              <DialogTitle className="text-2xl font-bold">
+                {mode === 'add' ? 'Nuevo Proveedor' : 'Editar Proveedor'}
+              </DialogTitle>
+              <DialogDescription>
+                {mode === 'add' ? 'Agregar un nuevo proveedor al sistema' : `Editar: ${supplier?.name}`}
+              </DialogDescription>
             </div>
           </div>
-        </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col md:flex-row flex-1 overflow-hidden">
-          {/* Sidebar Navigation */}
-          <div className="md:w-64 bg-slate-50 dark:bg-slate-900/50 border-r border-slate-200 dark:border-slate-800 p-4 overflow-y-auto">
-            <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="w-full">
-              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 p-0">
-                <TabsTrigger
-                  value="basic"
-                  className="w-full justify-start gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg transition-all"
-                >
+          {/* General Error Alert */}
+          {errors.general && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{errors.general}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="flex-1 overflow-hidden">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="basic" className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
-                  <span className="font-medium">Información Básica</span>
-                  {errors.name && <span className="ml-auto w-2 h-2 rounded-full bg-red-500" />}
+                  Básico
+                  {(errors.name || errors.business_type || errors.status) && (
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                  )}
                 </TabsTrigger>
-                <TabsTrigger
-                  value="contact"
-                  className="w-full justify-start gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg transition-all"
-                >
+                <TabsTrigger value="contact" className="flex items-center gap-2">
                   <User className="h-4 w-4" />
-                  <span className="font-medium">Contacto</span>
-                  {(errors.email || errors.phone || errors.contact_person) && <span className="ml-auto w-2 h-2 rounded-full bg-red-500" />}
+                  Contacto
+                  {(errors.contact_person || errors.email || errors.phone) && (
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                  )}
                 </TabsTrigger>
-                <TabsTrigger
-                  value="additional"
-                  className="w-full justify-start gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-slate-900 dark:data-[state=active]:text-slate-100 data-[state=active]:shadow-sm border border-transparent data-[state=active]:border-slate-200 dark:data-[state=active]:border-slate-700 rounded-lg transition-all"
-                >
+                <TabsTrigger value="additional" className="flex items-center gap-2">
                   <Tag className="h-4 w-4" />
-                  <span className="font-medium">Adicional</span>
+                  Adicional
                 </TabsTrigger>
               </TabsList>
-            </Tabs>
 
-            {/* Quick Info */}
-            {supplier && (
-              <div className="mt-8 p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-                <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Vista Rápida</h4>
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Calificación</p>
-                    <div className="flex gap-0.5">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} className={`h-3 w-3 ${i < formData.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200 dark:text-slate-700'}`} />
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Estado</p>
-                    <Badge variant={formData.status === 'active' ? 'default' : 'secondary'} className="w-full justify-center">
-                      {formData.status === 'active' ? 'Activo' : 'Inactivo'}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Main Content */}
-          <div className="flex-1 overflow-y-auto bg-white dark:bg-slate-950 p-8">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full max-w-3xl mx-auto" orientation="vertical">
-
-              {/* Información Básica */}
-              <TabsContent value="basic" className="space-y-8 mt-0 animate-in fade-in-50 duration-500 slide-in-from-bottom-4">
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Datos del Proveedor</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Información principal de la empresa.</p>
-                  </div>
-                  
+              <div className="flex-1 overflow-y-auto py-6">
+                {/* Basic Information */}
+                <TabsContent value="basic" className="space-y-6 mt-0">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <Label htmlFor="name" className="text-slate-700 dark:text-slate-300">Nombre del Proveedor <span className="text-red-500">*</span></Label>
+                      <Label htmlFor="name">Nombre del Proveedor *</Label>
                       <Input
                         id="name"
                         value={formData.name}
                         onChange={(e) => handleInputChange('name', e.target.value)}
                         placeholder="Ej: Distribuidora ABC"
-                        className={`bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors ${errors.name ? 'border-red-500 focus:ring-red-200 dark:focus:ring-red-900' : 'focus:ring-slate-200 dark:focus:ring-slate-800'}`}
+                        className={errors.name ? 'border-red-500' : ''}
                       />
-                      {errors.name && <p className="text-xs text-red-500 font-medium mt-1">{errors.name}</p>}
+                      {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="business_type" className="text-slate-700 dark:text-slate-300">Tipo de Negocio</Label>
+                      <Label htmlFor="business_type">Tipo de Negocio</Label>
                       <Select
                         value={formData.business_type}
-                        onValueChange={(value) => handleInputChange('business_type', value)}
+                        onValueChange={(value) => handleInputChange('business_type', value as any)}
                       >
-                        <SelectTrigger className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors">
+                        <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -271,226 +236,177 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="status" className="text-slate-700 dark:text-slate-300">Estado</Label>
+                      <Label htmlFor="status">Estado</Label>
                       <Select
                         value={formData.status}
-                        onValueChange={(value) => handleInputChange('status', value)}
+                        onValueChange={(value) => handleInputChange('status', value as any)}
                       >
-                        <SelectTrigger className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors">
+                        <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="active">Activo</SelectItem>
                           <SelectItem value="inactive">Inactivo</SelectItem>
                           <SelectItem value="pending">Pendiente</SelectItem>
+                          <SelectItem value="suspended">Suspendido</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-slate-700 dark:text-slate-300">Calificación</Label>
-                      <div className="flex items-center gap-1 p-2 border border-slate-200 dark:border-slate-800 rounded-md bg-slate-50 dark:bg-slate-900">
+                      <Label>Calificación</Label>
+                      <div className="flex items-center gap-1">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <button
                             key={star}
                             type="button"
                             onClick={() => handleInputChange('rating', star)}
-                            className="focus:outline-none hover:scale-110 transition-transform"
+                            className="focus:outline-none"
                           >
                             <Star
                               className={`h-5 w-5 ${
                                 star <= formData.rating
-                                  ? 'fill-amber-400 text-amber-400'
-                                  : 'text-slate-300 dark:text-slate-600 hover:text-amber-300'
+                                  ? 'fill-yellow-400 text-yellow-400'
+                                  : 'text-gray-300 hover:text-yellow-400'
                               }`}
                             />
                           </button>
                         ))}
-                        <span className="ml-2 text-sm text-slate-500 dark:text-slate-400">{formData.rating}/5</span>
+                        <span className="ml-2 text-sm text-muted-foreground">{formData.rating}/5</span>
                       </div>
                     </div>
                   </div>
-                </div>
-              </TabsContent>
+                </TabsContent>
 
-              {/* Contacto */}
-              <TabsContent value="contact" className="space-y-8 mt-0 animate-in fade-in-50 duration-500 slide-in-from-bottom-4">
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Información de Contacto</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Detalles de contacto y ubicación.</p>
-                  </div>
+                {/* Contact Information */}
+                <TabsContent value="contact" className="space-y-6 mt-0">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="contact_person">Nombre del Contacto *</Label>
+                      <Input
+                        id="contact_person"
+                        value={formData.contact_person}
+                        onChange={(e) => handleInputChange('contact_person', e.target.value)}
+                        placeholder="Juan Pérez"
+                        className={errors.contact_person ? 'border-red-500' : ''}
+                      />
+                      {errors.contact_person && <p className="text-sm text-red-500">{errors.contact_person}</p>}
+                    </div>
 
-                  {/* Contact Details */}
-                  <div className="space-y-4">
-                    <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2">Contacto Directo</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <Label htmlFor="contact_person" className="text-slate-700 dark:text-slate-300">Nombre del Contacto <span className="text-red-500">*</span></Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                          <Input
-                            id="contact_person"
-                            value={formData.contact_person}
-                            onChange={(e) => handleInputChange('contact_person', e.target.value)}
-                            placeholder="Juan Pérez"
-                            className={`pl-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors ${errors.contact_person ? 'border-red-500 focus:ring-red-200 dark:focus:ring-red-900' : 'focus:ring-slate-200 dark:focus:ring-slate-800'}`}
-                          />
-                        </div>
-                        {errors.contact_person && <p className="text-xs text-red-500 font-medium mt-1">{errors.contact_person}</p>}
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email *</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleInputChange('email', e.target.value)}
+                        placeholder="contacto@empresa.com"
+                        className={errors.email ? 'border-red-500' : ''}
+                      />
+                      {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
+                    </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="email" className="text-slate-700 dark:text-slate-300">Email <span className="text-red-500">*</span></Label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                          <Input
-                            id="email"
-                            type="email"
-                            value={formData.email}
-                            onChange={(e) => handleInputChange('email', e.target.value)}
-                            placeholder="contacto@empresa.com"
-                            className={`pl-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors ${errors.email ? 'border-red-500 focus:ring-red-200 dark:focus:ring-red-900' : 'focus:ring-slate-200 dark:focus:ring-slate-800'}`}
-                          />
-                        </div>
-                        {errors.email && <p className="text-xs text-red-500 font-medium mt-1">{errors.email}</p>}
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="phone">Teléfono *</Label>
+                      <Input
+                        id="phone"
+                        value={formData.phone}
+                        onChange={(e) => handleInputChange('phone', e.target.value)}
+                        placeholder="+1 234 567 8900"
+                        className={errors.phone ? 'border-red-500' : ''}
+                      />
+                      {errors.phone && <p className="text-sm text-red-500">{errors.phone}</p>}
+                    </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="phone" className="text-slate-700 dark:text-slate-300">Teléfono <span className="text-red-500">*</span></Label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                          <Input
-                            id="phone"
-                            value={formData.phone}
-                            onChange={(e) => handleInputChange('phone', e.target.value)}
-                            placeholder="+1 234 567 8900"
-                            className={`pl-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors ${errors.phone ? 'border-red-500 focus:ring-red-200 dark:focus:ring-red-900' : 'focus:ring-slate-200 dark:focus:ring-slate-800'}`}
-                          />
-                        </div>
-                        {errors.phone && <p className="text-xs text-red-500 font-medium mt-1">{errors.phone}</p>}
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="website">Sitio Web</Label>
+                      <Input
+                        id="website"
+                        value={formData.website}
+                        onChange={(e) => handleInputChange('website', e.target.value)}
+                        placeholder="https://www.empresa.com"
+                        className={errors.website ? 'border-red-500' : ''}
+                      />
+                      {errors.website && <p className="text-sm text-red-500">{errors.website}</p>}
+                    </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="website" className="text-slate-700 dark:text-slate-300">Sitio Web</Label>
-                        <div className="relative">
-                          <Globe className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                          <Input
-                            id="website"
-                            value={formData.website}
-                            onChange={(e) => handleInputChange('website', e.target.value)}
-                            placeholder="https://www.empresa.com"
-                            className="pl-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors focus:ring-slate-200 dark:focus:ring-slate-800"
-                          />
-                        </div>
-                      </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="address">Dirección</Label>
+                      <Input
+                        id="address"
+                        value={formData.address}
+                        onChange={(e) => handleInputChange('address', e.target.value)}
+                        placeholder="Calle Principal 123"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="city">Ciudad</Label>
+                      <Input
+                        id="city"
+                        value={formData.city}
+                        onChange={(e) => handleInputChange('city', e.target.value)}
+                        placeholder="Ciudad"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="country">País</Label>
+                      <Input
+                        id="country"
+                        value={formData.country}
+                        onChange={(e) => handleInputChange('country', e.target.value)}
+                        placeholder="País"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="postal_code">Código Postal</Label>
+                      <Input
+                        id="postal_code"
+                        value={formData.postal_code}
+                        onChange={(e) => handleInputChange('postal_code', e.target.value)}
+                        placeholder="12345"
+                      />
                     </div>
                   </div>
+                </TabsContent>
 
-                  {/* Address Details */}
-                  <div className="space-y-4 pt-4">
-                    <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 pb-2">Ubicación</h4>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="address" className="text-slate-700 dark:text-slate-300">Dirección</Label>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                          <Input
-                            id="address"
-                            value={formData.address}
-                            onChange={(e) => handleInputChange('address', e.target.value)}
-                            placeholder="Calle Principal 123"
-                            className="pl-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors focus:ring-slate-200 dark:focus:ring-slate-800"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="city" className="text-slate-700 dark:text-slate-300">Ciudad</Label>
-                          <Input
-                            id="city"
-                            value={formData.city}
-                            onChange={(e) => handleInputChange('city', e.target.value)}
-                            placeholder="Ciudad"
-                            className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors focus:ring-slate-200 dark:focus:ring-slate-800"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="country" className="text-slate-700 dark:text-slate-300">País</Label>
-                          <Input
-                            id="country"
-                            value={formData.country}
-                            onChange={(e) => handleInputChange('country', e.target.value)}
-                            placeholder="País"
-                            className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors focus:ring-slate-200 dark:focus:ring-slate-800"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="postal_code" className="text-slate-700 dark:text-slate-300">Código Postal</Label>
-                          <Input
-                            id="postal_code"
-                            value={formData.postal_code}
-                            onChange={(e) => handleInputChange('postal_code', e.target.value)}
-                            placeholder="12345"
-                            className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors focus:ring-slate-200 dark:focus:ring-slate-800"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Adicional */}
-              <TabsContent value="additional" className="space-y-8 mt-0 animate-in fade-in-50 duration-500 slide-in-from-bottom-4">
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Información Adicional</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Notas y detalles extra.</p>
-                  </div>
-                  
+                {/* Additional Information */}
+                <TabsContent value="additional" className="space-y-6 mt-0">
                   <div className="space-y-2">
-                    <Label htmlFor="notes" className="text-slate-700 dark:text-slate-300">Notas Internas</Label>
+                    <Label htmlFor="notes">Notas Internas</Label>
                     <Textarea
                       id="notes"
                       value={formData.notes}
                       onChange={(e) => handleInputChange('notes', e.target.value)}
                       placeholder="Escribe aquí cualquier nota relevante sobre este proveedor..."
-                      rows={8}
-                      className="bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors focus:ring-slate-200 dark:focus:ring-slate-800 resize-none"
+                      rows={6}
+                      className="resize-none"
                     />
+                    {errors.notes && <p className="text-sm text-red-500">{errors.notes}</p>}
                   </div>
-                </div>
-              </TabsContent>
+                </TabsContent>
+              </div>
             </Tabs>
-          </div>
-        </form>
+          </form>
 
-        {/* Sticky Footer */}
-        <div className="sticky bottom-0 bg-white dark:bg-slate-950 border-t border-gray-200 dark:border-slate-800 px-8 py-4 flex justify-between items-center gap-4 z-10">
-          <div className="text-sm text-gray-600 dark:text-slate-400 hidden md:block">
-            {mode === 'add' ? 'Creando nuevo proveedor' : 'Modificando proveedor existente'}
-          </div>
-          <div className="flex gap-3 ml-auto">
+          {/* Footer */}
+          <div className="flex justify-end gap-3 pt-6 border-t">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
-              disabled={loading}
-              className="min-w-[100px] dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              disabled={loading || isSubmitting}
             >
               Cancelar
             </Button>
             <Button
               type="submit"
               onClick={handleSubmit}
-              disabled={loading}
-              className="min-w-[140px] bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900 text-white shadow-lg shadow-slate-900/20 dark:shadow-none"
+              disabled={loading || isSubmitting}
             >
-              {loading ? (
+              {isSubmitting ? (
                 <>
                   <span className="animate-spin mr-2">⏳</span> Guardando...
                 </>
@@ -507,4 +423,3 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
     </Dialog>
   )
 }
-export default SupplierModal

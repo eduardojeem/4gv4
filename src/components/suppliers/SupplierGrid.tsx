@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { useRouter } from 'next/navigation'
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import {
     Building2, Mail, Phone, MapPin, Globe, Star,
     Package, DollarSign, MoreVertical, Edit, Trash2,

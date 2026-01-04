@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import { LucideIcon, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'

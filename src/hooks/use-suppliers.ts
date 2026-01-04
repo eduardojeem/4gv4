@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { computeSupplierStats } from './suppliers-stats'
+import { validateSupplier, formatValidationErrors } from '@/lib/validations/supplier'
 import type { SupplierStats } from './suppliers-stats'
 
 export type Supplier = UISupplier
@@ -42,7 +43,16 @@ export function useSuppliers() {
                 .rpc('get_supplier_stats')
 
             if (!rpcError && rpcData) {
-                setStats(rpcData)
+                // The function now returns JSON, so we use it directly
+                setStats({
+                    total_suppliers: rpcData.total_suppliers || 0,
+                    active_suppliers: rpcData.active_suppliers || 0,
+                    inactive_suppliers: rpcData.inactive_suppliers || 0,
+                    pending_suppliers: rpcData.pending_suppliers || 0,
+                    avg_rating: rpcData.avg_rating || 0,
+                    total_orders: rpcData.total_orders || 0,
+                    total_amount: rpcData.total_amount || 0
+                })
                 return
             }
 
@@ -50,10 +60,11 @@ export function useSuppliers() {
             console.log('RPC function not found or failed, using fallback method')
 
             // Execute counts in parallel
-            const [totalResult, activeResult, inactiveResult] = await Promise.all([
+            const [totalResult, activeResult, inactiveResult, pendingResult] = await Promise.all([
                 supabase.from('suppliers').select('*', { count: 'exact', head: true }),
-                supabase.from('suppliers').select('*', { count: 'exact', head: true }).eq('is_active', true),
-                supabase.from('suppliers').select('*', { count: 'exact', head: true }).eq('is_active', false)
+                supabase.from('suppliers').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+                supabase.from('suppliers').select('*', { count: 'exact', head: true }).eq('status', 'inactive'),
+                supabase.from('suppliers').select('*', { count: 'exact', head: true }).eq('status', 'pending')
             ])
 
             let totalOrders = 0
@@ -67,7 +78,7 @@ export function useSuppliers() {
                 total_suppliers: totalResult.count || 0,
                 active_suppliers: activeResult.count || 0,
                 inactive_suppliers: inactiveResult.count || 0,
-                pending_suppliers: 0, // No pending state in DB
+                pending_suppliers: pendingResult.count || 0,
                 avg_rating: 0,
                 total_orders: 0,
                 total_amount: 0
@@ -203,7 +214,15 @@ export function useSuppliers() {
     // Create supplier
     const createSupplier = async (supplierData: Partial<Supplier>) => {
         try {
-            const dbPayload = mapToDbPayload(supplierData)
+            // Validate data before sending to database
+            const validation = validateSupplier(supplierData)
+            if (!validation.success) {
+                const errors = formatValidationErrors(validation.errors)
+                const errorMessage = Object.values(errors)[0] || 'Datos inválidos'
+                throw new Error(errorMessage)
+            }
+
+            const dbPayload = mapToDbPayload(validation.data)
             dbPayload.created_at = new Date().toISOString()
 
             const { data, error } = await supabase
@@ -212,7 +231,16 @@ export function useSuppliers() {
                 .select()
                 .single()
 
-            if (error) throw error
+            if (error) {
+                // Handle specific database errors
+                if (error.code === '23505') {
+                    if (error.message.includes('email')) {
+                        throw new Error('Ya existe un proveedor con este email')
+                    }
+                    throw new Error('Ya existe un proveedor con estos datos')
+                }
+                throw new Error(error.message)
+            }
 
             toast.success('Proveedor creado exitosamente')
             await fetchSuppliers()
@@ -223,7 +251,7 @@ export function useSuppliers() {
             if (error.code === '42501' || msg.includes('policy')) {
                 toast.error('No tienes permisos para crear proveedores')
             } else {
-                toast.error('Error al crear proveedor: ' + msg)
+                toast.error(msg.includes('Ya existe') ? msg : 'Error al crear proveedor: ' + msg)
             }
             throw error
         }

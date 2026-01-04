@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Search, X, Command } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
-import { motion, AnimatePresence  } from '../ui/motion'
+import { motion, AnimatePresence } from '../ui/motion'
 
 interface SearchBarProps {
     value: string
