@@ -31,49 +31,11 @@ import { PaymentMethods } from './checkout/PaymentMethods'
 import { CustomerSelection } from './checkout/CustomerSelection'
 import { SaleSummary } from './checkout/SaleSummary'
 
+import { useCheckout } from '../contexts/CheckoutContext'
+import { usePOSCustomer } from '../contexts/POSCustomerContext'
+
 // Define props interface
 export interface CheckoutModalProps {
-  isOpen: boolean
-  onOpenChange: (open: boolean) => void
-  
-  // Payment Status
-  paymentStatus: 'idle' | 'processing' | 'success' | 'failed'
-  paymentError: string
-  
-  // Customer State
-  selectedCustomer: string
-  setSelectedCustomer: (val: string) => void
-  activeCustomer?: any
-  customerSearch: string
-  setCustomerSearch: (val: string) => void
-  customerTypeFilter: string
-  setCustomerTypeFilter: (val: string) => void
-  customerTypes: string[]
-  showFrequentOnly: boolean
-  setShowFrequentOnly: (val: boolean) => void
-  filteredCustomers: any[]
-  setCustomers: (rows: any[]) => void
-  setCustomersSourceSupabase: (val: boolean) => void
-  customersSourceSupabase: boolean
-  lastCustomerRefreshCount: number | null
-  setLastCustomerRefreshCount: (val: number) => void
-  
-  // New Customer State
-  newCustomerOpen: boolean
-  setNewCustomerOpen: (val: boolean) => void
-  newFirstName: string
-  setNewFirstName: (val: string) => void
-  newLastName: string
-  setNewLastName: (val: string) => void
-  newPhone: string
-  setNewPhone: (val: string) => void
-  newEmail: string
-  setNewEmail: (val: string) => void
-  newType: string
-  setNewType: (val: string) => void
-  newCustomerSaving: boolean
-  createNewCustomer: () => void
-  
   // Repair Linking
   selectedRepairIds: string[]
   setSelectedRepairIds: (val: string[]) => void
@@ -84,25 +46,6 @@ export interface CheckoutModalProps {
   setFinalCostFromSale: (val: boolean) => void
   selectedRepairs: any[]
   supabaseStatusToLabel: Record<string, string>
-  
-  // Payment State
-  isMixedPayment: boolean
-  setIsMixedPayment: (val: boolean) => void
-  paymentMethod: string
-  setPaymentMethod: (val: string) => void
-  cashReceived: number
-  setCashReceived: (val: number) => void
-  cardNumber: string
-  setCardNumber: (val: string) => void
-  transferReference: string
-  setTransferReference: (val: string) => void
-  splitAmount: number
-  setSplitAmount: (val: number) => void
-  paymentSplit: PaymentSplit[]
-  addPaymentSplit: (method: string, amount: number, reference?: string) => void
-  removePaymentSplit: (id: string) => void
-  getTotalPaid: () => number
-  getRemainingAmount: () => number
   
   // Cart & Calculations
   cart: CartItem[]
@@ -121,10 +64,6 @@ export interface CheckoutModalProps {
     repairSubtotal?: number
     repairTax?: number
   }
-  discount: number
-  setDiscount: (val: number) => void
-  notes: string
-  setNotes: (val: string) => void
   isWholesale: boolean
   WHOLESALE_DISCOUNT_RATE: number
   
@@ -142,40 +81,6 @@ export interface CheckoutModalProps {
 }
 
 export const CheckoutModal = memo<CheckoutModalProps>(({
-  isOpen,
-  onOpenChange,
-  paymentStatus,
-  paymentError,
-  selectedCustomer,
-  setSelectedCustomer,
-  activeCustomer,
-  customerSearch,
-  setCustomerSearch,
-  customerTypeFilter,
-  setCustomerTypeFilter,
-  customerTypes,
-  showFrequentOnly,
-  setShowFrequentOnly,
-  filteredCustomers,
-  setCustomers,
-  setCustomersSourceSupabase,
-  customersSourceSupabase,
-  lastCustomerRefreshCount,
-  setLastCustomerRefreshCount,
-  newCustomerOpen,
-  setNewCustomerOpen,
-  newFirstName,
-  setNewFirstName,
-  newLastName,
-  setNewLastName,
-  newPhone,
-  setNewPhone,
-  newEmail,
-  setNewEmail,
-  newType,
-  setNewType,
-  newCustomerSaving,
-  createNewCustomer,
   selectedRepairIds,
   setSelectedRepairIds,
   customerRepairs,
@@ -185,29 +90,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   setFinalCostFromSale,
   selectedRepairs,
   supabaseStatusToLabel,
-  isMixedPayment,
-  setIsMixedPayment,
-  paymentMethod,
-  setPaymentMethod,
-  cashReceived,
-  setCashReceived,
-  cardNumber,
-  setCardNumber,
-  transferReference,
-  setTransferReference,
-  splitAmount,
-  setSplitAmount,
-  paymentSplit,
-  addPaymentSplit,
-  removePaymentSplit,
-  getTotalPaid,
-  getRemainingAmount,
   cart,
   cartCalculations,
-  discount,
-  setDiscount,
-  notes,
-  setNotes,
   isWholesale,
   WHOLESALE_DISCOUNT_RATE,
   processSale,
@@ -217,6 +101,46 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   onOpenRegister,
   onCancel
 }) => {
+  const {
+    isCheckoutOpen,
+    setIsCheckoutOpen,
+    paymentStatus,
+    paymentError,
+    paymentMethod,
+    setPaymentMethod,
+    isMixedPayment,
+    setIsMixedPayment,
+    cashReceived,
+    setCashReceived,
+    cardNumber,
+    setCardNumber,
+    transferReference,
+    setTransferReference,
+    splitAmount,
+    setSplitAmount,
+    notes,
+    setNotes,
+    discount,
+    setDiscount,
+    paymentSplit,
+    addPaymentSplit,
+    removePaymentSplit
+  } = useCheckout()
+
+  const {
+    activeCustomer,
+    selectedCustomer
+  } = usePOSCustomer()
+
+  // Calculate totals locally
+  const getTotalPaid = () => {
+    return paymentSplit.reduce((total, split) => total + split.amount, 0)
+  }
+
+  const getRemainingAmount = () => {
+    return cartCalculations.total - getTotalPaid()
+  }
+
   // Sistema de créditos
   const { canSellOnCredit, createCreditSale, getCreditSummary } = useCreditSystem()
   const [showCreditHistory, setShowCreditHistory] = React.useState(false)
@@ -247,7 +171,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   }, [activeCustomer, cartCalculations.total, cart, selectedRepairIds, createCreditSale, onCancel])
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+    <Dialog open={isCheckoutOpen} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="w-[95vw] sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Procesar Pago</DialogTitle>
@@ -302,36 +226,6 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <CustomerSelection
-              selectedCustomer={selectedCustomer}
-              setSelectedCustomer={setSelectedCustomer}
-              activeCustomer={activeCustomer}
-              customerSearch={customerSearch}
-              setCustomerSearch={setCustomerSearch}
-              customerTypeFilter={customerTypeFilter}
-              setCustomerTypeFilter={setCustomerTypeFilter}
-              customerTypes={customerTypes}
-              showFrequentOnly={showFrequentOnly}
-              setShowFrequentOnly={setShowFrequentOnly}
-              filteredCustomers={filteredCustomers}
-              setCustomers={setCustomers}
-              setCustomersSourceSupabase={setCustomersSourceSupabase}
-              customersSourceSupabase={customersSourceSupabase}
-              lastCustomerRefreshCount={lastCustomerRefreshCount}
-              setLastCustomerRefreshCount={setLastCustomerRefreshCount}
-              newCustomerOpen={newCustomerOpen}
-              setNewCustomerOpen={setNewCustomerOpen}
-              newFirstName={newFirstName}
-              setNewFirstName={setNewFirstName}
-              newLastName={newLastName}
-              setNewLastName={setNewLastName}
-              newPhone={newPhone}
-              setNewPhone={setNewPhone}
-              newEmail={newEmail}
-              setNewEmail={setNewEmail}
-              newType={newType}
-              setNewType={setNewType}
-              newCustomerSaving={newCustomerSaving}
-              createNewCustomer={createNewCustomer}
               creditSummary={creditSummary || undefined}
               showCreditHistory={showCreditHistory}
               setShowCreditHistory={setShowCreditHistory}
@@ -485,26 +379,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             )}
 
             <PaymentMethods
-              isMixedPayment={isMixedPayment}
-              setIsMixedPayment={setIsMixedPayment}
-              paymentMethod={paymentMethod}
-              setPaymentMethod={setPaymentMethod}
-              cashReceived={cashReceived}
-              setCashReceived={setCashReceived}
-              cardNumber={cardNumber}
-              setCardNumber={setCardNumber}
-              transferReference={transferReference}
-              setTransferReference={setTransferReference}
-              splitAmount={splitAmount}
-              setSplitAmount={setSplitAmount}
-              paymentSplit={paymentSplit}
-              addPaymentSplit={addPaymentSplit}
-              removePaymentSplit={removePaymentSplit}
-              getTotalPaid={getTotalPaid}
-              getRemainingAmount={getRemainingAmount}
               cartTotal={cartCalculations.total}
-              cartChange={cartCalculations.change}
-              cartRemaining={cartCalculations.remaining}
               canUseCredit={canUseCredit}
               creditSummary={creditSummary || undefined}
               formatCurrency={formatCurrency}
@@ -535,7 +410,6 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             <SaleSummary
               cart={cart}
               cartCalculations={cartCalculations}
-              discount={discount}
               isWholesale={isWholesale}
               WHOLESALE_DISCOUNT_RATE={WHOLESALE_DISCOUNT_RATE}
               formatCurrency={formatCurrency}

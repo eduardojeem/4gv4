@@ -48,9 +48,7 @@ import { usePOSProducts } from '@/hooks/usePOSProducts'
 import { POSBarcodeScanner } from '@/components/barcode/BarcodeScanner'
 import { VariantSelector } from '@/components/pos/VariantSelector'
 import { useProductVariants } from '@/hooks/useProductVariants'
-import { usePOSKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useSmartSearch } from './hooks/useSmartSearch'
-import { usePromotions } from '@/hooks/use-promotions'
 import { usePromotionEngine } from '@/hooks/use-promotion-engine'
 import { ProductWithVariants, ProductVariant } from '@/types/product-variants'
 import { usePerformanceMonitor, useRenderTimeMonitor } from './hooks/usePerformanceMonitor'
@@ -58,9 +56,10 @@ import { recordMetric } from './utils/performance-monitor'
 import { useErrorHandler } from './hooks/useErrorHandler'
 import { ErrorMonitor } from './components/ErrorMonitor'
 import { PerformanceDashboard } from './components/PerformanceDashboard'
-import { CustomerProvider, useCustomers } from '@/contexts/CustomerContext'
 import { ProductCard } from './components/ProductCard'
 import { CheckoutModal } from './components/CheckoutModal'
+import { useCheckout } from './contexts/CheckoutContext'
+import { usePOSCustomer } from './contexts/POSCustomerContext'
 import { CartItem, PaymentSplit, PaymentMethodOption } from './types'
 import type { Product } from '@/types/product-unified'
 
@@ -113,130 +112,53 @@ export default function POSPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
-  const [selectedCustomer, setSelectedCustomer] = useState<string>('')
-  const [customers, setCustomers] = useState<any[]>([])
-  const [customersSourceSupabase, setCustomersSourceSupabase] = useState(false)
-  const [customerSearch, setCustomerSearch] = useState('')
-  const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('all')
-  const [showFrequentOnly, setShowFrequentOnly] = useState(false)
-  const [lastCustomerRefreshCount, setLastCustomerRefreshCount] = useState<number | null>(null)
-  const [newCustomerOpen, setNewCustomerOpen] = useState(false)
-  const [newCustomerSaving, setNewCustomerSaving] = useState(false)
-  const [newFirstName, setNewFirstName] = useState('')
-  const [newLastName, setNewLastName] = useState('')
-  const [newPhone, setNewPhone] = useState('')
-  const [newEmail, setNewEmail] = useState('')
-  const [newType, setNewType] = useState('regular')
-  const customerTypes = useMemo(() => {
-    const types = new Set<string>()
-    customers.forEach((c) => types.add(c.type || 'regular'))
-    return Array.from(types)
-  }, [customers])
-  const filteredCustomers = useMemo(() => {
-    const q = customerSearch.trim().toLowerCase()
-    let list = customers
-    if (q) {
-      list = list.filter((c) => {
-        const name = String(c.name || '').toLowerCase()
-        const phone = String(c.phone || '').toLowerCase()
-        const email = String(c.email || '').toLowerCase()
-        return name.includes(q) || phone.includes(q) || email.includes(q)
-      })
-    }
-    if (customerTypeFilter !== 'all') {
-      list = list.filter((c) => String(c.type || '').toLowerCase() === customerTypeFilter.toLowerCase())
-    }
-    if (showFrequentOnly) {
-      const cutoff = Date.now() - (90 * 24 * 60 * 60 * 1000)
-      list = list.filter((c) => {
-        const ts = c.updated_at ? new Date(c.updated_at).getTime() : 0
-        return ts >= cutoff
-      })
-    }
-    return list
-  }, [customers, customerSearch, customerTypeFilter, showFrequentOnly])
 
-  const createNewCustomer = useCallback(async () => {
-    const hasBasic = newFirstName.trim().length > 0 || newPhone.trim().length > 0
-    if (!hasBasic) {
-      toast.error('Ingrese al menos nombre o teléfono')
-      return
-    }
-    setNewCustomerSaving(true)
-    try {
-      if (config.supabase.isConfigured) {
-        const supabase = createSupabaseClient()
-        const { data, error } = await supabase
-          .from('customers')
-          .insert({
-            first_name: newFirstName.trim(),
-            last_name: newLastName.trim(),
-            phone: newPhone.trim(),
-            email: newEmail.trim(),
-            customer_type: newType,
-          })
-          .select('id,first_name,last_name,phone,email,customer_type,updated_at')
-          .single()
-        if (error) throw new Error(error.message)
-        const row = data as any
-        const mapped = {
-          id: row.id,
-          name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
-          email: row.email || '',
-          phone: row.phone || '',
-          type: row.customer_type || 'regular',
-          updated_at: row.updated_at,
-          address: '',
-          loyalty_points: 0,
-          total_purchases: 0,
-          total_repairs: 0,
-          current_balance: 0,
-          last_visit: null,
-        }
-        setCustomers(prev => [mapped, ...prev])
-        setSelectedCustomer(row.id)
-        setCustomersSourceSupabase(true)
-        toast.success('Cliente creado')
-      } else {
-        const id = Date.now().toString()
-        const mapped = {
-          id,
-          name: [newFirstName, newLastName].filter(Boolean).join(' ').trim(),
-          email: newEmail || '',
-          phone: newPhone || '',
-          type: newType,
-          updated_at: new Date().toISOString(),
-          address: '',
-          loyalty_points: 0,
-          total_purchases: 0,
-          total_repairs: 0,
-          current_balance: 0,
-          last_visit: null,
-        }
-        setCustomers(prev => [mapped, ...prev])
-        setSelectedCustomer(id)
-        toast.success('Cliente demo creado')
-      }
-      setNewCustomerOpen(false)
-      setNewCustomerSaving(false)
-      setNewFirstName('')
-      setNewLastName('')
-      setNewPhone('')
-      setNewEmail('')
-      setNewType('regular')
-    } catch (e: any) {
-      setNewCustomerSaving(false)
-      toast.error('No se pudo crear cliente: ' + String(e?.message || e || ''))
-    }
-  }, [config.supabase.isConfigured, newFirstName, newLastName, newPhone, newEmail, newType, createSupabaseClient, setCustomers, setSelectedCustomer])
+  // Use centralized customer state
+  const { 
+    selectedCustomer, 
+    setSelectedCustomer, 
+    customers, 
+    setCustomers,
+    setCustomersSourceSupabase,
+    setNewCustomerOpen
+  } = usePOSCustomer()
+
+  // Use centralized checkout state
+  const {
+    isCheckoutOpen,
+    setIsCheckoutOpen,
+    paymentStatus,
+    setPaymentStatus,
+    paymentError,
+    setPaymentError,
+    paymentMethod,
+    setPaymentMethod,
+    isMixedPayment,
+    setIsMixedPayment,
+    cashReceived,
+    setCashReceived,
+    cardNumber,
+    setCardNumber,
+    transferReference,
+    setTransferReference,
+    splitAmount,
+    setSplitAmount,
+    notes,
+    setNotes,
+    discount,
+    setDiscount,
+    paymentSplit,
+    setPaymentSplit,
+    addPaymentSplit,
+    removePaymentSplit,
+    resetCheckoutState
+  } = useCheckout()
+  
+
+
   const [customerRepairs, setCustomerRepairs] = useState<any[]>([])
   const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([])
-  const [paymentMethod, setPaymentMethod] = useState<string>('')
-  const [discount, setDiscount] = useState<number>(0)
-  const [notes, setNotes] = useState<string>('')
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
-  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle')
-  const [paymentError, setPaymentError] = useState('')
+  
   const [paymentAttempts, setPaymentAttempts] = useState<Array<{ time: string; status: 'processing' | 'success' | 'failed'; method: 'single' | 'mixed'; amount: number; message?: string }>>([])
   const addPaymentAttempt = useCallback((attempt: { status: 'processing' | 'success' | 'failed'; method: 'single' | 'mixed'; amount: number; message?: string }) => {
     setPaymentAttempts(prev => [{ ...attempt, time: new Date().toISOString() }, ...prev].slice(0, 50))
@@ -284,7 +206,6 @@ export default function POSPage() {
   }, [isCheckoutOpen, selectedRepairIds])
   const [showFeatured, setShowFeatured] = useState(false)
   const [barcodeInput, setBarcodeInput] = useState('')
-  const [cashReceived, setCashReceived] = useState<number>(0)
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showAccessibilitySettings, setShowAccessibilitySettings] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
@@ -302,131 +223,7 @@ export default function POSPage() {
   const { getProductWithVariants, convertVariantToCartItem } = useProductVariants()
   const { calculateCartSummary } = usePromotionEngine()
 
-  // Keyboard shortcuts integration
-  const { showShortcutsHelp } = usePOSKeyboardShortcuts({
-    onHelp: () => showShortcutsHelp(),
-    onSearchProduct: () => {
-      // Focus on search input
-      const searchInput = document.querySelector('input[placeholder*="Buscar"]') as HTMLInputElement
-      if (searchInput) {
-        searchInput.focus()
-        searchInput.select()
-      }
-    },
-    onSelectCustomer: () => {
-      // Open checkout modal and focus on customer selection
-      setIsCheckoutOpen(true)
-    },
-    onProcessPayment: () => {
-      // Open checkout modal if cart has items
-      if (cart.length > 0) {
-        setIsCheckoutOpen(true)
-      } else {
-        toast.error('Agregue productos al carrito primero')
-      }
-    },
-    onClearCart: () => {
-      if (cart.length > 0) {
-        setCart([])
-        toast.success('Carrito limpiado')
-      }
-    },
-    onOpenCashRegister: () => {
-      if (!getCurrentRegister?.isOpen) {
-        setIsOpenRegisterDialogOpen(true)
-      }
-    },
-    onCloseCashRegister: () => {
-      if (getCurrentRegister?.isOpen) {
-        // Implement close register logic
-        toast.info('Función de cerrar caja disponible próximamente')
-      }
-    },
-    onScanBarcode: () => {
-      // Focus on barcode input
-      const barcodeInput = document.querySelector('input[placeholder*="código"]') as HTMLInputElement
-      if (barcodeInput) {
-        barcodeInput.focus()
-      }
-    },
-    onApplyDiscount: () => {
-      if (isCheckoutOpen) {
-        // Focus on discount input in checkout modal
-        const discountInput = document.querySelector('input[placeholder="0"]') as HTMLInputElement
-        if (discountInput) {
-          discountInput.focus()
-        }
-      } else {
-        toast.info('Abra el modal de pago para aplicar descuento')
-      }
-    },
-    onPrintReceipt: () => {
-      if (lastSaleData) {
-        printReceipt(lastSaleData)
-        toast.success('Imprimiendo último recibo')
-      } else {
-        toast.error('No hay recibo para imprimir')
-      }
-    },
-    onNewCustomer: () => {
-      setNewCustomerOpen(true)
-    },
-    onSaveDraft: () => {
-      // Save current cart as draft
-      if (cart.length > 0) {
-        localStorage.setItem('pos-cart-draft', JSON.stringify(cart))
-        toast.success('Venta guardada como borrador')
-      }
-    },
-    onUndo: () => {
-      // Undo last cart action
-      if (cart.length > 0) {
-        const newCart = [...cart]
-        newCart.pop()
-        setCart(newCart)
-        toast.success('Última acción deshecha')
-      }
-    },
-    onPaymentCash: () => {
-      if (isCheckoutOpen) {
-        setPaymentMethod('cash')
-        toast.success('Método: Efectivo')
-      }
-    },
-    onPaymentCard: () => {
-      if (isCheckoutOpen) {
-        setPaymentMethod('card')
-        toast.success('Método: Tarjeta')
-      }
-    },
-    onPaymentTransfer: () => {
-      if (isCheckoutOpen) {
-        setPaymentMethod('transfer')
-        toast.success('Método: Transferencia')
-      }
-    },
-    onPaymentCredit: () => {
-      if (isCheckoutOpen) {
-        setPaymentMethod('credit')
-        toast.success('Método: Crédito')
-      }
-    },
-    onCancel: () => {
-      if (isCheckoutOpen) {
-        setIsCheckoutOpen(false)
-      }
-    },
-    onConfirm: () => {
-      if (isCheckoutOpen && paymentMethod) {
-        // Trigger payment processing
-        if (isMixedPayment) {
-          processMixedPayment()
-        } else {
-          processSale()
-        }
-      }
-    }
-  })
+
 
   // Contexto de caja
   const { 
@@ -458,12 +255,7 @@ export default function POSPage() {
   const [movementNote, setMovementNote] = useState('')
 
   // Estados para múltiples métodos de pago
-
-  const [paymentSplit, setPaymentSplit] = useState<PaymentSplit[]>([])
-  const [isMixedPayment, setIsMixedPayment] = useState(false)
-  const [cardNumber, setCardNumber] = useState('')
-  const [transferReference, setTransferReference] = useState('')
-  const [splitAmount, setSplitAmount] = useState<number>(0)
+  // Eliminados estados locales que ahora están en CheckoutContext
 
   // Estados para sistema de tickets
   const [showReceiptModal, setShowReceiptModal] = useState(false)
@@ -875,7 +667,7 @@ export default function POSPage() {
   // Estados para búsqueda avanzada
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'stock' | 'category'>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: 10000 })
+  const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: 1000000 })
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
@@ -1332,18 +1124,6 @@ export default function POSPage() {
     }))
   }, [checkAvailability, inventoryProducts])
 
-  const removeFromCart = useCallback((id: string) => {
-    setCart(prev => prev.filter(item => item.id !== id))
-  }, [])
-
-  const clearCart = useCallback((force?: boolean) => {
-    if (!force && cart.length > 0) {
-      const confirmed = window.confirm('¿Vaciar el carrito? Los artículos serán removidos.')
-      if (!confirmed) return
-    }
-    setCart([])
-  }, [cart])
-
   // Utilidad común para redondear a 2 decimales
   const roundToTwo = useCallback((num: number) => Math.round((num + Number.EPSILON) * 100) / 100, [])
 
@@ -1430,10 +1210,9 @@ export default function POSPage() {
     const taxAmount = roundToTwo(productTaxAmount + repairTax)
 
     // Total final
-    // Si los precios incluyen IVA, el total es el subtotal con descuentos + subtotal de reparaciones + IVA total
     const total = pricesIncludeTax
-      ? roundToTwo(subtotalAfterAllDiscounts + repairSubtotal + taxAmount)
-      : roundToTwo(subtotalAfterAllDiscounts + taxAmount + repairCost)
+      ? roundToTwo(subtotalAfterAllDiscounts + repairCost)
+      : roundToTwo(subtotalAfterAllDiscounts + productTaxAmount + repairCost)
 
     // Cálculo del cambio
     const change = roundToTwo(Math.max(0, cashReceived - total))
@@ -1493,6 +1272,32 @@ export default function POSPage() {
       }
     }
   }, [cart, discount, cashReceived, paymentMethod, isWholesale, roundToTwo, config.pricesIncludeTax, config.taxRate, selectedRepairs, selectedRepairIds])
+
+  const removeFromCart = useCallback((id: string) => {
+    setCart(prev => prev.filter(item => item.id !== id))
+  }, [])
+
+  const clearCart = useCallback((force?: boolean) => {
+    if (!force && cart.length > 0) {
+      const confirmed = window.confirm(
+        `¿Estás seguro de que deseas vaciar el carrito?\n\n` +
+        `Se eliminarán ${cart.length} producto${cart.length > 1 ? 's' : ''} por un total de ${formatCurrency(cartCalculations.total)}.\n\n` +
+        `Esta acción no se puede deshacer.`
+      )
+      if (!confirmed) return
+    }
+    setCart([])
+    toast.success('🗑️ Carrito vaciado correctamente')
+  }, [cart, cartCalculations.total, formatCurrency])
+
+  // Helper functions for payment calculations
+  const getTotalPaid = useCallback(() => {
+    return paymentSplit.reduce((total, split) => total + split.amount, 0)
+  }, [paymentSplit])
+
+  const getRemainingAmount = useCallback(() => {
+    return roundToTwo(cartCalculations.total - getTotalPaid())
+  }, [cartCalculations.total, getTotalPaid, roundToTwo])
 
   // Funciones auxiliares para descuentos y promociones
   const applyBulkDiscount = useCallback((productId: string, quantity: number) => {
@@ -1693,10 +1498,8 @@ export default function POSPage() {
       clearCart(true)
       setSelectedCustomer('')
       setSelectedRepairIds([])
-      setPaymentMethod('')
-      setDiscount(0)
-      setNotes('')
-      setCashReceived(0)
+      resetCheckoutState()
+      
       // Cerrar luego de una breve confirmación visual
       setTimeout(() => {
         setIsCheckoutOpen(false)
@@ -1705,37 +1508,7 @@ export default function POSPage() {
     })
   }, [cart, paymentMethod, cashReceived, cartCalculations, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing])
 
-  // Funciones para múltiples métodos de pago
-  const addPaymentSplit = useCallback((method: string, amount: number, reference?: string) => {
-    const newSplit: PaymentSplit = {
-      id: Date.now().toString(),
-      method: method as PaymentSplit['method'],
-      amount: roundToTwo(amount),
-      reference,
-      cardLast4: method === 'card' && cardNumber ? cardNumber.slice(-4) : undefined
-    }
 
-    setPaymentSplit(prev => [...prev, newSplit])
-
-    // Limpiar campos específicos
-    if (method === 'card') setCardNumber('')
-    if (method === 'transfer') setTransferReference('')
-
-    toast.success(`Pago de ${formatCurrency(amount)} agregado`)
-  }, [cardNumber, transferReference, formatCurrency])
-
-  const removePaymentSplit = useCallback((id: string) => {
-    setPaymentSplit(prev => prev.filter(split => split.id !== id))
-    toast.info('Pago removido')
-  }, [])
-
-  const getTotalPaid = useCallback(() => {
-    return paymentSplit.reduce((total, split) => total + split.amount, 0)
-  }, [paymentSplit])
-
-  const getRemainingAmount = useCallback(() => {
-    return roundToTwo(cartCalculations.total - getTotalPaid())
-  }, [cartCalculations.total, getTotalPaid])
 
   const processMixedPayment = useCallback(async () => {
     if (!getCurrentRegister.isOpen) {
@@ -1926,7 +1699,7 @@ export default function POSPage() {
             e.preventDefault()
             if (cart.length > 0) {
               clearCart()
-              toast.success('🗑️ Carrito vaciado')
+              toast.success('🗑️ Carrito vaciado correctamente')
             }
             break
           case 'n':
@@ -2875,12 +2648,24 @@ export default function POSPage() {
                   <div className="grid grid-cols-4 gap-2">
                     <Button
                       variant="outline"
-                      className="col-span-1 h-11 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+                      className="col-span-1 h-11 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 sm:flex hidden"
                       onClick={(e) => clearCart()}
                       disabled={cart.length === 0}
                       title="Limpiar Carrito"
                     >
                       <Trash2 className="h-5 w-5" />
+                    </Button>
+                    
+                    {/* Botón de limpiar carrito visible en móvil */}
+                    <Button
+                      variant="outline"
+                      className="col-span-1 h-11 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 sm:hidden flex items-center justify-center"
+                      onClick={(e) => clearCart()}
+                      disabled={cart.length === 0}
+                      title="Limpiar Carrito"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sr-only">Limpiar</span>
                     </Button>
                     
                     <Button
@@ -2899,14 +2684,30 @@ export default function POSPage() {
 
       {/* Mobile Cart Bottom Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t p-4 shadow-lg z-50">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex flex-col">
              <span className="text-xs text-muted-foreground">{cartCalculations.totalItemCount} items</span>
              <span className="font-bold text-lg">{formatCurrency(cartCalculations.total)}</span>
           </div>
+          
+          {/* Botón de limpiar carrito en móvil */}
+          {cart.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 px-3"
+              onClick={() => clearCart()}
+              title="Limpiar Carrito"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span className="ml-1 text-xs">Limpiar</span>
+            </Button>
+          )}
+          
           <Button 
             className="flex-1 h-12 text-lg"
             onClick={() => setIsCheckoutOpen(true)}
+            disabled={cart.length === 0 && selectedRepairIds.length === 0}
           >
             <CreditCard className="mr-2 h-5 w-5" />
             Pagar
@@ -2916,40 +2717,6 @@ export default function POSPage() {
 
       {/* Modal de checkout */}
       <CheckoutModal
-        isOpen={isCheckoutOpen}
-        onOpenChange={setIsCheckoutOpen}
-        paymentStatus={paymentStatus}
-        paymentError={paymentError}
-        selectedCustomer={selectedCustomer}
-        setSelectedCustomer={setSelectedCustomer}
-        activeCustomer={customers.find(c => c.id === selectedCustomer)}
-        customerSearch={customerSearch}
-        setCustomerSearch={setCustomerSearch}
-        customerTypeFilter={customerTypeFilter}
-        setCustomerTypeFilter={setCustomerTypeFilter}
-        customerTypes={customerTypes}
-        showFrequentOnly={showFrequentOnly}
-        setShowFrequentOnly={setShowFrequentOnly}
-        filteredCustomers={filteredCustomers}
-        setCustomers={setCustomers}
-        setCustomersSourceSupabase={setCustomersSourceSupabase}
-        customersSourceSupabase={customersSourceSupabase}
-        lastCustomerRefreshCount={lastCustomerRefreshCount}
-        setLastCustomerRefreshCount={setLastCustomerRefreshCount}
-        newCustomerOpen={newCustomerOpen}
-        setNewCustomerOpen={setNewCustomerOpen}
-        newFirstName={newFirstName}
-        setNewFirstName={setNewFirstName}
-        newLastName={newLastName}
-        setNewLastName={setNewLastName}
-        newPhone={newPhone}
-        setNewPhone={setNewPhone}
-        newEmail={newEmail}
-        setNewEmail={setNewEmail}
-        newType={newType}
-        setNewType={setNewType}
-        newCustomerSaving={newCustomerSaving}
-        createNewCustomer={createNewCustomer}
         selectedRepairIds={selectedRepairIds}
         setSelectedRepairIds={setSelectedRepairIds}
         customerRepairs={customerRepairs}
@@ -2959,42 +2726,18 @@ export default function POSPage() {
         setFinalCostFromSale={setFinalCostFromSale}
         selectedRepairs={selectedRepairs}
         supabaseStatusToLabel={supabaseStatusToLabel}
-        isMixedPayment={isMixedPayment}
-        setIsMixedPayment={setIsMixedPayment}
-        paymentMethod={paymentMethod}
-        setPaymentMethod={setPaymentMethod}
-        cashReceived={cashReceived}
-        setCashReceived={setCashReceived}
-        cardNumber={cardNumber}
-        setCardNumber={setCardNumber}
-        transferReference={transferReference}
-        setTransferReference={setTransferReference}
-        splitAmount={splitAmount}
-        setSplitAmount={setSplitAmount}
-        paymentSplit={paymentSplit}
-        addPaymentSplit={addPaymentSplit}
-        removePaymentSplit={removePaymentSplit}
-        getTotalPaid={getTotalPaid}
-        getRemainingAmount={getRemainingAmount}
         cart={cart}
         cartCalculations={cartCalculations}
-        discount={discount}
-        setDiscount={setDiscount}
-        notes={notes}
-        setNotes={setNotes}
         isWholesale={isWholesale}
         WHOLESALE_DISCOUNT_RATE={WHOLESALE_DISCOUNT_RATE}
         processSale={processSale}
         processMixedPayment={processMixedPayment}
         formatCurrency={formatCurrency}
         isRegisterOpen={getCurrentRegister.isOpen}
+        onOpenRegister={() => setIsOpenRegisterDialogOpen(true)}
         onCancel={() => {
           setIsCheckoutOpen(false)
-          setIsMixedPayment(false)
-          setPaymentSplit([])
-          setPaymentMethod('')
-          setPaymentStatus('idle')
-          setPaymentError('')
+          resetCheckoutState()
           setPaymentAttempts([])
         }}
       />
@@ -3238,7 +2981,7 @@ export default function POSPage() {
               </div>
               <div>
                 <strong>Ctrl + Backspace</strong>
-                <p className="text-muted-foreground">Limpiar carrito</p>
+                <p className="text-muted-foreground">Vaciar carrito completo</p>
               </div>
               <div>
                 <strong>F1</strong>

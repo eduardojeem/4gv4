@@ -447,6 +447,10 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       return { success: true, data }
     } catch (err) {
       console.error('Error updating product:', err)
+      // Intento de obtener más detalles del error si es un objeto
+      if (typeof err === 'object' && err !== null) {
+          console.error('Detalles del error:', JSON.stringify(err, null, 2))
+      }
       return { 
         success: false, 
         error: err instanceof Error ? err.message : 'Error desconocido' 
@@ -473,6 +477,9 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       return { success: true }
     } catch (err) {
       console.error('Error deleting product:', err)
+      if (typeof err === 'object' && err !== null) {
+          console.error('Detalles del error:', JSON.stringify(err, null, 2))
+      }
       return { 
         success: false, 
         error: err instanceof Error ? err.message : 'Error desconocido' 

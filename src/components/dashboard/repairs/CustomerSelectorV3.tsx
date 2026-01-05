@@ -157,7 +157,7 @@ export function CustomerSelectorV3({
             <Label htmlFor="customer">
                 Cliente <span className="text-red-500">*</span>
             </Label>
-            <Popover open={open} onOpenChange={setOpen}>
+            <Popover open={open} onOpenChange={setOpen} modal={true}>
                 <PopoverTrigger asChild>
                     <Button
                         id="customer"

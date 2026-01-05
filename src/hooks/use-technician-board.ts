@@ -44,7 +44,8 @@ export function useTechnicianBoard() {
                     .from('repairs')
                     .select(`
             *,
-            customer:customers(id, first_name, last_name, phone, email),
+            ticket_number,
+            customer:customers(id, first_name, last_name, phone, email, customer_code),
             technician:profiles(id, full_name)
           `)
                     .order('created_at', { ascending: false })

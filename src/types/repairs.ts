@@ -28,6 +28,7 @@ export type DeviceType = 'smartphone' | 'tablet' | 'laptop' | 'desktop' | 'acces
 
 export interface Customer {
   id?: string
+  customerCode?: string
   name: string
   phone: string
   email: string
@@ -68,6 +69,7 @@ export interface RepairNotifications {
 
 export interface Repair {
   id: string
+  ticketNumber?: string
   customer: Customer
   device: string
   deviceType: DeviceType

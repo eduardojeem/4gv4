@@ -27,6 +27,8 @@ export interface RepairFormData {
     technician_id?: string
     estimated_cost?: number
     metadata?: Record<string, unknown>
+    parts?: any[]
+    notes?: any[]
 }
 
 export interface RepairsContextValue {
@@ -110,35 +112,76 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         try {
             setError(null)
 
+            const { parts, notes, ...repairData } = data
+
+            // 1. Create Repair
             const { data: newRepair, error: createError } = await supabase
                 .from('repairs')
                 .insert([{
-                    customer_id: data.customer_id,
-                    device_brand: data.brand,
-                    device_model: data.model,
-                    device_type: data.deviceType,
-                    problem_description: data.issue,
-                    diagnosis: data.description,
-                    access_type: data.accessType || 'none',
-                    access_password: data.accessPassword || null,
+                    customer_id: repairData.customer_id,
+                    device_brand: repairData.brand,
+                    device_model: repairData.model,
+                    device_type: repairData.deviceType,
+                    problem_description: repairData.issue,
+                    diagnosis: repairData.description,
+                    access_type: repairData.accessType || 'none',
+                    access_password: repairData.accessPassword || null,
                     status: 'recibido',
-                    priority: data.priority,
-                    urgency: data.urgency,
-                    technician_id: data.technician_id,
-                    estimated_cost: data.estimated_cost,
+                    priority: repairData.priority,
+                    urgency: repairData.urgency,
+                    technician_id: repairData.technician_id,
+                    estimated_cost: repairData.estimated_cost,
                     received_at: new Date().toISOString()
                 }])
-                .select(`
-          *,
-          customer:customers(name, phone, email),
-          technician:profiles(id, full_name),
-          images:repair_images(id, image_url, description)
-        `)
+                .select()
                 .single()
 
             if (createError) throw createError
+            
+            const newRepairId = newRepair.id
 
-            const mapped = mapSupabaseRepairToUi(newRepair)
+            // 2. Insert Parts
+            if (parts && parts.length > 0) {
+                 const partsToInsert = parts.map((p: any) => ({
+                     repair_id: newRepairId,
+                     part_name: p.name,
+                     unit_cost: p.cost,
+                     quantity: p.quantity,
+                     supplier: p.supplier,
+                     part_number: p.partNumber
+                 }))
+                 const { error: insertPartsError } = await supabase.from('repair_parts').insert(partsToInsert)
+                 if (insertPartsError) throw insertPartsError
+            }
+
+            // 3. Insert Notes
+            if (notes && notes.length > 0) {
+                 const notesToInsert = notes.map((n: any) => ({
+                     repair_id: newRepairId,
+                     note_text: n.text,
+                     is_internal: n.isInternal
+                 }))
+                 const { error: insertNotesError } = await supabase.from('repair_notes').insert(notesToInsert)
+                 if (insertNotesError) throw insertNotesError
+            }
+
+            // 4. Fetch Complete Repair
+            const { data: finalRepair, error: fetchError } = await supabase
+                .from('repairs')
+                .select(`
+                  *,
+                  customer:customers(name, phone, email),
+                  technician:profiles(id, full_name),
+                  images:repair_images(id, image_url, description),
+                  parts:repair_parts(*),
+                  notes:repair_notes(*)
+                `)
+                .eq('id', newRepairId)
+                .single()
+
+            if (fetchError) throw fetchError
+
+            const mapped = mapSupabaseRepairToUi(finalRepair)
             const transformedRepair = { ...mapped, dbStatus: mapped.status }
 
             setRepairs(prev => [transformedRepair, ...prev])
@@ -160,21 +203,127 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         try {
             setError(null)
 
-            const { data: updatedRepair, error: updateError } = await supabase
+            // Extract parts and notes to handle separately
+            const { parts, notes, customer, technician, images, ...repairData } = data as any
+
+            const dbUpdateData: any = {}
+
+            // Map UI fields to DB columns
+            if (repairData.brand !== undefined) dbUpdateData.device_brand = repairData.brand
+            if (repairData.model !== undefined) dbUpdateData.device_model = repairData.model
+            if (repairData.deviceType !== undefined) dbUpdateData.device_type = repairData.deviceType
+            if (repairData.issue !== undefined) dbUpdateData.problem_description = repairData.issue
+            if (repairData.description !== undefined) dbUpdateData.diagnosis = repairData.description
+            if (repairData.accessType !== undefined) dbUpdateData.access_type = repairData.accessType
+            if (repairData.accessPassword !== undefined) dbUpdateData.access_password = repairData.accessPassword
+            if (repairData.status !== undefined) dbUpdateData.status = repairData.status
+            if (repairData.priority !== undefined) dbUpdateData.priority = repairData.priority
+            if (repairData.urgency !== undefined) dbUpdateData.urgency = repairData.urgency
+            if (repairData.technician_id !== undefined) dbUpdateData.technician_id = repairData.technician_id
+            if (repairData.estimatedCost !== undefined) dbUpdateData.estimated_cost = repairData.estimatedCost
+            if (repairData.finalCost !== undefined) dbUpdateData.final_cost = repairData.finalCost
+
+            // Only update repair if there are fields to update
+            if (Object.keys(dbUpdateData).length > 0) {
+                const { error: updateError } = await supabase
+                    .from('repairs')
+                    .update(dbUpdateData)
+                    .eq('id', id)
+
+                if (updateError) throw updateError
+            }
+
+            // Handle Parts - Strategy: Delete all and re-insert (simplest for syncing list)
+            if (parts) {
+                // 1. Delete existing parts
+                const { error: deletePartsError } = await supabase
+                    .from('repair_parts')
+                    .delete()
+                    .eq('repair_id', id)
+                
+                if (deletePartsError) throw deletePartsError
+
+                // 2. Insert new parts
+                if (parts.length > 0) {
+                    const partsToInsert = parts.map((p: any) => ({
+                        repair_id: id,
+                        part_name: p.name,
+                        unit_cost: p.cost,
+                        quantity: p.quantity,
+                        supplier: p.supplier,
+                        part_number: p.partNumber
+                    }))
+
+                    const { error: insertPartsError } = await supabase
+                        .from('repair_parts')
+                        .insert(partsToInsert)
+                    
+                    if (insertPartsError) throw insertPartsError
+                }
+            }
+
+            // Handle Notes - Strategy: Upsert existing, Insert new, Delete missing
+            if (notes) {
+                // 1. Get all current note IDs for this repair
+                const { data: currentNotes } = await supabase
+                    .from('repair_notes')
+                    .select('id')
+                    .eq('repair_id', id)
+                
+                const currentIds = (currentNotes || []).map((n: any) => n.id)
+                const incomingIds = notes.filter((n: any) => n.id).map((n: any) => n.id)
+                
+                // 2. Delete notes that are no longer in the list
+                const idsToDelete = currentIds.filter((cid: number) => !incomingIds.includes(cid))
+                
+                if (idsToDelete.length > 0) {
+                    const { error: deleteNotesError } = await supabase
+                        .from('repair_notes')
+                        .delete()
+                        .in('id', idsToDelete)
+
+                    if (deleteNotesError) throw deleteNotesError
+                }
+
+                // 3. Upsert (Update/Insert) notes
+                if (notes.length > 0) {
+                    const notesToUpsert = notes.map((n: any) => {
+                        const notePayload: any = {
+                            repair_id: id,
+                            note_text: n.text,
+                            is_internal: n.isInternal
+                        }
+                        if (n.id) notePayload.id = n.id
+                        // If it's a new note, we might want to set author if available, 
+                        // but for now we let DB default or handle it.
+                        return notePayload
+                    })
+
+                    const { error: upsertNotesError } = await supabase
+                        .from('repair_notes')
+                        .upsert(notesToUpsert)
+                    
+                    if (upsertNotesError) throw upsertNotesError
+                }
+            }
+
+            // Fetch final state with all relations
+            const { data: finalRepair, error: fetchError } = await supabase
                 .from('repairs')
-                .update(data)
-                .eq('id', id)
                 .select(`
           *,
           customer:customers(name, phone, email),
           technician:profiles(id, full_name),
-          images:repair_images(id, image_url, description)
+          images:repair_images(id, image_url, description),
+          parts:repair_parts(*),
+          notes:repair_notes(*)
         `)
-                .single()
+                .single() // We query by ID in the context of previous operations, but need to be sure we get the right one
+                .eq('id', id)
 
-            if (updateError) throw updateError
+            if (fetchError) throw fetchError
 
-            const mapped = mapSupabaseRepairToUi(updatedRepair)
+            const mapped = mapSupabaseRepairToUi(finalRepair)
             const transformed = { ...mapped, dbStatus: mapped.status }
 
             setRepairs(prev =>

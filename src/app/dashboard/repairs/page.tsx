@@ -35,9 +35,12 @@ import { RepairViewSelector } from '@/components/dashboard/repairs/RepairViewSel
 import { RepairEmptyState } from '@/components/dashboard/repairs/RepairEmptyState'
 import { RepairDeleteDialog } from '@/components/dashboard/repairs/RepairDeleteDialog'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
+import { RepairSuccessDialog } from '@/components/dashboard/repairs/RepairSuccessDialog'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
+import { RepairPrintPayload } from '@/lib/repair-receipt'
+import { deviceTypeConfig } from '@/config/repair-constants'
 
 // Types
 import { Repair } from '@/types/repairs'
@@ -103,6 +106,8 @@ function RepairsPageContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [pageSize, setPageSize] = useState<number>(20)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [successDialogData, setSuccessDialogData] = useState<RepairPrintPayload | null>(null)
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const searchParams = useSearchParams()
 
   // Handle URL query parameters for direct edit
@@ -226,7 +231,46 @@ function RepairsPageContent() {
           return created
         })
 
-        await Promise.all(promises)
+        const createdRepairs = await Promise.all(promises)
+
+        // Show success dialog with print options
+        const validRepairs = createdRepairs.filter(Boolean) as Repair[]
+        if (validRepairs.length > 0) {
+          const payload: RepairPrintPayload = {
+            customer: {
+              name: data.customerName,
+              phone: data.customerPhone,
+              email: data.customerEmail,
+              address: data.customerAddress,
+              document: data.customerDocument,
+              city: data.customerCity,
+              country: data.customerCountry
+            },
+            date: new Date(),
+            ticketNumber: validRepairs.length === 1 ? validRepairs[0].id : undefined,
+            priority: data.priority,
+            urgency: data.urgency,
+            devices: data.devices.map((deviceFormData, index) => {
+              const createdRepair = createdRepairs[index]
+              if (!createdRepair) return null
+
+              const techName = technicianOptions.find(t => t.id === deviceFormData.technician)?.name || 'Sin asignar'
+              
+              return {
+                typeLabel: deviceTypeConfig[deviceFormData.deviceType]?.label || deviceFormData.deviceType,
+                brand: deviceFormData.brand,
+                model: deviceFormData.model,
+                issue: deviceFormData.issue,
+                description: deviceFormData.description,
+                technician: techName,
+                estimatedCost: deviceFormData.estimatedCost,
+                ticketNumber: createdRepair.id
+              }
+            }).filter(Boolean) as any
+          }
+          setSuccessDialogData(payload)
+          setShowSuccessDialog(true)
+        }
       } else if (selectedRepair) {
         const d = data.devices[0]
         const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
@@ -428,6 +472,15 @@ function RepairsPageContent() {
         repair={selectedRepair}
         onClose={() => setIsDialogOpen(false)}
         onSubmit={handleFormSubmit}
+      />
+
+      <RepairSuccessDialog
+        open={showSuccessDialog}
+        onClose={() => {
+          setShowSuccessDialog(false)
+          setSuccessDialogData(null)
+        }}
+        data={successDialogData}
       />
 
       {uiFiltered.length > visibleRepairs.length && viewMode === 'table' && (

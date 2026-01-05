@@ -156,6 +156,27 @@ export const PriorityEnum = z.enum(['low', 'medium', 'high'], 'Selecciona una pr
 export const UrgencyEnum = z.enum(['low', 'medium', 'high'], 'Selecciona una urgencia válida')
 
 /**
+ * Repair Part Schema
+ */
+export const RepairPartSchema = z.object({
+  id: z.number().optional(),
+  name: z.string().min(1, 'El nombre del repuesto es obligatorio'),
+  cost: z.number().min(0, 'El costo no puede ser negativo'),
+  quantity: z.number().min(1, 'La cantidad debe ser al menos 1'),
+  supplier: z.string().optional().or(z.literal('')),
+  partNumber: z.string().optional().or(z.literal(''))
+})
+
+/**
+ * Repair Note Schema
+ */
+export const RepairNoteSchema = z.object({
+  id: z.number().optional(),
+  text: z.string().min(1, 'La nota no puede estar vacía'),
+  isInternal: z.boolean().default(false)
+})
+
+/**
  * Complete repair form schema
  */
 export const RepairFormSchema = z.object({
@@ -208,7 +229,13 @@ export const RepairFormQuickSchema = z.object({
   devices: z
     .array(DeviceSchemaQuick)
     .min(1, 'Agrega al menos un dispositivo')
-    .max(10, 'Máximo 10 dispositivos por reparación')
+    .max(10, 'Máximo 10 dispositivos por reparación'),
+
+  // Parts array
+  parts: z.array(RepairPartSchema).optional().default([]),
+
+  // Notes array
+  notes: z.array(RepairNoteSchema).optional().default([])
 })
 
 /**

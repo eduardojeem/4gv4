@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion  } from '../ui/motion'
-import { X, Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Scan } from 'lucide-react'
+import { X, Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Scan, Plus } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import {
   Dialog,
@@ -31,6 +31,11 @@ import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { validateProductForm, generateEAN13 } from '@/lib/validations/product-validation'
+import { CategoryModal } from './category-modal'
+import { SupplierModal } from './supplier-modal'
+import { useCategories } from '@/hooks/useCategories'
+import { useSuppliers } from '@/hooks/useSuppliers'
+import type { UISupplier } from '@/lib/types/supplier-ui'
 
 interface ProductModalProps {
   product: Product | null
@@ -73,6 +78,49 @@ export function ProductModal({
   const [loading, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState('basic')
+
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false)
+  const { createCategory } = useCategories()
+  const { createSupplier } = useSuppliers()
+
+  // Local state for lists to support instant updates
+  const [localCategories, setLocalCategories] = useState<Category[]>(categories)
+  const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers)
+
+  useEffect(() => {
+    setLocalCategories(categories)
+  }, [categories])
+
+  useEffect(() => {
+    setLocalSuppliers(suppliers)
+  }, [suppliers])
+
+  const handleSaveCategory = async (categoryData: any) => {
+    const result = await createCategory(categoryData)
+    if (result.success && result.data) {
+       toast.success('Categoría creada')
+       const newCategory = result.data as unknown as Category
+       setLocalCategories(prev => [...prev, newCategory])
+       handleInputChange('category_id', newCategory.id)
+       setIsCategoryModalOpen(false)
+    } else {
+       toast.error(result.error || 'Error al crear categoría')
+    }
+  }
+
+  const handleSaveSupplier = async (supplierData: Partial<UISupplier>) => {
+    const result = await createSupplier(supplierData as any)
+    if (result.success && result.data) {
+       toast.success('Proveedor creado')
+       const newSupplier = result.data as unknown as Supplier
+       setLocalSuppliers(prev => [...prev, newSupplier])
+       handleInputChange('supplier_id', newSupplier.id)
+       setIsSupplierModalOpen(false)
+    } else {
+       toast.error(result.error || 'Error al crear proveedor')
+    }
+  }
 
   // Generar SKU automático
   const generateSKU = () => {
@@ -225,6 +273,7 @@ export function ProductModal({
 
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[95vw] w-full lg:max-w-6xl h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-900 border-none">
         {/* Modern Header with Gradient */}
@@ -453,40 +502,64 @@ export function ProductModal({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="category" className="text-sm font-medium text-gray-700 dark:text-gray-300">Categoría</Label>
-                        <Select
-                          value={formData.category_id || ''}
-                          onValueChange={(value) => handleInputChange('category_id', value)}
-                        >
-                          <SelectTrigger className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-                            <SelectValue placeholder="Seleccionar categoría" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700">
-                            {categories.map((category) => (
-                              <SelectItem key={category.id} value={category.id} className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">
-                                {category.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex gap-2">
+                          <Select
+                            value={formData.category_id || ''}
+                            onValueChange={(value) => handleInputChange('category_id', value)}
+                          >
+                            <SelectTrigger className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 w-full">
+                              <SelectValue placeholder="Seleccionar categoría" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700">
+                              {localCategories.map((category) => (
+                                <SelectItem key={category.id} value={category.id} className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">
+                                  {category.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setIsCategoryModalOpen(true)}
+                            title="Agregar nueva categoría"
+                            className="shrink-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="space-y-2">
                         <Label htmlFor="supplier" className="text-sm font-medium text-gray-700 dark:text-gray-300">Proveedor</Label>
-                        <Select
-                          value={formData.supplier_id || ''}
-                          onValueChange={(value) => handleInputChange('supplier_id', value)}
-                        >
-                          <SelectTrigger className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-                            <SelectValue placeholder="Seleccionar proveedor" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700">
-                            {suppliers.map((supplier) => (
-                              <SelectItem key={supplier.id} value={supplier.id} className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">
-                                {supplier.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="flex gap-2">
+                          <Select
+                            value={formData.supplier_id || ''}
+                            onValueChange={(value) => handleInputChange('supplier_id', value)}
+                          >
+                            <SelectTrigger className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 w-full">
+                              <SelectValue placeholder="Seleccionar proveedor" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700">
+                              {localSuppliers.map((supplier) => (
+                                <SelectItem key={supplier.id} value={supplier.id} className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">
+                                  {supplier.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setIsSupplierModalOpen(true)}
+                            title="Agregar nuevo proveedor"
+                            className="shrink-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
@@ -881,6 +954,22 @@ export function ProductModal({
         </div>
       </DialogContent>
     </Dialog>
+
+    <CategoryModal
+      isOpen={isCategoryModalOpen}
+      onClose={() => setIsCategoryModalOpen(false)}
+      mode="add"
+      onSave={handleSaveCategory}
+      existingCategories={localCategories}
+    />
+
+    <SupplierModal
+      isOpen={isSupplierModalOpen}
+      onClose={() => setIsSupplierModalOpen(false)}
+      mode="add"
+      onSave={handleSaveSupplier}
+    />
+    </>
   )
 }
 

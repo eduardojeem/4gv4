@@ -17,7 +17,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Save, X, User, Phone, Mail, MapPin, Smartphone, Laptop, Tablet,
-  AlertCircle, Trash, Plus, Zap, UserPlus
+  AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -102,6 +102,7 @@ export function RepairFormDialogV2({
   const [quickMode, setQuickMode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false)
+  const [editingCustomer, setEditingCustomer] = useState<{ id: string; name: string; phone: string; email: string } | null>(null)
 
   // Select schema based on quick mode
   const schema = quickMode ? RepairFormQuickSchema : RepairFormSchema
@@ -142,7 +143,9 @@ export function RepairFormDialogV2({
         images: [],
         technician: '',
         estimatedCost: 0
-      }]
+      }],
+      parts: initialData?.parts || [],
+      notes: initialData?.notes || []
     }
   })
 
@@ -150,6 +153,18 @@ export function RepairFormDialogV2({
   const { fields, append, remove } = useFieldArray({
     control,
     name: 'devices'
+  })
+
+  // Field array for parts
+  const { fields: partsFields, append: appendPart, remove: removePart } = useFieldArray({
+    control,
+    name: 'parts'
+  })
+
+  // Field array for notes
+  const { fields: notesFields, append: appendNote, remove: removeNote } = useFieldArray({
+    control,
+    name: 'notes'
   })
 
   // Reset form when dialog opens/closes
@@ -177,7 +192,9 @@ export function RepairFormDialogV2({
           images: [],
           technician: '',
           estimatedCost: 0
-        }]
+        }],
+        parts: initialData?.parts || [],
+        notes: initialData?.notes || []
       })
     }
   }, [open, initialData, reset])
@@ -206,6 +223,25 @@ export function RepairFormDialogV2({
     setValue('customerName', customer.name)
     setValue('customerPhone', customer.phone)
     setValue('customerEmail', customer.email)
+  }
+
+  const handleQuickCustomerUpdated = (customer: { id: string; name: string; phone: string; email: string }) => {
+    setValue('customerName', customer.name)
+    setValue('customerPhone', customer.phone)
+    setValue('customerEmail', customer.email)
+    setEditingCustomer(null)
+  }
+
+  const handleEditCustomer = () => {
+    const id = watch('existingCustomerId')
+    const name = watch('customerName')
+    const phone = watch('customerPhone')
+    const email = watch('customerEmail')
+
+    if (id) {
+      setEditingCustomer({ id, name, phone, email })
+      setShowQuickCustomerModal(true)
+    }
   }
 
   // Focus first error field on submit
@@ -261,17 +297,35 @@ export function RepairFormDialogV2({
                     <User className="h-5 w-5 text-primary" />
                     Información del Cliente
                   </CardTitle>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowQuickCustomerModal(true)}
-                    disabled={isSubmitting}
-                    className="gap-2 text-sm hover:bg-primary/5 hover:text-primary hover:border-primary/30"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    Nuevo Cliente
-                  </Button>
+                  <div className="flex gap-2">
+                    {watch('existingCustomerId') && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleEditCustomer}
+                        disabled={isSubmitting}
+                        className="gap-2 text-sm hover:bg-primary/5 hover:text-primary hover:border-primary/30"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        Editar Cliente
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditingCustomer(null)
+                        setShowQuickCustomerModal(true)
+                      }}
+                      disabled={isSubmitting}
+                      className="gap-2 text-sm hover:bg-primary/5 hover:text-primary hover:border-primary/30"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Nuevo Cliente
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -822,6 +876,150 @@ export function RepairFormDialogV2({
                 )}
               </CardContent>
             </Card>
+
+            {/* Parts */}
+            <Card className="shadow-sm mt-4">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Package className="h-5 w-5 text-primary" />
+                    Repuestos y Materiales
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => appendPart({
+                      name: '',
+                      cost: 0,
+                      quantity: 1,
+                      supplier: '',
+                      partNumber: ''
+                    })}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Agregar Repuesto
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {partsFields.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                    No hay repuestos registrados
+                  </div>
+                )}
+                {partsFields.map((field, index) => (
+                  <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start p-4 border rounded-lg bg-muted/20">
+                    <div className="md:col-span-4 space-y-2">
+                      <Label className="text-sm">Nombre del Repuesto</Label>
+                      <Input {...register(`parts.${index}.name`)} placeholder="Ej: Pantalla OLED" />
+                      {errors.parts?.[index]?.name && (
+                        <p className="text-xs text-red-500">{errors.parts[index]?.name?.message}</p>
+                      )}
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                      <Label className="text-sm">Costo Unit.</Label>
+                      <div className="relative">
+                        <DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                          type="number" 
+                          className="pl-8" 
+                          {...register(`parts.${index}.cost`, { valueAsNumber: true })} 
+                        />
+                      </div>
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                      <Label className="text-sm">Cantidad</Label>
+                      <Input 
+                        type="number" 
+                        {...register(`parts.${index}.quantity`, { valueAsNumber: true })} 
+                      />
+                    </div>
+                    <div className="md:col-span-3 space-y-2">
+                      <Label className="text-sm">Proveedor</Label>
+                      <Input {...register(`parts.${index}.supplier`)} placeholder="Ej: Amazon" />
+                    </div>
+                    <div className="md:col-span-1 flex justify-end pt-8">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removePart(index)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Notes */}
+            <Card className="shadow-sm mt-4">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <MessageSquare className="h-5 w-5 text-primary" />
+                    Notas de Reparación
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => appendNote({
+                      text: '',
+                      isInternal: false
+                    })}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Agregar Nota
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {notesFields.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                    No hay notas registradas
+                  </div>
+                )}
+                {notesFields.map((field, index) => (
+                  <div key={field.id} className="flex gap-4 items-start p-4 border rounded-lg bg-muted/20">
+                    <div className="flex-1 space-y-2">
+                      <Label className="text-sm">Contenido de la nota</Label>
+                      <Textarea {...register(`notes.${index}.text`)} placeholder="Escribe una nota..." />
+                      {errors.notes?.[index]?.text && (
+                        <p className="text-xs text-red-500">{errors.notes[index]?.text?.message}</p>
+                      )}
+                      <div className="flex items-center gap-2 pt-2">
+                         <Controller
+                            control={control}
+                            name={`notes.${index}.isInternal`}
+                            render={({ field }) => (
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            )}
+                          />
+                          <Label className="text-sm text-muted-foreground">Nota interna (solo visible para técnicos)</Label>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeNote(index)}
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50 mt-8"
+                    >
+                      <Trash className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
           </form>
         </div>
 
@@ -862,12 +1060,17 @@ export function RepairFormDialogV2({
       </DialogContent>
     </Dialog>
 
-    {/* Quick Customer Creation Modal */}
+    {/* Quick Customer Creation/Edit Modal */}
     <QuickCustomerModal
       open={showQuickCustomerModal}
-      onClose={() => setShowQuickCustomerModal(false)}
+      onClose={() => {
+        setShowQuickCustomerModal(false)
+        setEditingCustomer(null)
+      }}
       onCustomerCreated={handleQuickCustomerCreated}
+      onCustomerUpdated={handleQuickCustomerUpdated}
+      customerToEdit={editingCustomer}
     />
-  </>
+    </>
   )
 }

@@ -20,6 +20,7 @@ interface RepairDevicePrintItem {
   description?: string
   technician?: string
   estimatedCost?: number
+  ticketNumber?: string
 }
 
 interface RepairCustomerInfo {
@@ -97,6 +98,41 @@ export const previewPersistentRepairTicketNumber = (): string => {
 }
 
 /**
+ * Genera un texto formateado para compartir por WhatsApp o copiar.
+ */
+export const generateRepairShareText = (payload: RepairPrintPayload): string => {
+  const company = config.company
+  const ticketNumber = payload.ticketNumber || 'N/A'
+  const dateObj = payload.date || new Date()
+  const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
+  
+  let text = `*${company.name}* - Comprobante de Recepción\n`
+  text += `--------------------------------\n`
+  text += `*Ticket N°:* ${ticketNumber}\n`
+  text += `*Fecha:* ${date}\n`
+  text += `*Cliente:* ${payload.customer.name}\n`
+  
+  if (payload.customer.customerCode) {
+    text += `*Cód. Cliente:* ${payload.customer.customerCode}\n`
+  }
+
+  text += `\n*Equipos:*\n`
+  payload.devices.forEach((d, i) => {
+    text += `${i + 1}. ${d.typeLabel} ${d.brand} ${d.model}\n`
+    text += `   Problema: ${d.issue}\n`
+    if (typeof d.estimatedCost === 'number') {
+      text += `   Costo Est.: ${formatCurrency(d.estimatedCost)}\n`
+    }
+  })
+  
+  text += `\n--------------------------------\n`
+  text += `Para consultas: ${company.phone || company.email}\n`
+  text += `Gracias por confiar en nosotros!`
+  
+  return text
+}
+
+/**
  * Abre una nueva ventana con el HTML del comprobante y dispara la impresión.
  * Si el navegador bloquea popups, muestra un `alert` solicitando permiso.
  */
@@ -163,6 +199,7 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
       <h3>Datos del Cliente</h3>
       <div class="grid">
         <div><strong>Nombre:</strong> ${payload.customer.name || '-'}</div>
+        ${payload.customer.customerCode ? `<div><strong>Código Cliente:</strong> ${payload.customer.customerCode}</div>` : ''}
         ${payload.customer.document ? `<div><strong>Documento:</strong> ${payload.customer.document}</div>` : ''}
         ${payload.customer.phone ? `<div><strong>Teléfono:</strong> ${payload.customer.phone}</div>` : ''}
         ${payload.customer.email ? `<div><strong>Email:</strong> ${payload.customer.email}</div>` : ''}
@@ -177,7 +214,7 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
     <div class="section">
       <h3>Datos de la Recepción</h3>
       <div class="grid">
-        <div><strong>N° Reparación:</strong> ${ticketNumber}</div>
+        <div><strong>Ticket N°:</strong> ${ticketNumber}</div>
         <div><strong>Fecha:</strong> ${date}</div>
         <div><strong>Hora:</strong> ${time}</div>
         ${payload.priority ? `<div><strong>Prioridad:</strong> ${payload.priority}</div>` : ''}
@@ -188,6 +225,8 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
 
   const footerNote = type === 'customer'
     ? `<p>Este comprobante confirma la recepción del/los equipo(s) para diagnóstico y reparación.</p>
+       <p><strong>Garantía:</strong> 30 días sobre el trabajo realizado (no cubre repuestos salvo defecto de fábrica).</p>
+       <p><strong>Retiro:</strong> Los equipos reparados deben ser retirados en un plazo máximo de 90 días. Pasado este tiempo, la empresa no se responsabiliza por abandono.</p>
        <p>Los costos estimados pueden variar según diagnóstico final.</p>
        <p>Para consultas: ${company.email}</p>`
     : `<p>Esta ficha resume la información técnica para el proceso de diagnóstico y reparación.</p>

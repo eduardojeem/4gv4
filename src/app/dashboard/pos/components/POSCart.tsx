@@ -147,14 +147,14 @@ export const POSCart: React.FC<POSCartProps> = memo(({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
-            Carrito
+            Carrito de Compras
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex items-center justify-center">
           <div className="text-center text-muted-foreground">
             <ShoppingCart className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>El carrito está vacío</p>
-            <p className="text-sm">Agrega productos para comenzar</p>
+            <p className="font-medium mb-1">Tu carrito está vacío</p>
+            <p className="text-sm">Selecciona productos para comenzar una venta</p>
           </div>
         </CardContent>
       </Card>
@@ -217,10 +217,11 @@ export const POSCart: React.FC<POSCartProps> = memo(({
             variant="outline"
             onClick={onClearCart}
             disabled={isProcessing}
-            className="flex-1"
+            className="flex-1 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+            title="Vaciar todos los productos del carrito"
           >
             <Trash2 className="h-4 w-4 mr-2" />
-            Limpiar
+            Vaciar Carrito
           </Button>
           
           <Button
@@ -236,7 +237,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
             ) : (
               <>
                 <CreditCard className="h-4 w-4 mr-2" />
-                Pagar
+                Procesar Pago
               </>
             )}
           </Button>

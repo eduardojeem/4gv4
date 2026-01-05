@@ -70,7 +70,7 @@ export const RepairCard = memo<RepairCardProps>(
                 <span>{Array.isArray(repair.images) ? repair.images.length : 0}</span>
               </div>
               <span className="font-mono text-[10px] bg-slate-100 dark:bg-muted/60 text-slate-700 dark:text-muted-foreground px-1 rounded">
-                {repair.id.slice(0, 8)}
+                {repair.ticketNumber || repair.id.slice(0, 8)}
               </span>
             </div>
           </div>

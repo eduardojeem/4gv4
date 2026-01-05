@@ -9,37 +9,18 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { 
   Users, 
   Star, 
   Mail, 
   Phone, 
   MapPin, 
-  AlertCircle,
-  CreditCard
+  AlertCircle
 } from 'lucide-react'
 import { CustomerProvider } from '@/contexts/CustomerContext'
 import { CustomerSyncSection } from '../CustomerSyncSection'
 import { CustomerRefreshButton } from '../CustomerRefreshButton'
-import { formatCurrency } from '@/lib/currency'
-
-interface Customer {
-  id: string
-  name: string
-  email?: string
-  phone?: string
-  address?: string
-  city?: string
-  type?: string
-  loyalty_points?: number
-  total_purchases?: number
-  total_repairs?: number
-  current_balance?: number
-  last_visit?: string
-  avatar?: string
-  credit_limit?: number
-}
+import { usePOSCustomer } from '../../contexts/POSCustomerContext'
 
 interface CreditSummary {
   totalCredit: number
@@ -51,44 +32,6 @@ interface CreditSummary {
 }
 
 interface CustomerSelectionProps {
-  // Estado del cliente
-  selectedCustomer: string
-  setSelectedCustomer: (id: string) => void
-  activeCustomer?: Customer
-  
-  // Búsqueda y filtros
-  customerSearch: string
-  setCustomerSearch: (search: string) => void
-  customerTypeFilter: string
-  setCustomerTypeFilter: (type: string) => void
-  customerTypes: string[]
-  showFrequentOnly: boolean
-  setShowFrequentOnly: (show: boolean) => void
-  filteredCustomers: Customer[]
-  
-  // Gestión de datos
-  setCustomers: (customers: Customer[]) => void
-  setCustomersSourceSupabase: (isSupabase: boolean) => void
-  customersSourceSupabase: boolean
-  lastCustomerRefreshCount: number | null
-  setLastCustomerRefreshCount: (count: number) => void
-  
-  // Nuevo cliente
-  newCustomerOpen: boolean
-  setNewCustomerOpen: (open: boolean) => void
-  newFirstName: string
-  setNewFirstName: (name: string) => void
-  newLastName: string
-  setNewLastName: (name: string) => void
-  newPhone: string
-  setNewPhone: (phone: string) => void
-  newEmail: string
-  setNewEmail: (email: string) => void
-  newType: string
-  setNewType: (type: string) => void
-  newCustomerSaving: boolean
-  createNewCustomer: () => void
-  
   // Crédito
   creditSummary?: CreditSummary
   showCreditHistory: boolean
@@ -98,41 +41,44 @@ interface CustomerSelectionProps {
 }
 
 export function CustomerSelection({
-  selectedCustomer,
-  setSelectedCustomer,
-  activeCustomer,
-  customerSearch,
-  setCustomerSearch,
-  customerTypeFilter,
-  setCustomerTypeFilter,
-  customerTypes,
-  showFrequentOnly,
-  setShowFrequentOnly,
-  filteredCustomers,
-  setCustomers,
-  setCustomersSourceSupabase,
-  customersSourceSupabase,
-  lastCustomerRefreshCount,
-  setLastCustomerRefreshCount,
-  newCustomerOpen,
-  setNewCustomerOpen,
-  newFirstName,
-  setNewFirstName,
-  newLastName,
-  setNewLastName,
-  newPhone,
-  setNewPhone,
-  newEmail,
-  setNewEmail,
-  newType,
-  setNewType,
-  newCustomerSaving,
-  createNewCustomer,
   creditSummary,
   showCreditHistory,
   setShowCreditHistory,
   formatCurrency
 }: CustomerSelectionProps) {
+  
+  const {
+    selectedCustomer,
+    setSelectedCustomer,
+    activeCustomer,
+    customerSearch,
+    setCustomerSearch,
+    customerTypeFilter,
+    setCustomerTypeFilter,
+    customerTypes,
+    showFrequentOnly,
+    setShowFrequentOnly,
+    filteredCustomers,
+    setCustomers,
+    setCustomersSourceSupabase,
+    customersSourceSupabase,
+    lastCustomerRefreshCount,
+    setLastCustomerRefreshCount,
+    newCustomerOpen,
+    setNewCustomerOpen,
+    newFirstName,
+    setNewFirstName,
+    newLastName,
+    setNewLastName,
+    newPhone,
+    setNewPhone,
+    newEmail,
+    setNewEmail,
+    newType,
+    setNewType,
+    newCustomerSaving,
+    createNewCustomer
+  } = usePOSCustomer()
 
   return (
     <CustomerProvider>

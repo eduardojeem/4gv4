@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Wrench } from 'lucide-react'
 import { config, getTaxConfig } from '@/lib/config'
+import { useCheckout } from '../../contexts/CheckoutContext'
 
 interface CartItem {
   id: string
@@ -33,7 +34,6 @@ interface CartCalculations {
 interface SaleSummaryProps {
   cart: CartItem[]
   cartCalculations: CartCalculations
-  discount: number
   isWholesale: boolean
   WHOLESALE_DISCOUNT_RATE: number
   formatCurrency: (amount: number) => string
@@ -42,11 +42,11 @@ interface SaleSummaryProps {
 export function SaleSummary({
   cart,
   cartCalculations,
-  discount,
   isWholesale,
   WHOLESALE_DISCOUNT_RATE,
   formatCurrency
 }: SaleSummaryProps) {
+  const { discount } = useCheckout()
 
   return (
     <div className="space-y-4">

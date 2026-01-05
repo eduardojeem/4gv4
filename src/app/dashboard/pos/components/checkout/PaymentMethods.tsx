@@ -3,47 +3,18 @@
  * Extraído del CheckoutModal para mejor modularización
  */
 
-import React from 'react'
+import React, { useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { CreditCard, Users, Clock } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatCurrency } from '@/lib/currency'
+import { useCheckout } from '../../contexts/CheckoutContext'
 
 interface PaymentMethodsProps {
-  // Estado de pago
-  isMixedPayment: boolean
-  setIsMixedPayment: (value: boolean) => void
-  paymentMethod: string
-  setPaymentMethod: (method: string) => void
-  
-  // Campos específicos por método
-  cashReceived: number
-  setCashReceived: (amount: number) => void
-  cardNumber: string
-  setCardNumber: (number: string) => void
-  transferReference: string
-  setTransferReference: (reference: string) => void
-  
-  // Pago mixto
-  splitAmount: number
-  setSplitAmount: (amount: number) => void
-  paymentSplit: Array<{
-    id: string
-    method: string
-    amount: number
-    reference?: string
-  }>
-  addPaymentSplit: (method: string, amount: number, reference?: string) => void
-  removePaymentSplit: (id: string) => void
-  getTotalPaid: () => number
-  getRemainingAmount: () => number
-  
   // Cálculos
   cartTotal: number
-  cartChange: number
-  cartRemaining: number
   
   // Crédito
   canUseCredit: boolean
@@ -56,31 +27,44 @@ interface PaymentMethodsProps {
 }
 
 export function PaymentMethods({
-  isMixedPayment,
-  setIsMixedPayment,
-  paymentMethod,
-  setPaymentMethod,
-  cashReceived,
-  setCashReceived,
-  cardNumber,
-  setCardNumber,
-  transferReference,
-  setTransferReference,
-  splitAmount,
-  setSplitAmount,
-  paymentSplit,
-  addPaymentSplit,
-  removePaymentSplit,
-  getTotalPaid,
-  getRemainingAmount,
   cartTotal,
-  cartChange,
-  cartRemaining,
   canUseCredit,
   creditSummary,
   formatCurrency
 }: PaymentMethodsProps) {
   
+  const {
+    isMixedPayment,
+    setIsMixedPayment,
+    paymentMethod,
+    setPaymentMethod,
+    cashReceived,
+    setCashReceived,
+    cardNumber,
+    setCardNumber,
+    transferReference,
+    setTransferReference,
+    splitAmount,
+    setSplitAmount,
+    paymentSplit,
+    addPaymentSplit,
+    removePaymentSplit
+  } = useCheckout()
+
+  // Calcular totales locales usando el contexto
+  const getTotalPaid = useCallback(() => {
+    return paymentSplit.reduce((total, split) => total + split.amount, 0)
+  }, [paymentSplit])
+
+  const getRemainingAmount = useCallback(() => {
+    // Redondear a 2 decimales para evitar problemas de punto flotante
+    return Math.round((cartTotal - getTotalPaid()) * 100) / 100
+  }, [cartTotal, getTotalPaid])
+
+  // Cálculos para pago en efectivo simple
+  const cashChange = Math.max(0, cashReceived - cartTotal)
+  const cashRemaining = Math.max(0, cartTotal - cashReceived)
+
   const paymentMethods = [
     { id: 'cash', label: 'Efectivo', icon: GSIcon, color: 'text-muted-foreground' },
     { id: 'card', label: 'Tarjeta', icon: CreditCard, color: 'text-muted-foreground' },
@@ -222,14 +206,14 @@ export function PaymentMethods({
             onChange={(e) => setCashReceived(Number(e.target.value))}
             placeholder="0"
           />
-          {cartRemaining > 0 && (
+          {cashRemaining > 0 && (
             <p className="text-sm text-destructive mt-2">
-              Restante: {formatCurrency(cartRemaining)}
+              Restante: {formatCurrency(cashRemaining)}
             </p>
           )}
-          {cartChange > 0 && (
+          {cashChange > 0 && (
             <p className="text-sm text-primary mt-1">
-              Cambio: {formatCurrency(cartChange)}
+              Cambio: {formatCurrency(cashChange)}
             </p>
           )}
         </div>

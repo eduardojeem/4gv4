@@ -43,7 +43,7 @@ interface UseSmartSearchOptions {
 
 export function useSmartSearch({
   products,
-  maxResults = 20,
+  maxResults = 100,
   enableFuzzySearch = true,
   enableSemanticSearch = true,
   minQueryLength = 1,
@@ -80,6 +80,7 @@ export function useSmartSearch({
 
   // Función para resaltar coincidencias
   const highlightMatch = useCallback((text: string, query: string): string => {
+    if (typeof text !== 'string') return ''
     if (!query) return text
     
     const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
@@ -92,12 +93,12 @@ export function useSmartSearch({
     const lowerQuery = query.toLowerCase()
     
     products.forEach(product => {
-      const lowerName = product.name.toLowerCase()
-      const lowerSku = product.sku.toLowerCase()
-      const lowerDescription = product.description?.toLowerCase() || ''
+      const lowerName = (typeof product.name === 'string' ? product.name : '').toLowerCase()
+      const lowerSku = (typeof product.sku === 'string' ? product.sku : '').toLowerCase()
+      const lowerDescription = (typeof product.description === 'string' ? product.description : '').toLowerCase()
       
       // Coincidencia exacta en nombre
-      if (lowerName === lowerQuery) {
+      if (lowerName === lowerQuery && lowerName) {
         results.push({
           product,
           score: 100,
@@ -137,10 +138,10 @@ export function useSmartSearch({
     const lowerQuery = query.toLowerCase()
     
     products.forEach(product => {
-      const lowerName = product.name.toLowerCase()
-      const lowerSku = product.sku.toLowerCase()
-      const lowerDescription = product.description?.toLowerCase() || ''
-      const lowerCategory = product.category.toLowerCase()
+      const lowerName = (typeof product.name === 'string' ? product.name : '').toLowerCase()
+      const lowerSku = (typeof product.sku === 'string' ? product.sku : '').toLowerCase()
+      const lowerDescription = (typeof product.description === 'string' ? product.description : '').toLowerCase()
+      const lowerCategory = (typeof product.category === 'string' ? product.category : '').toLowerCase()
       
       let score = 0
       let matchedField = ''
@@ -189,7 +190,7 @@ export function useSmartSearch({
     const maxDistance = Math.floor(query.length / 3) // Permitir 1 error cada 3 caracteres
     
     products.forEach(product => {
-      const words = product.name.toLowerCase().split(' ')
+      const words = (typeof product.name === 'string' ? product.name : '').toLowerCase().split(' ')
       
       words.forEach(word => {
         if (word.length >= 3) {
@@ -239,8 +240,8 @@ export function useSmartSearch({
     
     if (relatedWords.length > 0) {
       products.forEach(product => {
-        const lowerName = product.name.toLowerCase()
-        const lowerDescription = product.description?.toLowerCase() || ''
+        const lowerName = (typeof product.name === 'string' ? product.name : '').toLowerCase()
+        const lowerDescription = (typeof product.description === 'string' ? product.description : '').toLowerCase()
         
         relatedWords.forEach(word => {
           if (lowerName.includes(word) || lowerDescription.includes(word)) {
@@ -329,7 +330,7 @@ export function useSmartSearch({
       })
       
       // Mostrar categorías populares
-      const categories = [...new Set(products.map(p => p.category))]
+      const categories = [...new Set(products.map(p => p.category))].filter(c => typeof c === 'string' && c)
       categories.slice(0, 5).forEach(category => {
         const count = products.filter(p => p.category === category).length
         suggestions.push({
@@ -342,7 +343,7 @@ export function useSmartSearch({
       // Sugerencias basadas en productos
       const lowerQuery = query.toLowerCase()
       const productSuggestions = products
-        .filter(p => p.name.toLowerCase().includes(lowerQuery))
+        .filter(p => typeof p.name === 'string' && p.name.toLowerCase().includes(lowerQuery))
         .slice(0, 5)
         .map(p => ({
           text: p.name,
@@ -353,7 +354,7 @@ export function useSmartSearch({
       
       // Sugerencias de categorías
       const categorySuggestions = [...new Set(products.map(p => p.category))]
-        .filter(c => c.toLowerCase().includes(lowerQuery))
+        .filter(c => typeof c === 'string' && c.toLowerCase().includes(lowerQuery))
         .slice(0, 3)
         .map(c => ({
           text: c,

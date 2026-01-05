@@ -7,6 +7,7 @@ interface SupabaseCustomer {
     last_name?: string
     phone?: string
     email?: string
+    customer_code?: string
 }
 
 interface SupabaseTechnician {
@@ -23,8 +24,25 @@ interface SupabaseRepairImage {
     description?: string
 }
 
+interface SupabaseRepairPart {
+    id: string | number
+    part_name: string
+    unit_cost: number
+    quantity: number
+    supplier?: string
+    part_number?: string
+}
+
+interface SupabaseRepairNote {
+    id: string | number
+    note_text: string
+    created_at: string
+    author_name: string
+}
+
 interface SupabaseRepair {
     id: string
+    ticket_number?: string
     customer?: SupabaseCustomer
     device_brand: string
     device_model: string
@@ -55,6 +73,8 @@ interface SupabaseRepair {
     notify_customer?: boolean
     notify_technician?: boolean
     notify_manager?: boolean
+    parts?: SupabaseRepairPart[]
+    notes?: SupabaseRepairNote[]
 }
 
 /**
@@ -64,9 +84,11 @@ interface SupabaseRepair {
 export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
     return {
         id: r.id,
+        ticketNumber: r.ticket_number,
         customer: {
             id: r.customer?.id,
-            name: r.customer?.name || r.customer?.first_name + ' ' + r.customer?.last_name || 'Cliente Desconocido',
+            customerCode: r.customer?.customer_code,
+            name: r.customer?.name || (r.customer?.first_name ? `${r.customer?.first_name} ${r.customer?.last_name || ''}`.trim() : 'Cliente Desconocido'),
             phone: r.customer?.phone || '',
             email: r.customer?.email || ''
         },
@@ -96,8 +118,20 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         lastUpdate: r.updated_at,
         progress: r.progress || 0,
         customerRating: r.customer_rating ?? null,
-        notes: [], 
-        parts: [], 
+        notes: (r.notes || []).map((n: SupabaseRepairNote) => ({
+            id: Number(n.id) || 0, // Fallback if UUID
+            text: n.note_text,
+            timestamp: n.created_at,
+            author: n.author_name
+        })),
+        parts: (r.parts || []).map((p: SupabaseRepairPart) => ({
+            id: Number(p.id) || 0, // Fallback if UUID
+            name: p.part_name,
+            cost: p.unit_cost,
+            quantity: p.quantity,
+            supplier: p.supplier || '',
+            partNumber: p.part_number || ''
+        })),
         images: Array.isArray(r.images)
             ? r.images.map((img: SupabaseRepairImage) => ({
                 id: String(img.id ?? img.image_id ?? img.image_url),

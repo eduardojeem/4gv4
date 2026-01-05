@@ -37,7 +37,9 @@
     "setup:segmentation": "node scripts/setup-segmentation.js",
     "test:segmentation": "node scripts/test-segmentation.js",
     "fix:repair-status": "node scripts/fix-repair-status.js",
-    "init:repo": "node scripts/init-repo.js"
+    "init:repo": "node scripts/init-repo.js",
+    "storage:setup": "npx tsx scripts/setup-storage-buckets.ts",
+    "storage:check": "npx tsx scripts/check-storage-status.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

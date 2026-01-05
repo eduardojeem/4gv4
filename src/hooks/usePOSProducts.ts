@@ -119,66 +119,59 @@ export function usePOSProducts() {
     setError(null)
     
     try {
-      console.log('🔍 [usePOSProducts] Iniciando fetchProducts desde Supabase...')
-      
-      // FORZAR USO DE SUPABASE - No usar datos mock
-      console.log('🔗 [usePOSProducts] Conectando a Supabase para obtener productos...')
-      
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          *,
-          categories (
-            id,
-            name
-          )
-        `)
-        .eq('is_active', true)
-        .order('name')
+      console.log('🔄 [usePOSProducts] Cargando productos desde Supabase...')
 
-      console.log('📊 [usePOSProducts] Respuesta de Supabase:', { 
-        dataLength: data?.length || 0, 
-        error: error?.message || null,
-        hasData: !!data,
-        firstProduct: data?.[0]?.name || 'N/A'
-      })
+      // 1. Obtener conteo total (para detectar filtros ocultos)
+      const { count, error: countError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+      
+      if (countError) {
+        console.error('❌ [usePOSProducts] Error contando productos:', countError)
+        setError('Error al conectar con la base de datos')
+        // No retornamos, intentamos cargar igual
+      } else {
+        console.log('📊 [usePOSProducts] Total real en DB (count):', count)
+      }
+
+      // 2. Cargar productos
+      const { data: dbProducts, error } = await supabase
+        .from('products')
+        .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active')
+        .order('name')
+        .limit(5000)
 
       if (error) {
-        console.error('❌ [usePOSProducts] Error de Supabase:', error)
-        throw new Error(`Error de base de datos: ${error.message}`)
+          throw error
       }
 
-      if (!data || data.length === 0) {
-        console.log('⚠️ [usePOSProducts] No se encontraron productos en la base de datos')
-        setProducts([])
-        setError('No hay productos disponibles. Agregue productos a la base de datos.')
-        return
+      console.log(`📦 [usePOSProducts] Productos cargados: ${dbProducts?.length || 0}`)
+      
+      if (count !== null && dbProducts && dbProducts.length < count) {
+          console.warn(`⚠️ [usePOSProducts] Discrepancia: DB=${count} vs Cargados=${dbProducts.length}. Verifique RLS.`)
       }
 
-      console.log(`✅ [usePOSProducts] Procesando ${data.length} productos...`)
-
-      const posProducts: UnifiedProduct[] = data.map((product: any) => ({
-        id: product.id,
-        name: product.name,
-        sku: product.sku,
-        barcode: product.barcode || undefined,
-        sale_price: product.sale_price,
-        stock_quantity: product.stock_quantity,
-        category_id: product.category_id,
-        category: product.categories ? { id: product.categories.id, name: product.categories.name } as UnifiedCategory : undefined,
-        description: product.description || undefined,
-        image: (product.images?.[0]) || product.image_url || undefined,
-        unit_measure: product.unit_measure || 'unidad',
-        is_active: product.is_active,
-        purchase_price: product.cost_price || 0
+      // Transformar a formato unificado
+      const unifiedProducts: UnifiedProduct[] = (dbProducts || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku || '',
+        barcode: p.barcode,
+        sale_price: Number(p.sale_price),
+        stock_quantity: p.stock_quantity,
+        category_id: p.category_id,
+        description: p.description,
+        image: undefined, 
+        unit_measure: 'unidad',
+        is_active: p.is_active, 
+        purchase_price: 0 
       }))
 
-      console.log('✅ [usePOSProducts] Productos procesados exitosamente:', posProducts.length)
-      setProducts(posProducts)
+      setProducts(unifiedProducts)
     } catch (err) {
-      console.error('❌ [usePOSProducts] Error completo en fetchProducts:', err)
-      setProducts([])
+      console.error('❌ [usePOSProducts] Error cargando productos:', err)
       setError(`Error al cargar productos: ${err instanceof Error ? err.message : 'Error desconocido'}`)
+      setProducts([])
     } finally {
       setLoading(false)
     }

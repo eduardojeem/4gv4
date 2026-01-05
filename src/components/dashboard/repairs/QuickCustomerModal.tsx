@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,23 +12,50 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { User, Phone, Mail, Loader2, UserPlus } from 'lucide-react'
+import { User, Phone, Mail, Loader2, UserPlus, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 
 interface QuickCustomerModalProps {
   open: boolean
   onClose: () => void
-  onCustomerCreated: (customer: { id: string; name: string; phone: string; email: string }) => void
+  onCustomerCreated?: (customer: { id: string; name: string; phone: string; email: string }) => void
+  onCustomerUpdated?: (customer: { id: string; name: string; phone: string; email: string }) => void
+  customerToEdit?: { id: string; name: string; phone: string; email: string } | null
 }
 
-export function QuickCustomerModal({ open, onClose, onCustomerCreated }: QuickCustomerModalProps) {
-  const [isCreating, setIsCreating] = useState(false)
+export function QuickCustomerModal({ 
+  open, 
+  onClose, 
+  onCustomerCreated, 
+  onCustomerUpdated,
+  customerToEdit 
+}: QuickCustomerModalProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: ''
   })
+
+  // Update form data when customerToEdit changes
+  useEffect(() => {
+    if (open) {
+      if (customerToEdit) {
+        setFormData({
+          name: customerToEdit.name || '',
+          phone: customerToEdit.phone || '',
+          email: customerToEdit.email || ''
+        })
+      } else {
+        setFormData({
+          name: '',
+          phone: '',
+          email: ''
+        })
+      }
+    }
+  }, [open, customerToEdit])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,7 +65,7 @@ export function QuickCustomerModal({ open, onClose, onCustomerCreated }: QuickCu
       return
     }
 
-    setIsCreating(true)
+    setIsSubmitting(true)
     try {
       const supabase = createClient()
       
@@ -46,34 +73,57 @@ export function QuickCustomerModal({ open, onClose, onCustomerCreated }: QuickCu
         name: formData.name.trim(),
         phone: formData.phone.trim() || null,
         email: formData.email.trim() || null,
-        customer_type: 'regular',
-        status: 'active',
       }
 
-      const { data: customerRow, error } = await supabase
-        .from('customers')
-        .insert(payload)
-        .select('id, name, phone, email')
-        .single()
+      if (customerToEdit) {
+        // Update existing customer
+        const { data: customerRow, error } = await supabase
+          .from('customers')
+          .update(payload)
+          .eq('id', customerToEdit.id)
+          .select('id, name, phone, email')
+          .single()
 
-      if (error) throw error
+        if (error) throw error
 
-      const newCustomer = {
-        id: customerRow.id,
-        name: customerRow.name,
-        phone: customerRow.phone || '',
-        email: customerRow.email || ''
+        const updatedCustomer = {
+          id: customerRow.id,
+          name: customerRow.name,
+          phone: customerRow.phone || '',
+          email: customerRow.email || ''
+        }
+
+        onCustomerUpdated?.(updatedCustomer)
+        toast.success(`Cliente "${formData.name}" actualizado exitosamente`)
+      } else {
+        // Create new customer
+        const { data: customerRow, error } = await supabase
+          .from('customers')
+          .insert({
+            ...payload,
+            customer_type: 'regular',
+            status: 'active',
+          })
+          .select('id, name, phone, email')
+          .single()
+
+        if (error) throw error
+
+        const newCustomer = {
+          id: customerRow.id,
+          name: customerRow.name,
+          phone: customerRow.phone || '',
+          email: customerRow.email || ''
+        }
+
+        onCustomerCreated?.(newCustomer)
+        toast.success(`Cliente "${formData.name}" creado exitosamente`)
       }
-
-      onCustomerCreated(newCustomer)
-      toast.success(`Cliente "${formData.name}" creado exitosamente`)
       
-      // Reset form and close modal
-      setFormData({ name: '', phone: '', email: '' })
-      onClose()
+      handleClose()
     } catch (error: any) {
-      console.error('Error creating customer:', error)
-      const message = error?.message || 'Error al crear el cliente'
+      console.error('Error saving customer:', error)
+      const message = error?.message || 'Error al guardar el cliente'
       
       if (message.includes('duplicate key') && message.includes('email')) {
         toast.error('Ya existe un cliente con ese email')
@@ -81,27 +131,41 @@ export function QuickCustomerModal({ open, onClose, onCustomerCreated }: QuickCu
         toast.error(message)
       }
     } finally {
-      setIsCreating(false)
+      setIsSubmitting(false)
     }
   }
 
   const handleClose = () => {
-    if (!isCreating) {
+    if (!isSubmitting) {
       setFormData({ name: '', phone: '', email: '' })
       onClose()
     }
   }
+
+  const isEditing = !!customerToEdit
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="h-5 w-5 text-primary" />
-            Crear Nuevo Cliente
+            {isEditing ? (
+              <>
+                <Pencil className="h-5 w-5 text-primary" />
+                Actualizar Cliente
+              </>
+            ) : (
+              <>
+                <UserPlus className="h-5 w-5 text-primary" />
+                Crear Nuevo Cliente
+              </>
+            )}
           </DialogTitle>
           <DialogDescription>
-            Ingresa los datos básicos del cliente para crearlo rápidamente
+            {isEditing 
+              ? 'Actualiza los datos del cliente seleccionado'
+              : 'Ingresa los datos básicos del cliente para crearlo rápidamente'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -120,7 +184,7 @@ export function QuickCustomerModal({ open, onClose, onCustomerCreated }: QuickCu
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 className="pl-10 h-11"
-                disabled={isCreating}
+                disabled={isSubmitting}
                 required
               />
             </div>
@@ -140,7 +204,7 @@ export function QuickCustomerModal({ open, onClose, onCustomerCreated }: QuickCu
                 value={formData.phone}
                 onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                 className="pl-10 h-11"
-                disabled={isCreating}
+                disabled={isSubmitting}
               />
             </div>
           </div>
@@ -159,7 +223,7 @@ export function QuickCustomerModal({ open, onClose, onCustomerCreated }: QuickCu
                 value={formData.email}
                 onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                 className="pl-10 h-11"
-                disabled={isCreating}
+                disabled={isSubmitting}
               />
             </div>
           </div>
@@ -169,24 +233,24 @@ export function QuickCustomerModal({ open, onClose, onCustomerCreated }: QuickCu
               type="button"
               variant="outline"
               onClick={handleClose}
-              disabled={isCreating}
+              disabled={isSubmitting}
             >
               Cancelar
             </Button>
             <Button
               type="submit"
-              disabled={isCreating || !formData.name.trim()}
+              disabled={isSubmitting || !formData.name.trim()}
               className="gap-2"
             >
-              {isCreating ? (
+              {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Creando...
+                  {isEditing ? 'Actualizando...' : 'Creando...'}
                 </>
               ) : (
                 <>
-                  <UserPlus className="h-4 w-4" />
-                  Crear Cliente
+                  {isEditing ? <Pencil className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                  {isEditing ? 'Actualizar Cliente' : 'Crear Cliente'}
                 </>
               )}
             </Button>

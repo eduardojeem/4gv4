@@ -61,7 +61,7 @@ export const RepairRow = memo<RepairRowProps>(
       >
         <TableCell className="font-mono text-xs font-medium">
           <span className="text-muted-foreground dark:text-muted-foreground/80">#</span>
-          {repair.id.slice(0, 8)}
+          {repair.ticketNumber || repair.id.slice(0, 8)}
         </TableCell>
 
         <TableCell>

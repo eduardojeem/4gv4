@@ -7,6 +7,12 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -17,15 +23,17 @@ import {
   Smartphone, Tablet, Laptop, Monitor, AlertCircle, 
   DollarSign, Clock, FileText, Image as ImageIcon,
   Edit, Trash, Printer, Package as PackageIcon, CheckCircle,
-  Maximize2, Minimize2
+  Maximize2, Minimize2, Share2, MessageCircle, Copy
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
+import { toast } from 'sonner'
 import { Repair } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
 import { PatternDrawer } from './PatternDrawer'
+import { printRepairReceipt, generateRepairShareText, RepairPrintPayload } from '@/lib/repair-receipt'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -63,6 +71,66 @@ export function RepairDetailDialog({
     }).format(amount)
   }
 
+  const getPrintPayload = (): RepairPrintPayload => {
+    if (!repair) throw new Error("No repair")
+    return {
+      ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase(),
+      date: new Date(repair.createdAt),
+      priority: repair.priority,
+      urgency: repair.urgency,
+      customer: {
+        name: repair.customer.name,
+        customerCode: repair.customer.customerCode,
+        phone: repair.customer.phone,
+        email: repair.customer.email,
+        address: (repair.customer as any).address,
+        city: (repair.customer as any).city,
+        country: (repair.customer as any).country,
+        document: (repair.customer as any).document,
+      },
+      devices: [{
+        typeLabel: deviceTypeConfig[repair.deviceType]?.label || repair.deviceType,
+        brand: repair.brand,
+        model: repair.model,
+        issue: repair.issue,
+        description: repair.description,
+        technician: repair.technician?.name || 'Sin asignar',
+        estimatedCost: repair.estimatedCost,
+        ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()
+      }]
+    }
+  }
+
+  const handlePrint = (type: 'customer' | 'technician') => {
+    if (!repair) return
+    const payload = getPrintPayload()
+    printRepairReceipt(type, payload)
+  }
+
+  const handleShare = (method: 'whatsapp' | 'copy' | 'native') => {
+    if (!repair) return
+    const payload = getPrintPayload()
+    const shareText = generateRepairShareText(payload)
+
+    if (method === 'whatsapp') {
+      const encodedText = encodeURIComponent(shareText)
+      const url = `https://wa.me/?text=${encodedText}`
+      window.open(url, '_blank')
+    } else if (method === 'copy') {
+      navigator.clipboard.writeText(shareText)
+      toast.success('Texto copiado al portapapeles')
+    } else if (method === 'native') {
+      if (navigator.share) {
+        navigator.share({
+          title: `Reparación ${payload.ticketNumber}`,
+          text: shareText,
+        }).catch(console.error)
+      } else {
+        toast.error('Tu dispositivo no soporta compartir nativo')
+      }
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className={cn(
@@ -76,7 +144,7 @@ export function RepairDetailDialog({
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="bg-background">
-                  ID: {repair.id.slice(0, 8)}
+                  {repair.ticketNumber || `ID: ${repair.id.slice(0, 8)}`}
                 </Badge>
                 <Badge className={cn(priorityConfig[repair.priority].color)}>
                   Prioridad {priorityConfig[repair.priority].label}
@@ -101,6 +169,22 @@ export function RepairDetailDialog({
               </DialogDescription>
             </div>
             <div className="flex gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" title="Imprimir">
+                    <Printer className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handlePrint('customer')}>
+                    Comprobante Cliente
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handlePrint('technician')}>
+                    Ficha Técnica
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <Button
                 variant="ghost"
                 size="icon"
@@ -460,6 +544,30 @@ export function RepairDetailDialog({
           <Button variant="outline" onClick={onClose}>
             Cerrar
           </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Share2 className="h-4 w-4" />
+                Compartir
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleShare('whatsapp')}>
+                <MessageCircle className="mr-2 h-4 w-4" />
+                WhatsApp
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleShare('copy')}>
+                <Copy className="mr-2 h-4 w-4" />
+                Copiar Texto
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleShare('native')}>
+                <Share2 className="mr-2 h-4 w-4" />
+                Otras apps
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {onEdit && (
             <Button onClick={() => onEdit(repair)}>
               <Edit className="mr-2 h-4 w-4" />
