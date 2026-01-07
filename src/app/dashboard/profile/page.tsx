@@ -22,7 +22,8 @@ import {
   Mail, Phone, User, LogOut, Palette, Shield, Bell, Building2, MapPin, 
   Camera, Save, RefreshCw, Settings, Key, Eye, EyeOff, Globe, 
   Smartphone, Monitor, Sun, Moon, Zap, Check, X, Edit3, Copy,
-  UserCheck, Activity, Clock, Calendar, Star, Award, TrendingUp
+  UserCheck, Activity, Clock, Calendar, Star, Award, TrendingUp,
+  AlertCircle, CheckCircle
 } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton, SkeletonCard } from '@/components/ui/skeleton-loader'
@@ -464,63 +465,101 @@ export default function UserProfilePage() {
         {/* Pestaña de Perfil */}
         <TabsContent value="profile" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Información básica */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
+            {/* Información básica y Contacto */}
+            <Card className="lg:col-span-2 border-none shadow-md bg-card/50 backdrop-blur-sm">
+              <CardHeader className="pb-4 border-b">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <User className="h-5 w-5" />
-                    Información Personal
-                  </CardTitle>
-                  {isDirty && <Badge variant="outline" className="animate-pulse">Sin guardar</Badge>}
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                      <User className="h-5 w-5 text-primary" />
+                      Información del Perfil
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Gestiona tu información personal y de contacto visible para otros usuarios.
+                    </p>
+                  </div>
+                  {isDirty && (
+                    <Badge variant="secondary" className="animate-pulse bg-yellow-500/10 text-yellow-600 border-yellow-200">
+                      Cambios sin guardar
+                    </Badge>
+                  )}
                 </div>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-8 pt-6">
                 {loadingUser ? (
-                  <div className="space-y-4">
-                    <Skeleton className="h-20 w-20 rounded-full" />
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="h-24 w-24 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-6 w-48" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                    </div>
                     <SkeletonCard />
                   </div>
                 ) : (
                   <>
-                    {/* Avatar Section - Optimizado */}
-                    <div className="flex flex-col sm:flex-row items-start gap-6">
-                      <AvatarUpload
-                        currentAvatarUrl={profile.avatarUrl}
-                        userName={profile.name}
-                        userId={userId}
-                        userEmail={profile.email}
-                        onAvatarChange={(url) => setProfile(p => ({ ...p, avatarUrl: url }))}
-                        size="lg"
-                        className="mx-auto sm:mx-0"
-                      />
+                    {/* Sección Superior: Avatar y Bio */}
+                    <div className="flex flex-col md:flex-row gap-8 items-start">
+                      <div className="flex-shrink-0 mx-auto md:mx-0">
+                        <AvatarUpload
+                          currentAvatarUrl={profile.avatarUrl}
+                          userName={profile.name}
+                          userId={userId}
+                          userEmail={profile.email}
+                          onAvatarChange={(url) => setProfile(p => ({ ...p, avatarUrl: url }))}
+                          size="lg"
+                          className="ring-4 ring-background shadow-xl"
+                        />
+                        <p className="text-xs text-center text-muted-foreground mt-2">
+                          Click para cambiar
+                        </p>
+                      </div>
                       
-                      <div className="flex-1 space-y-2 text-center sm:text-left">
-                        <div className="flex items-center gap-2 justify-center sm:justify-start">
-                          <h3 className="text-lg font-semibold">{profile.name}</h3>
-                          {role && <Badge variant="secondary">{role}</Badge>}
+                      <div className="flex-1 w-full space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="name" className="text-sm font-medium">Nombre Completo</Label>
+                            <div className="relative">
+                              <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <Input 
+                                id="name" 
+                                value={profile.name} 
+                                onChange={(e) => setProfile(p => ({ ...p, name: e.target.value }))}
+                                className={`pl-9 ${errors.name ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                                placeholder="Tu nombre completo"
+                              />
+                            </div>
+                            {errors.name && <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> {errors.name}</p>}
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="department" className="text-sm font-medium">Departamento / Rol</Label>
+                            <div className="relative">
+                              <Building2 className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <Input 
+                                id="department" 
+                                value={profile.department} 
+                                onChange={(e) => setProfile(p => ({ ...p, department: e.target.value }))}
+                                placeholder="Ej. Ventas, IT, Marketing"
+                                className="pl-9"
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-muted-foreground">{profile.email}</p>
-                        <div className="flex flex-wrap gap-2 text-sm text-muted-foreground justify-center sm:justify-start">
-                          {profile.department && (
-                            <span className="inline-flex items-center gap-1">
-                              <Building2 className="h-3 w-3" />
-                              {profile.department}
-                            </span>
-                          )}
-                          {profile.location && (
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />
-                              {profile.location}
-                            </span>
-                          )}
-                        </div>
-                        
-                        {/* Tips para avatar */}
-                        <div className="mt-4 p-3 bg-muted rounded-lg">
-                          <p className="text-xs text-muted-foreground">
-                            💡 <strong>Tips:</strong> Puedes generar avatares únicos con IA o subir tu propia imagen. 
-                            Formatos soportados: JPG, PNG, WebP, GIF (máx. 10MB)
+
+                        <div className="space-y-2">
+                          <Label htmlFor="bio" className="text-sm font-medium">Biografía</Label>
+                          <Textarea 
+                            id="bio" 
+                            value={profile.bio} 
+                            onChange={(e) => setProfile(p => ({ ...p, bio: e.target.value }))}
+                            placeholder="Escribe una breve descripción sobre ti..."
+                            rows={3}
+                            className="resize-none"
+                          />
+                          <p className="text-xs text-muted-foreground text-right">
+                            {profile.bio.length}/500 caracteres
                           </p>
                         </div>
                       </div>
@@ -528,108 +567,94 @@ export default function UserProfilePage() {
 
                     <Separator />
 
-                    {/* Form Fields */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="name">Nombre completo *</Label>
-                        <Input 
-                          id="name" 
-                          value={profile.name} 
-                          onChange={(e) => setProfile(p => ({ ...p, name: e.target.value }))}
-                          className={errors.name ? 'border-red-500' : ''}
-                        />
-                        {errors.name && <p className="text-xs text-red-600">{errors.name}</p>}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="email">Correo electrónico</Label>
-                        <div className="flex gap-2">
-                          <Input id="email" value={profile.email} disabled className="flex-1" />
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => copyToClipboard(profile.email, 'Correo')}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Teléfono</Label>
-                        <div className="flex gap-2">
-                          <Input 
-                            id="phone" 
-                            value={profile.phone} 
-                            onChange={(e) => setProfile(p => ({ ...p, phone: e.target.value }))}
-                            placeholder="+595 981 123 456"
-                            className={`flex-1 ${errors.phone ? 'border-red-500' : ''}`}
-                          />
-                          {profile.phone && (
+                    {/* Sección de Contacto */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-primary" />
+                        Información de Contacto
+                      </h3>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="email" className="text-sm font-medium">Correo Electrónico</Label>
+                          <div className="relative flex gap-2">
+                            <div className="relative flex-1">
+                              <Mail className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                              <Input 
+                                id="email" 
+                                value={profile.email} 
+                                disabled 
+                                className="pl-9 bg-muted/50" 
+                              />
+                            </div>
                             <Button 
                               variant="outline" 
-                              size="sm" 
-                              onClick={() => copyToClipboard(profile.phone, 'Teléfono')}
+                              size="icon"
+                              onClick={() => copyToClipboard(profile.email, 'Correo')}
+                              title="Copiar correo"
                             >
                               <Copy className="h-4 w-4" />
                             </Button>
-                          )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">El correo no se puede cambiar directamente.</p>
                         </div>
-                        {errors.phone && <p className="text-xs text-red-600">{errors.phone}</p>}
-                      </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="department">Departamento</Label>
-                        <Input 
-                          id="department" 
-                          value={profile.department} 
-                          onChange={(e) => setProfile(p => ({ ...p, department: e.target.value }))}
-                          placeholder="Ej: Ventas, Técnico, Administración"
-                        />
-                      </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="phone" className="text-sm font-medium">Teléfono</Label>
+                          <div className="relative">
+                            <Phone className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                              id="phone" 
+                              value={profile.phone} 
+                              onChange={(e) => setProfile(p => ({ ...p, phone: e.target.value }))}
+                              placeholder="+595 9..."
+                              className={`pl-9 ${errors.phone ? 'border-red-500' : ''}`}
+                            />
+                          </div>
+                          {errors.phone && <p className="text-xs text-red-600">{errors.phone}</p>}
+                        </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="location">Ubicación</Label>
-                        <Input 
-                          id="location" 
-                          value={profile.location} 
-                          onChange={(e) => setProfile(p => ({ ...p, location: e.target.value }))}
-                          placeholder="Ej: Asunción, Paraguay"
-                        />
-                      </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="location" className="text-sm font-medium">Ubicación</Label>
+                          <div className="relative">
+                            <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                              id="location" 
+                              value={profile.location} 
+                              onChange={(e) => setProfile(p => ({ ...p, location: e.target.value }))}
+                              placeholder="Ciudad, País"
+                              className="pl-9"
+                            />
+                          </div>
+                        </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="website">Sitio web</Label>
-                        <Input 
-                          id="website" 
-                          value={profile.website} 
-                          onChange={(e) => setProfile(p => ({ ...p, website: e.target.value }))}
-                          placeholder="https://ejemplo.com"
-                          className={errors.website ? 'border-red-500' : ''}
-                        />
-                        {errors.website && <p className="text-xs text-red-600">{errors.website}</p>}
+                        <div className="space-y-2">
+                          <Label htmlFor="website" className="text-sm font-medium">Sitio Web</Label>
+                          <div className="relative">
+                            <Globe className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                              id="website" 
+                              value={profile.website} 
+                              onChange={(e) => setProfile(p => ({ ...p, website: e.target.value }))}
+                              placeholder="https://..."
+                              className={`pl-9 ${errors.website ? 'border-red-500' : ''}`}
+                            />
+                          </div>
+                          {errors.website && <p className="text-xs text-red-600">{errors.website}</p>}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="bio">Biografía</Label>
-                      <Textarea 
-                        id="bio" 
-                        value={profile.bio} 
-                        onChange={(e) => setProfile(p => ({ ...p, bio: e.target.value }))}
-                        placeholder="Cuéntanos un poco sobre ti..."
-                        rows={3}
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-3 pt-4 border-t">
                       <Button 
                         variant="outline" 
                         onClick={() => {
                           setProfile(initialProfile)
                           setErrors({})
+                          toast.info('Cambios revertidos')
                         }}
                         disabled={!isDirty}
+                        className="hover:bg-destructive/10 hover:text-destructive"
                       >
                         <X className="h-4 w-4 mr-2" />
                         Cancelar
@@ -637,6 +662,7 @@ export default function UserProfilePage() {
                       <Button 
                         onClick={handleUpdateProfile} 
                         disabled={loading || !isDirty}
+                        className="bg-primary hover:bg-primary/90 min-w-[150px]"
                       >
                         {loading ? (
                           <>
@@ -646,7 +672,7 @@ export default function UserProfilePage() {
                         ) : (
                           <>
                             <Save className="h-4 w-4 mr-2" />
-                            Guardar cambios
+                            Guardar Cambios
                           </>
                         )}
                       </Button>
@@ -656,65 +682,73 @@ export default function UserProfilePage() {
               </CardContent>
             </Card>
 
-            {/* Estadísticas del perfil */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Estadísticas
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className={`text-sm font-medium ${getCompletionColor(profileCompleteness)}`}>
+            {/* Panel Lateral de Estadísticas */}
+            <div className="space-y-6">
+              <Card className="border-none shadow-md bg-card/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <TrendingUp className="h-5 w-5 text-green-500" />
+                    Estado del Perfil
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Completitud</span>
+                      <span className={`font-bold ${getCompletionColor(profileCompleteness)}`}>
+                        {profileCompleteness}%
+                      </span>
+                    </div>
+                    <Progress value={profileCompleteness} className="h-2" />
+                    <p className={`text-xs ${getCompletionColor(profileCompleteness)} font-medium`}>
                       {getCompletionMessage(profileCompleteness)}
-                    </span>
-                    <span className=
-{`text-sm ${getCompletionColor(profileCompleteness)}`}>
-                      {profileCompleteness}%
-                    </span>
+                    </p>
                   </div>
-                  <Progress value={profileCompleteness} className="h-2" />
-                </div>
 
-                <Separator />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-muted/50 rounded-lg text-center space-y-1">
+                      <Award className="h-5 w-5 mx-auto text-yellow-500" />
+                      <div className="text-2xl font-bold">{stats.totalSales}</div>
+                      <div className="text-xs text-muted-foreground">Ventas</div>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg text-center space-y-1">
+                      <CheckCircle className="h-5 w-5 mx-auto text-blue-500" />
+                      <div className="text-2xl font-bold">{stats.completedTasks}</div>
+                      <div className="text-xs text-muted-foreground">Tareas</div>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg text-center space-y-1">
+                      <Zap className="h-5 w-5 mx-auto text-orange-500" />
+                      <div className="text-2xl font-bold">{stats.loginStreak}</div>
+                      <div className="text-xs text-muted-foreground">Días racha</div>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg text-center space-y-1">
+                      <Clock className="h-5 w-5 mx-auto text-purple-500" />
+                      <div className="text-xs font-medium mt-2">Activo</div>
+                      <div className="text-[10px] text-muted-foreground">{stats.lastActivity}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Star className="h-4 w-4 text-yellow-500" />
-                      <span className="text-sm">Ventas totales</span>
-                    </div>
-                    <span className="font-semibold">{stats.totalSales}</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-green-500" />
-                      <span className="text-sm">Tareas completadas</span>
-                    </div>
-                    <span className="font-semibold">{stats.completedTasks}</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-blue-500" />
-                      <span className="text-sm">Racha de login</span>
-                    </div>
-                    <span className="font-semibold">{stats.loginStreak} días</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-gray-500" />
-                      <span className="text-sm">Última actividad</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{stats.lastActivity}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              <Card className="border-none shadow-md bg-card/50 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Shield className="h-5 w-5 text-blue-500" />
+                    Seguridad Rápida
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button variant="outline" className="w-full justify-start gap-2" onClick={() => setActiveTab('security')}>
+                    <Key className="h-4 w-4" />
+                    Cambiar contraseña
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start gap-2" onClick={() => setActiveTab('security')}>
+                    <Smartphone className="h-4 w-4" />
+                    Autenticación 2FA
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
 

@@ -2336,10 +2336,10 @@ export default function POSPage() {
                 </div>
               )}
 
-              {!productsLoading && !productsError && inventoryProducts.length > 0 && paginatedProducts.length > virtualizationThreshold ? (
+              {!productsLoading && !productsError && inventoryProducts.length > 0 && filteredProducts.length > virtualizationThreshold ? (
                 <div className="rounded-xl overflow-hidden border border-border/50 shadow-sm bg-card">
                   <VirtualizedProductGrid
-                    products={paginatedProducts}
+                    products={filteredProducts}
                     viewMode={viewMode}
                     height={viewportHeight - 200}
                     onAddToCart={addToCart}
@@ -2388,7 +2388,7 @@ export default function POSPage() {
               )}
 
               {/* Controles de paginación */}
-              {!productsLoading && !productsError && filteredProducts.length > 0 && (
+              {!productsLoading && !productsError && filteredProducts.length > 0 && filteredProducts.length <= virtualizationThreshold && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 py-4 border-t border-border/50">
                   <div className="flex items-center gap-2 order-2 sm:order-1">
                     <span className="text-sm text-muted-foreground">Mostrar:</span>

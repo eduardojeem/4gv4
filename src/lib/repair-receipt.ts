@@ -226,11 +226,147 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
   const footerNote = type === 'customer'
     ? `<p>Este comprobante confirma la recepción del/los equipo(s) para diagnóstico y reparación.</p>
        <p><strong>Garantía:</strong> 30 días sobre el trabajo realizado (no cubre repuestos salvo defecto de fábrica).</p>
-       <p><strong>Retiro:</strong> Los equipos reparados deben ser retirados en un plazo máximo de 90 días. Pasado este tiempo, la empresa no se responsabiliza por abandono.</p>
-       <p>Los costos estimados pueden variar según diagnóstico final.</p>
+       <p><strong>Retiro:</strong> Los equipos reparados deben ser retirados en un plazo máximo de 90 días.</p>
        <p>Para consultas: ${company.email}</p>`
-    : `<p>Esta ficha resume la información técnica para el proceso de diagnóstico y reparación.</p>
-       <p>Contactar al cliente en caso de requerir información adicional.</p>`
+    : `<p>Ficha de uso interno.</p>`
+
+  // Estilos unificados para formato ticket (80mm)
+  const styles = `
+      @media print {
+        @page { size: 80mm auto; margin: 0mm; }
+        body { margin: 0.2cm; width: 76mm; }
+      }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #000;
+        background: #fff;
+        line-height: 1.2;
+        padding: 0;
+        font-size: 11px;
+        max-width: 300px;
+        margin: 0 auto;
+      }
+      .doc { width: 100%; }
+      .header {
+        text-align: center;
+        border-bottom: 1px dashed #000;
+        padding-bottom: 8px;
+        margin-bottom: 8px;
+      }
+      .header .company {
+        font-weight: bold;
+        font-size: 14px;
+        text-transform: uppercase;
+      }
+      .header .company-sub {
+        font-size: 10px;
+        margin-top: 2px;
+      }
+      .title {
+        font-size: 13px;
+        font-weight: bold;
+        margin: 6px 0;
+        text-align: center;
+      }
+      .subtitle {
+        font-size: 10px;
+        text-align: center;
+        color: #444;
+        margin-bottom: 4px;
+      }
+      .ticket-number {
+        font-size: 16px;
+        font-weight: bold;
+        text-align: center;
+        margin: 8px 0;
+        border: 2px solid #000;
+        padding: 4px;
+      }
+      .section { margin: 10px 0; border-bottom: 1px dashed #ccc; padding-bottom: 8px; }
+      .section h3 { font-size: 11px; margin: 0 0 4px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #eee; padding-bottom: 2px; }
+      
+      .grid { display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
+      .grid div { display: flex; justify-content: space-between; }
+      .grid div strong { margin-right: 4px; }
+      
+      .device { margin-bottom: 12px; }
+      .device-header { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #eee; font-size: 12px; }
+      .issue { margin-top: 6px; }
+      .issue .label { font-weight: bold; font-size: 10px; color: #444; }
+      .issue .value { font-size: 11px; padding: 2px 0; font-weight: 600; }
+      
+      .footer { margin-top: 12px; text-align: center; font-size: 9px; color: #444; }
+      .footer p { margin: 4px 0; }
+  `
+
+  // HTML específico para el ticket técnico (más compacto)
+  if (type === 'technician') {
+    const techDevicesHTML = payload.devices.map((d, idx) => `
+      <div class="device">
+        <div class="device-header">
+          ${d.typeLabel} - ${d.brand} ${d.model}
+        </div>
+        <div class="grid">
+          ${d.technician ? `<div><strong>Técnico:</strong> <span>${d.technician}</span></div>` : ''}
+          ${typeof d.estimatedCost === 'number' ? `<div><strong>Costo:</strong> <span>${formatCurrency(d.estimatedCost)}</span></div>` : ''}
+        </div>
+        <div class="issue">
+          <div class="label">Problema:</div>
+          <div class="value">${d.issue || '-'}</div>
+        </div>
+        ${d.description ? `
+        <div class="issue" style="margin-top: 4px;">
+          <div class="label">Notas:</div>
+          <div class="value" style="font-weight: normal;">${d.description}</div>
+        </div>` : ''}
+      </div>
+    `).join('<hr style="border: 0; border-top: 1px dashed #000; margin: 8px 0;" />')
+
+    return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Ficha ${ticketNumber}</title>
+        <style>${styles}</style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="company">${company.name}</div>
+          <div class="company-sub">${date} ${time}</div>
+        </div>
+        
+        <div class="ticket-number">${ticketNumber}</div>
+        <div class="title">FICHA TÉCNICA</div>
+        
+        <div class="section">
+          <h3>Cliente</h3>
+          <div class="grid">
+            <div><strong>Nombre:</strong> <span style="font-weight:bold">${payload.customer.name}</span></div>
+            ${payload.customer.phone ? `<div><strong>Tel:</strong> <span>${payload.customer.phone}</span></div>` : ''}
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Detalles</h3>
+          <div class="grid">
+            <div><strong>Prioridad:</strong> <span>${payload.priority || 'Normal'}</span></div>
+            <div><strong>Urgencia:</strong> <span>${payload.urgency || 'Normal'}</span></div>
+          </div>
+        </div>
+
+        <div class="section" style="border-bottom: none;">
+          <h3>Equipos (${payload.devices.length})</h3>
+          ${techDevicesHTML}
+        </div>
+
+        <div class="footer">
+          <p>Uso Interno - ${company.name}</p>
+        </div>
+      </body>
+    </html>
+    `
+  }
 
   return `
   <!DOCTYPE html>
@@ -238,56 +374,7 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
     <head>
       <meta charset="utf-8" />
       <title>${title} - ${ticketNumber}</title>
-      <style>
-        @media print {
-          @page { size: A4; margin: 12mm; }
-          body { margin: 0; }
-        }
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
-          color: #0f172a;
-          background: #ffffff;
-          line-height: 1.5;
-          padding: 16px;
-        }
-        .doc {
-          max-width: 860px;
-          margin: 0 auto;
-        }
-        .header {
-          border-bottom: 2px solid #e2e8f0;
-          padding-bottom: 12px;
-          margin-bottom: 16px;
-        }
-        .header .company {
-          font-weight: 700;
-          font-size: 20px;
-        }
-        .header .company-sub {
-          font-size: 12px;
-          color: #64748b;
-        }
-        .title {
-          margin: 8px 0 4px 0;
-          font-size: 18px;
-          font-weight: 600;
-        }
-        .subtitle {
-          font-size: 12px;
-          color: #64748b;
-        }
-        .section { margin: 14px 0; }
-        .section h3 { font-size: 14px; margin: 0 0 8px 0; font-weight: 600; }
-        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 12px; }
-        .devices { margin-top: 8px; }
-        .device { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
-        .device-header { display: flex; justify-content: space-between; font-weight: 600; margin-bottom: 6px; }
-        .device-index { color: #334155; }
-        .device-type { color: #0f172a; }
-        .issue .label { font-size: 11px; color: #64748b; }
-        .issue .value { font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; }
-        .footer { border-top: 1px dashed #cbd5e1; margin-top: 16px; padding-top: 12px; text-align: center; font-size: 11px; color: #475569; }
-      </style>
+      <style>${styles}</style>
     </head>
     <body>
       <div class="doc">
