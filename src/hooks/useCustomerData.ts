@@ -74,7 +74,7 @@ export function useCustomerData(customerId: number | string | null) {
   useCustomerCreditRealtime(
     id,
     (data as CustomerWithCredit | undefined)?.credit_summary?.credit_id ?? null,
-    () => mutate()
+    mutate
   )
 
   return { data, error, mutate, isLoading: !data && !error }

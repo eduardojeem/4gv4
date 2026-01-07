@@ -49,7 +49,9 @@ export const config = {
     enableDetailedLogging: process.env.NODE_ENV === 'development',
     
     // Habilitar retry automático en operaciones de red
-    enableAutoRetry: true
+    enableAutoRetry: true,
+    // Escáner de códigos de barras en POS
+    enableBarcodeScanner: true
   }
 }
 

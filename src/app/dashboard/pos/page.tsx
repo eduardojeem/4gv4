@@ -29,12 +29,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { toast } from 'sonner'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
 import { createReceiptData, printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
-import { InventoryAlerts } from '@/components/pos/InventoryAlerts'
-import { AccessibilitySettings } from '@/components/pos/AccessibilitySettings'
+// Limpieza: se retiran componentes de debug/diagnóstico del POS
 import { VirtualizedProductGrid } from './components/VirtualizedProductList'
 import { formatStockStatus } from '@/lib/inventory-manager'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { config, isDemoNoDb, getTaxConfig } from '@/lib/config'
+import { config, isDemoNoDb, getTaxConfig, getFeatureFlag } from '@/lib/config'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { SupabaseStatus } from '@/components/supabase-status'
 import { formatCurrency } from '@/lib/currency'
@@ -57,7 +56,10 @@ import { useErrorHandler } from './hooks/useErrorHandler'
 import { ErrorMonitor } from './components/ErrorMonitor'
 import { PerformanceDashboard } from './components/PerformanceDashboard'
 import { ProductCard } from './components/ProductCard'
+import { POSHeader } from './components/POSHeader'
+import { POSCart } from './components/POSCart'
 import { CheckoutModal } from './components/CheckoutModal'
+import { useOptimizedCart } from './hooks/useOptimizedCart'
 import { useCheckout } from './contexts/CheckoutContext'
 import { usePOSCustomer } from './contexts/POSCustomerContext'
 import { CartItem, PaymentSplit, PaymentMethodOption } from './types'
@@ -111,7 +113,7 @@ export default function POSPage() {
   // Estados principales
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
-  const [cart, setCart] = useState<CartItem[]>([])
+  // Cart state managed by useOptimizedCart hook
 
   // Use centralized customer state
   const { 
@@ -184,7 +186,7 @@ export default function POSPage() {
       setPaymentStatus('idle')
       setPaymentError('')
     }
-  }, [isCheckoutOpen])
+  }, [isCheckoutOpen, setPaymentError, setPaymentStatus])
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   // Opciones de vinculación de reparación
   const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
@@ -211,9 +213,6 @@ export default function POSPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  // Venta mayorista
-  const [isWholesale, setIsWholesale] = useState(false)
-  const WHOLESALE_DISCOUNT_RATE = 10
 
   // Estados para variantes y promociones
   const [variantSelectorOpen, setVariantSelectorOpen] = useState(false)
@@ -270,6 +269,36 @@ export default function POSPage() {
     processSale: processInventorySale,
     findProductByBarcode
   } = usePOSProducts()
+
+  // Optimized Cart Hook
+  const {
+    cart,
+    isWholesale,
+    setIsWholesale,
+    discount: generalDiscount,
+    setDiscount: setGeneralDiscount,
+    cartTotal,
+    cartSubtotal,
+    cartTax,
+    cartItemCount,
+    subtotalApplied,
+    subtotalNonWholesale,
+    generalDiscountAmount,
+    wholesaleDiscountAmount,
+    totalSavings,
+    addToCart: addToCartHook,
+    addVariantToCart: addVariantToCartHook,
+    removeFromCart,
+    updateQuantity,
+    updateItemDiscount,
+    clearCart,
+    checkAvailability: checkCartAvailability
+  } = useOptimizedCart(inventoryProducts, {
+    taxRate: getTaxConfig().rate,
+    pricesIncludeTax: getTaxConfig().pricesIncludeTax
+  })
+  
+  const WHOLESALE_DISCOUNT_RATE = 10
 
   // Función para verificar disponibilidad de stock
   const checkAvailability = useCallback((productId: string, quantity: number) => {
@@ -466,7 +495,7 @@ export default function POSPage() {
     return () => {
       if (channel) channel.unsubscribe()
     }
-  }, [selectedCustomer])
+  }, [selectedCustomer, setCustomers, setCustomersSourceSupabase, selectedRepairIds, setSelectedRepairIds])
 
   // Persistir venta y actualizar stock en Supabase
   const persistSaleToSupabase = useCallback(
@@ -517,7 +546,8 @@ export default function POSPage() {
 
         if (saleId) {
           if (!existingSaleId) {
-            const saleItems = items.map((i) => {
+            const productItems = items.filter(i => !i.isService)
+            const saleItems = productItems.map((i) => {
               const unitApplied = isWholesale
                 ? (typeof i.wholesalePrice === 'number' ? i.wholesalePrice : (i.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
                 : i.price
@@ -585,9 +615,9 @@ export default function POSPage() {
             }
           }
 
-          // El stock ya es actualizado por el hook de inventario cuando existingSaleId está presente
           if (!existingSaleId) {
-            for (const i of items) {
+            const productItems = items.filter(i => !i.isService)
+            for (const i of productItems) {
               const newStock = Math.max(0, (i.stock ?? 0) - i.quantity)
               const { error: updError } = await supabase
                 .from('products')
@@ -661,7 +691,7 @@ export default function POSPage() {
         throw err
       }
     },
-    [selectedCustomer, selectedRepairIds]
+    [selectedCustomer, selectedRepairIds, finalCostFromSale, markRepairDelivered]
   )
 
   // Estados para búsqueda avanzada
@@ -886,13 +916,13 @@ export default function POSPage() {
         (product.barcode && product.barcode.includes(debouncedSearchTerm))
 
       const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory
-      const matchesFeatured = !showFeatured || (product as any).featured
+      const matchesFeatured = !showFeatured || (product as any).featured === true  // CORREGIDO: verificación explícita
       const matchesPrice = product.sale_price >= priceRange.min && product.sale_price <= priceRange.max
 
       let matchesStock = true
       switch (stockFilter) {
         case 'in_stock':
-          matchesStock = product.stock_quantity > 5
+          matchesStock = product.stock_quantity > 0  // CORREGIDO: > 0 en lugar de > 5
           break
         case 'low_stock':
           matchesStock = product.stock_quantity <= 5 && product.stock_quantity > 0
@@ -963,60 +993,11 @@ export default function POSPage() {
         setVariantSelectorOpen(true)
         return
       }
-
-      // Verificar disponibilidad con el hook de Supabase
-      const currentProduct = inventoryProducts.find(p => p.id === product.id)
-      if (!currentProduct) {
-        toast.error('Producto no encontrado')
-        return
-      }
-
-      const existingItem = cart.find(item => item.id === product.id)
-      const requestedQuantity = existingItem ? existingItem.quantity + 1 : 1
-
-      if (!checkAvailability(product.id, requestedQuantity)) {
-        toast.error(`Stock insuficiente. Disponible: ${currentProduct.stock_quantity}`)
-        return
-      }
-
-      setCart(prev => {
-        const existingItem = prev.find(item => item.id === product.id)
-        if (existingItem) {
-          return prev.map(item =>
-            item.id === product.id
-              ? { ...item, quantity: item.quantity + 1, subtotal: item.price * (item.quantity + 1) }
-              : item
-          )
-        } else {
-          // Intentar tomar precio mayorista desde el producto si existe
-          const inferredWholesale = product.wholesale_price
-          return [...prev, {
-            id: product.id,
-            name: product.name,
-            sku: product.sku,
-            price: product.sale_price,
-            quantity: 1,
-            stock: currentProduct.stock_quantity,
-            subtotal: product.sale_price * 1,
-            image: product.image,
-            wholesalePrice: inferredWholesale,
-            originalPrice: product.sale_price,
-          }]
-        }
-      })
-      toast.success(
-        <div className="flex flex-col gap-0.5">
-          <span className="font-medium text-sm">{product.name}</span>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground">Agregado al carrito</span>
-            <span className="text-xs font-bold text-green-600 dark:text-green-400">
-              {formatCurrency(product.price)}
-            </span>
-          </div>
-        </div>
-      )
+      
+      // Usar hook optimizado
+      addToCartHook(product)
     })
-  }, [cart, inventoryProducts, checkAvailability, getProductWithVariants, measureCartOperation])
+  }, [getProductWithVariants, measureCartOperation, addToCartHook])
 
   // Función para agregar variante al carrito
   const addVariantToCart = useCallback((variant: ProductVariant, quantity: number) => {
@@ -1026,301 +1007,137 @@ export default function POSPage() {
       toast.error('Error al procesar la variante')
       return
     }
+    
+    addVariantToCartHook(cartItemWithVariant)
+    
+  }, [convertVariantToCartItem, addVariantToCartHook])
 
-    // Convertir CartItemWithVariant a CartItem
-    const cartItem: CartItem = {
-      id: cartItemWithVariant.id,
-      name: cartItemWithVariant.product_name,
-      sku: cartItemWithVariant.sku,
-      price: cartItemWithVariant.price,
-      quantity: cartItemWithVariant.quantity,
-      stock: cartItemWithVariant.stock,
-      subtotal: cartItemWithVariant.price * cartItemWithVariant.quantity
-    }
-
-    // Verificar stock de la variante
-    if (variant.stock < quantity) {
-      toast.error(`Stock insuficiente. Disponible: ${variant.stock}`)
-      return
-    }
-
-    setCart(prev => {
-      const existingItem = prev.find(item =>
-        item.id === cartItem.id || (item.sku === variant.sku)
-      )
-
-      if (existingItem) {
-        const newQuantity = existingItem.quantity + quantity
-        if (variant.stock < newQuantity) {
-          toast.error(`Stock insuficiente. Disponible: ${variant.stock}`)
-          return prev
-        }
-
-        return prev.map(item =>
-          (item.id === cartItem.id || item.sku === variant.sku)
-            ? { ...item, quantity: newQuantity }
-            : item
-        )
-      } else {
-        return [...prev, cartItem]
-      }
-    })
-
-    toast.success(
-      <div className="flex flex-col gap-0.5">
-        <span className="font-medium text-sm">{cartItem.name}</span>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-muted-foreground">Variante agregada</span>
-          <span className="text-xs font-bold text-green-600 dark:text-green-400">
-            {formatCurrency(cartItem.price)}
-          </span>
-        </div>
-      </div>
-    )
-  }, [convertVariantToCartItem])
-
-  const updateQuantity = useCallback((id: string, quantity: number) => {
-    if (quantity <= 0) {
-      setCart(prev => prev.filter(item => item.id !== id))
-      toast.info('Producto eliminado del carrito')
-      return
-    }
-
-    // Verificar disponibilidad con el hook de Supabase
-    if (!checkAvailability(id, quantity)) {
-      const currentProduct = inventoryProducts.find(p => p.id === id)
-      toast.error(`Stock insuficiente. Disponible: ${currentProduct?.stock_quantity || 0}`)
-      return
-    }
-
-    setCart(prev => prev.map(item => {
-      if (item.id === id) {
-        // Aplicar descuentos automáticos por cantidad
-        let autoDiscount = 0
-        if (quantity >= 50) {
-          autoDiscount = 15
-        } else if (quantity >= 20) {
-          autoDiscount = 10
-        } else if (quantity >= 10) {
-          autoDiscount = 5
-        }
-
-        // Mantener el descuento manual si es mayor al automático
-        const finalDiscount = Math.max(autoDiscount, item.discount || 0)
-
-        // Mostrar notificación si se aplicó descuento automático
-        if (autoDiscount > (item.discount || 0)) {
-          toast.success(`¡Descuento por cantidad aplicado: ${autoDiscount}%!`)
-        }
-
-        return {
-          ...item,
-          quantity,
-          subtotal: item.price * quantity,
-          discount: finalDiscount
-        }
-      }
-      return item
-    }))
-  }, [checkAvailability, inventoryProducts])
+  // updateQuantity is now provided by useOptimizedCart
 
   // Utilidad común para redondear a 2 decimales
   const roundToTwo = useCallback((num: number) => Math.round((num + Number.EPSILON) * 100) / 100, [])
 
-  // Motor de cálculos optimizado
-  const cartCalculations = useMemo(() => {
-    // Usar utilidad común de redondeo
-    const pricesIncludeTax = config.pricesIncludeTax
-
-    // Cálculo del subtotal con descuentos por item
-    // Integrando precio mayorista por ítem cuando está activado "Venta mayorista"
-    const itemsCalculation = cart.map(item => {
-      const itemDiscountRate = item.discount || 0
-      const unitNonWholesale = item.price
-      const unitWholesaleCandidate = item.wholesalePrice ?? roundToTwo(item.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100)))
-      const unitApplied = isWholesale ? unitWholesaleCandidate : unitNonWholesale
-
-      const discountAmountPerUnit = unitApplied * (itemDiscountRate / 100)
-      const unitAfterItemDiscount = unitApplied - discountAmountPerUnit
-      const lineTotalApplied = unitAfterItemDiscount * item.quantity
-
-      const unitAfterItemDiscountNonWholesale = unitNonWholesale * (1 - itemDiscountRate / 100)
-      const lineTotalNonWholesale = unitAfterItemDiscountNonWholesale * item.quantity
-
-      return {
-        id: item.id,
-        basePrice: roundToTwo(unitApplied),
-        discountAmount: roundToTwo(discountAmountPerUnit),
-        discountedPrice: roundToTwo(unitAfterItemDiscount),
-        quantity: item.quantity,
-        lineTotal: roundToTwo(lineTotalApplied),
-        itemDiscount: itemDiscountRate,
-        // Auxiliares para cálculo de ahorro mayorista
-        lineTotalNonWholesale: roundToTwo(lineTotalNonWholesale),
-      }
-    })
-
-    // Subtotales: aplicado vs referencia sin mayorista (ambos incluyen descuento por ítem)
-    const subtotalApplied = roundToTwo(itemsCalculation.reduce((sum, it) => sum + it.lineTotal, 0))
-    const subtotalNonWholesale = roundToTwo(itemsCalculation.reduce((sum, it) => sum + (it.lineTotalNonWholesale ?? it.lineTotal), 0))
-    const subtotal = subtotalApplied
-
-    // Descuento general aplicado al subtotal (aplicado)
-    const generalDiscountRate = Math.max(0, Math.min(100, discount)) // Validar entre 0-100%
-    const generalDiscountAmountApplied = roundToTwo(subtotalApplied * (generalDiscountRate / 100))
-    const subtotalAfterDiscountApplied = roundToTwo(subtotalApplied - generalDiscountAmountApplied)
-
-    // Para comparar ahorro mayorista, calcular el subtotal de referencia sin mayorista tras descuento general
-    const generalDiscountAmountNonWholesale = roundToTwo(subtotalNonWholesale * (generalDiscountRate / 100))
-    const subtotalAfterDiscountNonWholesale = roundToTwo(subtotalNonWholesale - generalDiscountAmountNonWholesale)
-
-    // Ahorro mayorista: diferencia entre referencia sin mayorista y aplicado
-    const wholesaleDiscountRate = isWholesale ? WHOLESALE_DISCOUNT_RATE : 0
-    const wholesaleDiscountAmount = isWholesale
-      ? roundToTwo(Math.max(0, subtotalAfterDiscountNonWholesale - subtotalAfterDiscountApplied))
-      : 0
-    const subtotalAfterAllDiscounts = subtotalAfterDiscountApplied
-
-    // Costo de reparación vinculada con IVA incluido
-    const repairCalculations = selectedRepairs.map(repair => {
+  // Unified Cart + Repairs Calculations
+  const unifiedCalculations = useMemo(() => {
+    // 1. Calculate Repair Costs
+    const repairDetails = selectedRepairs.map(repair => {
       const laborCost = repair.final_cost || repair.estimated_cost || 0
-      const partsCost = 0 // Las reparaciones en el POS no tienen partes separadas
-      
+      // Repairs in POS don't have separate parts cost in this context
       return calculateRepairTotal({
         laborCost,
-        partsCost,
-        taxRate: config.taxRate * 100, // Convertir a porcentaje
-        pricesIncludeTax: true // Por defecto IVA incluido
+        partsCost: 0,
+        taxRate: getTaxConfig().percentage,
+        pricesIncludeTax: true
       })
     })
-    
-    const repairCost = repairCalculations.reduce((sum, calc) => sum + calc.total, 0)
-    const repairSubtotal = repairCalculations.reduce((sum, calc) => sum + calc.subtotal, 0)
-    const repairTax = repairCalculations.reduce((sum, calc) => sum + calc.taxAmount, 0)
 
-    // Cálculo de impuestos (según configuración)
-    const taxRate = config.taxRate
-    const productTaxAmount = pricesIncludeTax
-      // IVA incluido: extraer componente de impuesto del subtotal bruto
-      ? roundToTwo(subtotalAfterAllDiscounts * (taxRate / (1 + taxRate)))
-      // IVA no incluido: calcular sobre base neta
-      : roundToTwo(subtotalAfterAllDiscounts * taxRate)
-    
-    // IVA total = IVA de productos + IVA de reparaciones
-    const taxAmount = roundToTwo(productTaxAmount + repairTax)
+    const repairTotal = repairDetails.reduce((sum, calc) => sum + calc.total, 0)
+    const repairSubtotal = repairDetails.reduce((sum, calc) => sum + calc.subtotal, 0)
+    const repairTax = repairDetails.reduce((sum, calc) => sum + calc.taxAmount, 0)
 
-    // Total final
-    const total = pricesIncludeTax
-      ? roundToTwo(subtotalAfterAllDiscounts + repairCost)
-      : roundToTwo(subtotalAfterAllDiscounts + productTaxAmount + repairCost)
+    // 2. Combine with Product Cart (from hook)
+    const finalTotal = roundToTwo(cartTotal + repairTotal)
+    const finalTax = roundToTwo(cartTax + repairTax)
+    const finalSubtotalApplied = roundToTwo(subtotalApplied + repairSubtotal)
+    const finalSubtotalNonWholesale = roundToTwo(subtotalNonWholesale + repairSubtotal) // Repairs don't have wholesale discount usually
 
-    // Cálculo del cambio
-    const change = roundToTwo(Math.max(0, cashReceived - total))
-
-    // Monto restante a pagar (solo para pago simple en efectivo)
-    const remaining = roundToTwo(Math.max(0, total - cashReceived))
-
-    // Conteo de artículos
-    const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-    const totalItemCount = itemCount + selectedRepairIds.length
-
-    // Estadísticas adicionales
-    const totalItemsDiscount = roundToTwo(itemsCalculation.reduce((sum, item) =>
-      sum + (item.discountAmount * item.quantity), 0))
-    const totalSavings = roundToTwo(totalItemsDiscount + generalDiscountAmountApplied + wholesaleDiscountAmount)
-    const averageItemPrice = itemCount > 0 ? roundToTwo(subtotal / itemCount) : 0
-
-    // Validaciones
-    const isValidPayment = paymentMethod === 'cash' ? cashReceived >= total : true
-    const hasDiscount = totalSavings > 0
+    const totalItemCount = cartItemCount + selectedRepairIds.length
 
     return {
-      // Valores básicos
-      subtotal,
-      repairCost,
+      // Combined Values for UI/Checkout
+      total: finalTotal,
+      tax: finalTax,
+      subtotal: finalSubtotalApplied, // For compatibility
+      subtotalApplied: finalSubtotalApplied,
+      subtotalNonWholesale: finalSubtotalNonWholesale,
+      
+      // Breakdown
+      repairCost: repairTotal,
       repairSubtotal,
       repairTax,
-      generalDiscount: generalDiscountAmountApplied,
-      generalDiscountRate,
-      wholesaleDiscount: wholesaleDiscountAmount,
-      wholesaleDiscountRate,
-      tax: taxAmount,
-      taxRate,
-      total,
-      change,
-      remaining,
-      itemCount,
-      totalItemCount,
-
-      // Valores adicionales
-      subtotalAfterDiscount: subtotalAfterDiscountApplied,
-      subtotalAfterAllDiscounts,
-      totalItemsDiscount,
+      
+      // Hook passthrough (renamed or raw)
+      generalDiscountAmount,
+      wholesaleDiscountAmount,
       totalSavings,
-      totalDiscount: totalSavings,
-      averageItemPrice,
-      itemsCalculation,
-
-      // Estados
-      isValidPayment,
-      hasDiscount,
-
-      // Métodos auxiliares
-      formatters: {
-        currency: (amount: number) => formatCurrency(amount),
-        percentage: (rate: number) => `${rate.toFixed(1)}%`
-      }
+      totalItemCount,
+      
+      // Flags
+      hasDiscount: totalSavings > 0,
+      isValidPayment: paymentMethod === 'cash' ? cashReceived >= finalTotal : true
     }
-  }, [cart, discount, cashReceived, paymentMethod, isWholesale, roundToTwo, config.pricesIncludeTax, config.taxRate, selectedRepairs, selectedRepairIds])
+  }, [
+    selectedRepairs, 
+    cartTotal, 
+    cartTax, 
+    subtotalApplied, 
+    subtotalNonWholesale, 
+    cartItemCount, 
+    selectedRepairIds.length,
+    generalDiscountAmount,
+    wholesaleDiscountAmount,
+    totalSavings,
+    paymentMethod,
+    cashReceived,
+    roundToTwo
+  ])
 
-  const removeFromCart = useCallback((id: string) => {
-    setCart(prev => prev.filter(item => item.id !== id))
-  }, [])
-
-  const clearCart = useCallback((force?: boolean) => {
-    if (!force && cart.length > 0) {
-      const confirmed = window.confirm(
-        `¿Estás seguro de que deseas vaciar el carrito?\n\n` +
-        `Se eliminarán ${cart.length} producto${cart.length > 1 ? 's' : ''} por un total de ${formatCurrency(cartCalculations.total)}.\n\n` +
-        `Esta acción no se puede deshacer.`
-      )
-      if (!confirmed) return
-    }
-    setCart([])
-    toast.success('🗑️ Carrito vaciado correctamente')
-  }, [cart, cartCalculations.total, formatCurrency])
-
-  // Helper functions for payment calculations
   const getTotalPaid = useCallback(() => {
     return paymentSplit.reduce((total, split) => total + split.amount, 0)
   }, [paymentSplit])
 
   const getRemainingAmount = useCallback(() => {
-    return roundToTwo(cartCalculations.total - getTotalPaid())
-  }, [cartCalculations.total, getTotalPaid, roundToTwo])
+    return roundToTwo(unifiedCalculations.total - getTotalPaid())
+  }, [unifiedCalculations.total, getTotalPaid, roundToTwo])
 
-  // Funciones auxiliares para descuentos y promociones
-  const applyBulkDiscount = useCallback((productId: string, quantity: number) => {
-    // Descuentos por cantidad
-    const bulkDiscounts = [
-      { minQty: 10, discount: 5 },   // 5% descuento por 10+ items
-      { minQty: 20, discount: 10 },  // 10% descuento por 20+ items
-      { minQty: 50, discount: 15 }   // 15% descuento por 50+ items
-    ]
+  // Adapter for backward compatibility and unified usage
+  const cartCalculations = useMemo(() => ({
+    subtotal: unifiedCalculations.subtotalNonWholesale,
+    subtotalAfterAllDiscounts: unifiedCalculations.subtotalApplied,
+    generalDiscount: generalDiscount,
+    wholesaleDiscount: unifiedCalculations.wholesaleDiscountAmount,
+    wholesaleDiscountRate: WHOLESALE_DISCOUNT_RATE,
+    tax: unifiedCalculations.tax,
+    total: unifiedCalculations.total,
+    change: cashReceived - unifiedCalculations.total,
+    remaining: roundToTwo(unifiedCalculations.total - getTotalPaid()),
+    discount: unifiedCalculations.totalSavings,
+    repairCost: unifiedCalculations.repairCost,
+    repairSubtotal: unifiedCalculations.repairSubtotal,
+    repairTax: unifiedCalculations.repairTax,
+    totalItemCount: unifiedCalculations.totalItemCount
+  }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid, roundToTwo])
 
-    const applicableDiscount = bulkDiscounts
-      .filter(rule => quantity >= rule.minQty)
-      .sort((a, b) => b.discount - a.discount)[0]
+  // Adapter for POSCart items
+  const combinedCartItems = useMemo(() => {
+    const repairItems: CartItem[] = selectedRepairs.map(repair => ({
+      id: repair.id,
+      name: `Reparación: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
+      price: repair.final_cost || repair.estimated_cost || 0,
+      quantity: 1,
+      isService: true,
+      // Add required fields for CartItem type safety
+      stock: 0,
+      subtotal: repair.final_cost || repair.estimated_cost || 0,
+      category: 'service',
+      // Prevent wholesale discount application in SaleSummary by setting wholesalePrice = price
+      wholesalePrice: repair.final_cost || repair.estimated_cost || 0
+    }))
 
-    if (applicableDiscount) {
-      setCart(prev => prev.map(item =>
-        item.id === productId
-          ? { ...item, discount: applicableDiscount.discount }
-          : item
-      ))
-      toast.success(`Descuento por cantidad aplicado: ${applicableDiscount.discount}%`)
+    return [...cart, ...repairItems]
+  }, [cart, selectedRepairs])
+
+  // Unified Remove Handler
+  const handleRemoveItem = useCallback((id: string) => {
+    // Check if it's a repair
+    if (selectedRepairIds.includes(id)) {
+      setSelectedRepairIds(prev => prev.filter(repairId => repairId !== id))
+      toast.info('Reparación removida del cobro')
+    } else {
+      // It's a product
+      removeFromCart(id)
     }
-  }, [])
+  }, [selectedRepairIds, removeFromCart])
 
   const applyPromoCode = useCallback((code: string) => {
     const promoCodes: Record<string, { type: 'percentage' | 'fixed'; value: number; minAmount: number }> = {
@@ -1336,23 +1153,23 @@ export default function POSPage() {
       return false
     }
 
-    if (cartCalculations.subtotal < promo.minAmount) {
+    if (unifiedCalculations.subtotal < promo.minAmount) {
       toast.error(`Monto mínimo requerido: ${formatCurrency(promo.minAmount)}`)
       return false
     }
 
     if (promo.type === 'percentage') {
-      setDiscount(promo.value)
+      setGeneralDiscount(promo.value)
       toast.success(`Código aplicado: ${promo.value}% de descuento`)
     } else {
       // Para descuentos fijos, convertir a porcentaje basado en el subtotal
-      const percentageEquivalent = (promo.value / cartCalculations.subtotal) * 100
-      setDiscount(Math.min(percentageEquivalent, 100))
+      const percentageEquivalent = (promo.value / unifiedCalculations.subtotal) * 100
+      setGeneralDiscount(Math.min(percentageEquivalent, 100))
       toast.success(`Código aplicado: ${formatCurrency(promo.value)} de descuento`)
     }
 
     return true
-  }, [cartCalculations.subtotal])
+  }, [unifiedCalculations.subtotal, setGeneralDiscount])
 
   const calculateLoyaltyPoints = useCallback((total: number) => {
     // 1 punto por cada $10 gastados
@@ -1372,8 +1189,8 @@ export default function POSPage() {
         return
       }
 
-      if (cart.length === 0 && selectedRepairIds.length === 0) {
-        const msg = 'El carrito está vacío y no hay reparaciones seleccionadas'
+      if (combinedCartItems.length === 0) {
+        const msg = 'El carrito está vacío'
         toast.error(msg)
         setPaymentStatus('failed')
         setPaymentError(msg)
@@ -1383,7 +1200,7 @@ export default function POSPage() {
 
       // Evaluar promociones antes de procesar la venta
       try {
-        const cartItems = cart.map(item => ({
+        const cartItems = combinedCartItems.filter(item => !item.isService).map(item => ({
           id: item.id,
           product_id: item.id,
           variant_id: undefined,
@@ -1432,7 +1249,7 @@ export default function POSPage() {
       }]
 
       const receiptData = createReceiptData(
-        cart,
+        combinedCartItems,
         cartCalculations,
         payments,
         customer,
@@ -1450,9 +1267,10 @@ export default function POSPage() {
       try {
         // Usar el hook de Supabase para procesar la venta solo si hay items
         let saleResult = null
-        if (cart.length > 0) {
+        const productItems = combinedCartItems.filter(item => !item.isService)
+        if (productItems.length > 0) {
           saleResult = await processInventorySale({
-            items: cart.map(item => ({
+            items: productItems.map(item => ({
               id: item.id,
               name: item.name,
               sku: item.sku,
@@ -1468,7 +1286,7 @@ export default function POSPage() {
 
         // Persistir en Supabase (venta, items y stock)
         await persistSaleToSupabase(
-          cart,
+          combinedCartItems,
           paymentMethod,
           (cartCalculations as any).discount ?? 0,
           (cartCalculations as any).tax ?? 0,
@@ -1506,7 +1324,7 @@ export default function POSPage() {
         setPaymentStatus('idle')
       }, 600)
     })
-  }, [cart, paymentMethod, cashReceived, cartCalculations, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing])
+  }, [combinedCartItems, paymentMethod, cashReceived, cartCalculations, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing])
 
 
 
@@ -1576,7 +1394,7 @@ export default function POSPage() {
     const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
 
     const receiptData = createReceiptData(
-      cart,
+      combinedCartItems,
       cartCalculations,
       paymentSplit,
       customer,
@@ -1593,22 +1411,28 @@ export default function POSPage() {
     addPaymentAttempt({ status: 'processing', method: 'mixed', amount: (cartCalculations as any).total, message: 'Procesando pago mixto' })
     try {
       // Usar el hook de Supabase para procesar la venta
-      const saleResult = await processInventorySale({
-        items: cart.map(item => ({
-          id: item.id,
-          name: item.name,
-          sku: item.sku,
-          price: item.price,
-          quantity: item.quantity,
-          stock: item.stock,
-          subtotal: item.price * item.quantity
-        })),
-        total: (cartCalculations as any).total,
-        payment_method: (paymentSplit && paymentSplit.length > 0 ? paymentSplit[0].method : 'cash') as 'cash' | 'card' | 'transfer'
-      })
+      const productItems = combinedCartItems.filter(item => !item.isService)
+      let saleResult = null
+      
+      if (productItems.length > 0) {
+        saleResult = await processInventorySale({
+          items: productItems.map(item => ({
+            id: item.id,
+            name: item.name,
+            sku: item.sku,
+            price: item.price,
+            quantity: item.quantity,
+            stock: item.stock,
+            subtotal: item.price * item.quantity
+          })),
+          total: (cartCalculations as any).total,
+          payment_method: (paymentSplit && paymentSplit.length > 0 ? paymentSplit[0].method : 'cash') as 'cash' | 'card' | 'transfer'
+        })
+      }
+      
       // Persistir en Supabase como pago mixto
       await persistSaleToSupabase(
-        cart,
+        combinedCartItems,
         'mixed',
         (cartCalculations as any).discount ?? 0,
         (cartCalculations as any).tax ?? 0,
@@ -1652,7 +1476,7 @@ export default function POSPage() {
       setIsCheckoutOpen(false)
       setPaymentStatus('idle')
     }, 600)
-  }, [getTotalPaid, getRemainingAmount, formatCurrency, clearCart, persistSaleToSupabase, cartCalculations, processInventorySale])
+  }, [combinedCartItems, getTotalPaid, getRemainingAmount, formatCurrency, clearCart, persistSaleToSupabase, cartCalculations, processInventorySale])
 
 
   // Cerrar sugerencias al hacer clic fuera
@@ -1688,7 +1512,7 @@ export default function POSPage() {
             break
           case 'Enter':
             e.preventDefault()
-            if (cart.length > 0 || selectedRepairIds.length > 0) {
+            if (combinedCartItems.length > 0) {
               setIsCheckoutOpen(true)
               toast.info('💳 Abriendo checkout')
             } else {
@@ -1710,7 +1534,7 @@ export default function POSPage() {
             break
           case 'p':
             e.preventDefault()
-            if (cart.length > 0 || selectedRepairIds.length > 0) {
+            if (combinedCartItems.length > 0) {
               setIsCheckoutOpen(true)
               toast.info('💳 Procesando pago')
             }
@@ -1876,7 +1700,7 @@ export default function POSPage() {
 
           {/* Alertas de inventario móvil */}
           <div className="mb-3">
-            <InventoryAlerts />
+            
           </div>
 
           {/* Resumen del carrito móvil mejorado */}
@@ -1973,115 +1797,48 @@ export default function POSPage() {
         {/* Contenido principal */}
         <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
           {/* Header desktop optimizado */}
-          <div className="hidden lg:flex items-center justify-between bg-card/50 backdrop-blur-md border-b border-border/60 px-6 py-2 sticky top-0 z-20">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-3">
-                <div className="bg-primary/10 p-2 rounded-lg">
-                  <div className="font-bold text-xl text-primary tracking-tight">4G</div>
-                </div>
-                <div>
-                  <h1 className="text-lg font-bold text-foreground leading-none">Punto de Venta</h1>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-muted-foreground/30 text-muted-foreground font-normal">
-                      v4.0
-                    </Badge>
-                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                      <div className={`w-1.5 h-1.5 rounded-full ${registerState[activeRegisterId]?.isOpen ? 'bg-green-500' : 'bg-red-500'}`} />
-                      {registerState[activeRegisterId]?.isOpen ? 'Caja Abierta' : 'Caja Cerrada'}
-                    </span>
-                    <div className="w-px h-3 bg-border/40 mx-1" />
-                    <SupabaseStatus mode="compact" />
-                  </div>
-                </div>
+          <POSHeader
+            className="hidden lg:flex items-center justify-between bg-card/50 backdrop-blur-md border-b border-border/60 px-6 py-2 sticky top-0 z-20"
+            registers={registers}
+            activeRegisterId={activeRegisterId}
+            onRegisterChange={setActiveRegisterId}
+            onOpenRegisterManager={() => setIsRegisterManagerOpen(true)}
+            onOpenMovements={() => {
+              setMovementType('out')
+              setMovementAmount('')
+              setMovementNote('')
+              setIsMovementDialogOpen(true)
+            }}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+          >
+            {/* Branding */}
+            <div className="flex items-center gap-3">
+              <div className="bg-primary/10 p-2 rounded-lg">
+                <div className="font-bold text-xl text-primary tracking-tight">4G</div>
               </div>
-
-              <div className="h-8 w-px bg-border/60 mx-2" />
-
-              {/* Selector de caja simplificado */}
-              <div className="flex items-center gap-2">
-                <Select value={activeRegisterId} onValueChange={(val) => setActiveRegisterId(val)}>
-                  <SelectTrigger className="w-40 h-8 text-xs bg-background border-border/50 shadow-sm">
-                    <div className="flex items-center gap-2 truncate">
-                      <CreditCard className="h-3 w-3 text-muted-foreground" />
-                      <SelectValue placeholder="Caja" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {registers.map(reg => (
-                      <SelectItem key={reg.id} value={reg.id} className="text-xs">
-                        {reg.name || `Caja ${reg.id}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-primary"
-                  onClick={() => setIsRegisterManagerOpen(true)}
-                  title="Gestionar cajas"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
+              <div>
+                <h1 className="text-lg font-bold text-foreground leading-none">Punto de Venta</h1>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-muted-foreground/30 text-muted-foreground font-normal">
+                    v4.0
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <div className={`w-1.5 h-1.5 rounded-full ${registerState[activeRegisterId]?.isOpen ? 'bg-green-500' : 'bg-red-500'}`} />
+                    {registerState[activeRegisterId]?.isOpen ? 'Caja Abierta' : 'Caja Cerrada'}
+                  </span>
+                  <div className="w-px h-3 bg-border/40 mx-1" />
+                  <SupabaseStatus mode="compact" />
+                </div>
               </div>
             </div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex items-center bg-muted/30 rounded-lg p-1 border border-border/40 mr-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none"
-                  onClick={() => {
-                    setMovementType('out')
-                    setMovementAmount('')
-                    setMovementNote('')
-                    setIsMovementDialogOpen(true)
-                  }}
-                >
-                  <GSIcon className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                  Movimientos
-                </Button>
-                <div className="w-px h-4 bg-border/40 mx-1" />
-                <Link href="/dashboard/pos/caja">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none"
-                  >
-                    <FileText className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                    Detalles de Caja
-                  </Button>
-                </Link>
-                <div className="w-px h-4 bg-border/40 mx-1" />
-                <Link href="/dashboard/pos/dashboard">
-                  <Button variant="ghost" size="sm" className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none">
-                    <BarChart3 className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                    Reportes
-                  </Button>
-                </Link>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                  title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-                >
-                  {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-          </div>
+          </POSHeader>
 
 
 
           {/* Alertas de inventario desktop */}
           <div className="hidden lg:block px-6 pt-4">
-            <InventoryAlerts />
+            
           </div>
 
           {/* Barra de búsqueda y filtros */}
@@ -2267,28 +2024,30 @@ export default function POSPage() {
                   </div>
                 </div>
 
-                {/* Escáner de códigos de barras integrado */}
-                <POSBarcodeScanner
-                  onProductFound={async (barcode) => {
-                    const normalized = normalizeBarcode(barcode)
-                    const localProduct = inventoryProducts.find(
-                      (p) => p.barcode === barcode || p.barcode === normalized
-                    )
-                    if (localProduct) {
-                      addToCart(localProduct)
-                      toast.success(`${localProduct.name} agregado al carrito`)
-                      return
-                    }
-                    const remoteProduct = await findProductByBarcode(normalized)
-                    if (remoteProduct) {
-                      addToCart(remoteProduct)
-                      toast.success(`${remoteProduct.name} agregado al carrito`)
-                    } else {
-                      toast.error('Producto no encontrado')
-                    }
-                  }}
-                  className="w-full shadow-sm"
-                />
+                {/* Escáner de códigos de barras */}
+                {getFeatureFlag('enableBarcodeScanner') && (
+                  <POSBarcodeScanner
+                    onProductFound={async (barcode) => {
+                      const normalized = normalizeBarcode(barcode)
+                      const localProduct = inventoryProducts.find(
+                        (p) => p.barcode === barcode || p.barcode === normalized
+                      )
+                      if (localProduct) {
+                        addToCart(localProduct)
+                        toast.success(`${localProduct.name} agregado al carrito`)
+                        return
+                      }
+                      const remoteProduct = await findProductByBarcode(normalized)
+                      if (remoteProduct) {
+                        addToCart(remoteProduct)
+                        toast.success(`${remoteProduct.name} agregado al carrito`)
+                      } else {
+                        toast.error('Producto no encontrado')
+                      }
+                    }}
+                    className="w-full shadow-sm"
+                  />
+                )}
               </div>
 
               {/* Estados de carga y error */}
@@ -2447,236 +2206,28 @@ export default function POSPage() {
             </div>
 
             {/* Carrito lateral mejorado - responsive */}
-            <div className="hidden md:flex flex-col w-[22rem] lg:w-96 xl:w-[26rem] bg-card border-l shadow-[rgb(0_0_0_/_0.1)_0px_0px_15px_-3px] h-full transition-all duration-300 z-20">
-              {/* Header del carrito */}
-              <div className="p-3 border-b border-border bg-muted/20 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-primary/10 p-1.5 rounded-md">
-                      <ShoppingCart className="h-4 w-4 text-primary" />
-                    </div>
-                    <h2 className="text-base font-semibold text-foreground">Carrito</h2>
-                  </div>
-                  <Badge variant="secondary" className="text-xs font-normal bg-background border shadow-sm">
-                    {cartCalculations.totalItemCount} items
-                  </Badge>
-                </div>
-
-                {/* Resumen rápido */}
-                {(cart.length > 0 || selectedRepairIds.length > 0) && (
-                  <div className="bg-background rounded-lg p-3 border border-border/60 shadow-sm relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-1 opacity-10 group-hover:opacity-20 transition-opacity">
-                      <CreditCard className="h-12 w-12 text-primary" />
-                    </div>
-                    <div className="flex justify-between items-baseline relative z-10">
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Estimado</span>
-                      <span className="font-bold text-xl text-primary tracking-tight">
-                        {formatCurrency(cartCalculations.total)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Lista de productos */}
-              <div className="flex-1 overflow-y-auto p-3 min-h-0 space-y-2 bg-muted/5 scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/40">
-                {cart.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
-                    <div className="bg-muted/50 rounded-full p-5 mb-3">
-                      {selectedRepairIds.length > 0 ? (
-                        <Wrench className="h-10 w-10 text-primary" />
-                      ) : (
-                        <ShoppingCart className="h-10 w-10 text-muted-foreground" />
-                      )}
-                    </div>
-                    <h3 className="text-base font-medium text-foreground mb-1">
-                      {selectedRepairIds.length > 0 ? 'Reparación Seleccionada' : 'Carrito vacío'}
-                    </h3>
-                    <p className="text-xs text-muted-foreground max-w-[180px]">
-                      {selectedRepairIds.length > 0 
-                        ? 'Puede proceder al cobro o agregar productos adicionales'
-                        : 'Escanea o selecciona productos para comenzar'}
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {cart.map((item, index) => (
-                      <div key={item.id} className="group relative bg-card rounded-lg border border-border/60 hover:border-primary/30 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
-                        <div className="p-2.5 flex gap-2.5">
-                          {/* Imagen del producto */}
-                          <div className="h-12 w-12 bg-muted/30 rounded-md flex items-center justify-center text-lg flex-shrink-0 border border-border/30 self-center">
-                            {item.image}
-                          </div>
-
-                          {/* Información del producto */}
-                          <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-                            <div className="flex justify-between items-start gap-1">
-                              <h4 className="text-xs font-semibold text-foreground/90 truncate leading-tight pr-5">{item.name}</h4>
-                              <button 
-                                onClick={() => removeFromCart(item.id)}
-                                className="text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 rounded transition-all absolute top-1.5 right-1.5 p-1"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                            
-                            <div className="flex items-end justify-between mt-1.5">
-                              <div className="flex flex-col leading-none gap-0.5">
-                                <span className="text-xs font-bold text-primary">
-                                  {formatCurrency(item.price)}
-                                </span>
-                                {item.stock - item.quantity <= 3 && (
-                                  <span className={`text-[9px] font-medium ${
-                                    item.stock - item.quantity === 0 
-                                      ? 'text-destructive' 
-                                      : 'text-yellow-600'
-                                  }`}>
-                                    {item.stock - item.quantity === 0 ? 'Sin Stock' : `Queda ${item.stock - item.quantity}`}
-                                  </span>
-                                )}
-                              </div>
-                              
-                              <div className="flex items-center bg-muted/30 rounded-md border border-border/40 h-6">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-full w-6 p-0 hover:bg-background hover:text-destructive rounded-l-md"
-                                  onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                  disabled={item.quantity <= 1}
-                                >
-                                  <Minus className="h-2.5 w-2.5" />
-                                </Button>
-                                <span className="w-6 text-center text-xs font-semibold tabular-nums leading-none">{item.quantity}</span>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-full w-6 p-0 hover:bg-background hover:text-primary rounded-r-md"
-                                  onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                  disabled={item.quantity >= item.stock}
-                                >
-                                  <Plus className="h-2.5 w-2.5" />
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Subtotal footer - sutil */}
-                        {item.quantity > 1 && (
-                          <div className="bg-muted/20 px-2.5 py-1 flex justify-between items-center border-t border-border/30">
-                            <span className="text-[9px] text-muted-foreground font-medium">Subtotal</span>
-                            <span className="text-xs font-bold text-foreground/80">
-                              {formatCurrency(item.price * item.quantity)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-
-              {/* Resumen y acciones */}
-              {(cart.length > 0 || selectedRepairIds.length > 0) && (
-                <div className="border-t border-border bg-card p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30">
-                  {/* Desglose de costos mejorado */}
-                  <div className="space-y-2 mb-3">
-                    {/* Toggle de venta mayorista */}
-                    <div className="flex items-center justify-between p-2 bg-muted/30 rounded-lg border border-border/50">
-                      <div className="flex items-center gap-2">
-                        <Tag className="h-3.5 w-3.5 text-primary" />
-                        <span className="text-xs font-medium">Precio Mayorista</span>
-                        {isWholesale && (
-                          <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold">
-                            -{cartCalculations.wholesaleDiscountRate}%
-                          </span>
-                        )}
-                      </div>
-                      <Switch
-                        checked={isWholesale}
-                        onCheckedChange={setIsWholesale}
-                        className="scale-75 origin-right"
-                      />
-                    </div>
-
-                    <div className="space-y-1 px-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Subtotal</span>
-                        <span className="font-medium text-foreground">{formatCurrency(cartCalculations.subtotal)}</span>
-                      </div>
-
-                      {/* Costo de reparación vinculada */}
-                      {cartCalculations.repairCost > 0 && (
-                        <div className="flex justify-between text-xs text-blue-600 dark:text-blue-400">
-                          <span className="flex items-center gap-1"><Wrench className="h-3 w-3" /> Reparación</span>
-                          <span className="font-medium">+{formatCurrency(cartCalculations.repairCost)}</span>
-                        </div>
-                      )}
-
-                      {/* Ahorros */}
-                      {cartCalculations.hasDiscount && (
-                        <div className="flex justify-between text-xs text-green-600 dark:text-green-400">
-                          <span className="flex items-center gap-1"><Sparkles className="h-3 w-3" /> Descuentos</span>
-                          <span className="font-medium">-{formatCurrency(cartCalculations.totalSavings)}</span>
-                        </div>
-                      )}
-
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">Impuestos (IVA)</span>
-                        <span className="font-medium text-foreground">{formatCurrency(cartCalculations.tax)}</span>
-                      </div>
-
-                      <Separator className="my-1.5" />
-
-                      <div className="flex justify-between items-end">
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium text-foreground">Total a Pagar</span>
-                          {selectedCustomer && (
-                            <span className="text-[10px] text-primary flex items-center gap-1">
-                              <Award className="h-3 w-3" /> +{calculateLoyaltyPoints(cartCalculations.total)} pts
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-2xl font-bold text-primary leading-none">
-                          {formatCurrency(cartCalculations.total)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Botones de acción */}
-                  <div className="grid grid-cols-4 gap-2">
-                    <Button
-                      variant="outline"
-                      className="col-span-1 h-11 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 sm:flex hidden"
-                      onClick={(e) => clearCart()}
-                      disabled={cart.length === 0}
-                      title="Limpiar Carrito"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </Button>
-                    
-                    {/* Botón de limpiar carrito visible en móvil */}
-                    <Button
-                      variant="outline"
-                      className="col-span-1 h-11 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 sm:hidden flex items-center justify-center"
-                      onClick={(e) => clearCart()}
-                      disabled={cart.length === 0}
-                      title="Limpiar Carrito"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span className="sr-only">Limpiar</span>
-                    </Button>
-                    
-                    <Button
-                      className="col-span-3 h-11 text-base font-bold shadow-md hover:shadow-lg transition-all"
-                      onClick={() => setIsCheckoutOpen(true)}
-                    >
-                      Cobrar <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
-                  </div>
-                </div>
-              )}
+            <div className="hidden md:flex flex-col w-[22rem] lg:w-96 xl:w-[26rem] h-full transition-all duration-300 z-20 p-2">
+              <POSCart
+                items={combinedCartItems}
+                onUpdateQuantity={updateQuantity}
+                onRemoveItem={handleRemoveItem}
+                onApplyDiscount={updateItemDiscount}
+                onCheckout={() => setIsCheckoutOpen(true)}
+                onClearCart={() => clearCart()}
+                isWholesale={isWholesale}
+                onToggleWholesale={setIsWholesale}
+                discount={generalDiscount}
+                onUpdateDiscount={setGeneralDiscount}
+                subtotalApplied={unifiedCalculations.subtotalApplied}
+                subtotalNonWholesale={unifiedCalculations.subtotalNonWholesale}
+                generalDiscountAmount={unifiedCalculations.generalDiscountAmount}
+                wholesaleDiscountAmount={unifiedCalculations.wholesaleDiscountAmount}
+                totalSavings={unifiedCalculations.totalSavings}
+                cartTax={unifiedCalculations.tax}
+                cartTotal={unifiedCalculations.total}
+                cartItemCount={unifiedCalculations.totalItemCount}
+                taxRate={getTaxConfig().rate}
+              />
             </div>
           </div>
         </div>
@@ -2726,7 +2277,7 @@ export default function POSPage() {
         setFinalCostFromSale={setFinalCostFromSale}
         selectedRepairs={selectedRepairs}
         supabaseStatusToLabel={supabaseStatusToLabel}
-        cart={cart}
+        cart={combinedCartItems}
         cartCalculations={cartCalculations}
         isWholesale={isWholesale}
         WHOLESALE_DISCOUNT_RATE={WHOLESALE_DISCOUNT_RATE}
@@ -3075,7 +2626,7 @@ export default function POSPage() {
         </DialogContent>
       </Dialog>
       {/* Diálogo de configuración de accesibilidad */}
-      <AccessibilitySettings isOpen={showAccessibilitySettings} onClose={() => setShowAccessibilitySettings(false)} />
+      
 
       {/* Selector de variantes */}
       {selectedProductForVariants && (
@@ -3163,6 +2714,8 @@ export default function POSPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      
     </div>
   )
 }

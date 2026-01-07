@@ -118,7 +118,7 @@ export default function ProductsPage() {
 
   const handleProductDuplicate = async (product: Product) => {
     // Exclude system fields and relations that shouldn't be duplicated
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     const { id, created_at, updated_at, category, supplier, ...rest } = product as any
 
     const duplicatedData = {

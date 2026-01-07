@@ -84,11 +84,6 @@ export function useSegmentation(customers: Customer[]) {
   const [loading, setLoading] = useState(true)
   const [aiInsights, setAiInsights] = useState<AIInsight[]>([])
 
-  // Cargar segmentos desde Supabase
-  useEffect(() => {
-    loadSegments()
-  }, [])
-
   const loadSegments = useCallback(async () => {
     setLoading(true)
     try {
@@ -105,6 +100,11 @@ export function useSegmentation(customers: Customer[]) {
       setLoading(false)
     }
   }, [])
+
+  // Cargar segmentos desde Supabase
+  useEffect(() => {
+    loadSegments()
+  }, [loadSegments])
 
   // Cargar insights de IA
   const loadAIInsights = useCallback(async () => {

@@ -90,7 +90,7 @@ export function useInvoicing() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [supabase])
 
     // Generate PDF
     const generatePDF = useCallback(async (invoiceId: string) => {
@@ -139,7 +139,7 @@ export function useInvoicing() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [supabase])
 
     // Send invoice by email
     const sendInvoice = useCallback(async (invoiceId: string, email: string) => {
@@ -183,7 +183,7 @@ export function useInvoicing() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [supabase])
 
     // Fetch invoices
     const fetchInvoices = useCallback(async () => {
@@ -200,7 +200,7 @@ export function useInvoicing() {
             console.error('Error fetching invoices:', error)
             toast.error('Error al cargar facturas')
         }
-    }, [])
+    }, [supabase])
 
     // Cancel invoice
     const cancelInvoice = useCallback(async (invoiceId: string) => {
@@ -221,7 +221,7 @@ export function useInvoicing() {
             console.error('Error cancelling invoice:', error)
             toast.error('Error al cancelar factura')
         }
-    }, [fetchInvoices])
+    }, [fetchInvoices, supabase])
 
     useEffect(() => {
         fetchInvoices()

@@ -124,7 +124,7 @@ export const useChartData = <T extends ChartDataPoint>(
     }
 
     loadData()
-  }, [cacheKey, loadData, ...dependencies])
+  }, [cacheKey, loadData, refreshInterval, dependencies])
 
   // Set up refresh interval
   useEffect(() => {

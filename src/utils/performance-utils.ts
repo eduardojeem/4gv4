@@ -88,6 +88,7 @@ export const useStableCallback = <T extends (...args: unknown[]) => unknown>(
   
   useEffect(() => {
     callbackRef.current = callback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
   
   return useCallback(

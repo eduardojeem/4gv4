@@ -195,7 +195,7 @@ export default function UserProfilePage() {
 
     loadUser()
     loadPrefs()
-  }, [supabase])
+  }, [supabase, prefs])
 
   // Detectar cambios
   useEffect(() => {

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence  } from '../../../components/ui/motion'
 import {
   Plus, Download, LayoutGrid, List, Trash2,
@@ -184,10 +184,10 @@ export default function CategoriesPage() {
     }
   }
 
-  const handleExport = (format: 'csv' | 'json') => {
+  const handleExport = useCallback((format: 'csv' | 'json') => {
     exportCategories(categories, { format })
     toast.info(`Exportando categorías a ${format.toUpperCase()}...`)
-  }
+  }, [categories])
 
   // Command Palette Configuration
   const commands = useMemo(() => [
@@ -242,7 +242,7 @@ export default function CategoriesPage() {
       category: 'navigation' as const,
       keywords: ['vista', 'árbol', 'tree']
     }
-  ], [categories, handleExport])
+  ], [handleExport])
 
   // Keyboard Shortcuts
   useEffect(() => {

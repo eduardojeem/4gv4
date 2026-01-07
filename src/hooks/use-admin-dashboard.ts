@@ -205,7 +205,7 @@ export function useAdminDashboard() {
 
   const [isLoading, setIsLoading] = useState(false)
   
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -257,7 +257,7 @@ export function useAdminDashboard() {
     }
 
     fetchData()
-  }, [])
+  }, [supabase])
 
 
   const getFilteredUsers = useCallback((filters: { role?: string; status?: string; search?: string }) => {

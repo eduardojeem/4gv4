@@ -270,6 +270,11 @@ export function usePOSProducts() {
     return true
   }, [])
 
+  // Función para remover producto del carrito
+  const removeFromCart = useCallback((productId: string) => {
+    setCart(prevCart => prevCart.filter(item => item.id !== productId))
+  }, [])
+
   // Función para actualizar cantidad en el carrito
   const updateCartItemQuantity = useCallback((productId: string, quantity: number) => {
     if (quantity <= 0) {
@@ -298,12 +303,7 @@ export function usePOSProducts() {
     )
 
     setError(null)
-  }, [products])
-
-  // Función para remover producto del carrito
-  const removeFromCart = useCallback((productId: string) => {
-    setCart(prevCart => prevCart.filter(item => item.id !== productId))
-  }, [])
+  }, [products, removeFromCart])
 
   // Función para limpiar el carrito
   const clearCart = useCallback(() => {

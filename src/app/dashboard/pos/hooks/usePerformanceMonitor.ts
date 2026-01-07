@@ -249,7 +249,7 @@ export const useOperationPerformance = () => {
       endMeasurement()
       throw error
     }
-  }, [measureOperation, isMonitoring])
+  }, [isMonitoring])
 
   const measureSync = useCallback(<T>(
     operationName: string,
@@ -270,7 +270,7 @@ export const useOperationPerformance = () => {
       endMeasurement()
       throw error
     }
-  }, [measureOperation, isMonitoring])
+  }, [isMonitoring])
 
   return {
     measureAsync,

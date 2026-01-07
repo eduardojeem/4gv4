@@ -40,7 +40,7 @@ interface Sale {
   payment_method: string
   customer?: { name: string } | null
   items_count?: number
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   sale_items?: any[]
 }
 
@@ -93,10 +93,10 @@ export default function POSDashboard() {
         if (salesError) throw salesError
 
         // Process sales data
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const processedSales = (salesData || []).map((sale: any) => ({
           ...sale,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           items_count: sale.sale_items?.reduce((acc: number, item: any) => acc + item.quantity, 0) || 0,
           customer_name: sale.customer?.name || 'Cliente Casual'
         }))
@@ -120,7 +120,7 @@ export default function POSDashboard() {
             if (!topItemsError && topItemsData) {
               const productMap = new Map<string, {name: string, sales: number, revenue: number}>()
               
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               
               topItemsData.forEach((item: any) => {
                 const name = item.product?.name || 'Producto eliminado'
                 const existing = productMap.get(name) || { name, sales: 0, revenue: 0 }

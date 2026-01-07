@@ -101,7 +101,7 @@ export function useSales() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [supabase])
 
     // Calculate stats
     const calculateStats = (salesData: Sale[]) => {
@@ -168,7 +168,7 @@ export function useSales() {
             toast.error('Error al cargar venta')
             return null
         }
-    }, [])
+    }, [supabase])
 
     // Cancel sale
     const cancelSale = useCallback(async (saleId: string, reason: string) => {
@@ -217,7 +217,7 @@ export function useSales() {
             console.error('Error cancelling sale:', error)
             toast.error('Error al cancelar venta')
         }
-    }, [fetchSales])
+    }, [fetchSales, supabase])
 
     // Real-time subscription
     useEffect(() => {
@@ -241,7 +241,7 @@ export function useSales() {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [fetchSales])
+    }, [fetchSales, supabase])
 
     return {
         sales,

@@ -147,6 +147,7 @@ export function useCriticalMemo<T>(
     const value = factory()
     memoRef.current = { value, deps: [...deps] }
     return value
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 }
 

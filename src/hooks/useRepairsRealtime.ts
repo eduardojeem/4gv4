@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createClient as createSupabaseClient } from '../lib/supabase/client'
 import type { RepairOrder } from '@/types/repairs'
 
@@ -9,6 +9,12 @@ type RepairCallbacks = {
 }
 
 export function useRepairsRealtime(callbacks: RepairCallbacks = {}) {
+  const callbacksRef = useRef(callbacks)
+
+  useEffect(() => {
+    callbacksRef.current = callbacks
+  }, [callbacks])
+
   useEffect(() => {
     const supabase = createSupabaseClient()
 
@@ -48,12 +54,14 @@ interface RealtimePayload {
     const channel = (supabase as { channel?: (name: string) => { on: (event: string, config: unknown, callback: (payload: RealtimePayload) => void) => { subscribe: () => void; unsubscribe: () => void } } })?.channel?.('repairs-live')
       ?.on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, (payload: RealtimePayload) => {
         const type = payload.eventType || payload.event
-        if (type === 'INSERT' && callbacks.onInsert && payload.new) {
-          callbacks.onInsert(mapDbToRepair(payload.new))
-        } else if (type === 'UPDATE' && callbacks.onUpdate && payload.new) {
-          callbacks.onUpdate(mapDbToRepair(payload.new))
-        } else if (type === 'DELETE' && callbacks.onDelete) {
-          callbacks.onDelete(String(payload.old?.id))
+        const currentCallbacks = callbacksRef.current
+        
+        if (type === 'INSERT' && currentCallbacks.onInsert && payload.new) {
+          currentCallbacks.onInsert(mapDbToRepair(payload.new))
+        } else if (type === 'UPDATE' && currentCallbacks.onUpdate && payload.new) {
+          currentCallbacks.onUpdate(mapDbToRepair(payload.new))
+        } else if (type === 'DELETE' && currentCallbacks.onDelete) {
+          currentCallbacks.onDelete(String(payload.old?.id))
         }
       })
 

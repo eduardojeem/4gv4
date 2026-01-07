@@ -16,6 +16,7 @@ interface CartItem {
   price: number
   quantity: number
   wholesalePrice?: number
+  isService?: boolean
 }
 
 interface CartCalculations {
@@ -94,20 +95,20 @@ export function SaleSummary({
           <>
             <div className="flex justify-between text-blue-600 dark:text-blue-400">
               <span className="flex items-center gap-1">
-                <Wrench className="h-3 w-3" /> 
+                <Wrench className="h-3 w-3" />
                 Reparación (con IVA):
               </span>
               <span>+{formatCurrency(cartCalculations.repairCost)}</span>
             </div>
-            {(cartCalculations as any).repairSubtotal && (cartCalculations as any).repairTax && (
+            {cartCalculations.repairSubtotal && cartCalculations.repairTax && (
               <div className="text-xs text-muted-foreground pl-4 space-y-1">
                 <div className="flex justify-between">
                   <span>• Subtotal reparación:</span>
-                  <span>{formatCurrency((cartCalculations as any).repairSubtotal)}</span>
+                  <span>{formatCurrency(cartCalculations.repairSubtotal)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>• IVA reparación:</span>
-                  <span>{formatCurrency((cartCalculations as any).repairTax)}</span>
+                  <span>{formatCurrency(cartCalculations.repairTax)}</span>
                 </div>
               </div>
             )}

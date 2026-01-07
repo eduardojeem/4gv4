@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { 
   Search, 
   Plus, 
@@ -110,7 +110,7 @@ export default function PostsPage() {
   })
 
   // Cargar posts desde Supabase
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
     try {
       setLoading(true)
       const supabase = createClient()
@@ -160,11 +160,11 @@ export default function PostsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     fetchPosts()
-  }, [])
+  }, [fetchPosts])
 
   // Obtener todas las etiquetas únicas
   const allTags = useMemo(() => {

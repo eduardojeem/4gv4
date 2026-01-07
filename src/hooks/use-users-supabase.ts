@@ -91,7 +91,7 @@ export function useUsersSupabase({
         } finally {
             setIsLoading(false)
         }
-    }, [page, pageSize, search, roleFilter, statusFilter])
+    }, [page, pageSize, search, roleFilter, statusFilter, supabase])
 
     // Suscripción a cambios en tiempo real
     useEffect(() => {
@@ -116,7 +116,7 @@ export function useUsersSupabase({
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [fetchUsers])
+    }, [fetchUsers, supabase])
 
     const createUser = async (userData: Partial<SupabaseUser>) => {
         try {

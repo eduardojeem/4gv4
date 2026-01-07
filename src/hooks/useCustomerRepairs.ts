@@ -43,7 +43,7 @@ export function useCustomerRepairs() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [supabase])
 
     return {
         repairs,

@@ -155,6 +155,12 @@ export function usePOS() {
         })
 
         toast.success('Producto agregado')
+    }, [isWholesale])
+
+    // Remover del carrito
+    const removeFromCart = useCallback((itemId: string) => {
+        setCart(prev => prev.filter(item => item.id !== itemId))
+        toast.success('Producto eliminado')
     }, [])
 
     // Actualizar cantidad
@@ -180,7 +186,7 @@ export function usePOS() {
                 return item
             })
         )
-    }, [])
+    }, [removeFromCart])
 
     // Aplicar descuento a un item
     const applyItemDiscount = useCallback((itemId: string, discount: number) => {
@@ -191,12 +197,6 @@ export function usePOS() {
                     : item
             )
         )
-    }, [])
-
-    // Remover del carrito
-    const removeFromCart = useCallback((itemId: string) => {
-        setCart(prev => prev.filter(item => item.id !== itemId))
-        toast.success('Producto eliminado')
     }, [])
 
     // Limpiar carrito
@@ -325,7 +325,7 @@ export function usePOS() {
         } finally {
             setProcessing(false)
         }
-    }, [cart, customer, subtotal, tax, totalDiscount, total, paymentSplits, notes, totalPaid, clearCart])
+    }, [cart, customer, subtotal, tax, totalDiscount, total, paymentSplits, notes, totalPaid, clearCart, supabase])
 
     return {
         // Estado

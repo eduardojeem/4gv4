@@ -89,11 +89,14 @@ CREATE TABLE IF NOT EXISTS products (
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
     supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
     brand TEXT,
-    stock INTEGER DEFAULT 0,
+    stock_quantity INTEGER DEFAULT 0,  -- CORREGIDO: usar stock_quantity
     min_stock INTEGER DEFAULT 0,
     purchase_price DECIMAL(10,2) NOT NULL,
     sale_price DECIMAL(10,2) NOT NULL,
     description TEXT,
+    is_active BOOLEAN DEFAULT true,    -- AGREGADO: columna is_active
+    barcode VARCHAR(50),               -- AGREGADO: columna barcode
+    unit_measure VARCHAR(20) DEFAULT 'unidad',  -- AGREGADO: columna unit_measure
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -160,7 +163,7 @@ CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
-CREATE INDEX IF NOT EXISTS idx_products_stock ON products(stock);
+CREATE INDEX IF NOT EXISTS idx_products_stock_quantity ON products(stock_quantity);  -- CORREGIDO
 CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id);
 CREATE INDEX IF NOT EXISTS idx_sales_user ON sales(user_id);
@@ -489,7 +492,7 @@ DO $$ BEGIN
 END $$;
 -- Optional extended product columns for brand/model/location and flags
 -- Ensure core columns exist (for migration from older schemas)
-ALTER TABLE products ADD COLUMN IF NOT EXISTS stock INTEGER DEFAULT 0;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_quantity INTEGER DEFAULT 0;  -- CORREGIDO
 ALTER TABLE products ADD COLUMN IF NOT EXISTS min_stock INTEGER DEFAULT 0;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_price DECIMAL(10,2) NOT NULL DEFAULT 0;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_price DECIMAL(10,2) NOT NULL DEFAULT 0;
@@ -503,15 +506,15 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS is_on_sale boolean DEFAULT false;
 
 -- Generated column to support server-side low-stock filtering
 ALTER TABLE products
-  ADD COLUMN IF NOT EXISTS is_low_stock boolean GENERATED ALWAYS AS ((stock > 0) AND (stock <= min_stock)) STORED;
+  ADD COLUMN IF NOT EXISTS is_low_stock boolean GENERATED ALWAYS AS ((stock_quantity > 0) AND (stock_quantity <= min_stock)) STORED;  -- CORREGIDO
 
 -- Helpful indexes for search and ordering
 CREATE INDEX IF NOT EXISTS idx_products_name ON products (name);
 CREATE INDEX IF NOT EXISTS idx_products_sku ON products (sku);
 CREATE INDEX IF NOT EXISTS idx_products_created_at ON products (created_at);
-CREATE INDEX IF NOT EXISTS idx_products_stock ON products (stock);
+CREATE INDEX IF NOT EXISTS idx_products_stock_quantity ON products (stock_quantity);  -- CORREGIDO
 CREATE INDEX IF NOT EXISTS idx_products_sale_price ON products (sale_price);
-CREATE INDEX IF NOT EXISTS idx_products_is_low_stock ON products (is_low_stock);
+CREATE INDEX IF NOT EXISTS idx_products_is_active ON products (is_active);            -- AGREGADO
 
 -- Generated column for margin percent and helpful index
 ALTER TABLE products

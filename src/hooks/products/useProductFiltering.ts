@@ -28,7 +28,10 @@ export function useProductFiltering(
   initialFilters: ProductFilters = {},
   performanceConfig: PerformanceConfig = DEFAULT_PERFORMANCE_CONFIG
 ): ProductFilteringReturn {
-  const products: Product[] = Array.isArray(arg1) ? arg1 : (arg1?.products ?? [])
+  const productsStable: Product[] = useMemo(
+    () => (Array.isArray(arg1) ? arg1 : (arg1?.products ?? [])),
+    [arg1]
+  )
   const onFiltersChange = Array.isArray(arg1) ? undefined : arg1?.onFiltersChange
   const [filters, setFilters] = useState<ProductFilters>({
     search: initialFilters.search ?? '',
@@ -75,23 +78,23 @@ export function useProductFiltering(
 
   // Calcular rangos automáticamente
   const dataRanges = useMemo(() => {
-    if (products.length === 0) return null
+    if (productsStable.length === 0) return null
 
-    const prices = products.map(p => p.sale_price || 0).filter(p => p > 0)
-    const stocks = products.map(p => p.stock_quantity || 0)
-    const margins = products.map(p => p.margin_percentage || 0).filter(m => m > 0)
+    const prices = productsStable.map(p => p.sale_price || 0).filter(p => p > 0)
+    const stocks = productsStable.map(p => p.stock_quantity || 0)
+    const margins = productsStable.map(p => p.margin_percentage || 0).filter(m => m > 0)
 
     return {
       price: { min: Math.min(...prices), max: Math.max(...prices) },
       stock: { min: Math.min(...stocks), max: Math.max(...stocks) },
       margin: { min: Math.min(...margins), max: Math.max(...margins) }
     }
-  }, [products])
+  }, [productsStable])
 
   // Catálogo auxiliar: categorías y proveedores únicos
   const categories: Category[] = useMemo(() => {
     const map = new Map<string, Category>()
-    for (const p of products) {
+    for (const p of productsStable) {
       const cat = (p as any).category
       const catId = (p as any).category_id || (cat && (cat as any).id)
       if (catId) {
@@ -100,11 +103,11 @@ export function useProductFiltering(
       }
     }
     return Array.from(map.values())
-  }, [products])
+  }, [productsStable])
 
   const suppliers: Supplier[] = useMemo(() => {
     const map = new Map<string, Supplier>()
-    for (const p of products) {
+    for (const p of productsStable) {
       const sup = (p as any).supplier
       const supId = (p as any).supplier_id || (sup && (sup as any).id)
       if (supId) {
@@ -113,7 +116,7 @@ export function useProductFiltering(
       }
     }
     return Array.from(map.values())
-  }, [products])
+  }, [productsStable])
 
   // Actualizar rangos cuando cambien los datos
   useEffect(() => {
@@ -250,7 +253,7 @@ export function useProductFiltering(
     },
     [handleProductError],
     { ttl: performanceConfig.memoization?.ttl }
-  )(products, debouncedSearch, { fields: ['name', 'sku', 'description'], minLength: 2, debounceMs: 300 })
+  )(productsStable, debouncedSearch, { fields: ['name', 'sku', 'description'], minLength: 2, debounceMs: 300 })
 
   // Aplicar filtros básicos con memoización optimizada
   const basicFilteredProducts = useAdvancedMemoization(
@@ -397,7 +400,7 @@ export function useProductFiltering(
   // Estadísticas de filtros
   const filterStats = useMemo(() => {
     const stats = {
-      totalProducts: products.length,
+      totalProducts: productsStable.length,
       filteredCount: filteredProducts.length,
       byCategory: {} as Record<string, number>,
       bySupplier: {} as Record<string, number>,
@@ -434,7 +437,7 @@ export function useProductFiltering(
     if (stats.stockRange.max === -Infinity) stats.stockRange.max = 0
 
     return stats
-  }, [products.length, filteredProducts])
+  }, [productsStable.length, filteredProducts])
 
   const activeFiltersCount = useMemo(() => (
     Object.values(filters).filter(v => v !== '' && v !== 'all' && v !== undefined).length
@@ -462,7 +465,7 @@ export function useProductFiltering(
       const productError = handleProductError(error, 'update filter')
       setLastError(productError)
     }
-  }, [handleProductError])
+  }, [handleProductError, onFiltersChange])
 
   const updateAdvancedFilter = useCallback((key: string, value: any) => {
     try {
@@ -512,7 +515,7 @@ export function useProductFiltering(
       const productError = handleProductError(error, 'clear filters')
       setLastError(productError)
     }
-  }, [dataRanges, handleProductError])
+  }, [dataRanges, handleProductError, onFiltersChange])
 
   const applyPreset = useCallback((presetName: string) => {
     try {
@@ -578,12 +581,12 @@ export function useProductFiltering(
       recommendations: PerformanceUtils.generatePerformanceRecommendations(metrics),
       memoryUsage: PerformanceUtils.getMemoryUsage(),
       filteringStats: {
-        totalProducts: products.length,
+        totalProducts: productsStable.length,
         filteredProducts: filteredProducts.length,
-        filterEfficiency: filteredProducts.length / products.length
+        filterEfficiency: filteredProducts.length / Math.max(productsStable.length, 1)
       }
     }
-  }, [getMetrics, products.length, filteredProducts.length])
+  }, [getMetrics, filteredProducts, productsStable])
 
   return {
     // Productos filtrados

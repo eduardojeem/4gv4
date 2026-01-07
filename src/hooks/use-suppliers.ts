@@ -380,7 +380,7 @@ export function useSuppliers() {
         return () => {
             channel.unsubscribe()
         }
-    }, [fetchSuppliers])
+    }, [fetchSuppliers, supabase])
 
     return {
         suppliers,

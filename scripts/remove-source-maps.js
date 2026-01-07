@@ -5,8 +5,12 @@
  * Esto es necesario porque Turbopack genera source maps por defecto
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function removeSourceMaps(dir) {
   if (!fs.existsSync(dir)) return;
@@ -61,8 +65,9 @@ function main() {
   }
 }
 
-if (require.main === module) {
+// Check if this script is being run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }
 
-module.exports = { removeSourceMaps };
+export { removeSourceMaps };

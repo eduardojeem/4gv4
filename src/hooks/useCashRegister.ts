@@ -56,7 +56,7 @@ export function useCashRegister() {
             console.error('Error loading registers:', error)
             toast.error('Error al cargar cajas')
         }
-    }, [])
+    }, [supabase])
 
     // Check for open session
     const checkOpenSession = useCallback(async (registerId: string) => {
@@ -83,7 +83,7 @@ export function useCashRegister() {
             console.error('Error checking session:', error)
             return null
         }
-    }, [])
+    }, [supabase])
 
     // Open cash register
     const openRegister = useCallback(async (registerId: string, openingBalance: number, userId?: string) => {
@@ -146,7 +146,7 @@ export function useCashRegister() {
         } finally {
             setLoading(false)
         }
-    }, [checkOpenSession])
+    }, [checkOpenSession, supabase])
 
     // Close cash register
     const closeRegister = useCallback(async (closingBalance: number, userId?: string) => {
@@ -213,7 +213,7 @@ export function useCashRegister() {
         } finally {
             setLoading(false)
         }
-    }, [currentSession])
+    }, [currentSession, supabase])
 
     // Add cash in
     const addCashIn = useCallback(async (amount: number, reason: string, userId?: string) => {
@@ -250,7 +250,7 @@ export function useCashRegister() {
             toast.error('Error al registrar entrada')
             return false
         }
-    }, [currentSession])
+    }, [currentSession, supabase])
 
     // Add cash out
     const addCashOut = useCallback(async (amount: number, reason: string, userId?: string) => {
@@ -287,7 +287,7 @@ export function useCashRegister() {
             toast.error('Error al registrar salida')
             return false
         }
-    }, [currentSession])
+    }, [currentSession, supabase])
 
     // Register sale
     const registerSale = useCallback(async (saleId: string, amount: number) => {
@@ -321,7 +321,7 @@ export function useCashRegister() {
             console.error('Error registering sale:', error)
             return false
         }
-    }, [currentSession])
+    }, [currentSession, supabase])
 
     // Get current balance
     const getCurrentBalance = useCallback(() => {

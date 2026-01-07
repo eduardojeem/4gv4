@@ -76,7 +76,7 @@ export function useInventory() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [supabase])
 
     // Search products
     const searchProducts = useCallback(async (query: string) => {
@@ -116,7 +116,7 @@ export function useInventory() {
             toast.error('Error al buscar producto')
             return null
         }
-    }, [])
+    }, [supabase])
 
     // Update stock
     const updateStock = useCallback(async (productId: string, quantity: number, operation: 'add' | 'subtract' = 'subtract') => {
@@ -153,7 +153,7 @@ export function useInventory() {
             toast.error('Error al actualizar stock')
             return false
         }
-    }, [products, fetchProducts])
+    }, [products, fetchProducts, supabase])
 
     // Adjust stock (for corrections)
     const adjustStock = useCallback(async (productId: string, newStock: number, reason: string) => {
@@ -186,7 +186,7 @@ export function useInventory() {
             toast.error('Error al ajustar stock')
             return false
         }
-    }, [fetchProducts])
+    }, [fetchProducts, supabase])
 
     // Real-time subscription
     useEffect(() => {
@@ -210,7 +210,7 @@ export function useInventory() {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [fetchProducts])
+    }, [fetchProducts, supabase])
 
     return {
         products,

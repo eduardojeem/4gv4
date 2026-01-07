@@ -5,6 +5,7 @@ interface CartItem {
   price: number
   quantity: number
   discount?: number
+  isService?: boolean
 }
 
 interface PaymentSplit {
@@ -215,6 +216,17 @@ const generatePrintHTML = (receiptData: ReceiptData): string => {
           color: #666;
         }
         
+        .tag-service {
+          display: inline-block;
+          font-size: 9px;
+          color: #0b5ed7;
+          background: #e7f1ff;
+          border: 1px solid #cfe2ff;
+          padding: 1px 4px;
+          border-radius: 3px;
+          margin-left: 6px;
+        }
+        
         .total-section {
           border-top: 2px solid #333;
           padding-top: 5px;
@@ -286,13 +298,16 @@ const generatePrintHTML = (receiptData: ReceiptData): string => {
       <div class="separator"></div>
       
       <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
-        DETALLE DE PRODUCTOS
+        DETALLE DE ITEMS
       </div>
       
       ${receiptData.items.map(item => `
         <div class="item">
           <div class="info-row item-name">
-            <span>${item.name}</span>
+            <span>
+              ${item.name}
+              ${item.isService ? `<span class="tag-service">SERVICIO</span>` : ``}
+            </span>
             <span>${formatCurrency(item.price * item.quantity)}</span>
           </div>
           <div class="info-row item-details">

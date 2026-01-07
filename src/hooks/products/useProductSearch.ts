@@ -239,7 +239,7 @@ export function useProductSearch(
     // Aplicar filtros adicionales
     return applySearchFilters(results, searchFilters)
   }, [products, debouncedQuery, searchMode, searchFilters, config.minLength, 
-      simpleSearch, fuzzySearch, advancedSearch, semanticSearch])
+      simpleSearch, fuzzySearch, advancedSearch, semanticSearch, applySearchFilters])
 
   // Aplicar filtros a los resultados
   const applySearchFilters = useCallback((

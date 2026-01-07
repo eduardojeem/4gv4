@@ -7,7 +7,7 @@ import { useCallback, useRef, useEffect } from 'react'
 /**
  * Hook para debounce de funciones
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function useDebounce<T extends (...args: any[]) => any>(
   callback: T,
   delay: number
@@ -41,7 +41,7 @@ export function useDebounce<T extends (...args: any[]) => any>(
 /**
  * Hook para throttle de funciones
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export function useThrottle<T extends (...args: any[]) => any>(
   callback: T,
   delay: number

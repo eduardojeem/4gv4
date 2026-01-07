@@ -376,7 +376,7 @@ export const useAccessibilityValidation = (containerRef: React.RefObject<HTMLEle
     }
 
     return () => observer.disconnect()
-  }, [validateAccessibility])
+  }, [validateAccessibility, containerRef])
 
   return {
     issues,

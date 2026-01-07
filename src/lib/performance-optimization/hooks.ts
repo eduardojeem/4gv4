@@ -3,16 +3,17 @@ import { useEffect, useRef } from 'react'
 export function usePerformanceMark(name: string) {
   const label = useRef<string>(name)
   useEffect(() => {
+    const currentLabel = label.current
     if (typeof performance !== 'undefined' && 'mark' in performance) {
-      performance.mark(`${label.current}-start`)
+      performance.mark(`${currentLabel}-start`)
     }
     return () => {
       if (typeof performance !== 'undefined' && 'mark' in performance) {
-        performance.mark(`${label.current}-end`)
+        performance.mark(`${currentLabel}-end`)
       }
       if (typeof performance !== 'undefined' && 'measure' in performance) {
         try {
-          performance.measure(label.current, `${label.current}-start`, `${label.current}-end`)
+          performance.measure(currentLabel, `${currentLabel}-start`, `${currentLabel}-end`)
         } catch {}
       }
     }
@@ -29,5 +30,5 @@ export function useMeasureRender(label: string) {
         console.debug(`[perf] ${label} render ${duration.toFixed(2)}ms`)
       }
     }
-  }, [])
+  }, [label])
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useCriticalDebounce } from '@/lib/critical-performance'
 
 export interface BarcodeResult {
@@ -52,7 +52,13 @@ const DEFAULT_OPTIONS: Required<BarcodeScannerOptions> = {
 }
 
 export function useBarcodeScanner(options: BarcodeScannerOptions = {}): BarcodeScannerReturn {
-  const opts = { ...DEFAULT_OPTIONS, ...options }
+  const optionsRef = useRef(options)
+  
+  useEffect(() => {
+    optionsRef.current = options
+  }, [options])
+
+  const opts = useMemo(() => ({ ...DEFAULT_OPTIONS, ...options }), [options])
   
   const [isScanning, setIsScanning] = useState(false)
   const [lastScan, setLastScan] = useState<BarcodeResult | null>(null)
@@ -75,12 +81,12 @@ export function useBarcodeScanner(options: BarcodeScannerOptions = {}): BarcodeS
       return false
     }
     
-    if (!opts.allowedCharacters.test(code)) {
+    if (opts.allowedCharacters && !opts.allowedCharacters.test(code)) {
       return false
     }
     
     return true
-  }, [opts.minBarcodeLength, opts.maxBarcodeLength, opts.allowedCharacters])
+  }, [opts])
 
   // Procesar escaneo
   const processScan = useCallback((code: string, source: 'scanner' | 'manual' | 'camera') => {
@@ -91,7 +97,9 @@ export function useBarcodeScanner(options: BarcodeScannerOptions = {}): BarcodeS
       const error = `Código de barras inválido: ${code}`
       setErrorMessage(error)
       setScannerStatus('error')
-      opts.onError(error)
+      if (optionsRef.current.onError) {
+        optionsRef.current.onError(error)
+      }
       return
     }
 
@@ -105,8 +113,10 @@ export function useBarcodeScanner(options: BarcodeScannerOptions = {}): BarcodeS
     setScanHistory(prev => [result, ...prev.slice(0, 49)]) // Mantener últimos 50
     setScannerStatus('idle')
     
-    opts.onScan(result)
-  }, [validateBarcode, opts])
+    if (optionsRef.current.onScan) {
+      optionsRef.current.onScan(result)
+    }
+  }, [validateBarcode])
 
   // Manejar entrada de teclado (escáner físico)
   const handleKeyPress = useCallback((event: KeyboardEvent) => {

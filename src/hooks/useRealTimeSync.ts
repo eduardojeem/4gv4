@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import type { RealtimeChannel } from '@supabase/supabase-js'
@@ -229,18 +229,20 @@ export function useProductRealTimeSync(
   onProductUpdate: (product: unknown) => void,
   onStockUpdate: (movement: unknown) => void
 ) {
-  return useRealTimeSync({
+  const options = useMemo(() => ({
     tables: ['products', 'product_movements'],
-    onProductChange: (event) => {
+    onProductChange: (event: RealTimeEvent) => {
       if (event.type === 'UPDATE' || event.type === 'INSERT') {
         onProductUpdate(event.record)
       }
     },
-    onStockChange: (event) => {
+    onStockChange: (event: RealTimeEvent) => {
       if (event.type === 'INSERT') {
         onStockUpdate(event.record)
       }
     },
     enableLogging: true
-  })
+  }), [onProductUpdate, onStockUpdate])
+
+  return useRealTimeSync(options)
 }

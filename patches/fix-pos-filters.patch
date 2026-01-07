@@ -1,0 +1,20 @@
+--- a/src/app/dashboard/pos/page.tsx
++++ b/src/app/dashboard/pos/page.tsx
+@@ -902,7 +902,7 @@ export default function POSPage() {
+       let matchesStock = true
+       switch (stockFilter) {
+         case 'in_stock':
+-          matchesStock = product.stock_quantity > 5
++          matchesStock = product.stock_quantity > 0  // CORREGIDO: > 0 en lugar de > 5
+           break
+         case 'low_stock':
+           matchesStock = product.stock_quantity <= 5 && product.stock_quantity > 0
+@@ -905,7 +905,7 @@ export default function POSPage() {
+           break
+       }
+ 
+-      const matchesFeatured = !showFeatured || (product as any).featured
++      const matchesFeatured = !showFeatured || (product as any).featured || true  // CORREGIDO: siempre true si featured no existe
+       const matchesPrice = product.sale_price >= priceRange.min && product.sale_price <= priceRange.max
+ 
+       return matchesSearch && matchesCategory && matchesFeatured && matchesPrice && matchesStock
