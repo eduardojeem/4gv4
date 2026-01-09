@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { toast } from 'sonner'
+import { showAddToCartToast } from '@/lib/pos-toasts'
 import { createClient } from '@/lib/supabase/client'
 import type { Product } from '@/types/product-unified'
 
@@ -108,16 +109,17 @@ export function usePOS() {
 
     // Agregar producto al carrito
     const addToCart = useCallback((product: Product, quantity: number = 1) => {
+        const nowId = `cart-${Date.now()}-${product.id}`
+        let addedNew = false
+
         setCart(prev => {
             const existing = prev.find(item => item.product_id === product.id)
 
             if (existing) {
-                // Verificar stock
                 if (existing.quantity + quantity > existing.stock) {
                     toast.error('Stock insuficiente')
                     return prev
                 }
-
                 return prev.map(item =>
                     item.product_id === product.id
                         ? {
@@ -129,14 +131,14 @@ export function usePOS() {
                 )
             }
 
-            // Verificar stock para nuevo item
             if (quantity > product.stock_quantity) {
                 toast.error('Stock insuficiente')
                 return prev
             }
 
+            addedNew = true
             const newItem: CartItem = {
-                id: `cart-${Date.now()}-${product.id}`,
+                id: nowId,
                 product_id: product.id,
                 name: product.name,
                 sku: product.sku,
@@ -148,13 +150,34 @@ export function usePOS() {
                 discount: 0,
                 subtotal: (isWholesale ? (product.wholesale_price || product.sale_price) : product.sale_price) * quantity,
                 image: product.images?.[0] || undefined,
-                tax_rate: 0 // Default tax rate since it's not in the Product type
+                tax_rate: 0
             }
 
             return [...prev, newItem]
         })
 
-        toast.success('Producto agregado')
+        showAddToCartToast({ 
+            name: product.name, 
+            quantity,
+            onUndo: () => {
+                setCart(prev => {
+                    const existing = prev.find(i => i.product_id === product.id)
+                    if (!existing) return prev
+                    // Si era nuevo, eliminar; si era incremento, revertir cantidad
+                    if (addedNew) {
+                        return prev.filter(i => i.id !== nowId)
+                    }
+                    const decQty = Math.max(existing.quantity - quantity, 0)
+                    if (decQty === 0) {
+                        return prev.filter(i => i.product_id !== product.id)
+                    }
+                    return prev.map(i => i.product_id === product.id 
+                        ? { ...i, quantity: decQty, subtotal: i.price * decQty }
+                        : i
+                    )
+                })
+            }
+        })
     }, [isWholesale])
 
     // Remover del carrito

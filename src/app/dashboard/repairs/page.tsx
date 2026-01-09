@@ -297,7 +297,7 @@ function RepairsPageContent() {
       console.error('Error submitting form:', error)
       toast.error('Error al guardar la reparación')
     }
-  }, [dialogMode, selectedRepair, createRepair, updateRepair, addImages])
+  }, [dialogMode, selectedRepair, createRepair, updateRepair, addImages, technicianOptions])
 
   // Keyboard shortcuts
   useEffect(() => {

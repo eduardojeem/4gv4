@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -81,9 +81,9 @@ export function SupplierManagement() {
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     fetchSuppliers()
-  }, [])
+  }, [fetchSuppliers])
 
-  const fetchSuppliers = async () => {
+  const fetchSuppliers = useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase
@@ -124,7 +124,7 @@ export function SupplierManagement() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
 
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)

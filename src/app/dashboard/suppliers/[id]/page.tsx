@@ -79,7 +79,7 @@ export default function SupplierDetailPage() {
         if (params.id) {
             fetchSupplier()
         }
-    }, [params.id])
+    }, [params.id, supabase])
 
     if (loading) {
         return (

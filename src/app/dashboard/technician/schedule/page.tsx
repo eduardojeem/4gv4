@@ -94,7 +94,7 @@ export default function TechnicianSchedulePage() {
 
   useEffect(() => {
     if (repairs.length && !selectedRepairId) setSelectedRepairId(unscheduled[0]?.id || null)
-  }, [repairs])
+  }, [repairs, selectedRepairId, unscheduled])
 
   return (
     <div className="space-y-6">

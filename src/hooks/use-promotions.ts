@@ -336,7 +336,7 @@ export function usePromotions() {
     }
     
     return insights
-  }, [getPromotionStatus, isPromotionExpiringSoon])
+  }, [getPromotionStatus, isPromotionExpiringSoon, calculateEffectiveness, calculateROI])
 
   // Calculate promotion effectiveness
   const calculateEffectiveness = useCallback((promotion: Promotion) => {

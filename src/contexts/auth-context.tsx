@@ -38,6 +38,15 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Helper: validar y castear cadenas a UserRole
+const VALID_ROLES: UserRole[] = ['admin', 'vendedor', 'tecnico', 'cliente']
+const toUserRole = (value: any): UserRole => {
+  if (typeof value === 'string' && VALID_ROLES.includes(value as UserRole)) {
+    return value as UserRole
+  }
+  return 'cliente'
+}
+
 // Hook para usar el contexto de autenticación
 export function useAuth() {
   const context = useContext(AuthContext)
@@ -56,14 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const supabase = useMemo(() => createSupabaseClient(), [])
 
-  // Helper: validar y castear cadenas a UserRole
-  const VALID_ROLES: UserRole[] = ['admin', 'vendedor', 'tecnico', 'cliente']
-  const toUserRole = (value: any): UserRole => {
-    if (typeof value === 'string' && VALID_ROLES.includes(value as UserRole)) {
-      return value as UserRole
-    }
-    return 'cliente'
-  }
+
 
   // Función para obtener el perfil del usuario y sus permisos
   const fetchUserProfile = useCallback(async (userId: string): Promise<Partial<AuthUser>> => {
@@ -395,7 +397,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     promoteSelf()
-  }, [user])
+  }, [user, refreshUser, supabase, toast])
 
   // Efecto para manejar cambios de autenticación
   useEffect(() => {
@@ -493,7 +495,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     )
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [fetchUserProfile, supabase])
 
   const value = useMemo<AuthContextType>(() => ({
     user,

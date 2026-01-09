@@ -33,6 +33,9 @@ interface CartItem {
   variant?: string;
   wholesalePrice?: number;
   isService?: boolean;
+  sku?: string;
+  image?: string;
+  stock?: number;
 }
 
 interface POSCartProps {
@@ -82,8 +85,19 @@ const CartItemRow = memo<{
   const finalTotal = itemTotal * (1 - itemDiscount / 100);
 
   return (
-    <div className={cn("flex items-center gap-3 py-3 group", isService && "bg-muted/10 rounded-md px-2 -mx-2")}>
-      <div className="flex-1 min-w-0">
+    <div className={cn("grid grid-cols-[56px_1fr_auto_auto_auto] items-center gap-3 py-3 group", isService && "bg-muted/10 rounded-md px-2 -mx-2")}> 
+      {/* Thumbnail */}
+      <div className="h-14 w-14 rounded-md bg-muted/40 border border-border/40 overflow-hidden flex items-center justify-center">
+        {item.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+        ) : (
+          <ShoppingCart className="h-5 w-5 text-muted-foreground" />
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="min-w-0">
         <div className="flex items-center gap-2">
            {isService && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">SERV</Badge>}
            <h4 className="font-medium text-sm truncate">{item.name}</h4>
@@ -93,6 +107,12 @@ const CartItemRow = memo<{
             <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">
               {item.variant}
             </Badge>
+          )}
+          {item.sku && (
+            <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">SKU: {item.sku}</Badge>
+          )}
+          {typeof item.stock === 'number' && (
+            <span className={cn("text-[10px] px-1 py-0 h-4 rounded-sm", (item.stock ?? 0) <= 5 ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" : "bg-muted/40 text-muted-foreground")}>Stock: {item.stock}</span>
           )}
           <div className="flex items-center gap-1">
             <span className={cn(
@@ -116,8 +136,14 @@ const CartItemRow = memo<{
             </Badge>
           </div>
         )}
+
+        {/* Formula */}
+        <div className="mt-1 text-[11px] text-muted-foreground">
+          {formatCurrency(unitPrice)} × {item.quantity} = {formatCurrency(itemTotal)}{itemDiscount > 0 ? ` → ${formatCurrency(finalTotal)}` : ''}
+        </div>
       </div>
 
+      {/* Qty controls */}
       <div className="flex items-center gap-2 bg-secondary/20 rounded-md p-1">
         {!isService ? (
           <>
@@ -150,12 +176,14 @@ const CartItemRow = memo<{
         )}
       </div>
 
-      <div className="text-right min-w-[70px]">
+      {/* Subtotal */}
+      <div className="text-right min-w-[90px]">
         <div className="font-medium text-sm">
           {formatCurrency(finalTotal)}
         </div>
       </div>
 
+      {/* Remove */}
       <Button
         variant="ghost"
         size="sm"

@@ -195,7 +195,7 @@ export function ProductConfiguration() {
     }
 
     fetchData()
-  }, [])
+  }, [supabase])
   
   const [activeTab, setActiveTab] = useState('categories')
   

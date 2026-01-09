@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Download, LayoutGrid, List, Trash2, CheckCircle, XCircle, Clock, RefreshCw, FileUp, FileDown, X, Scale } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -87,7 +87,7 @@ export default function SuppliersPage() {
 
   useEffect(() => {
     setPage(0)
-  }, [search, statusFilter, businessTypeFilter, sortBy])
+  }, [search, statusFilter, businessTypeFilter, sortBy, setPage])
 
   useEffect(() => {
     refresh({
@@ -98,7 +98,7 @@ export default function SuppliersPage() {
       page: pagination.page,
       pageSize: pagination.pageSize,
     })
-  }, [search, statusFilter, businessTypeFilter, sortBy, pagination.page, pagination.pageSize])
+  }, [search, statusFilter, businessTypeFilter, sortBy, pagination.page, pagination.pageSize, refresh])
 
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 300)
@@ -106,17 +106,17 @@ export default function SuppliersPage() {
   }, [searchInput])
 
   // Handlers
-  const handleAddSupplier = () => {
+  const handleAddSupplier = useCallback(() => {
     setSelectedSupplier(null)
     setModalMode('add')
     setIsModalOpen(true)
-  }
+  }, [])
 
-  const handleEditSupplier = (supplier: UISupplier) => {
+  const handleEditSupplier = useCallback((supplier: UISupplier) => {
     setSelectedSupplier(supplier)
     setModalMode('edit')
     setIsModalOpen(true)
-  }
+  }, [])
 
   const handleDeleteClick = (id: string) => {
     setDeleteId(id)
@@ -162,19 +162,19 @@ export default function SuppliersPage() {
     }
   }
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     exportSuppliers(filteredSuppliers, {
       format: 'csv',
       filename: `proveedores-${new Date().toISOString().split('T')[0]}`
     })
-  }
+  }, [filteredSuppliers])
 
-  const handleExportJSON = () => {
+  const handleExportJSON = useCallback(() => {
     exportSuppliers(filteredSuppliers, {
       format: 'json',
       filename: `proveedores-${new Date().toISOString().split('T')[0]}`
     })
-  }
+  }, [filteredSuppliers])
 
   const handleRemoveFilter = (id: string) => {
     if (id === 'search') setSearchInput('')
@@ -182,11 +182,11 @@ export default function SuppliersPage() {
     if (id === 'business_type') setBusinessTypeFilter('all')
   }
 
-  const handleClearAllFilters = () => {
+  const handleClearAllFilters = useCallback(() => {
     setSearchInput('')
     setStatusFilter('all')
     setBusinessTypeFilter('all')
-  }
+  }, [])
 
   // Command Palette Commands
   const commands = useMemo(() => [
@@ -283,7 +283,7 @@ export default function SuppliersPage() {
       category: 'settings' as const,
       keywords: ['list', 'table', 'lista', 'tabla']
     }
-  ], [handleAddSupplier, handleExport, handleExportJSON, refresh, handleClearAllFilters])
+  ], [handleAddSupplier, handleExport, handleExportJSON, refresh, handleClearAllFilters, router])
 
   const hasFilters = filterTags.length > 0
 

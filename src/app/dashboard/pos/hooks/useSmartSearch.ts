@@ -272,49 +272,64 @@ export function useSmartSearch({
       return searchCacheRef.current.get(cacheKey)!
     }
 
-    setIsSearching(true)
+    // Note: We don't set isSearching state here because this function is called 
+    // synchronously. State updates should be handled by the caller or a wrapping effect.
 
-    try {
-      const allResults: SearchResult[] = []
+    const allResults: SearchResult[] = []
       
-      // 1. Búsqueda exacta (mayor prioridad)
-      allResults.push(...exactSearch(products, searchQuery))
+    // 1. Búsqueda exacta (mayor prioridad)
+    allResults.push(...exactSearch(products, searchQuery))
       
-      // 2. Búsqueda parcial
-      allResults.push(...partialSearch(products, searchQuery))
+    // 2. Búsqueda parcial
+    allResults.push(...partialSearch(products, searchQuery))
       
-      // 3. Búsqueda fuzzy (errores tipográficos)
-      allResults.push(...fuzzySearch(products, searchQuery))
+    // 3. Búsqueda fuzzy (errores tipográficos)
+    allResults.push(...fuzzySearch(products, searchQuery))
       
-      // 4. Búsqueda semántica
-      allResults.push(...semanticSearch(products, searchQuery))
+    // 4. Búsqueda semántica
+    allResults.push(...semanticSearch(products, searchQuery))
       
-      // Eliminar duplicados y ordenar por score
-      const uniqueResults = allResults.reduce((acc, result) => {
-        const existing = acc.find(r => r.product.id === result.product.id)
-        if (!existing || existing.score < result.score) {
-          return [...acc.filter(r => r.product.id !== result.product.id), result]
-        }
-        return acc
-      }, [] as SearchResult[])
+    // Eliminar duplicados y ordenar por score
+    const uniqueResults = allResults.reduce((acc, result) => {
+      const existing = acc.find(r => r.product.id === result.product.id)
+      if (!existing || existing.score < result.score) {
+        return [...acc.filter(r => r.product.id !== result.product.id), result]
+      }
+      return acc
+    }, [] as SearchResult[])
       
-      const sortedResults = uniqueResults
-        .sort((a, b) => b.score - a.score)
-        .slice(0, maxResults)
+    const sortedResults = uniqueResults
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxResults)
       
-      // Guardar en caché
-      searchCacheRef.current.set(cacheKey, sortedResults)
+    // Guardar en caché
+    searchCacheRef.current.set(cacheKey, sortedResults)
       
-      return sortedResults
-    } finally {
-      setIsSearching(false)
-    }
+    return sortedResults
   }, [products, minQueryLength, maxResults, exactSearch, partialSearch, fuzzySearch, semanticSearch])
 
-  // Resultados de búsqueda
-  const searchResults = useMemo(() => {
-    return performSearch(debouncedQuery)
-  }, [debouncedQuery, performSearch])
+  // Resultados de búsqueda - Managed via useEffect to avoid state updates during render
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+
+  useEffect(() => {
+    // If query is empty, clear results immediately
+    if (!debouncedQuery || debouncedQuery.length < minQueryLength) {
+      setSearchResults([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    
+    // Use setTimeout to allow UI to update and avoid blocking render
+    const timer = setTimeout(() => {
+      const results = performSearch(debouncedQuery)
+      setSearchResults(results)
+      setIsSearching(false)
+    }, 0)
+
+    return () => clearTimeout(timer)
+  }, [debouncedQuery, performSearch, minQueryLength])
 
   // Generar sugerencias
   const suggestions = useMemo((): SearchSuggestion[] => {

@@ -27,6 +27,7 @@ import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 import { toast } from 'sonner'
+import { showAddToCartToast } from '@/lib/pos-toasts'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
 import { createReceiptData, printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
 // Limpieza: se retiran componentes de debug/diagnóstico del POS
@@ -64,6 +65,7 @@ import { useCheckout } from './contexts/CheckoutContext'
 import { usePOSCustomer } from './contexts/POSCustomerContext'
 import { CartItem, PaymentSplit, PaymentMethodOption } from './types'
 import type { Product } from '@/types/product-unified'
+import { useCashRegister } from '@/hooks/useCashRegister'
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
@@ -213,6 +215,7 @@ export default function POSPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showCartDialog, setShowCartDialog] = useState(false)
 
   // Estados para variantes y promociones
   const [variantSelectorOpen, setVariantSelectorOpen] = useState(false)
@@ -237,6 +240,27 @@ export default function POSPage() {
     addMovement,
     openRegister
   } = useCashRegisterContext()
+
+  const handleRegisterChange = useCallback((id: string) => {
+    if (!id || activeRegisterId === id) return
+    
+    // Ensure the register exists
+    const registerExists = registers.find(r => r.id === id)
+    if (!registerExists) {
+      console.warn(`Register ${id} not found, using first available register`)
+      const firstRegister = registers[0]
+      if (firstRegister && firstRegister.id !== activeRegisterId) {
+        React.startTransition(() => {
+          setActiveRegisterId(firstRegister.id)
+        })
+      }
+      return
+    }
+    
+    React.startTransition(() => {
+      setActiveRegisterId(id)
+    })
+  }, [activeRegisterId, setActiveRegisterId, registers])
 
   // Gestor de cajas: crear, renombrar, eliminar
   const [isOpenRegisterDialogOpen, setIsOpenRegisterDialogOpen] = useState(false)
@@ -297,8 +321,17 @@ export default function POSPage() {
     taxRate: getTaxConfig().rate,
     pricesIncludeTax: getTaxConfig().pricesIncludeTax
   })
+
+  const handleWholesaleToggle = useCallback((value: boolean) => {
+    if (isWholesale === value) return
+    React.startTransition(() => {
+      setIsWholesale(value)
+    })
+  }, [isWholesale, setIsWholesale])
   
   const WHOLESALE_DISCOUNT_RATE = 10
+
+  const { currentSession, registerSale } = useCashRegister()
 
   // Función para verificar disponibilidad de stock
   const checkAvailability = useCallback((productId: string, quantity: number) => {
@@ -437,7 +470,7 @@ export default function POSPage() {
     // Cargar reparaciones del cliente desde Supabase
     if (!selectedCustomer) {
       setCustomerRepairs([])
-      setSelectedRepairIds([])
+      setSelectedRepairIds(prev => (prev.length ? [] : prev))
       return
     }
 
@@ -476,7 +509,7 @@ export default function POSPage() {
 
           if (payload.eventType === 'DELETE') {
             setCustomerRepairs(prev => prev.filter(r => r.id !== row.id))
-            if (selectedRepairIds.includes(row.id)) setSelectedRepairIds(prev => prev.filter(id => id !== row.id))
+            setSelectedRepairIds(prev => prev.filter(id => id !== row.id))
             return
           }
 
@@ -495,7 +528,7 @@ export default function POSPage() {
     return () => {
       if (channel) channel.unsubscribe()
     }
-  }, [selectedCustomer, setCustomers, setCustomersSourceSupabase, selectedRepairIds, setSelectedRepairIds])
+  }, [selectedCustomer])
 
   // Persistir venta y actualizar stock en Supabase
   const persistSaleToSupabase = useCallback(
@@ -827,7 +860,8 @@ export default function POSPage() {
     const names = inventoryProducts
       .map(p => (typeof p.category === 'object' ? p.category?.name : p.category))
       .filter((name): name is string => !!name && typeof name === 'string')
-    return ['all', ...Array.from(new Set(names))]
+    const uniqueNames = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b))
+    return ['all', ...uniqueNames]
   }, [inventoryProducts])
 
   // Rango de precios dinámico
@@ -936,11 +970,11 @@ export default function POSPage() {
     })
 
     // Registrar métrica de búsqueda
-    const endTime = performance.now()
-    const searchTime = endTime - startTime
-    if (searchTime > 0) {
-      recordMetric('product-search', searchTime)
-    }
+    // const endTime = performance.now()
+    // const searchTime = endTime - startTime
+    // if (searchTime > 0) {
+    //   recordMetric('product-search', searchTime)
+    // }
 
     return result
   }, [inventoryProducts, debouncedSearchTerm, selectedCategory, showFeatured, priceRange, stockFilter])
@@ -1106,7 +1140,7 @@ export default function POSPage() {
     repairSubtotal: unifiedCalculations.repairSubtotal,
     repairTax: unifiedCalculations.repairTax,
     totalItemCount: unifiedCalculations.totalItemCount
-  }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid, roundToTwo])
+  }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid])
 
   // Adapter for POSCart items
   const combinedCartItems = useMemo(() => {
@@ -1304,9 +1338,10 @@ export default function POSPage() {
         addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
         return
       }
-      // Registrar caja: pago simple en efectivo
-      if (paymentMethod === 'cash') {
-        addMovement('sale', (cartCalculations as any).total, 'Venta POS')
+      // Registrar venta en caja (Supabase)
+      if (currentSession) {
+        const sid = (saleResult && (saleResult as any).saleId) ? String((saleResult as any).saleId) : 'POS'
+        registerSale(sid, (cartCalculations as any).total, paymentMethod as any)
       }
 
       // Mostrar modal de ticket
@@ -1324,7 +1359,7 @@ export default function POSPage() {
         setPaymentStatus('idle')
       }, 600)
     })
-  }, [combinedCartItems, paymentMethod, cashReceived, cartCalculations, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing])
+  }, [combinedCartItems, paymentMethod, cashReceived, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing])
 
 
 
@@ -1451,12 +1486,15 @@ export default function POSPage() {
       return
     }
 
-    // Registrar caja: pago mixto (solo efectivo)
-    const cashPaid = paymentSplit
-      .filter(split => split.method === 'cash')
-      .reduce((sum, split) => sum + split.amount, 0)
-    if (cashPaid > 0) {
-      addMovement('sale', cashPaid, 'Venta POS (mixta)')
+    // Registrar venta mixta en caja (Supabase)
+    if (currentSession) {
+      const sid = (saleResult && (saleResult as any).saleId) ? String((saleResult as any).saleId) : 'POS'
+      const cashPaid = paymentSplit.filter(split => split.method === 'cash').reduce((sum, split) => sum + split.amount, 0)
+      const cardPaid = paymentSplit.filter(split => split.method === 'card').reduce((sum, split) => sum + split.amount, 0)
+      const transferPaid = paymentSplit.filter(split => split.method === 'transfer').reduce((sum, split) => sum + split.amount, 0)
+      if (cashPaid > 0) registerSale(sid, cashPaid, 'cash')
+      if (cardPaid > 0) registerSale(sid, cardPaid, 'card')
+      if (transferPaid > 0) registerSale(sid, transferPaid, 'transfer')
     }
 
     // Mostrar modal de ticket
@@ -1476,7 +1514,7 @@ export default function POSPage() {
       setIsCheckoutOpen(false)
       setPaymentStatus('idle')
     }, 600)
-  }, [combinedCartItems, getTotalPaid, getRemainingAmount, formatCurrency, clearCart, persistSaleToSupabase, cartCalculations, processInventorySale])
+  }, [combinedCartItems, getTotalPaid, getRemainingAmount, formatCurrency, clearCart, persistSaleToSupabase, processInventorySale])
 
 
   // Cerrar sugerencias al hacer clic fuera
@@ -1599,7 +1637,7 @@ export default function POSPage() {
             e.preventDefault()
             if (filteredProducts.length > 0) {
               addToCart(filteredProducts[0])
-              toast.success(`➕ ${filteredProducts[0].name} agregado`)
+              showAddToCartToast({ name: filteredProducts[0].name })
             }
             break
         }
@@ -1636,7 +1674,7 @@ export default function POSPage() {
       if (product) {
         addToCart(product)
         setBarcodeInput('')
-        toast.success(`${product.name} agregado al carrito`)
+        showAddToCartToast({ name: product.name })
       } else {
         toast.error('Producto no encontrado')
         setBarcodeInput('')
@@ -1784,7 +1822,7 @@ export default function POSPage() {
                 <span className="text-xs">Mayorista</span>
                 <Switch
                   checked={isWholesale}
-                  onCheckedChange={setIsWholesale}
+                  onCheckedChange={handleWholesaleToggle}
                   aria-label="Ver precio mayorista"
                 />
               </div>
@@ -1797,21 +1835,25 @@ export default function POSPage() {
         {/* Contenido principal */}
         <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
           {/* Header desktop optimizado */}
-          <POSHeader
-            className="hidden lg:flex items-center justify-between bg-card/50 backdrop-blur-md border-b border-border/60 px-6 py-2 sticky top-0 z-20"
-            registers={registers}
-            activeRegisterId={activeRegisterId}
-            onRegisterChange={setActiveRegisterId}
-            onOpenRegisterManager={() => setIsRegisterManagerOpen(true)}
-            onOpenMovements={() => {
-              setMovementType('out')
-              setMovementAmount('')
-              setMovementNote('')
-              setIsMovementDialogOpen(true)
-            }}
-            isFullscreen={isFullscreen}
-            onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-          >
+  <POSHeader
+    className="hidden lg:flex items-center justify-between bg-card/50 backdrop-blur-md border-b border-border/60 px-6 py-2 sticky top-0 z-20"
+    registers={registers}
+    activeRegisterId={activeRegisterId}
+    onRegisterChange={handleRegisterChange}
+    onOpenRegisterManager={() => setIsRegisterManagerOpen(true)}
+    onOpenMovements={() => {
+      setMovementType('out')
+      setMovementAmount('')
+      setMovementNote('')
+      setIsMovementDialogOpen(true)
+    }}
+    onOpenRegister={() => setIsOpenRegisterDialogOpen(true)}
+    isRegisterOpen={Boolean(registerState[activeRegisterId]?.isOpen)}
+    isFullscreen={isFullscreen}
+    onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+    onOpenCart={() => setShowCartDialog(true)}
+    cartItemCount={cartItemCount}
+  >
             {/* Branding */}
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 p-2 rounded-lg">
@@ -1833,6 +1875,69 @@ export default function POSPage() {
               </div>
             </div>
           </POSHeader>
+
+
+
+          {/* Header móvil con acción principal del carrito */}
+  <POSHeader
+    className="flex lg:hidden items-center justify-between bg-card border-b border-border px-4 py-2 sticky top-0 z-20"
+    registers={registers}
+    activeRegisterId={activeRegisterId}
+    onRegisterChange={handleRegisterChange}
+    onOpenRegisterManager={() => setIsRegisterManagerOpen(true)}
+    onOpenMovements={() => {
+      setMovementType('out')
+      setMovementAmount('')
+      setMovementNote('')
+      setIsMovementDialogOpen(true)
+    }}
+    onOpenRegister={() => setIsOpenRegisterDialogOpen(true)}
+    isRegisterOpen={Boolean(registerState[activeRegisterId]?.isOpen)}
+    isFullscreen={isFullscreen}
+    onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+    onOpenCart={() => setShowCartDialog(true)}
+    cartItemCount={cartItemCount}
+  >
+            <div className="flex items-center gap-2">
+              <div className="bg-primary/10 p-1 rounded">
+                <div className="font-bold text-base text-primary">4G</div>
+              </div>
+              <span className="text-sm font-semibold">POS</span>
+            </div>
+          </POSHeader>
+
+  {/* Cart Overview Dialog */}
+  <Dialog open={showCartDialog} onOpenChange={setShowCartDialog}>
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Productos en el carrito</DialogTitle>
+        <DialogDescription>
+          Revisa rápidamente los productos agregados antes de cobrar.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="max-h-[50vh] overflow-y-auto pr-1">
+        {combinedCartItems.length === 0 ? (
+          <div className="text-muted-foreground text-sm">No hay productos en el carrito.</div>
+        ) : (
+          <div className="space-y-2">
+            {combinedCartItems.map((item) => (
+              <div key={item.id} className="flex items-center justify-between border rounded-md px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">{item.name}</div>
+                  <div className="text-xs text-muted-foreground">{item.quantity} × {formatCurrency(item.price)}</div>
+                </div>
+                <div className="text-sm font-semibold">{formatCurrency((item.price ?? 0) * (item.quantity ?? 1))}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={() => setShowCartDialog(false)}>Cerrar</Button>
+        <Button onClick={() => { setShowCartDialog(false); setIsCheckoutOpen(true) }}>Cobrar</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 
 
 
@@ -2016,7 +2121,7 @@ export default function POSPage() {
                       <span className="text-xs font-medium text-muted-foreground">Mayorista</span>
                       <Switch
                         checked={isWholesale}
-                        onCheckedChange={setIsWholesale}
+                        onCheckedChange={handleWholesaleToggle}
                         aria-label="Ver precio mayorista"
                         className="scale-75 origin-right"
                       />
@@ -2034,13 +2139,13 @@ export default function POSPage() {
                       )
                       if (localProduct) {
                         addToCart(localProduct)
-                        toast.success(`${localProduct.name} agregado al carrito`)
+                        showAddToCartToast({ name: localProduct.name })
                         return
                       }
                       const remoteProduct = await findProductByBarcode(normalized)
                       if (remoteProduct) {
                         addToCart(remoteProduct)
-                        toast.success(`${remoteProduct.name} agregado al carrito`)
+                        showAddToCartToast({ name: remoteProduct.name })
                       } else {
                         toast.error('Producto no encontrado')
                       }
@@ -2215,7 +2320,7 @@ export default function POSPage() {
                 onCheckout={() => setIsCheckoutOpen(true)}
                 onClearCart={() => clearCart()}
                 isWholesale={isWholesale}
-                onToggleWholesale={setIsWholesale}
+                onToggleWholesale={handleWholesaleToggle}
                 discount={generalDiscount}
                 onUpdateDiscount={setGeneralDiscount}
                 subtotalApplied={unifiedCalculations.subtotalApplied}

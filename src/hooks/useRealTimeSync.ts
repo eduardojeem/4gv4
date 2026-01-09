@@ -212,7 +212,7 @@ export function useRealTimeSync(options: RealTimeSyncOptions): RealTimeSyncRetur
     }
   }, [unsubscribe])
 
-  return {
+  return useMemo(() => ({
     isConnected,
     connectionStatus,
     lastSync,
@@ -221,7 +221,16 @@ export function useRealTimeSync(options: RealTimeSyncOptions): RealTimeSyncRetur
     unsubscribe,
     reconnect,
     getConnectionHealth
-  }
+  }), [
+    isConnected,
+    connectionStatus,
+    lastSync,
+    eventsReceived,
+    subscribe,
+    unsubscribe,
+    reconnect,
+    getConnectionHealth
+  ])
 }
 
 // Hook simplificado para productos

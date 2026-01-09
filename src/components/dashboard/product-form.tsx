@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -220,6 +220,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isEditing = false
     if (category && category.subcategories.length > 0 && !category.subcategories.includes(formData.subcategory)) {
       setFormData(prev => ({ ...prev, subcategory: '' }))
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.category, categories])
 
   // Generar SKU automático

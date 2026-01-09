@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -26,9 +26,9 @@ export function ProductsDiagnostic() {
   const [loading, setLoading] = useState(false)
   const [fixing, setFixing] = useState(false)
 
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  const runDiagnostic = async () => {
+  const runDiagnostic = useCallback(async () => {
     setLoading(true)
     try {
       const result: DiagnosticResult = {
@@ -111,7 +111,7 @@ export function ProductsDiagnostic() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
 
   const fixProducts = async () => {
     setFixing(true)

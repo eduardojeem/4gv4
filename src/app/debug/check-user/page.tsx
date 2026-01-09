@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function CheckUserPage() {
@@ -9,7 +9,7 @@ export default function CheckUserPage() {
   const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState('jeem101595@gmail.com')
 
-  const checkUser = async () => {
+  const checkUser = useCallback(async () => {
     setLoading(true)
     const supabase = createClient()
     try {
@@ -40,11 +40,11 @@ export default function CheckUserPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [email])
 
   useEffect(() => {
     checkUser()
-  }, [])
+  }, [checkUser])
 
   return (
     <div className="p-8">

@@ -98,7 +98,7 @@ export function useProductAnalytics(
     if (config.includeMovements || config.includeAlerts) {
       loadAnalyticsData()
     }
-  }, [config.includeMovements, config.includeAlerts, config.dateRange])
+  }, [config.includeMovements, config.includeAlerts, config.dateRange, loadAnalyticsData])
 
   // Validar configuración de análisis
   const validateAnalyticsConfig = useCallback((config: AnalyticsConfig): boolean => {
@@ -235,7 +235,7 @@ export function useProductAnalytics(
     } finally {
       setLoading(false)
     }
-  }, [products, config, supabase, handleProductError, recordMetric, performanceConfig, validateAnalyticsConfig])
+  }, [products, config, supabase, handleProductError, recordMetric, validateAnalyticsConfig])
 
   // Estadísticas básicas del dashboard con optimización
   const dashboardStats: DashboardStats = useAdvancedMemoization(() => {

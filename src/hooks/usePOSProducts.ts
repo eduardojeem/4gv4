@@ -50,7 +50,7 @@ export function usePOSProducts() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [realTimeEnabled, setRealTimeEnabled] = useState(true)
 
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   // Función para actualizar un producto específico en tiempo real
   const updateProductInState = useCallback((updatedProduct: Product) => {
@@ -60,11 +60,24 @@ export function usePOSProducts() {
       if (productIndex >= 0) {
         // Actualizar producto existente
         const newProducts = [...prevProducts]
+        
+        // Intentar mantener la categoría si cambió el ID
+        const newCategoryId = updatedProduct.category_id
+        const currentCategory = newProducts[productIndex].category
+        const categoryChanged = newCategoryId !== newProducts[productIndex].category_id
+        
+        let newCategory = currentCategory
+        if (categoryChanged) {
+           newCategory = prevProducts.find(p => p.category_id === newCategoryId)?.category
+        }
+
         newProducts[productIndex] = {
           ...newProducts[productIndex],
           name: updatedProduct.name,
           sale_price: updatedProduct.sale_price,
           stock_quantity: updatedProduct.stock_quantity,
+          category_id: newCategoryId,
+          category: newCategory,
           description: updatedProduct.description || undefined,
           image: (updatedProduct as any).images?.[0] || (updatedProduct as any).image_url || undefined,
           is_active: updatedProduct.is_active,
@@ -81,6 +94,7 @@ export function usePOSProducts() {
           sale_price: updatedProduct.sale_price,
           stock_quantity: updatedProduct.stock_quantity,
           category_id: updatedProduct.category_id || null as any,
+          category: prevProducts.find(p => p.category_id === updatedProduct.category_id)?.category,
           description: updatedProduct.description || undefined,
           image: (updatedProduct as any).images?.[0] || (updatedProduct as any).image_url || undefined,
           unit_measure: updatedProduct.unit_measure || 'unidad',
@@ -137,7 +151,7 @@ export function usePOSProducts() {
       // 2. Cargar productos
       const { data: dbProducts, error } = await supabase
         .from('products')
-        .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active')
+        .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active, categories(name)')
         .order('name')
         .limit(5000)
 
@@ -160,6 +174,7 @@ export function usePOSProducts() {
         sale_price: Number(p.sale_price),
         stock_quantity: p.stock_quantity,
         category_id: p.category_id,
+        category: p.categories ? { id: p.category_id, name: p.categories.name } : undefined,
         description: p.description,
         image: undefined, 
         unit_measure: 'unidad',
@@ -176,6 +191,11 @@ export function usePOSProducts() {
       setLoading(false)
     }
   }, [supabase])
+
+  // Cargar productos iniciales
+  useEffect(() => {
+    fetchProducts()
+  }, [fetchProducts])
 
   // Función para buscar producto por código de barras
   const findProductByBarcode = useCallback(async (barcode: string): Promise<UnifiedProduct | null> => {
@@ -445,16 +465,14 @@ export function usePOSProducts() {
     fetchProducts()
   }, [fetchProducts])
 
-  // Inicializar sincronización en tiempo real
+  // Inicializar sincronización en tiempo real (dependencias estables)
   useEffect(() => {
-    if (realTimeEnabled && config.supabase.isConfigured) {
-      realTimeSync.subscribe()
-      
-      return () => {
-        realTimeSync.unsubscribe()
-      }
-    }
-  }, [realTimeEnabled, realTimeSync])
+    if (!config.supabase.isConfigured) return
+    if (!realTimeEnabled) return
+
+    realTimeSync.subscribe()
+    return () => realTimeSync.unsubscribe()
+  }, [realTimeEnabled])
 
   // Función para alternar tiempo real
   const toggleRealTime = useCallback(() => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 
 export default function DebugPage() {
@@ -16,7 +16,7 @@ export default function DebugPage() {
     setLogs(prev => [...prev, `${new Date().toISOString()}: ${message}`])
   }
   
-  const testConnection = async () => {
+  const testConnection = useCallback(async () => {
     addLog('🔍 Testing Supabase connection...')
     
     try {
@@ -89,11 +89,11 @@ export default function DebugPage() {
       addLog(`💥 Unexpected error: ${err}`)
       setError(err)
     }
-  }
+  }, [supabase])
   
   useEffect(() => {
     testConnection()
-  }, [])
+  }, [testConnection])
   
   return (
     <div className="p-8 max-w-4xl mx-auto">

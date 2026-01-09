@@ -104,7 +104,7 @@ export default function ProductReportsPage() {
       }
     }
     fetchData()
-  }, [])
+  }, [supabase])
   const [dateRange, setDateRange] = useState({
     from: subMonths(new Date(), 1),
     to: new Date()
@@ -124,7 +124,7 @@ export default function ProductReportsPage() {
       
       return matchesCategory && matchesStatus && matchesSearch
     })
-  }, [selectedCategory, selectedStatus, searchTerm])
+  }, [products, selectedCategory, selectedStatus, searchTerm])
 
   // Calcular métricas
   const metrics = useMemo(() => {

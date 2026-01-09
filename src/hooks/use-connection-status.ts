@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 
@@ -6,9 +6,9 @@ export type ConnectionStatus = 'checking' | 'connected' | 'disconnected'
 
 export function useConnectionStatus() {
     const [status, setStatus] = useState<ConnectionStatus>('checking')
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
 
-    const checkConnection = async () => {
+    const checkConnection = useCallback(async () => {
         if (!config.supabase.isConfigured) {
             setStatus('disconnected')
             return
@@ -27,11 +27,11 @@ export function useConnectionStatus() {
             console.error('Supabase connection check error:', err)
             setStatus('disconnected')
         }
-    }
+    }, [supabase])
 
     useEffect(() => {
         checkConnection()
-    }, [])
+    }, [checkConnection])
 
     return { status, checkConnection }
 }
