@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -20,295 +20,142 @@ import {
   RefreshCw, 
   Phone, 
   Mail, 
-  MapPin, 
   Building, 
-  Clock,
   CheckCircle,
   XCircle,
-  AlertTriangle
+  Search,
+  Loader2,
+  MapPin
 } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-
-interface Supplier {
-  id: string
-  name: string
-  contact: string
-  email: string
-  phone: string
-  address: string
-  city: string
-  country: string
-  taxId: string
-  isActive: boolean
-  rating: number
-  paymentTerms: string
-  deliveryTime: number
-  minimumOrder: number
-  lastSync: Date
-  syncStatus: 'success' | 'error' | 'pending' | 'never'
-  products: number
-  notes: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-interface SupplierFormData {
-  name: string
-  contact: string
-  email: string
-  phone: string
-  address: string
-  city: string
-  country: string
-  taxId: string
-  isActive: boolean
-  rating: number
-  paymentTerms: string
-  deliveryTime: number
-  minimumOrder: number
-  notes: string
-}
-
-// TODO: Cargar datos reales desde Supabase
-const mockSuppliers: Supplier[] = []
-
-import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { useInventory, Supplier } from '@/hooks/use-inventory'
 
 export function SupplierManagement() {
-  const supabase = createClient()
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    fetchSuppliers()
-  }, [fetchSuppliers])
-
-  const fetchSuppliers = useCallback(async () => {
-    try {
-      setLoading(true)
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .order('name')
-
-      if (error) throw error
-
-      if (data) {
-        const formattedSuppliers: Supplier[] = data.map(supplier => ({
-          id: supplier.id,
-          name: supplier.name,
-          contact: supplier.contact_name || '',
-          email: supplier.contact_email || '',
-          phone: supplier.phone || '',
-          address: supplier.address || '',
-          city: '', // Not in DB
-          country: 'México', // Default
-          taxId: supplier.tax_id || '',
-          isActive: supplier.is_active ?? true,
-          rating: 5,
-          paymentTerms: '30 días',
-          deliveryTime: 5,
-          minimumOrder: 0,
-          lastSync: new Date(),
-          syncStatus: 'success',
-          products: 0,
-          notes: '',
-          createdAt: supplier.created_at ? new Date(supplier.created_at) : new Date(),
-          updatedAt: supplier.updated_at ? new Date(supplier.updated_at) : new Date()
-        }))
-        setSuppliers(formattedSuppliers)
-      }
-    } catch (error) {
-      console.error('Error fetching suppliers:', error)
-      toast.error('Error al cargar proveedores')
-    } finally {
-      setLoading(false)
-    }
-  }, [supabase])
+  const { 
+    suppliers, 
+    loading, 
+    createSupplier, 
+    updateSupplier, 
+    deleteSupplier, 
+    refreshSuppliers 
+  } = useInventory()
 
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
-  const [syncFilter, setSyncFilter] = useState<'all' | 'success' | 'error' | 'pending' | 'never'>('all')
-  const [isSyncing, setIsSyncing] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'suspended'>('all')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const [formData, setFormData] = useState<SupplierFormData>({
+  // Form state
+  const [formData, setFormData] = useState<Partial<Supplier>>({
     name: '',
-    contact: '',
+    contact_person: '',
     email: '',
     phone: '',
     address: '',
     city: '',
     country: 'México',
-    taxId: '',
-    isActive: true,
+    tax_id: '',
+    status: 'active',
     rating: 5,
-    paymentTerms: '30 días',
-    deliveryTime: 5,
-    minimumOrder: 1000,
+    payment_terms: '30 días',
+    credit_limit: 0,
     notes: ''
   })
 
   const filteredSuppliers = suppliers.filter(supplier => {
-    const matchesSearch = supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         supplier.contact.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         supplier.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const searchLower = searchTerm.toLowerCase()
+    const matchesSearch = 
+      supplier.name.toLowerCase().includes(searchLower) ||
+      (supplier.contact_person || '').toLowerCase().includes(searchLower) ||
+      (supplier.email || '').toLowerCase().includes(searchLower)
     
-    const matchesStatus = statusFilter === 'all' || 
-                         (statusFilter === 'active' && supplier.isActive) ||
-                         (statusFilter === 'inactive' && !supplier.isActive)
+    const matchesStatus = statusFilter === 'all' || supplier.status === statusFilter
     
-    const matchesSync = syncFilter === 'all' || supplier.syncStatus === syncFilter
-
-    return matchesSearch && matchesStatus && matchesSync
+    return matchesSearch && matchesStatus
   })
 
   const resetForm = () => {
     setFormData({
       name: '',
-      contact: '',
+      contact_person: '',
       email: '',
       phone: '',
       address: '',
       city: '',
       country: 'México',
-      taxId: '',
-      isActive: true,
+      tax_id: '',
+      status: 'active',
       rating: 5,
-      paymentTerms: '30 días',
-      deliveryTime: 5,
-      minimumOrder: 1000,
+      payment_terms: '30 días',
+      credit_limit: 0,
       notes: ''
     })
   }
 
   const handleEdit = (supplier: Supplier) => {
     setFormData({
-      name: supplier.name,
-      contact: supplier.contact,
-      email: supplier.email,
-      phone: supplier.phone,
-      address: supplier.address,
-      city: supplier.city,
-      country: supplier.country,
-      taxId: supplier.taxId,
-      isActive: supplier.isActive,
-      rating: supplier.rating,
-      paymentTerms: supplier.paymentTerms,
-      deliveryTime: supplier.deliveryTime,
-      minimumOrder: supplier.minimumOrder,
-      notes: supplier.notes
+      ...supplier
     })
     setSelectedSupplier(supplier)
     setIsEditing(true)
     setIsDialogOpen(true)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsSubmitting(true)
     
-    if (isEditing && selectedSupplier) {
-      // Actualizar proveedor existente
-      setSuppliers(prev => prev.map(supplier => 
-        supplier.id === selectedSupplier.id 
-          ? { ...supplier, ...formData, updatedAt: new Date() }
-          : supplier
-      ))
-    } else {
-      // Crear nuevo proveedor
-      const newSupplier: Supplier = {
-        id: Date.now().toString(),
-        ...formData,
-        lastSync: new Date(),
-        syncStatus: 'never',
-        products: 0,
-        createdAt: new Date(),
-        updatedAt: new Date()
+    try {
+      if (isEditing && selectedSupplier) {
+        const result = await updateSupplier(selectedSupplier.id, formData)
+        if (result.success) {
+          toast.success('Proveedor actualizado correctamente')
+          setIsDialogOpen(false)
+        } else {
+          toast.error('Error al actualizar proveedor: ' + result.error)
+        }
+      } else {
+        const result = await createSupplier(formData)
+        if (result.success) {
+          toast.success('Proveedor creado correctamente')
+          setIsDialogOpen(false)
+        } else {
+          toast.error('Error al crear proveedor: ' + result.error)
+        }
       }
-      setSuppliers(prev => [...prev, newSupplier])
+    } catch (error) {
+      toast.error('Ocurrió un error inesperado')
+      console.error(error)
+    } finally {
+      setIsSubmitting(false)
+      if (!isEditing) resetForm()
     }
-
-    setIsDialogOpen(false)
-    setIsEditing(false)
-    setSelectedSupplier(null)
-    resetForm()
   }
 
-  const handleDelete = (supplierId: string) => {
-    setSuppliers(prev => prev.filter(supplier => supplier.id !== supplierId))
+  const handleDelete = async (supplierId: string) => {
+    if (confirm('¿Estás seguro de que deseas eliminar este proveedor?')) {
+      const result = await deleteSupplier(supplierId)
+      if (result.success) {
+        toast.success('Proveedor eliminado correctamente')
+      } else {
+        toast.error('Error al eliminar proveedor: ' + result.error)
+      }
+    }
   }
 
-  const handleSync = async (supplierId: string) => {
-    setIsSyncing(supplierId)
-    
-    // Simular sincronización
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    setSuppliers(prev => prev.map(supplier => 
-      supplier.id === supplierId 
-        ? { 
-            ...supplier, 
-            lastSync: new Date(), 
-            syncStatus: Math.random() > 0.2 ? 'success' : 'error',
-            updatedAt: new Date()
-          }
-        : supplier
-    ))
-    
-    setIsSyncing(null)
-  }
-
-  const handleSyncAll = async () => {
-    setIsSyncing('all')
-    
-    // Simular sincronización de todos
-    await new Promise(resolve => setTimeout(resolve, 3000))
-    
-    setSuppliers(prev => prev.map(supplier => ({
-      ...supplier,
-      lastSync: new Date(),
-      syncStatus: Math.random() > 0.1 ? 'success' : 'error' as const,
-      updatedAt: new Date()
-    })))
-    
-    setIsSyncing(null)
-  }
-
-  const getSyncStatusIcon = (status: Supplier['syncStatus']) => {
+  const getStatusBadge = (status: string = 'active') => {
     switch (status) {
-      case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'error':
-        return <XCircle className="h-4 w-4 text-red-500" />
-      case 'pending':
-        return <Clock className="h-4 w-4 text-yellow-500" />
-      case 'never':
-        return <AlertTriangle className="h-4 w-4 text-gray-500" />
+      case 'active':
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300">Activo</Badge>
+      case 'inactive':
+        return <Badge variant="secondary">Inactivo</Badge>
+      case 'suspended':
+        return <Badge variant="destructive">Suspendido</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
     }
-  }
-
-  const getSyncStatusBadge = (status: Supplier['syncStatus']) => {
-    const variants = {
-      success: 'default',
-      error: 'destructive',
-      pending: 'secondary',
-      never: 'outline'
-    } as const
-
-    const labels = {
-      success: 'Sincronizado',
-      error: 'Error',
-      pending: 'Pendiente',
-      never: 'Sin sincronizar'
-    }
-
-    return (
-      <Badge variant={variants[status]}>
-        {labels[status]}
-      </Badge>
-    )
   }
 
   return (
@@ -317,19 +164,25 @@ export function SupplierManagement() {
         <div>
           <h2 className="text-2xl font-bold">Gestión de Proveedores</h2>
           <p className="text-muted-foreground">
-            Administra y sincroniza la información de tus proveedores
+            Administra la información de tus proveedores
           </p>
         </div>
         <div className="flex gap-2">
           <Button 
             variant="outline" 
-            onClick={handleSyncAll}
-            disabled={isSyncing === 'all'}
+            onClick={() => refreshSuppliers()}
+            disabled={loading}
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing === 'all' ? 'animate-spin' : ''}`} />
-            Sincronizar Todo
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
           </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+            setIsDialogOpen(open)
+            if (!open) {
+              setIsEditing(false)
+              resetForm()
+            }
+          }}>
             <DialogTrigger asChild>
               <Button onClick={() => { resetForm(); setIsEditing(false); }}>
                 <Plus className="h-4 w-4 mr-2" />
@@ -348,10 +201,9 @@ export function SupplierManagement() {
               
               <form onSubmit={handleSubmit} className="space-y-4">
                 <Tabs defaultValue="basic" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="basic">Información Básica</TabsTrigger>
-                    <TabsTrigger value="contact">Contacto</TabsTrigger>
-                    <TabsTrigger value="terms">Términos</TabsTrigger>
+                    <TabsTrigger value="details">Detalles y Contacto</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="basic" className="space-y-4">
@@ -368,13 +220,12 @@ export function SupplierManagement() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="contact">Persona de Contacto *</Label>
+                        <Label htmlFor="contact">Persona de Contacto</Label>
                         <Input
                           id="contact"
-                          value={formData.contact}
-                          onChange={(e) => setFormData(prev => ({ ...prev, contact: e.target.value }))}
+                          value={formData.contact_person || ''}
+                          onChange={(e) => setFormData(prev => ({ ...prev, contact_person: e.target.value }))}
                           placeholder="Nombre del contacto"
-                          required
                         />
                       </div>
 
@@ -382,61 +233,51 @@ export function SupplierManagement() {
                         <Label htmlFor="taxId">RFC/Tax ID</Label>
                         <Input
                           id="taxId"
-                          value={formData.taxId}
-                          onChange={(e) => setFormData(prev => ({ ...prev, taxId: e.target.value }))}
+                          value={formData.tax_id || ''}
+                          onChange={(e) => setFormData(prev => ({ ...prev, tax_id: e.target.value }))}
                           placeholder="RFC o Tax ID"
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="rating">Calificación</Label>
-                        <Select value={formData.rating.toString()} onValueChange={(value) => setFormData(prev => ({ ...prev, rating: parseInt(value) }))}>
+                        <Label htmlFor="status">Estado</Label>
+                        <Select 
+                          value={formData.status} 
+                          onValueChange={(value: any) => setFormData(prev => ({ ...prev, status: value }))}
+                        >
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="1">1 - Muy Malo</SelectItem>
-                            <SelectItem value="2">2 - Malo</SelectItem>
-                            <SelectItem value="3">3 - Regular</SelectItem>
-                            <SelectItem value="4">4 - Bueno</SelectItem>
-                            <SelectItem value="5">5 - Excelente</SelectItem>
+                            <SelectItem value="active">Activo</SelectItem>
+                            <SelectItem value="inactive">Inactivo</SelectItem>
+                            <SelectItem value="suspended">Suspendido</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="isActive"
-                        checked={formData.isActive}
-                        onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}
-                      />
-                      <Label htmlFor="isActive">Proveedor activo</Label>
-                    </div>
                   </TabsContent>
 
-                  <TabsContent value="contact" className="space-y-4">
+                  <TabsContent value="details" className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="email">Email *</Label>
+                        <Label htmlFor="email">Email</Label>
                         <Input
                           id="email"
                           type="email"
-                          value={formData.email}
+                          value={formData.email || ''}
                           onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                           placeholder="email@proveedor.com"
-                          required
                         />
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="phone">Teléfono *</Label>
+                        <Label htmlFor="phone">Teléfono</Label>
                         <Input
                           id="phone"
-                          value={formData.phone}
+                          value={formData.phone || ''}
                           onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                           placeholder="+52 55 1234 5678"
-                          required
                         />
                       </div>
 
@@ -444,7 +285,7 @@ export function SupplierManagement() {
                         <Label htmlFor="city">Ciudad</Label>
                         <Input
                           id="city"
-                          value={formData.city}
+                          value={formData.city || ''}
                           onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
                           placeholder="Ciudad"
                         />
@@ -454,7 +295,7 @@ export function SupplierManagement() {
                         <Label htmlFor="country">País</Label>
                         <Input
                           id="country"
-                          value={formData.country}
+                          value={formData.country || ''}
                           onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
                           placeholder="País"
                         />
@@ -465,76 +306,57 @@ export function SupplierManagement() {
                       <Label htmlFor="address">Dirección</Label>
                       <Textarea
                         id="address"
-                        value={formData.address}
+                        value={formData.address || ''}
                         onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
                         placeholder="Dirección completa"
                         rows={2}
                       />
                     </div>
-                  </TabsContent>
-
-                  <TabsContent value="terms" className="space-y-4">
+                    
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="paymentTerms">Términos de Pago</Label>
-                        <Select value={formData.paymentTerms} onValueChange={(value) => setFormData(prev => ({ ...prev, paymentTerms: value }))}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Contado">Contado</SelectItem>
-                            <SelectItem value="15 días">15 días</SelectItem>
-                            <SelectItem value="30 días">30 días</SelectItem>
-                            <SelectItem value="45 días">45 días</SelectItem>
-                            <SelectItem value="60 días">60 días</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="deliveryTime">Tiempo de Entrega (días)</Label>
+                       <div className="space-y-2">
+                        <Label htmlFor="payment_terms">Términos de Pago</Label>
                         <Input
-                          id="deliveryTime"
-                          type="number"
-                          value={formData.deliveryTime}
-                          onChange={(e) => setFormData(prev => ({ ...prev, deliveryTime: parseInt(e.target.value) || 0 }))}
-                          placeholder="5"
+                          id="payment_terms"
+                          value={formData.payment_terms || ''}
+                          onChange={(e) => setFormData(prev => ({ ...prev, payment_terms: e.target.value }))}
+                          placeholder="Ej. 30 días"
                         />
                       </div>
-
-                      <div className="space-y-2 col-span-2">
-                        <Label htmlFor="minimumOrder">Pedido Mínimo ($)</Label>
+                       <div className="space-y-2">
+                        <Label htmlFor="credit_limit">Límite de Crédito</Label>
                         <Input
-                          id="minimumOrder"
+                          id="credit_limit"
                           type="number"
-                          value={formData.minimumOrder}
-                          onChange={(e) => setFormData(prev => ({ ...prev, minimumOrder: parseInt(e.target.value) || 0 }))}
-                          placeholder="1000"
+                          value={formData.credit_limit || ''}
+                          onChange={(e) => setFormData(prev => ({ ...prev, credit_limit: Number(e.target.value) }))}
+                          placeholder="0.00"
                         />
                       </div>
                     </div>
-
-                    <div className="space-y-2">
+                    
+                     <div className="space-y-2">
                       <Label htmlFor="notes">Notas</Label>
                       <Textarea
                         id="notes"
-                        value={formData.notes}
+                        value={formData.notes || ''}
                         onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                        placeholder="Notas adicionales sobre el proveedor..."
-                        rows={3}
+                        placeholder="Notas adicionales..."
+                        rows={2}
                       />
                     </div>
                   </TabsContent>
                 </Tabs>
 
-                <div className="flex justify-end gap-2 pt-4">
+                <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancelar
                   </Button>
-                  <Button type="submit">
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     {isEditing ? 'Actualizar' : 'Crear'} Proveedor
                   </Button>
-                </div>
+                </DialogFooter>
               </form>
             </DialogContent>
           </Dialog>
@@ -545,11 +367,13 @@ export function SupplierManagement() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 placeholder="Buscar proveedores..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
               />
             </div>
             <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
@@ -560,18 +384,7 @@ export function SupplierManagement() {
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="active">Activos</SelectItem>
                 <SelectItem value="inactive">Inactivos</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={syncFilter} onValueChange={(value: any) => setSyncFilter(value)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Sincronización" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="success">Sincronizado</SelectItem>
-                <SelectItem value="error">Con Error</SelectItem>
-                <SelectItem value="pending">Pendiente</SelectItem>
-                <SelectItem value="never">Sin Sincronizar</SelectItem>
+                <SelectItem value="suspended">Suspendidos</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -587,92 +400,95 @@ export function SupplierManagement() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Proveedor</TableHead>
-                <TableHead>Contacto</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Productos</TableHead>
-                <TableHead>Sincronización</TableHead>
-                <TableHead>Última Sync</TableHead>
-                <TableHead>Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredSuppliers.map((supplier) => (
-                <TableRow key={supplier.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{supplier.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {supplier.city}, {supplier.country}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{supplier.contact}</div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-1">
-                        <Mail className="h-3 w-3" />
-                        {supplier.email}
-                      </div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-1">
-                        <Phone className="h-3 w-3" />
-                        {supplier.phone}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={supplier.isActive ? 'default' : 'secondary'}>
-                      {supplier.isActive ? 'Activo' : 'Inactivo'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{supplier.products}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {getSyncStatusIcon(supplier.syncStatus)}
-                      {getSyncStatusBadge(supplier.syncStatus)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {supplier.lastSync.toLocaleDateString()}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {supplier.lastSync.toLocaleTimeString()}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleSync(supplier.id)}
-                        disabled={isSyncing === supplier.id}
-                      >
-                        <RefreshCw className={`h-4 w-4 ${isSyncing === supplier.id ? 'animate-spin' : ''}`} />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(supplier)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(supplier.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
+          {loading ? (
+             <div className="flex justify-center p-8">
+               <Loader2 className="h-8 w-8 animate-spin text-primary" />
+             </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Proveedor</TableHead>
+                  <TableHead>Contacto</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Productos</TableHead>
+                  <TableHead>Crédito / Deuda</TableHead>
+                  <TableHead>Acciones</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredSuppliers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      No se encontraron proveedores
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredSuppliers.map((supplier) => (
+                    <TableRow key={supplier.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{supplier.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {[supplier.city, supplier.country].filter(Boolean).join(', ')}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{supplier.contact_person || '-'}</div>
+                          {supplier.email && (
+                            <div className="text-sm text-muted-foreground flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              {supplier.email}
+                            </div>
+                          )}
+                          {supplier.phone && (
+                            <div className="text-sm text-muted-foreground flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              {supplier.phone}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(supplier.status)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{supplier.productCount || 0}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <p>Límite: ${supplier.credit_limit?.toLocaleString() || '0'}</p>
+                          <p className={(supplier.current_debt || 0) > 0 ? "text-red-600 font-medium" : "text-green-600"}>
+                            Deuda: ${supplier.current_debt?.toLocaleString() || '0'}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(supplier)}
+                          >
+                            <Edit className="h-4 w-4 text-blue-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(supplier.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -696,7 +512,7 @@ export function SupplierManagement() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Activos</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {suppliers.filter(s => s.isActive).length}
+                  {suppliers.filter(s => s.status === 'active').length}
                 </p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-600" />
@@ -708,23 +524,9 @@ export function SupplierManagement() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Sincronizados</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {suppliers.filter(s => s.syncStatus === 'success').length}
-                </p>
-              </div>
-              <RefreshCw className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Con Errores</p>
+                <p className="text-sm font-medium text-muted-foreground">Deuda Total</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {suppliers.filter(s => s.syncStatus === 'error').length}
+                  ${suppliers.reduce((sum, s) => sum + (s.current_debt || 0), 0).toLocaleString()}
                 </p>
               </div>
               <XCircle className="h-8 w-8 text-red-600" />
@@ -734,4 +536,6 @@ export function SupplierManagement() {
       </div>
     </div>
   )
-}export default SupplierManagement
+}
+
+export default SupplierManagement

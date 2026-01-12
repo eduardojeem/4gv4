@@ -83,8 +83,13 @@ export function StatusBadge({
   onStatusChange,
   className 
 }: StatusBadgeProps) {
-  const config = statusConfig[status]
-  const sizeStyles = sizeConfig[size]
+  const config = statusConfig[status] ?? {
+    label: 'Desconocido',
+    icon: AlertTriangle,
+    className: 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-700/50',
+    dotColor: 'bg-gray-400'
+  }
+  const sizeStyles = sizeConfig[size] ?? sizeConfig.md
   const Icon = config.icon
 
   if (!interactive || !onStatusChange) {

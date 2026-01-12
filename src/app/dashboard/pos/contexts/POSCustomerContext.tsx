@@ -108,6 +108,70 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
     return list
   }, [customers, customerSearch, customerTypeFilter, showFrequentOnly])
 
+  // Load real aggregates from Supabase when selecting a customer
+  React.useEffect(() => {
+    const run = async () => {
+      if (!config.supabase.isConfigured || !selectedCustomer) return
+      try {
+        const supabase = createSupabaseClient()
+        // Sales totals
+        const { data: salesAgg, error: salesErr } = await supabase
+          .from('sales')
+          .select('total_amount,status', { count: 'exact' })
+          .eq('customer_id', selectedCustomer)
+        if (salesErr) throw new Error(salesErr.message)
+        const totalPurchases = (salesAgg && Array.isArray(salesAgg)) ? salesAgg.length : 0
+        const totalSpent = (salesAgg || []).reduce((sum: number, s: any) => sum + (Number(s.total_amount) || 0), 0)
+
+        // Repairs count
+        const { data: repairsAgg, error: repairsErr } = await supabase
+          .from('repairs')
+          .select('id', { count: 'exact' })
+          .eq('customer_id', selectedCustomer)
+        if (repairsErr) throw new Error(repairsErr.message)
+        const totalRepairs = (repairsAgg && Array.isArray(repairsAgg)) ? repairsAgg.length : 0
+
+        // Outstanding balance: sum of pending installments
+        const { data: credits, error: creditsErr } = await supabase
+          .from('customer_credits')
+          .select('id,status')
+          .eq('customer_id', selectedCustomer)
+        if (creditsErr) throw new Error(creditsErr.message)
+        const creditIds = (credits || []).map((c: any) => c.id)
+        let outstanding = 0
+        if (creditIds.length > 0) {
+          const { data: installments, error: instErr } = await supabase
+            .from('credit_installments')
+            .select('amount,status')
+            .in('credit_id', creditIds)
+          if (instErr) throw new Error(instErr.message)
+          outstanding = (installments || [])
+            .filter((i: any) => String(i.status || '').toLowerCase() === 'pending')
+            .reduce((sum: number, i: any) => sum + (Number(i.amount) || 0), 0)
+        }
+
+        const loyaltyPoints = Math.floor((totalSpent || 0) / 10)
+
+        // Update mapped customer
+        setCustomers(prev => prev.map(c => (
+          c.id === selectedCustomer
+            ? {
+                ...c,
+                total_purchases: totalPurchases,
+                total_repairs: totalRepairs,
+                current_balance: outstanding,
+                loyalty_points: loyaltyPoints,
+                last_visit: new Date().toISOString(),
+              }
+            : c
+        )))
+      } catch (e: any) {
+        console.warn('No se pudieron cargar métricas del cliente:', String(e?.message || e || ''))
+      }
+    }
+    run()
+  }, [selectedCustomer, setCustomers])
+
   // Action: Create New Customer
   const createNewCustomer = useCallback(async () => {
     const hasBasic = newFirstName.trim().length > 0 || newPhone.trim().length > 0

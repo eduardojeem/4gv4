@@ -57,54 +57,14 @@ export default function ProductReportsPage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   
-  // Datos para gráficas (inicialmente vacíos)
-  const salesTrendData: any[] = []
-  const categoryData: any[] = []
-  const topProductsData: any[] = []
+  // Datos para gráficas
+  const [salesTrendData, setSalesTrendData] = useState<any[]>([])
+  const [categoryData, setCategoryData] = useState<any[]>([])
+  const [topProductsData, setTopProductsData] = useState<any[]>([])
 
-  // Cargar datos reales desde Supabase
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      try {
-        const { data, error } = await supabase
-          .from('products')
-          .select('*')
-          // Add filters if needed
-        
-        if (error) throw error
-
-        if (data) {
-          // Transform data to match UI expectations if needed
-          // For now, we just use what we have or map it
-          const formattedProducts = data.map(p => ({
-            id: p.id,
-            name: p.name,
-            category: 'General', // Would need join with categories
-            sku: p.sku,
-            stock_quantity: p.stock_quantity,
-            min_stock: p.min_stock_level || 0,
-            sale_price: p.sale_price,
-            purchase_price: 0, // Not exposed publicly usually
-            total_sales: 0, // Would need to calculate from sales items
-            revenue: 0,
-            profit: 0,
-            margin: 0,
-            last_sale: null,
-            supplier: '', // Would need join
-            status: p.is_active ? 'active' : 'inactive'
-          }))
-          setProducts(formattedProducts)
-        }
-      } catch (error) {
-        console.error('Error loading product reports:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchData()
-  }, [supabase])
+  // Estados de filtros - deben declararse antes del useEffect
   const [dateRange, setDateRange] = useState({
     from: subMonths(new Date(), 1),
     to: new Date()
@@ -113,6 +73,136 @@ export default function ProductReportsPage() {
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [isExporting, setIsExporting] = useState(false)
+
+  // Cargar datos reales desde Supabase
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true)
+      setErrorMsg(null)
+      try {
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select(`
+            *,
+            category:categories(name),
+            supplier:suppliers(name)
+          `)
+
+        if (productsError) throw productsError
+
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('sale_items')
+          .select(`
+            product_id,
+            quantity,
+            unit_price,
+            subtotal,
+            product:products(name, category:categories(name), sale_price, purchase_price),
+            sale:sales!inner(created_at, status)
+          `)
+
+        if (itemsError) throw itemsError
+
+        const inRangeCompleted = (itemsData ?? []).filter((i: any) => {
+          const d = i?.sale?.created_at ? new Date(i.sale.created_at) : null
+          const s = i?.sale?.status
+          return d && d >= dateRange.from && d <= dateRange.to && s === 'completada'
+        })
+
+        const productAgg: Record<string, any> = {}
+        const categoryAgg: Record<string, number> = {}
+        const trendAgg: Record<string, { sales: number; revenue: number }> = {}
+
+        inRangeCompleted.forEach((item: any) => {
+          const pid = item.product_id
+          const p = item.product
+          const qty = Number(item.quantity) || 0
+          const total = Number(item.subtotal ?? qty * Number(item.unit_price ?? 0)) || 0
+          const cat = p?.category?.name || 'Sin categoría'
+          const saleDate = new Date(item.sale.created_at)
+          const monthKey = `${saleDate.getFullYear()}-${String(saleDate.getMonth()+1).padStart(2,'0')}`
+
+          if (!productAgg[pid]) {
+            productAgg[pid] = {
+              id: pid,
+              name: p?.name || 'Desconocido',
+              sku: '',
+              stock_quantity: 0,
+              min_stock: 0,
+              sale_price: p?.sale_price || 0,
+              purchase_price: p?.purchase_price || 0,
+              total_sales: 0,
+              revenue: 0,
+              profit: 0,
+              margin: 0,
+              last_sale: null,
+              category: cat,
+              supplier: item.product?.supplier?.name || '',
+              status: 'active'
+            }
+          }
+          const pa = productAgg[pid]
+          pa.total_sales += qty
+          pa.revenue += total
+          pa.profit += total - qty * Number(pa.purchase_price)
+          pa.margin = pa.revenue > 0 ? (pa.profit / pa.revenue) * 100 : 0
+          pa.last_sale = !pa.last_sale || new Date(pa.last_sale) < saleDate ? saleDate.toISOString() : pa.last_sale
+
+          categoryAgg[cat] = (categoryAgg[cat] || 0) + total
+          if (!trendAgg[monthKey]) trendAgg[monthKey] = { sales: 0, revenue: 0 }
+          trendAgg[monthKey].sales += qty
+          trendAgg[monthKey].revenue += total
+        })
+
+        const formattedProducts = (productsData ?? []).map((p: any) => {
+          const agg = productAgg[p.id] || {}
+          return {
+            id: p.id,
+            name: p.name,
+            category: p.category?.name || 'Sin categoría',
+            sku: p.sku,
+            stock_quantity: p.stock_quantity,
+            min_stock: p.min_stock || 0,
+            sale_price: p.sale_price,
+            purchase_price: p.purchase_price || 0,
+            total_sales: agg.total_sales || 0,
+            revenue: agg.revenue || 0,
+            profit: agg.profit || 0,
+            margin: agg.margin || 0,
+            last_sale: agg.last_sale || null,
+            supplier: p.supplier?.name || '',
+            status: p.is_active ? 'active' : 'inactive'
+          }
+        })
+
+        setProducts(formattedProducts)
+
+        const categoriesList = Object.entries(categoryAgg)
+          .map(([name, value], index) => ({ name, value, color: `hsl(${index * 45}, 70%, 50%)` }))
+          .sort((a, b) => b.value - a.value)
+        setCategoryData(categoriesList)
+
+        const trendList = Object.entries(trendAgg)
+          .map(([month, vals]) => ({ month, sales: vals.sales, revenue: vals.revenue }))
+          .sort((a, b) => a.month.localeCompare(b.month))
+        setSalesTrendData(trendList)
+
+        const topProducts = formattedProducts
+          .map(p => ({ name: p.name, revenue: p.revenue, sales: p.total_sales }))
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 5)
+        setTopProductsData(topProducts)
+
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        console.error('Error loading product reports:', msg)
+        setErrorMsg(msg)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [supabase, dateRange])
 
   // Filtrar datos basado en los filtros seleccionados
   const filteredData = useMemo(() => {
@@ -476,6 +566,9 @@ export default function ProductReportsPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {errorMsg && (
+          <div className="p-3 border rounded text-red-600 bg-red-50 mb-4">{errorMsg}</div>
+        )}
         {/* Filtros */}
         <Card className="mb-6">
           <CardHeader>
@@ -774,7 +867,7 @@ export default function ProductReportsPage() {
                             </Badge>
                           </td>
                           <td className="p-2 text-muted-foreground">
-                            {format(new Date(product.last_sale), 'dd/MM/yyyy', { locale: es })}
+                            {product.last_sale ? format(new Date(product.last_sale), 'dd/MM/yyyy', { locale: es }) : '-'}
                           </td>
                         </tr>
                       ))}

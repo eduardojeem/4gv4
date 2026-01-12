@@ -224,6 +224,74 @@ export function usePromotions() {
     return daysRemaining <= days && daysRemaining > 0
   }, [])
 
+  // Calculate promotion effectiveness
+  const calculateEffectiveness = useCallback((promotion: Promotion) => {
+    if (!promotion.usage_count || promotion.usage_count === 0) return 0
+    
+    const now = new Date()
+    const startDate = promotion.start_date ? parseISO(promotion.start_date) : null
+    const daysActive = startDate ? differenceInDays(now, startDate) : 1
+    
+    // Usage per day
+    const usagePerDay = promotion.usage_count / Math.max(daysActive, 1)
+    
+    // Effectiveness score (0-100)
+    let score = 0
+    
+    // Base score from usage frequency
+    if (usagePerDay >= 10) score += 40
+    else if (usagePerDay >= 5) score += 30
+    else if (usagePerDay >= 1) score += 20
+    else score += 10
+    
+    // Bonus for high usage rate if limit exists
+    if (promotion.usage_limit) {
+      const usageRate = promotion.usage_count / promotion.usage_limit
+      if (usageRate >= 0.8) score += 30
+      else if (usageRate >= 0.5) score += 20
+      else if (usageRate >= 0.2) score += 10
+    } else {
+      score += 15 // Bonus for unlimited usage
+    }
+    
+    // Bonus for active status
+    if (promotion.is_active) score += 15
+    
+    // Penalty for expiring soon
+    if (isPromotionExpiringSoon(promotion)) score -= 10
+    
+    return Math.min(Math.max(score, 0), 100)
+  }, [isPromotionExpiringSoon])
+
+  // Calculate ROI (simplified)
+  const calculateROI = useCallback((promotion: Promotion) => {
+    if (!promotion.usage_count || promotion.usage_count === 0) return 0
+    
+    // Estimated average order value (this could be configurable)
+    const avgOrderValue = 150000 // 150k PYG
+    
+    // Calculate discount per use
+    let discountPerUse = 0
+    if (promotion.type === 'percentage') {
+      const estimatedDiscount = (avgOrderValue * promotion.value) / 100
+      discountPerUse = promotion.max_discount 
+        ? Math.min(estimatedDiscount, promotion.max_discount)
+        : estimatedDiscount
+    } else {
+      discountPerUse = promotion.value
+    }
+    
+    const totalDiscountGiven = discountPerUse * promotion.usage_count
+    const totalRevenue = avgOrderValue * promotion.usage_count
+    
+    // ROI = (Revenue - Discount) / Discount * 100
+    const roi = totalDiscountGiven > 0 
+      ? ((totalRevenue - totalDiscountGiven) / totalDiscountGiven) * 100
+      : 0
+    
+    return Math.round(roi)
+  }, [])
+
   // Advanced operations
   const duplicatePromotion = useCallback(async (promotion: Promotion) => {
     const duplicatedData = {
@@ -338,73 +406,6 @@ export function usePromotions() {
     return insights
   }, [getPromotionStatus, isPromotionExpiringSoon, calculateEffectiveness, calculateROI])
 
-  // Calculate promotion effectiveness
-  const calculateEffectiveness = useCallback((promotion: Promotion) => {
-    if (!promotion.usage_count || promotion.usage_count === 0) return 0
-    
-    const now = new Date()
-    const startDate = promotion.start_date ? parseISO(promotion.start_date) : null
-    const daysActive = startDate ? differenceInDays(now, startDate) : 1
-    
-    // Usage per day
-    const usagePerDay = promotion.usage_count / Math.max(daysActive, 1)
-    
-    // Effectiveness score (0-100)
-    let score = 0
-    
-    // Base score from usage frequency
-    if (usagePerDay >= 10) score += 40
-    else if (usagePerDay >= 5) score += 30
-    else if (usagePerDay >= 1) score += 20
-    else score += 10
-    
-    // Bonus for high usage rate if limit exists
-    if (promotion.usage_limit) {
-      const usageRate = promotion.usage_count / promotion.usage_limit
-      if (usageRate >= 0.8) score += 30
-      else if (usageRate >= 0.5) score += 20
-      else if (usageRate >= 0.2) score += 10
-    } else {
-      score += 15 // Bonus for unlimited usage
-    }
-    
-    // Bonus for active status
-    if (promotion.is_active) score += 15
-    
-    // Penalty for expiring soon
-    if (isPromotionExpiringSoon(promotion)) score -= 10
-    
-    return Math.min(Math.max(score, 0), 100)
-  }, [isPromotionExpiringSoon])
-
-  // Calculate ROI (simplified)
-  const calculateROI = useCallback((promotion: Promotion) => {
-    if (!promotion.usage_count || promotion.usage_count === 0) return 0
-    
-    // Estimated average order value (this could be configurable)
-    const avgOrderValue = 150000 // 150k PYG
-    
-    // Calculate discount per use
-    let discountPerUse = 0
-    if (promotion.type === 'percentage') {
-      const estimatedDiscount = (avgOrderValue * promotion.value) / 100
-      discountPerUse = promotion.max_discount 
-        ? Math.min(estimatedDiscount, promotion.max_discount)
-        : estimatedDiscount
-    } else {
-      discountPerUse = promotion.value
-    }
-    
-    const totalDiscountGiven = discountPerUse * promotion.usage_count
-    const totalRevenue = avgOrderValue * promotion.usage_count
-    
-    // ROI = (Revenue - Discount) / Discount * 100
-    const roi = totalDiscountGiven > 0 
-      ? ((totalRevenue - totalDiscountGiven) / totalDiscountGiven) * 100
-      : 0
-    
-    return Math.round(roi)
-  }, [])
 
   // Get promotion performance metrics
   const getPromotionMetrics = useCallback(() => {
@@ -558,6 +559,8 @@ export function usePromotions() {
     getTopPerformingPromotions,
     getUnusedPromotions,
     getPromotionMetrics,
+    calculateEffectiveness,
+    calculateROI,
     
     // Filters
     updateFilters,

@@ -267,6 +267,7 @@ export function CategoryListView({
                             </TableCell>
 
                             <TableCell>
+                                {(onEdit || onAddChild || onToggleActive || onDelete) && (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button 
@@ -278,39 +279,46 @@ export function CategoryListView({
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => onEdit(category)}>
-                                            <Edit className="h-4 w-4 mr-2" />
-                                            Editar
-                                        </DropdownMenuItem>
+                                        {onEdit && (
+                                            <DropdownMenuItem onClick={() => onEdit(category)}>
+                                                <Edit className="h-4 w-4 mr-2" />
+                                                Editar
+                                            </DropdownMenuItem>
+                                        )}
                                         {onAddChild && (
                                             <DropdownMenuItem onClick={() => onAddChild(category.id)}>
                                                 <Plus className="h-4 w-4 mr-2" />
                                                 Agregar subcategoría
                                             </DropdownMenuItem>
                                         )}
-                                        <DropdownMenuItem onClick={() => onToggleActive(category.id, category.is_active)}>
-                                            {category.is_active ? (
-                                                <>
-                                                    <ToggleLeft className="h-4 w-4 mr-2" />
-                                                    Desactivar
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <ToggleRight className="h-4 w-4 mr-2" />
-                                                    Activar
-                                                </>
-                                            )}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            onClick={() => onDelete(category.id)}
-                                            className="text-red-600 dark:text-red-400"
-                                        >
-                                            <Trash2 className="h-4 w-4 mr-2" />
-                                            Eliminar
-                                        </DropdownMenuItem>
+                                        {onToggleActive && (
+                                            <DropdownMenuItem onClick={() => onToggleActive(category.id, category.is_active)}>
+                                                {category.is_active ? (
+                                                    <>
+                                                        <ToggleLeft className="h-4 w-4 mr-2" />
+                                                        Desactivar
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <ToggleRight className="h-4 w-4 mr-2" />
+                                                        Activar
+                                                    </>
+                                                )}
+                                            </DropdownMenuItem>
+                                        )}
+                                        {(onEdit || onAddChild || onToggleActive) && onDelete && <DropdownMenuSeparator />}
+                                        {onDelete && (
+                                            <DropdownMenuItem
+                                                onClick={() => onDelete(category.id)}
+                                                className="text-red-600 dark:text-red-400"
+                                            >
+                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                Eliminar
+                                            </DropdownMenuItem>
+                                        )}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
+                                )}
                             </TableCell>
                         </motion.tr>
                     ))}

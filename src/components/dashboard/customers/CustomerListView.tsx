@@ -56,6 +56,7 @@ import {
   PowerOff
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
+import { useCustomerSalesMetricsMap, CustomerMetrics } from '@/hooks/use-customer-metrics'
 import { StatusBadge, StatusToggle, BulkStatusSelector } from '@/components/ui/StatusBadge'
 import { formatters } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
@@ -138,6 +139,8 @@ export function CustomerListView({
 
     return filtered
   }, [customers, searchTerm, sortField, sortOrder])
+
+  const metricsMap = useCustomerSalesMetricsMap(processedCustomers.map(c => c.id))
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -257,6 +260,7 @@ export function CustomerListView({
               onDeleteCustomer={onDeleteCustomer}
               onToggleCustomerStatus={onToggleCustomerStatus}
               loading={loading}
+              metricsMap={metricsMap}
             />
           </motion.div>
         ) : (
@@ -276,6 +280,7 @@ export function CustomerListView({
               onDeleteCustomer={onDeleteCustomer}
               onToggleCustomerStatus={onToggleCustomerStatus}
               loading={loading}
+              metricsMap={metricsMap}
             />
           </motion.div>
         )}
@@ -299,7 +304,8 @@ function TableView({
   onEditCustomer,
   onDeleteCustomer,
   onToggleCustomerStatus,
-  loading
+  loading,
+  metricsMap
 }: {
   customers: Customer[]
   selectedCustomers: string[]
@@ -315,6 +321,7 @@ function TableView({
   onDeleteCustomer: (customer: Customer) => void
   onToggleCustomerStatus?: (customer: Customer) => void
   loading: boolean
+  metricsMap: Record<string, CustomerMetrics>
 }) {
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null
@@ -369,6 +376,17 @@ function TableView({
                   Valor
                   <SortIcon field="lifetime_value" />
                 </div>
+              </TableHead>
+              <TableHead 
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
+                onClick={() => onSort('total_purchases')}
+              >
+                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                  Compras
+                </div>
+              </TableHead>
+              <TableHead className="bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300">
+                Última compra
               </TableHead>
               <TableHead 
                 className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
@@ -448,14 +466,24 @@ function TableView({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <div className="space-y-1">
-                    <div className="font-medium text-gray-900 dark:text-gray-100">
-                      {formatters.currency(customer.lifetime_value || 0)}
-                    </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {customer.total_purchases || 0} compras
-                    </div>
+              <div className="space-y-1">
+                <div className="font-medium text-gray-900 dark:text-gray-100">
+                      {formatters.currency((metricsMap[customer.id]?.total ?? (customer as any).total_spent_this_year ?? customer.lifetime_value) || 0)}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                      {(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)} compras
+                </div>
+              </div>
+                </TableCell>
+                <TableCell>
+                <div className="space-y-1">
+                  <div className="text-sm text-gray-700 dark:text-gray-300">
+                      {formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}
                   </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {customer.city || ''}
+                  </div>
+                </div>
                 </TableCell>
                 <TableCell>
                   <div className="space-y-1">
@@ -494,7 +522,8 @@ function GridView({
   onEditCustomer,
   onDeleteCustomer,
   onToggleCustomerStatus,
-  loading
+  loading,
+  metricsMap
 }: {
   customers: Customer[]
   selectedCustomers: string[]
@@ -504,6 +533,7 @@ function GridView({
   onDeleteCustomer: (customer: Customer) => void
   onToggleCustomerStatus?: (customer: Customer) => void
   loading: boolean
+  metricsMap: Record<string, CustomerMetrics>
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -522,6 +552,7 @@ function GridView({
             onEdit={() => onEditCustomer(customer)}
             onDelete={() => onDeleteCustomer(customer)}
             onToggleStatus={onToggleCustomerStatus ? () => onToggleCustomerStatus(customer) : undefined}
+            metricsMap={metricsMap}
           />
         </motion.div>
       ))}
@@ -537,7 +568,8 @@ function CustomerCard({
   onView,
   onEdit,
   onDelete,
-  onToggleStatus
+  onToggleStatus,
+  metricsMap
 }: {
   customer: Customer
   selected: boolean
@@ -546,6 +578,7 @@ function CustomerCard({
   onEdit: () => void
   onDelete: () => void
   onToggleStatus?: () => void
+  metricsMap: Record<string, CustomerMetrics>
 }) {
   return (
     <Card className={cn(
@@ -630,15 +663,23 @@ function CustomerCard({
 
         {/* Métricas */}
         <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-          <div>
-            <div className="text-gray-500 dark:text-gray-400">Valor Total</div>
-            <div className="font-semibold text-gray-900 dark:text-gray-100">
-              {formatters.currency(customer.lifetime_value || 0)}
+            <div>
+              <div className="text-gray-500 dark:text-gray-400">Valor Total</div>
+              <div className="font-semibold text-gray-900 dark:text-gray-100">
+              {formatters.currency((metricsMap[customer.id]?.total ?? (customer as any).total_spent_this_year ?? customer.lifetime_value) || 0)}
+              </div>
             </div>
-          </div>
+            <div>
+              <div className="text-gray-500 dark:text-gray-400">Compras</div>
+            <div className="font-semibold text-gray-900 dark:text-gray-100">{(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)}</div>
+            </div>
+            <div>
+              <div className="text-gray-500 dark:text-gray-400">Última compra</div>
+            <div className="font-semibold text-gray-900 dark:text-gray-100">{formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}</div>
+            </div>
           <div>
-            <div className="text-gray-500 dark:text-gray-400">Compras</div>
-            <div className="font-semibold text-gray-900 dark:text-gray-100">{customer.total_purchases || 0}</div>
+            <div className="text-gray-500 dark:text-gray-400">Puntos</div>
+            <div className="font-semibold text-gray-900 dark:text-gray-100">{(customer as any).loyalty_points ?? 0}</div>
           </div>
         </div>
 
@@ -647,6 +688,10 @@ function CustomerCard({
           <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
             <Clock className="h-3 w-3" />
             <span>Última actividad: {getRelativeTime(customer.last_activity)}</span>
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <MapPin className="h-3 w-3" />
+            <span>{customer.city || ''}</span>
           </div>
         </div>
       </CardContent>

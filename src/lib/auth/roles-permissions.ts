@@ -160,6 +160,43 @@ export const PERMISSIONS: Record<string, Permission> = {
     description: 'Control total sobre configuraciones',
     resource: 'settings',
     action: 'manage'
+  },
+
+  // Promociones
+  'promotions.read': {
+    id: 'promotions.read',
+    name: 'Ver Promociones',
+    description: 'Permite ver la lista de promociones',
+    resource: 'promotions',
+    action: 'read'
+  },
+  'promotions.create': {
+    id: 'promotions.create',
+    name: 'Crear Promociones',
+    description: 'Permite crear nuevas promociones',
+    resource: 'promotions',
+    action: 'create'
+  },
+  'promotions.update': {
+    id: 'promotions.update',
+    name: 'Editar Promociones',
+    description: 'Permite modificar promociones existentes',
+    resource: 'promotions',
+    action: 'update'
+  },
+  'promotions.delete': {
+    id: 'promotions.delete',
+    name: 'Eliminar Promociones',
+    description: 'Permite eliminar promociones',
+    resource: 'promotions',
+    action: 'delete'
+  },
+  'promotions.manage': {
+    id: 'promotions.manage',
+    name: 'Gestionar Promociones',
+    description: 'Control total sobre promociones',
+    resource: 'promotions',
+    action: 'manage'
   }
 }
 
@@ -182,7 +219,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
       PERMISSIONS['inventory.read'],
       PERMISSIONS['inventory.update'],
       PERMISSIONS['reports.read'],
-      PERMISSIONS['reports.create']
+      PERMISSIONS['reports.create'],
+      PERMISSIONS['promotions.read'],
+      PERMISSIONS['promotions.create'],
+      PERMISSIONS['promotions.update']
     ]
   },
   tecnico: {

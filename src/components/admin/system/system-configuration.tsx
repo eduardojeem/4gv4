@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,9 +25,12 @@ import {
   CheckCircle,
   Clock,
   Users,
-  Lock
+  Lock,
+  Globe,
+  Server
 } from 'lucide-react'
 import { SystemSettings } from '@/hooks/use-admin-dashboard'
+import { toast } from 'sonner'
 
 interface SystemConfigurationProps {
   settings: SystemSettings
@@ -48,6 +51,11 @@ export function SystemConfiguration({
   const [errors, setErrors] = useState<Partial<Record<keyof SystemSettings, string>>>({})
   const [settingsSearch, setSettingsSearch] = useState('')
   const [settingsSearchDebounced, setSettingsSearchDebounced] = useState('')
+
+  // Sincronizar estado cuando las props cambian (ej. al cargar)
+  useEffect(() => {
+    setFormData(settings)
+  }, [settings])
 
   const isChanged = (field: keyof SystemSettings) => {
     return formData[field] !== settings[field]
@@ -114,16 +122,24 @@ export function SystemConfiguration({
   }
 
   const handleSave = async () => {
-    if (Object.keys(errors).length > 0) return
+    if (Object.keys(errors).length > 0) {
+      toast.error('Por favor corrija los errores antes de guardar')
+      return
+    }
     const result = await onUpdateSettings(formData)
     if (result.success) {
       setHasChanges(false)
+      toast.success('Configuración guardada correctamente')
+    } else {
+      toast.error(result.error || 'Error al guardar configuración')
     }
   }
 
   const handleReset = () => {
     setFormData(settings)
     setHasChanges(false)
+    setErrors({})
+    toast.info('Cambios descartados')
   }
 
   const sectionFields: Record<string, (keyof SystemSettings)[]> = {
@@ -147,13 +163,19 @@ export function SystemConfiguration({
 
   const handleSaveSection = async (section: keyof typeof sectionFields) => {
     const ok = validateSection(section)
-    if (!ok) return
+    if (!ok) {
+      toast.error('Corrija los errores en la sección')
+      return
+    }
     const fields = sectionFields[section]
     const partial: Partial<SystemSettings> = {}
     fields.forEach(f => { (partial as any)[f] = formData[f] })
     const result = await onUpdateSettings(partial)
     if (result.success) {
-      setHasChanges(false)
+      setHasChanges(false) // Esto es simplificado, idealmente solo para los campos guardados
+      toast.success('Sección guardada correctamente')
+    } else {
+      toast.error(result.error || 'Error al guardar sección')
     }
   }
 
@@ -164,20 +186,35 @@ export function SystemConfiguration({
       checkIntegrity: 'Verificar Integridad',
       testEmail: 'Probar Email'
     }
-    const confirmed = window.confirm(`¿Confirmar acción: ${labels[action] || action}?`)
-    if (!confirmed) return
-    await onPerformAction(action)
+    
+    if (confirm(`¿Está seguro de realizar la acción: ${labels[action] || action}?`)) {
+       try {
+         const result = await onPerformAction(action)
+         if (result.success) {
+           toast.success(result.message || 'Acción completada con éxito')
+         } else {
+           toast.error(result.error || 'Error al realizar acción')
+         }
+       } catch (e) {
+         toast.error('Error inesperado')
+       }
+    }
   }
 
   const exportSettings = () => {
-    const dataStr = JSON.stringify(formData, null, 2)
-    const dataBlob = new Blob([dataStr], { type: 'application/json' })
-    const url = URL.createObjectURL(dataBlob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `system-settings-${new Date().toISOString().split('T')[0]}.json`
-    link.click()
-    URL.revokeObjectURL(url)
+    try {
+      const dataStr = JSON.stringify(formData, null, 2)
+      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(dataBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `system-settings-${new Date().toISOString().split('T')[0]}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      toast.success('Configuración exportada')
+    } catch (e) {
+      toast.error('Error al exportar')
+    }
   }
 
   const importSettings = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,10 +224,11 @@ export function SystemConfiguration({
       reader.onload = (e) => {
         try {
           const importedSettings = JSON.parse(e.target?.result as string)
-          setFormData({ ...formData, ...importedSettings })
+          setFormData(prev => ({ ...prev, ...importedSettings }))
           setHasChanges(true)
+          toast.success('Configuración importada. Revise los cambios antes de guardar.')
         } catch (error) {
-          alert('Error al importar configuración: archivo inválido')
+          toast.error('Error al importar: archivo inválido')
         }
       }
       reader.readAsText(file)
@@ -206,183 +244,151 @@ export function SystemConfiguration({
   return (
     <div className="space-y-6">
       {/* Header simplificado */}
-      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold flex items-center text-purple-700">
-              <Settings className="h-6 w-6 mr-2 text-purple-700" />
+            <h2 className="text-2xl font-bold flex items-center text-gray-900 dark:text-white">
+              <Settings className="h-6 w-6 mr-3 text-purple-600 dark:text-purple-400" />
               Configuración del Sistema
             </h2>
-            <p className="text-purple-700 mt-1">Administra la configuración general del sistema</p>
-            <div className="mt-3">
-              <Input
-                placeholder="Buscar configuración…"
+            <p className="text-gray-500 dark:text-gray-400 mt-1">Administra la configuración general y preferencias</p>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+               <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+               <Input
+                placeholder="Buscar opción…"
                 value={settingsSearch}
                 onChange={(e) => setSettingsSearch(e.target.value)}
-                className="max-w-md border-purple-200 focus-visible:ring-purple-400"
+                className="w-64 pl-9 bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
               />
             </div>
-          </div>
-        
-        <div className="flex space-x-2">
-          {Object.keys(errors).length > 0 && (
-            <Badge variant="destructive" className="self-center">
-              {Object.keys(errors).length} errores
-            </Badge>
-          )}
-          <Button 
-            variant="outline" 
-            onClick={exportSettings}
-            className="border-purple-300 text-purple-600 hover:bg-purple-50"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
-          <label className="cursor-pointer">
+
             <Button 
               variant="outline" 
-              asChild
-              className="border-purple-300 text-purple-600 hover:bg-purple-50"
+              onClick={exportSettings}
+              className="border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300"
             >
-              <span>
-                <Upload className="h-4 w-4 mr-2" />
-                Importar
-              </span>
+              <Download className="h-4 w-4 mr-2" />
+              Exportar
             </Button>
-            <input
-              type="file"
-              accept=".json"
-              onChange={importSettings}
-              className="hidden"
-            />
-          </label>
-          {hasChanges && (
-            <>
+            <label className="cursor-pointer">
               <Button 
                 variant="outline" 
-                onClick={handleReset}
-                className="border-purple-300 text-purple-600 hover:bg-purple-50"
+                asChild
+                className="border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 pointer-events-none"
               >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Descartar
+                <span>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar
+                </span>
               </Button>
-              <Button 
-                onClick={handleSave} 
-                disabled={isLoading || Object.keys(errors).length > 0}
-                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {isLoading ? 'Guardando...' : (Object.keys(errors).length > 0 ? 'Corregir errores' : 'Guardar')}
-              </Button>
-            </>
-          )}
+              <input
+                type="file"
+                accept=".json"
+                onChange={importSettings}
+                className="hidden"
+              />
+            </label>
+          </div>
         </div>
-        </div>
+        
+        {/* Barra de acciones flotante si hay cambios */}
+        {hasChanges && (
+           <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-800 flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+             <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
+               <AlertTriangle className="h-5 w-5" />
+               <span className="font-medium">Tienes cambios sin guardar</span>
+             </div>
+             <div className="flex gap-2">
+                <Button 
+                  variant="ghost" 
+                  onClick={handleReset}
+                  className="text-purple-700 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-200"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Descartar
+                </Button>
+                <Button 
+                  onClick={handleSave} 
+                  disabled={isLoading || Object.keys(errors).length > 0}
+                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  {isLoading ? 'Guardando...' : 'Guardar Cambios'}
+                </Button>
+             </div>
+           </div>
+        )}
       </div>
 
-      {/* Estado de Cambios */}
-      {hasChanges && (
-        <Card className="border-orange-200 bg-orange-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className="h-5 w-5 text-orange-600" />
-              <span className="text-orange-800 font-medium">
-                Tienes cambios sin guardar
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Tabs con colores */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5 bg-gradient-to-r from-purple-100 to-indigo-100 p-1">
-          <TabsTrigger 
-            value="company" 
-            className="flex items-center data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white transition-all duration-300"
-          >
-            Empresa
-          </TabsTrigger>
-          <TabsTrigger 
-            value="general" 
-            className="flex items-center data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-green-600 data-[state=active]:text-white transition-all duration-300"
-          >
-            General
-          </TabsTrigger>
-          <TabsTrigger 
-            value="security" 
-            className="flex items-center data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white transition-all duration-300"
-          >
-            Seguridad
-          </TabsTrigger>
-          <TabsTrigger 
-            value="notifications" 
-            className="flex items-center data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500 data-[state=active]:to-orange-500 data-[state=active]:text-white transition-all duration-300"
-          >
-            Notificaciones
-          </TabsTrigger>
-          <TabsTrigger 
-            value="system" 
-            className="flex items-center data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white transition-all duration-300"
-          >
-            Sistema
-          </TabsTrigger>
+      {/* Tabs con nuevo estilo */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="bg-white dark:bg-gray-800 p-1 border border-gray-200 dark:border-gray-700 w-full justify-start overflow-x-auto">
+          {[
+            { id: 'company', label: 'Empresa', icon: Building },
+            { id: 'general', label: 'General', icon: Globe },
+            { id: 'security', label: 'Seguridad', icon: Shield },
+            { id: 'notifications', label: 'Notificaciones', icon: Bell },
+            { id: 'system', label: 'Sistema', icon: Server },
+          ].map((tab) => (
+             <TabsTrigger 
+              key={tab.id}
+              value={tab.id} 
+              className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-purple-50 dark:data-[state=active]:bg-purple-900/20 data-[state=active]:text-purple-700 dark:data-[state=active]:text-purple-300"
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         {/* Configuración de Empresa */}
         <TabsContent value="company" className="space-y-6">
-          <Card className="border-blue-200 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200">
-              <CardTitle className="flex items-center justify-between text-blue-800">
-                <span>Información de la Empresa</span>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setFormData({...formData, companyName: settings.companyName, companyEmail: settings.companyEmail, companyPhone: settings.companyPhone, currency: settings.currency, companyAddress: settings.companyAddress})} className="border-blue-300 text-blue-700 hover:bg-blue-50">
-                    Resetear
-                  </Button>
-                  <Button size="sm" onClick={() => handleSaveSection('company')} className="bg-blue-600 hover:bg-blue-700 text-white">
-                    Guardar sección
-                  </Button>
-                </div>
-              </CardTitle>
+          <Card className="border-gray-200 dark:border-gray-700 shadow-sm dark:bg-gray-800">
+            <CardHeader>
+              <CardTitle>Información de la Empresa</CardTitle>
+              <CardDescription>Datos principales de la organización visibles en reportes y facturas</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className={`space-y-2 ${matchesSearch('Nombre de la Empresa companyName') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                  <Label htmlFor="companyName">Nombre de la Empresa {isChanged('companyName') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className={`space-y-2 ${matchesSearch('Nombre de la Empresa companyName') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                  <Label htmlFor="companyName">Nombre de la Empresa</Label>
                   <Input
                     id="companyName"
                     value={formData.companyName}
                     onChange={(e) => handleInputChange('companyName', e.target.value)}
-                    aria-invalid={!!errors.companyName}
+                    className={errors.companyName ? 'border-red-500' : ''}
                   />
                   {errors.companyName && (<p className="text-sm text-red-600">{errors.companyName}</p>)}
                 </div>
                 
-                <div className={`space-y-2 ${matchesSearch('Email de la Empresa companyEmail') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                  <Label htmlFor="companyEmail">Email de la Empresa {isChanged('companyEmail') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
+                <div className={`space-y-2 ${matchesSearch('Email de la Empresa companyEmail') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                  <Label htmlFor="companyEmail">Email de Contacto</Label>
                   <Input
                     id="companyEmail"
                     type="email"
                     value={formData.companyEmail}
                     onChange={(e) => handleInputChange('companyEmail', e.target.value)}
-                    aria-invalid={!!errors.companyEmail}
+                    className={errors.companyEmail ? 'border-red-500' : ''}
                   />
                   {errors.companyEmail && (<p className="text-sm text-red-600">{errors.companyEmail}</p>)}
                 </div>
                 
-                <div className={`space-y-2 ${matchesSearch('Teléfono companyPhone telefono') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                  <Label htmlFor="companyPhone">Teléfono {isChanged('companyPhone') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
+                <div className={`space-y-2 ${matchesSearch('Teléfono companyPhone telefono') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                  <Label htmlFor="companyPhone">Teléfono</Label>
                   <Input
                     id="companyPhone"
                     value={formData.companyPhone}
                     onChange={(e) => handleInputChange('companyPhone', e.target.value)}
-                    aria-invalid={!!errors.companyPhone}
+                    className={errors.companyPhone ? 'border-red-500' : ''}
                   />
                   {errors.companyPhone && (<p className="text-sm text-red-600">{errors.companyPhone}</p>)}
                 </div>
                 
-                <div className={`space-y-2 ${matchesSearch('Moneda currency') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                  <Label htmlFor="currency">Moneda {isChanged('currency') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
+                <div className={`space-y-2 ${matchesSearch('Moneda currency') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                  <Label htmlFor="currency">Moneda Principal</Label>
                   <Select 
                     value={formData.currency} 
                     onValueChange={(value) => handleInputChange('currency', value)}
@@ -394,18 +400,20 @@ export function SystemConfiguration({
                       <SelectItem value="PYG">Guaraní (PYG)</SelectItem>
                       <SelectItem value="USD">Dólar (USD)</SelectItem>
                       <SelectItem value="EUR">Euro (EUR)</SelectItem>
+                      <SelectItem value="MXN">Peso Mexicano (MXN)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               
-              <div className={`space-y-2 ${matchesSearch('Dirección address companyAddress') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                <Label htmlFor="companyAddress">Dirección {isChanged('companyAddress') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
+              <div className={`space-y-2 ${matchesSearch('Dirección address companyAddress') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                <Label htmlFor="companyAddress">Dirección Física</Label>
                 <Textarea
                   id="companyAddress"
                   value={formData.companyAddress}
                   onChange={(e) => handleInputChange('companyAddress', e.target.value)}
                   rows={3}
+                  className="resize-none"
                 />
               </div>
             </CardContent>
@@ -414,52 +422,46 @@ export function SystemConfiguration({
 
         {/* Configuración General */}
         <TabsContent value="general" className="space-y-6">
-          <Card className="border-green-200 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200">
-              <CardTitle className="flex items-center justify-between text-green-800">
-                <span>Configuración Comercial</span>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setFormData({...formData, taxRate: settings.taxRate, lowStockThreshold: settings.lowStockThreshold, sessionTimeout: settings.sessionTimeout, autoBackup: settings.autoBackup, maintenanceMode: settings.maintenanceMode})} className="border-green-300 text-green-700 hover:bg-green-50">
-                    Resetear
-                  </Button>
-                  <Button size="sm" onClick={() => handleSaveSection('general')} className="bg-green-600 hover:bg-green-700 text-white">
-                    Guardar sección
-                  </Button>
-                </div>
-              </CardTitle>
+          <Card className="border-gray-200 dark:border-gray-700 shadow-sm dark:bg-gray-800">
+            <CardHeader>
+              <CardTitle>Configuración General</CardTitle>
+              <CardDescription>Parámetros operativos del sistema</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className={`space-y-2 ${matchesSearch('Tasa de Impuesto taxRate') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                  <Label htmlFor="taxRate">Tasa de Impuesto (%) {isChanged('taxRate') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
-                  <Input
-                    id="taxRate"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={formData.taxRate}
-                    onChange={(e) => handleInputChange('taxRate', parseFloat(e.target.value))}
-                    aria-invalid={!!errors.taxRate}
-                  />
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className={`space-y-2 ${matchesSearch('Tasa de Impuesto taxRate') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                  <Label htmlFor="taxRate">IVA / Impuesto (%)</Label>
+                  <div className="relative">
+                    <Input
+                        id="taxRate"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={formData.taxRate}
+                        onChange={(e) => handleInputChange('taxRate', parseFloat(e.target.value))}
+                        className={errors.taxRate ? 'border-red-500 pr-8' : 'pr-8'}
+                    />
+                    <span className="absolute right-3 top-2.5 text-gray-500">%</span>
+                  </div>
                   {errors.taxRate && (<p className="text-sm text-red-600">{errors.taxRate}</p>)}
                 </div>
                 
-                <div className={`space-y-2 ${matchesSearch('Umbral de Stock Bajo lowStockThreshold') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                  <Label htmlFor="lowStockThreshold">Umbral de Stock Bajo {isChanged('lowStockThreshold') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
+                <div className={`space-y-2 ${matchesSearch('Umbral de Stock Bajo lowStockThreshold') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                  <Label htmlFor="lowStockThreshold">Alerta de Stock Bajo</Label>
                   <Input
                     id="lowStockThreshold"
                     type="number"
                     min="1"
                     value={formData.lowStockThreshold}
                     onChange={(e) => handleInputChange('lowStockThreshold', parseInt(e.target.value))}
-                    aria-invalid={!!errors.lowStockThreshold}
+                    className={errors.lowStockThreshold ? 'border-red-500' : ''}
                   />
-                  {errors.lowStockThreshold && (<p className="text-sm text-red-600">{errors.lowStockThreshold}</p>)}
+                  <p className="text-xs text-muted-foreground">Cantidad mínima para alerta</p>
                 </div>
                 
-                <div className={`space-y-2 ${matchesSearch('Tiempo de Sesión sessionTimeout') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                  <Label htmlFor="sessionTimeout">Tiempo de Sesión (minutos) {isChanged('sessionTimeout') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
+                <div className={`space-y-2 ${matchesSearch('Tiempo de Sesión sessionTimeout') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                  <Label htmlFor="sessionTimeout">Timeout de Sesión (min)</Label>
                   <Input
                     id="sessionTimeout"
                     type="number"
@@ -467,18 +469,17 @@ export function SystemConfiguration({
                     max="480"
                     value={formData.sessionTimeout}
                     onChange={(e) => handleInputChange('sessionTimeout', parseInt(e.target.value))}
-                    aria-invalid={!!errors.sessionTimeout}
+                    className={errors.sessionTimeout ? 'border-red-500' : ''}
                   />
-                  {errors.sessionTimeout && (<p className="text-sm text-red-600">{errors.sessionTimeout}</p>)}
                 </div>
               </div>
-              
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
+
+              <div className="border-t dark:border-gray-700 pt-6 space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                   <div className="space-y-0.5">
-                    <Label>Backup Automático</Label>
+                    <Label className="text-base">Backup Automático</Label>
                     <p className="text-sm text-muted-foreground">
-                      Realizar copias de seguridad automáticas diariamente
+                      Realizar copias de seguridad diarias a las 00:00
                     </p>
                   </div>
                   <Switch
@@ -487,11 +488,11 @@ export function SystemConfiguration({
                   />
                 </div>
                 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
                   <div className="space-y-0.5">
-                    <Label>Modo Mantenimiento</Label>
+                    <Label className="text-base">Modo Mantenimiento</Label>
                     <p className="text-sm text-muted-foreground">
-                      Activar modo mantenimiento para el sistema
+                      Restringe el acceso solo a administradores
                     </p>
                   </div>
                   <Switch
@@ -506,38 +507,33 @@ export function SystemConfiguration({
 
         {/* Configuración de Seguridad */}
         <TabsContent value="security" className="space-y-6">
-          <Card className="border-red-200 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="bg-gradient-to-r from-red-50 to-red-100 border-b border-red-200">
-              <CardTitle className="flex items-center justify-between text-red-800">
-                <span>Configuración de Seguridad</span>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setFormData({...formData, maxLoginAttempts: settings.maxLoginAttempts, passwordMinLength: settings.passwordMinLength, allowRegistration: settings.allowRegistration, requireEmailVerification: settings.requireEmailVerification, requireTwoFactor: settings.requireTwoFactor})} className="border-red-300 text-red-700 hover:bg-red-50">
-                    Resetear
-                  </Button>
-                  <Button size="sm" onClick={() => handleSaveSection('security')} className="bg-red-600 hover:bg-red-700 text-white">
-                    Guardar sección
-                  </Button>
-                </div>
-              </CardTitle>
+          <Card className="border-gray-200 dark:border-gray-700 shadow-sm dark:bg-gray-800">
+            <CardHeader>
+              <CardTitle>Seguridad y Acceso</CardTitle>
+              <CardDescription>Políticas de seguridad para usuarios y sistema</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className={`space-y-2 ${matchesSearch('Máximo Intentos de Login maxLoginAttempts') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                  <Label htmlFor="maxLoginAttempts">Máximo Intentos de Login {isChanged('maxLoginAttempts') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
-                  <Input
-                    id="maxLoginAttempts"
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={formData.maxLoginAttempts}
-                    onChange={(e) => handleInputChange('maxLoginAttempts', parseInt(e.target.value))}
-                    aria-invalid={!!errors.maxLoginAttempts}
-                  />
-                  {errors.maxLoginAttempts && (<p className="text-sm text-red-600">{errors.maxLoginAttempts}</p>)}
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className={`space-y-2 ${matchesSearch('Máximo Intentos de Login maxLoginAttempts') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                  <Label htmlFor="maxLoginAttempts">Intentos de Login Fallidos</Label>
+                  <Select 
+                    value={String(formData.maxLoginAttempts)} 
+                    onValueChange={(value) => handleInputChange('maxLoginAttempts', parseInt(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3 intentos</SelectItem>
+                      <SelectItem value="5">5 intentos</SelectItem>
+                      <SelectItem value="10">10 intentos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Antes de bloquear la cuenta temporalmente</p>
                 </div>
                 
-                <div className={`space-y-2 ${matchesSearch('Longitud Mínima de Contraseña passwordMinLength') ? 'ring-1 ring-purple-300 rounded-md p-2' : ''}`}>
-                  <Label htmlFor="passwordMinLength">Longitud Mínima de Contraseña {isChanged('passwordMinLength') && (<Badge className="ml-2" variant="secondary">Editado</Badge>)}</Label>
+                <div className={`space-y-2 ${matchesSearch('Longitud Mínima de Contraseña passwordMinLength') ? 'bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded' : ''}`}>
+                  <Label htmlFor="passwordMinLength">Longitud Mínima Password</Label>
                   <Input
                     id="passwordMinLength"
                     type="number"
@@ -545,18 +541,19 @@ export function SystemConfiguration({
                     max="32"
                     value={formData.passwordMinLength}
                     onChange={(e) => handleInputChange('passwordMinLength', parseInt(e.target.value))}
-                    aria-invalid={!!errors.passwordMinLength}
                   />
-                  {errors.passwordMinLength && (<p className="text-sm text-red-600">{errors.passwordMinLength}</p>)}
                 </div>
               </div>
               
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="space-y-4 pt-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg dark:border-gray-700">
                   <div className="space-y-0.5">
-                    <Label>Permitir Registro</Label>
+                    <div className="flex items-center gap-2">
+                         <Label className="text-base">Registro de Usuarios</Label>
+                         {formData.allowRegistration ? <Badge variant="default" className="bg-green-500">Activo</Badge> : <Badge variant="secondary">Inactivo</Badge>}
+                    </div>
                     <p className="text-sm text-muted-foreground">
-                      Permitir que nuevos usuarios se registren
+                      Permitir que nuevos usuarios se registren desde el login
                     </p>
                   </div>
                   <Switch
@@ -565,11 +562,11 @@ export function SystemConfiguration({
                   />
                 </div>
                 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between p-4 border rounded-lg dark:border-gray-700">
                   <div className="space-y-0.5">
-                    <Label>Verificación de Email</Label>
+                    <Label className="text-base">Verificación de Email</Label>
                     <p className="text-sm text-muted-foreground">
-                      Requerir verificación de email para nuevos usuarios
+                      Requerir validación de correo antes del primer acceso
                     </p>
                   </div>
                   <Switch
@@ -578,11 +575,14 @@ export function SystemConfiguration({
                   />
                 </div>
                 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between p-4 border rounded-lg dark:border-gray-700">
                   <div className="space-y-0.5">
-                    <Label>Autenticación de Dos Factores</Label>
+                     <div className="flex items-center gap-2">
+                        <Label className="text-base">2FA (Dos Factores)</Label>
+                        <Badge variant="outline" className="text-purple-600 border-purple-200 bg-purple-50">Recomendado</Badge>
+                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Requerir 2FA para todos los usuarios
+                      Forzar autenticación de dos factores para todos los roles
                     </p>
                   </div>
                   <Switch
@@ -597,99 +597,110 @@ export function SystemConfiguration({
 
         {/* Configuración de Notificaciones */}
         <TabsContent value="notifications" className="space-y-6">
-          <Card className="border-yellow-200 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="bg-gradient-to-r from-yellow-50 to-orange-50 border-b border-yellow-200">
-              <CardTitle className="flex items-center text-yellow-800">
-                <Mail className="h-5 w-5 mr-2 text-yellow-600" />
-                Configuración de Notificaciones
-              </CardTitle>
-              <div className="mt-2">
-                <Button variant="outline" size="sm" onClick={() => setFormData({...formData, emailNotifications: settings.emailNotifications, smsNotifications: settings.smsNotifications})} className="border-yellow-300 text-yellow-700 hover:bg-yellow-50">
-                  Resetear pestaña
-                </Button>
-              </div>
+          <Card className="border-gray-200 dark:border-gray-700 shadow-sm dark:bg-gray-800">
+            <CardHeader>
+              <CardTitle>Canales de Notificación</CardTitle>
+              <CardDescription>Configura cómo el sistema se comunica con usuarios y clientes</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Notificaciones por Email</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enviar notificaciones importantes por email
-                    </p>
+            <CardContent className="space-y-6">
+               <div className="grid gap-6">
+                  <div className="flex items-start space-x-4 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg">
+                    <Mail className="h-6 w-6 text-blue-600 mt-1" />
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between">
+                         <Label className="text-base font-medium">Email</Label>
+                         <Switch
+                            checked={formData.emailNotifications}
+                            onCheckedChange={(checked) => handleInputChange('emailNotifications', checked)}
+                          />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Enviar recibos, alertas de stock y reportes por correo electrónico.
+                      </p>
+                    </div>
                   </div>
-                  <Switch
-                    checked={formData.emailNotifications}
-                    onCheckedChange={(checked) => handleInputChange('emailNotifications', checked)}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Notificaciones por SMS</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enviar notificaciones críticas por SMS
-                    </p>
+
+                  <div className="flex items-start space-x-4 p-4 bg-green-50 dark:bg-green-900/10 rounded-lg">
+                    <div className="h-6 w-6 flex items-center justify-center mt-1">
+                        <span className="text-lg">📱</span>
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center justify-between">
+                         <Label className="text-base font-medium">SMS / WhatsApp</Label>
+                         <Switch
+                            checked={formData.smsNotifications}
+                            onCheckedChange={(checked) => handleInputChange('smsNotifications', checked)}
+                          />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Enviar alertas críticas y confirmaciones de pedido a móviles.
+                      </p>
+                    </div>
                   </div>
-                  <Switch
-                    checked={formData.smsNotifications}
-                    onCheckedChange={(checked) => handleInputChange('smsNotifications', checked)}
-                  />
-                </div>
-              </div>
+               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Acciones del Sistema */}
         <TabsContent value="system" className="space-y-6">
-          <Card className="border-purple-200 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-200">
-              <CardTitle className="flex items-center text-purple-800">
-                <Database className="h-5 w-5 mr-2 text-purple-600" />
-                Acciones del Sistema
-              </CardTitle>
+          <Card className="border-gray-200 dark:border-gray-700 shadow-sm dark:bg-gray-800">
+            <CardHeader>
+              <CardTitle>Mantenimiento del Sistema</CardTitle>
+              <CardDescription>Herramientas avanzadas para administradores</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 <Button 
                   variant="outline" 
                   onClick={() => handleSystemAction('backup')}
                   disabled={isLoading}
-                  className="h-20 flex-col border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-all duration-300"
+                  className="h-auto py-6 flex-col gap-3 hover:bg-blue-50 hover:border-blue-200 dark:hover:bg-blue-900/20"
                 >
-                  <Database className="h-6 w-6 mb-2 text-blue-600" />
-                  <span className="text-blue-800">Crear Backup</span>
+                  <Database className="h-8 w-8 text-blue-500" />
+                  <div className="text-center">
+                    <span className="block font-medium">Crear Backup</span>
+                    <span className="text-xs text-muted-foreground">Base de datos completa</span>
+                  </div>
                 </Button>
                 
                 <Button 
                   variant="outline" 
                   onClick={() => handleSystemAction('clearCache')}
                   disabled={isLoading}
-                  className="h-20 flex-col border-orange-300 hover:bg-orange-50 hover:border-orange-400 transition-all duration-300"
+                  className="h-auto py-6 flex-col gap-3 hover:bg-orange-50 hover:border-orange-200 dark:hover:bg-orange-900/20"
                 >
-                  <RotateCcw className="h-6 w-6 mb-2 text-orange-600" />
-                  <span className="text-orange-800">Limpiar Caché</span>
+                  <RotateCcw className="h-8 w-8 text-orange-500" />
+                  <div className="text-center">
+                    <span className="block font-medium">Limpiar Caché</span>
+                    <span className="text-xs text-muted-foreground">Archivos temporales</span>
+                  </div>
                 </Button>
                 
                 <Button 
                   variant="outline" 
                   onClick={() => handleSystemAction('checkIntegrity')}
                   disabled={isLoading}
-                  className="h-20 flex-col border-green-300 hover:bg-green-50 hover:border-green-400 transition-all duration-300"
+                  className="h-auto py-6 flex-col gap-3 hover:bg-green-50 hover:border-green-200 dark:hover:bg-green-900/20"
                 >
-                  <CheckCircle className="h-6 w-6 mb-2 text-green-600" />
-                  <span className="text-green-800">Verificar Integridad</span>
+                  <CheckCircle className="h-8 w-8 text-green-500" />
+                  <div className="text-center">
+                    <span className="block font-medium">Verificar Integridad</span>
+                    <span className="text-xs text-muted-foreground">Escanear errores</span>
+                  </div>
                 </Button>
                 
                 <Button 
                   variant="outline" 
                   onClick={() => handleSystemAction('testEmail')}
                   disabled={isLoading}
-                  className="h-20 flex-col border-purple-300 hover:bg-purple-50 hover:border-purple-400 transition-all duration-300"
+                  className="h-auto py-6 flex-col gap-3 hover:bg-purple-50 hover:border-purple-200 dark:hover:bg-purple-900/20"
                 >
-                  <Mail className="h-6 w-6 mb-2 text-purple-600" />
-                  <span className="text-purple-800">Probar Email</span>
+                  <Mail className="h-8 w-8 text-purple-500" />
+                  <div className="text-center">
+                    <span className="block font-medium">Probar Email</span>
+                    <span className="text-xs text-muted-foreground">Enviar correo de prueba</span>
+                  </div>
                 </Button>
               </div>
             </CardContent>
@@ -697,5 +708,25 @@ export function SystemConfiguration({
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
   )
 }

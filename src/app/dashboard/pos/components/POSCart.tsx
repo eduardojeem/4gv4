@@ -46,6 +46,7 @@ interface POSCartProps {
   onApplyDiscount?: (id: string, discount: number) => void;
   onCheckout: () => void;
   onClearCart: () => void;
+  onApplyPromoCode?: (code: string) => void;
   // Wholesale & Discount State
   isWholesale: boolean;
   onToggleWholesale: (value: boolean) => void;
@@ -83,6 +84,7 @@ const CartItemRow = memo<{
   const itemTotal = unitPrice * item.quantity;
   const itemDiscount = item.discount || 0;
   const finalTotal = itemTotal * (1 - itemDiscount / 100);
+  const savingsAmount = itemTotal - finalTotal;
 
   return (
     <div className={cn("grid grid-cols-[56px_1fr_auto_auto_auto] items-center gap-3 py-3 group", isService && "bg-muted/10 rounded-md px-2 -mx-2")}> 
@@ -113,6 +115,12 @@ const CartItemRow = memo<{
           )}
           {typeof item.stock === 'number' && (
             <span className={cn("text-[10px] px-1 py-0 h-4 rounded-sm", (item.stock ?? 0) <= 5 ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" : "bg-muted/40 text-muted-foreground")}>Stock: {item.stock}</span>
+          )}
+          {item.promoCode && (
+            <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">Promo: {item.promoCode}</Badge>
+          )}
+          {itemDiscount > 0 && (
+            <span className="text-[10px] px-1 py-0 h-4 rounded-sm bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">Ahorro: {formatCurrency(savingsAmount)}</span>
           )}
           <div className="flex items-center gap-1">
             <span className={cn(
@@ -293,22 +301,54 @@ export const POSCart: React.FC<POSCartProps> = memo(({
               </Label>
             </div>
             
-            <div className="flex items-center space-x-2">
-              <Tag className="h-3 w-3 text-muted-foreground" />
-              <div className="relative flex-1">
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={discount > 0 ? discount : ''}
-                  onChange={(e) => onUpdateDiscount(Number(e.target.value))}
-                  placeholder="Desc. %"
-                  className="h-8 text-xs pr-6"
-                />
-                <span className="absolute right-2 top-2 text-[10px] text-muted-foreground">%</span>
-              </div>
+          <div className="flex items-center space-x-2">
+            <Tag className="h-3 w-3 text-muted-foreground" />
+            <div className="relative flex-1">
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={discount > 0 ? discount : ''}
+                onChange={(e) => onUpdateDiscount(Number(e.target.value))}
+                placeholder="Desc. %"
+                className="h-8 text-xs pr-6"
+              />
+              <span className="absolute right-2 top-2 text-[10px] text-muted-foreground">%</span>
             </div>
           </div>
+          {typeof onApplyPromoCode === 'function' && (
+            <div className="col-span-2 flex items-center gap-2">
+              <Input
+                id="pos-promo-code"
+                type="text"
+                placeholder="Código promocional"
+                className="h-8 text-xs"
+                onKeyDown={(e) => {
+                  const target = e.target as HTMLInputElement
+                  if (e.key === 'Enter' && target.value.trim()) {
+                    onApplyPromoCode(target.value.trim())
+                    target.value = ''
+                  }
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  const el = (document.activeElement as HTMLInputElement)
+                  const input = el && el.tagName === 'INPUT' ? el : (document.querySelector('#pos-promo-code') as HTMLInputElement | null)
+                  if (input && input.value.trim()) {
+                    onApplyPromoCode(input.value.trim())
+                    input.value = ''
+                  }
+                }}
+              >
+                Aplicar código
+              </Button>
+            </div>
+          )}
+        </div>
 
           {/* Totals Breakdown */}
           <div className="p-4 space-y-2.5">

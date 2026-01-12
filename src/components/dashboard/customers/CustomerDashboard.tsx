@@ -86,7 +86,8 @@ export function CustomerDashboard() {
     toggleCustomerStatus, 
     updateCustomer,
     updateCustomerStatus, 
-    bulkUpdateCustomerStatus 
+    bulkUpdateCustomerStatus,
+    refreshCustomers 
   } = useCustomers()
   
   // Handle customer selection from search
@@ -403,8 +404,8 @@ export function CustomerDashboard() {
     try {
       const result = await toggleCustomerStatus(customer.id)
       if (result.success) {
-        // Refresh the customer list or update local state
-        window.location.reload() // Simple refresh for now
+        await refreshCustomers()
+        toast.success('Estado actualizado')
       }
     } catch (error) {
       console.error('Error toggling customer status:', error)
@@ -417,15 +418,16 @@ export function CustomerDashboard() {
       if (result.success) {
         // Clear selection and refresh
         setSelectedCustomers([])
-        window.location.reload() // Simple refresh for now
+        await refreshCustomers()
+        toast.success('Estados actualizados')
       }
     } catch (error) {
       console.error('Error updating bulk status:', error)
     }
   }
 
-  const handleRefresh = () => {
-    window.location.reload()
+  const handleRefresh = async () => {
+    await refreshCustomers()
     toast.success('Lista actualizada')
   }
 
@@ -840,7 +842,8 @@ export function CustomerDashboard() {
                           // Actualizar el cliente en la lista local si es necesible
                           handleBackToList()
                           // Refresh the customer list
-                          window.location.reload()
+                          await refreshCustomers()
+                          toast.success('Cliente actualizado')
                         }
                       } catch (error) {
                         console.error('Error updating customer:', error)

@@ -24,9 +24,9 @@ interface Category extends BaseCategory {
 
 interface CategoryCardProps {
     category: Category
-    onEdit: (category: Category) => void
-    onDelete: (id: string) => void
-    onToggleActive: (id: string, isActive: boolean) => void
+    onEdit?: (category: Category) => void
+    onDelete?: (id: string) => void
+    onToggleActive?: (id: string, isActive: boolean) => void
     selected?: boolean
     onSelect?: (id: string) => void
     parentName?: string
@@ -46,6 +46,8 @@ export function CategoryCard({
     onSelect,
     parentName
 }: CategoryCardProps) {
+    const hasActions = onEdit || onDelete || onToggleActive
+
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -73,42 +75,50 @@ export function CategoryCard({
             )}
 
             {/* Actions Menu */}
-            <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 bg-background/80 backdrop-blur-sm">
-                            <MoreVertical className="h-4 w-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onEdit(category)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onToggleActive(category.id, category.is_active)}>
-                            {category.is_active ? (
-                                <>
-                                    <ToggleLeft className="h-4 w-4 mr-2" />
-                                    Desactivar
-                                </>
-                            ) : (
-                                <>
-                                    <ToggleRight className="h-4 w-4 mr-2" />
-                                    Activar
-                                </>
+            {hasActions && (
+                <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 bg-background/80 backdrop-blur-sm">
+                                <MoreVertical className="h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            {onEdit && (
+                                <DropdownMenuItem onClick={() => onEdit(category)}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Editar
+                                </DropdownMenuItem>
                             )}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            onClick={() => onDelete(category.id)}
-                            className="text-red-600 dark:text-red-400"
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Eliminar
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
+                            {onToggleActive && (
+                                <DropdownMenuItem onClick={() => onToggleActive(category.id, category.is_active)}>
+                                    {category.is_active ? (
+                                        <>
+                                            <ToggleLeft className="h-4 w-4 mr-2" />
+                                            Desactivar
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ToggleRight className="h-4 w-4 mr-2" />
+                                            Activar
+                                        </>
+                                    )}
+                                </DropdownMenuItem>
+                            )}
+                            {(onEdit || onToggleActive) && onDelete && <DropdownMenuSeparator />}
+                            {onDelete && (
+                                <DropdownMenuItem
+                                    onClick={() => onDelete(category.id)}
+                                    className="text-red-600 dark:text-red-400"
+                                >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Eliminar
+                                </DropdownMenuItem>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            )}
 
             {/* Card Content */}
             <div className="p-6">
@@ -167,9 +177,9 @@ export function CategoryCard({
 
 interface CategoryGridProps {
     categories: Category[]
-    onEdit: (category: Category) => void
-    onDelete: (id: string) => void
-    onToggleActive: (id: string, isActive: boolean) => void
+    onEdit?: (category: Category) => void
+    onDelete?: (id: string) => void
+    onToggleActive?: (id: string, isActive: boolean) => void
     selectedIds?: string[]
     onSelectionChange?: (ids: string[]) => void
     getCategoryName?: (id: string) => string

@@ -1,22 +1,18 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { 
   ArrowUpDown, 
   TrendingUp, 
   TrendingDown, 
   Package, 
-  Plus, 
-  Minus, 
   RefreshCw,
   Filter,
   Download,
@@ -30,33 +26,28 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  AlertCircle,
   CheckCircle,
-  XCircle
+  XCircle,
+  AlertCircle
 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 
 // Interfaces
 interface StockMovement {
   id: string
-  productId: string
-  productName: string
-  productSku: string
+  product_id: string
+  product: { name: string; sku: string }
   type: 'entrada' | 'salida' | 'ajuste' | 'transferencia' | 'devolucion'
   quantity: number
-  previousStock: number
-  newStock: number
+  previous_stock: number
+  new_stock: number
   reason: string
   reference?: string
-  userId: string
-  userName: string
-  timestamp: Date
-  cost?: number
-  supplier?: string
-  location?: string
+  user_id: string
+  created_at: string
   notes?: string
-  approved?: boolean
-  approvedBy?: string
-  approvedAt?: Date
 }
 
 interface MovementSummary {
@@ -64,148 +55,118 @@ interface MovementSummary {
   totalEntradas: number
   totalSalidas: number
   totalAjustes: number
-  valueImpact: number
-  mostActiveProduct: string
-  averageMovementValue: number
 }
 
 const StockMovements: React.FC = () => {
-  // Estados
   const [movements, setMovements] = useState<StockMovement[]>([])
-  const [filteredMovements, setFilteredMovements] = useState<StockMovement[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedMovement, setSelectedMovement] = useState<StockMovement | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
+  
+  // Filtros
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
-  const [filterUser, setFilterUser] = useState<string>('all')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage] = useState(10)
+  
+  // Paginación
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(10)
+  const [totalCount, setTotalCount] = useState(0)
+  
   const [summary, setSummary] = useState<MovementSummary | null>(null)
 
-  // Datos mock
-  const mockMovements: StockMovement[] = [
-    {
-      id: '1',
-      productId: '1',
-      productName: 'iPhone 15 Pro',
-      productSku: 'IPH15P-128',
-      type: 'entrada',
-      quantity: 50,
-      previousStock: 5,
-      newStock: 55,
-      reason: 'Reposición de inventario mensual',
-      reference: 'PO-2024-001',
-      userId: 'user1',
-      userName: 'Juan Pérez',
-      timestamp: new Date('2024-01-15T10:30:00'),
-      cost: 800,
-      supplier: 'Apple Inc.',
-      location: 'Almacén Principal',
-      notes: 'Productos recibidos en perfectas condiciones',
-      approved: true,
-      approvedBy: 'Admin',
-      approvedAt: new Date('2024-01-15T10:35:00')
-    },
-    {
-      id: '2',
-      productId: '1',
-      productName: 'iPhone 15 Pro',
-      productSku: 'IPH15P-128',
-      type: 'salida',
-      quantity: 3,
-      previousStock: 55,
-      newStock: 52,
-      reason: 'Venta al cliente - Factura #VT-001',
-      reference: 'VT-2024-001',
-      userId: 'user2',
-      userName: 'María García',
-      timestamp: new Date('2024-01-16T14:15:00'),
-      location: 'Tienda Principal',
-      approved: true,
-      approvedBy: 'Supervisor',
-      approvedAt: new Date('2024-01-16T14:20:00')
-    },
-    {
-      id: '3',
-      productId: '2',
-      productName: 'Samsung Galaxy S24',
-      productSku: 'SGS24-256',
-      type: 'ajuste',
-      quantity: -2,
-      previousStock: 10,
-      newStock: 8,
-      reason: 'Ajuste por inventario físico - Productos dañados',
-      reference: 'AJ-2024-001',
-      userId: 'user3',
-      userName: 'Carlos López',
-      timestamp: new Date('2024-01-17T09:00:00'),
-      location: 'Almacén Principal',
-      notes: 'Productos con daños en pantalla detectados durante inventario',
-      approved: true,
-      approvedBy: 'Admin',
-      approvedAt: new Date('2024-01-17T09:15:00')
-    },
-    {
-      id: '4',
-      productId: '3',
-      productName: 'MacBook Air M3',
-      productSku: 'MBA-M3-512',
-      type: 'transferencia',
-      quantity: 5,
-      previousStock: 15,
-      newStock: 10,
-      reason: 'Transferencia a sucursal norte',
-      reference: 'TR-2024-001',
-      userId: 'user1',
-      userName: 'Juan Pérez',
-      timestamp: new Date('2024-01-18T11:30:00'),
-      location: 'Sucursal Norte',
-      notes: 'Transferencia autorizada por gerencia regional',
-      approved: true,
-      approvedBy: 'Gerente Regional',
-      approvedAt: new Date('2024-01-18T11:45:00')
-    },
-    {
-      id: '5',
-      productId: '1',
-      productName: 'iPhone 15 Pro',
-      productSku: 'IPH15P-128',
-      type: 'devolucion',
-      quantity: 1,
-      previousStock: 52,
-      newStock: 53,
-      reason: 'Devolución de cliente - Producto defectuoso',
-      reference: 'DV-2024-001',
-      userId: 'user2',
-      userName: 'María García',
-      timestamp: new Date('2024-01-19T16:20:00'),
-      location: 'Tienda Principal',
-      notes: 'Cliente reportó falla en cámara, producto enviado a garantía',
-      approved: false
+  const supabase = createClient()
+
+  const fetchMovements = useCallback(async () => {
+    setLoading(true)
+    try {
+      let query = supabase
+        .from('product_movements')
+        .select(`
+          *,
+          product:products(name, sku)
+        `, { count: 'exact' })
+
+      // Aplicar filtros
+      if (filterType !== 'all') {
+        query = query.eq('type', filterType)
+      }
+
+      if (filterDateFrom) {
+        query = query.gte('created_at', `${filterDateFrom}T00:00:00`)
+      }
+
+      if (filterDateTo) {
+        query = query.lte('created_at', `${filterDateTo}T23:59:59`)
+      }
+
+      // Si hay búsqueda por texto, necesitamos buscar en la relación o campos locales
+      // Supabase no soporta filtrado profundo en relaciones fácilmente con OR
+      // Por simplicidad, filtramos por razón o referencia aquí, y si es posible por producto
+      if (searchTerm) {
+        query = query.or(`reason.ilike.%${searchTerm}%,reference.ilike.%${searchTerm}%`)
+      }
+
+      // Paginación
+      const from = (page - 1) * pageSize
+      const to = from + pageSize - 1
+      
+      const { data, error, count } = await query
+        .order('created_at', { ascending: false })
+        .range(from, to)
+
+      if (error) throw error
+
+      setMovements(data as any) // Cast to any to avoid strict typing issues with joins for now
+      setTotalCount(count || 0)
+
+      // Calcular resumen (esto debería ser un count en el servidor idealmente, pero haremos un simple conteo de la página actual o query separada)
+      // Para un resumen real de TODO el periodo, necesitaríamos queries agregadas.
+      // Haremos queries separadas para el resumen
+      fetchSummary()
+
+    } catch (error) {
+      console.error('Error fetching movements:', error)
+    } finally {
+      setLoading(false)
     }
-  ]
+  }, [supabase, page, pageSize, filterType, filterDateFrom, filterDateTo, searchTerm])
 
-  // Efectos
-  useEffect(() => {
-    setMovements(mockMovements)
-    calculateSummary(mockMovements)
-  }, [])
+  const fetchSummary = async () => {
+    // Esta función podría ser costosa si hay muchos datos. 
+    // Idealmente usar un RPC o vistas materializadas.
+    // Por ahora haremos queries count simples.
+    try {
+      const { count: total } = await supabase.from('product_movements').select('*', { count: 'exact', head: true })
+      const { count: entradas } = await supabase.from('product_movements').select('*', { count: 'exact', head: true }).eq('type', 'entrada')
+      const { count: salidas } = await supabase.from('product_movements').select('*', { count: 'exact', head: true }).eq('type', 'salida')
+      const { count: ajustes } = await supabase.from('product_movements').select('*', { count: 'exact', head: true }).eq('type', 'ajuste')
+
+      setSummary({
+        totalMovements: total || 0,
+        totalEntradas: entradas || 0,
+        totalSalidas: salidas || 0,
+        totalAjustes: ajustes || 0
+      })
+    } catch (error) {
+      console.error('Error fetching summary:', error)
+    }
+  }
 
   useEffect(() => {
-    applyFilters()
-  }, [movements, searchTerm, filterType, filterDateFrom, filterDateTo, filterUser])
+    fetchMovements()
+  }, [fetchMovements])
 
   // Funciones utilitarias
   const getMovementTypeColor = (type: string) => {
     switch (type) {
-      case 'entrada': return 'bg-green-100 text-green-800 border-green-200'
-      case 'salida': return 'bg-red-100 text-red-800 border-red-200'
-      case 'ajuste': return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'transferencia': return 'bg-purple-100 text-purple-800 border-purple-200'
-      case 'devolucion': return 'bg-orange-100 text-orange-800 border-orange-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'entrada': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800'
+      case 'salida': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
+      case 'ajuste': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800'
+      case 'transferencia': return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-800'
+      case 'devolucion': return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
     }
   }
 
@@ -220,88 +181,18 @@ const StockMovements: React.FC = () => {
     }
   }
 
-  const getApprovalStatus = (movement: StockMovement) => {
-    if (movement.approved === true) {
-      return { icon: <CheckCircle className="h-4 w-4" />, color: 'text-green-600', text: 'Aprobado' }
-    } else if (movement.approved === false) {
-      return { icon: <XCircle className="h-4 w-4" />, color: 'text-red-600', text: 'Pendiente' }
-    }
-    return { icon: <AlertCircle className="h-4 w-4" />, color: 'text-yellow-600', text: 'En Revisión' }
-  }
-
-  const calculateSummary = (movementsList: StockMovement[]) => {
-    const totalMovements = movementsList.length
-    const totalEntradas = movementsList.filter(m => m.type === 'entrada').length
-    const totalSalidas = movementsList.filter(m => m.type === 'salida').length
-    const totalAjustes = movementsList.filter(m => m.type === 'ajuste').length
-    
-    const valueImpact = movementsList.reduce((sum, m) => {
-      if (m.cost) {
-        return sum + (m.quantity * m.cost)
-      }
-      return sum
-    }, 0)
-
-    // Producto más activo
-    const productCounts = movementsList.reduce((acc, m) => {
-      acc[m.productName] = (acc[m.productName] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-    
-    const mostActiveProduct = Object.entries(productCounts)
-      .sort(([,a], [,b]) => b - a)[0]?.[0] || 'N/A'
-
-    const averageMovementValue = totalMovements > 0 ? valueImpact / totalMovements : 0
-
-    setSummary({
-      totalMovements,
-      totalEntradas,
-      totalSalidas,
-      totalAjustes,
-      valueImpact,
-      mostActiveProduct,
-      averageMovementValue
-    })
-  }
-
-  const applyFilters = () => {
-    const filtered = movements.filter(movement => {
-      const matchesSearch = movement.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           movement.productSku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           movement.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           movement.reference?.toLowerCase().includes(searchTerm.toLowerCase())
-      
-      const matchesType = filterType === 'all' || movement.type === filterType
-      const matchesUser = filterUser === 'all' || movement.userName === filterUser
-      
-      let matchesDate = true
-      if (filterDateFrom) {
-        matchesDate = matchesDate && movement.timestamp >= new Date(filterDateFrom)
-      }
-      if (filterDateTo) {
-        matchesDate = matchesDate && movement.timestamp <= new Date(filterDateTo + 'T23:59:59')
-      }
-      
-      return matchesSearch && matchesType && matchesUser && matchesDate
-    })
-
-    setFilteredMovements(filtered)
-    setCurrentPage(1)
-  }
-
   const exportMovements = () => {
     const csvContent = [
-      ['Fecha', 'Producto', 'SKU', 'Tipo', 'Cantidad', 'Stock Anterior', 'Stock Nuevo', 'Motivo', 'Usuario', 'Referencia'],
-      ...filteredMovements.map(m => [
-        m.timestamp.toLocaleString(),
-        m.productName,
-        m.productSku,
+      ['Fecha', 'Producto', 'SKU', 'Tipo', 'Cantidad', 'Stock Anterior', 'Stock Nuevo', 'Motivo', 'Referencia'],
+      ...movements.map(m => [
+        new Date(m.created_at).toLocaleString(),
+        m.product?.name || 'Producto eliminado',
+        m.product?.sku || 'N/A',
         m.type,
         m.quantity.toString(),
-        m.previousStock.toString(),
-        m.newStock.toString(),
+        m.previous_stock.toString(),
+        m.new_stock.toString(),
         m.reason,
-        m.userName,
         m.reference || ''
       ])
     ].map(row => row.join(',')).join('\n')
@@ -315,24 +206,18 @@ const StockMovements: React.FC = () => {
     window.URL.revokeObjectURL(url)
   }
 
-  // Paginación
-  const totalPages = Math.ceil(filteredMovements.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const endIndex = startIndex + itemsPerPage
-  const currentMovements = filteredMovements.slice(startIndex, endIndex)
-
-  const uniqueUsers = Array.from(new Set(movements.map(m => m.userName)))
+  const totalPages = Math.ceil(totalCount / pageSize)
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Movimientos de Stock</h2>
-          <p className="text-gray-600">Historial detallado y análisis de movimientos de inventario</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Movimientos de Stock</h2>
+          <p className="text-gray-600 dark:text-gray-400">Historial detallado y análisis de movimientos de inventario</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportMovements}>
+          <Button variant="outline" onClick={exportMovements} className="dark:bg-gray-800 dark:text-white dark:border-gray-700">
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
@@ -342,50 +227,50 @@ const StockMovements: React.FC = () => {
       {/* Resumen */}
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Movimientos</p>
-                  <p className="text-2xl font-bold text-blue-600">{summary.totalMovements}</p>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Movimientos</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{summary.totalMovements}</p>
                 </div>
-                <ArrowUpDown className="h-8 w-8 text-blue-600" />
+                <ArrowUpDown className="h-8 w-8 text-blue-600 dark:text-blue-400" />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Entradas</p>
-                  <p className="text-2xl font-bold text-green-600">{summary.totalEntradas}</p>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Entradas</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{summary.totalEntradas}</p>
                 </div>
-                <TrendingUp className="h-8 w-8 text-green-600" />
+                <TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Salidas</p>
-                  <p className="text-2xl font-bold text-red-600">{summary.totalSalidas}</p>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Salidas</p>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">{summary.totalSalidas}</p>
                 </div>
-                <TrendingDown className="h-8 w-8 text-red-600" />
+                <TrendingDown className="h-8 w-8 text-red-600 dark:text-red-400" />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Impacto Valor</p>
-                  <p className="text-2xl font-bold text-purple-600">${summary.valueImpact.toLocaleString()}</p>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Ajustes</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{summary.totalAjustes}</p>
                 </div>
-                <BarChart3 className="h-8 w-8 text-purple-600" />
+                <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
               </div>
             </CardContent>
           </Card>
@@ -393,24 +278,24 @@ const StockMovements: React.FC = () => {
       )}
 
       {/* Filtros */}
-      <Card>
+      <Card className="dark:bg-gray-800 dark:border-gray-700">
         <CardHeader>
-          <CardTitle className="flex items-center">
+          <CardTitle className="flex items-center dark:text-white">
             <Filter className="h-5 w-5 mr-2" />
             Filtros de Búsqueda
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Buscar</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Producto, SKU, motivo..."
+                  placeholder="Razón, referencia..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 />
               </div>
             </div>
@@ -418,7 +303,7 @@ const StockMovements: React.FC = () => {
             <div className="space-y-2">
               <Label>Tipo de Movimiento</Label>
               <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger>
+                <SelectTrigger className="dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
@@ -433,26 +318,12 @@ const StockMovements: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <Label>Usuario</Label>
-              <Select value={filterUser} onValueChange={setFilterUser}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {uniqueUsers.map(user => (
-                    <SelectItem key={user} value={user}>{user}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
               <Label>Fecha Desde</Label>
               <Input
                 type="date"
                 value={filterDateFrom}
                 onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
 
@@ -462,6 +333,7 @@ const StockMovements: React.FC = () => {
                 type="date"
                 value={filterDateTo}
                 onChange={(e) => setFilterDateTo(e.target.value)}
+                className="dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               />
             </div>
           </div>
@@ -469,23 +341,26 @@ const StockMovements: React.FC = () => {
       </Card>
 
       {/* Lista de Movimientos */}
-      <Card>
+      <Card className="dark:bg-gray-800 dark:border-gray-700">
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Historial de Movimientos</CardTitle>
-              <CardDescription>
-                Mostrando {currentMovements.length} de {filteredMovements.length} movimientos
+              <CardTitle className="dark:text-white">Historial de Movimientos</CardTitle>
+              <CardDescription className="dark:text-gray-400">
+                Mostrando {movements.length} de {totalCount} movimientos
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {currentMovements.map(movement => {
-              const approval = getApprovalStatus(movement)
-              return (
-                <div key={movement.id} className="border rounded-lg p-4 hover:bg-gray-50 transition-colors">
+          {loading ? (
+            <div className="text-center py-8 text-gray-500">Cargando movimientos...</div>
+          ) : movements.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No se encontraron movimientos.</div>
+          ) : (
+            <div className="space-y-4">
+              {movements.map(movement => (
+                <div key={movement.id} className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors dark:border-gray-700">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       <div className={`p-2 rounded-lg ${getMovementTypeColor(movement.type)}`}>
@@ -493,29 +368,21 @@ const StockMovements: React.FC = () => {
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-1">
-                          <h4 className="font-medium">{movement.productName}</h4>
-                          <Badge variant="outline">{movement.productSku}</Badge>
+                          <h4 className="font-medium dark:text-white">{movement.product?.name || 'Producto Desconocido'}</h4>
+                          <Badge variant="outline" className="dark:text-gray-300 dark:border-gray-600">{movement.product?.sku || 'N/A'}</Badge>
                           <Badge className={getMovementTypeColor(movement.type)}>
                             {movement.type.toUpperCase()}
                           </Badge>
-                          <div className={`flex items-center space-x-1 ${approval.color}`}>
-                            {approval.icon}
-                            <span className="text-xs">{approval.text}</span>
-                          </div>
                         </div>
-                        <p className="text-sm text-gray-600 mb-1">{movement.reason}</p>
-                        <div className="flex items-center space-x-4 text-xs text-gray-500">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{movement.reason}</p>
+                        <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-500">
                           <span className="flex items-center">
                             <Calendar className="h-3 w-3 mr-1" />
-                            {movement.timestamp.toLocaleDateString()}
+                            {format(new Date(movement.created_at), 'dd/MM/yyyy', { locale: es })}
                           </span>
                           <span className="flex items-center">
                             <Clock className="h-3 w-3 mr-1" />
-                            {movement.timestamp.toLocaleTimeString()}
-                          </span>
-                          <span className="flex items-center">
-                            <User className="h-3 w-3 mr-1" />
-                            {movement.userName}
+                            {format(new Date(movement.created_at), 'HH:mm', { locale: es })}
                           </span>
                           {movement.reference && (
                             <span className="flex items-center">
@@ -527,9 +394,9 @@ const StockMovements: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="flex items-center space-x-2 mb-1">
+                      <div className="flex items-center space-x-2 mb-1 justify-end">
                         <span className={`text-lg font-semibold ${
-                          movement.type === 'entrada' || movement.type === 'devolucion' ? 'text-green-600' : 'text-red-600'
+                          movement.type === 'entrada' || movement.type === 'devolucion' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
                           {(movement.type === 'entrada' || movement.type === 'devolucion') ? '+' : '-'}{Math.abs(movement.quantity)}
                         </span>
@@ -540,37 +407,34 @@ const StockMovements: React.FC = () => {
                             setSelectedMovement(movement)
                             setIsDetailDialogOpen(true)
                           }}
+                          className="dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
                       </div>
-                      <p className="text-xs text-gray-500">
-                        {movement.previousStock} → {movement.newStock}
+                      <p className="text-xs text-gray-500 dark:text-gray-500">
+                        {movement.previous_stock} → {movement.new_stock}
                       </p>
-                      {movement.cost && (
-                        <p className="text-xs text-gray-500">
-                          Valor: ${(movement.quantity * movement.cost).toLocaleString()}
-                        </p>
-                      )}
                     </div>
                   </div>
                 </div>
-              )
-            })}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Paginación */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-6">
-              <p className="text-sm text-gray-600">
-                Página {currentPage} de {totalPages}
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Página {page} de {totalPages}
               </p>
               <div className="flex space-x-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
+                  onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                  disabled={page === 1}
+                  className="dark:bg-gray-700 dark:text-white"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Anterior
@@ -578,8 +442,9 @@ const StockMovements: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
+                  onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={page === totalPages}
+                  className="dark:bg-gray-700 dark:text-white"
                 >
                   Siguiente
                   <ChevronRight className="h-4 w-4" />
@@ -592,13 +457,13 @@ const StockMovements: React.FC = () => {
 
       {/* Dialog: Detalle del Movimiento */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl dark:bg-gray-800 dark:text-white dark:border-gray-700">
           <DialogHeader>
             <DialogTitle className="flex items-center">
               <FileText className="h-5 w-5 mr-2" />
               Detalle del Movimiento
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="dark:text-gray-400">
               Información completa del movimiento de stock
             </DialogDescription>
           </DialogHeader>
@@ -608,132 +473,78 @@ const StockMovements: React.FC = () => {
               {/* Información del Producto */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Producto</Label>
-                  <p className="font-semibold">{selectedMovement.productName}</p>
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Producto</Label>
+                  <p className="font-semibold dark:text-white">{selectedMovement.product?.name}</p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">SKU</Label>
-                  <p className="font-semibold">{selectedMovement.productSku}</p>
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">SKU</Label>
+                  <p className="font-semibold dark:text-white">{selectedMovement.product?.sku}</p>
                 </div>
               </div>
 
               {/* Información del Movimiento */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Tipo</Label>
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Tipo</Label>
                   <Badge className={getMovementTypeColor(selectedMovement.type)}>
                     {selectedMovement.type.toUpperCase()}
                   </Badge>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Cantidad</Label>
-                  <p className="font-semibold text-lg">
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Cantidad</Label>
+                  <p className="font-semibold text-lg dark:text-white">
                     {(selectedMovement.type === 'entrada' || selectedMovement.type === 'devolucion') ? '+' : '-'}
                     {Math.abs(selectedMovement.quantity)}
                   </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Estado</Label>
-                  <div className={`flex items-center space-x-1 ${getApprovalStatus(selectedMovement).color}`}>
-                    {getApprovalStatus(selectedMovement).icon}
-                    <span className="font-semibold">{getApprovalStatus(selectedMovement).text}</span>
-                  </div>
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Fecha</Label>
+                  <p className="font-semibold dark:text-white">
+                    {format(new Date(selectedMovement.created_at), 'dd/MM/yyyy HH:mm', { locale: es })}
+                  </p>
                 </div>
               </div>
 
               {/* Stock */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Stock Anterior</Label>
-                  <p className="font-semibold">{selectedMovement.previousStock}</p>
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Stock Anterior</Label>
+                  <p className="font-semibold dark:text-white">{selectedMovement.previous_stock}</p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Cambio</Label>
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Cambio</Label>
                   <p className={`font-semibold ${
-                    selectedMovement.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                    selectedMovement.quantity > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                   }`}>
                     {selectedMovement.quantity > 0 ? '+' : ''}{selectedMovement.quantity}
                   </p>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Stock Final</Label>
-                  <p className="font-semibold">{selectedMovement.newStock}</p>
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Stock Final</Label>
+                  <p className="font-semibold dark:text-white">{selectedMovement.new_stock}</p>
                 </div>
               </div>
 
               {/* Información Adicional */}
               <div className="space-y-4">
                 <div>
-                  <Label className="text-sm font-medium text-gray-600">Motivo</Label>
-                  <p className="mt-1 p-3 bg-gray-50 rounded-lg">{selectedMovement.reason}</p>
+                  <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Motivo</Label>
+                  <p className="mt-1 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg dark:text-white">{selectedMovement.reason}</p>
                 </div>
 
                 {selectedMovement.notes && (
                   <div>
-                    <Label className="text-sm font-medium text-gray-600">Notas</Label>
-                    <p className="mt-1 p-3 bg-gray-50 rounded-lg">{selectedMovement.notes}</p>
+                    <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Notas</Label>
+                    <p className="mt-1 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg dark:text-white">{selectedMovement.notes}</p>
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-4">
                   {selectedMovement.reference && (
                     <div>
-                      <Label className="text-sm font-medium text-gray-600">Referencia</Label>
-                      <p className="font-semibold">{selectedMovement.reference}</p>
+                      <Label className="text-sm font-medium text-gray-600 dark:text-gray-400">Referencia</Label>
+                      <p className="font-semibold dark:text-white">{selectedMovement.reference}</p>
                     </div>
-                  )}
-                  {selectedMovement.location && (
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Ubicación</Label>
-                      <p className="font-semibold">{selectedMovement.location}</p>
-                    </div>
-                  )}
-                </div>
-
-                {selectedMovement.cost && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Costo Unitario</Label>
-                      <p className="font-semibold">${selectedMovement.cost.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Valor Total</Label>
-                      <p className="font-semibold">${(selectedMovement.quantity * selectedMovement.cost).toLocaleString()}</p>
-                    </div>
-                  </div>
-                )}
-
-                {selectedMovement.supplier && (
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Proveedor</Label>
-                    <p className="font-semibold">{selectedMovement.supplier}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Información de Auditoría */}
-              <div className="border-t pt-4">
-                <h4 className="font-semibold text-gray-900 mb-3">Información de Auditoría</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <Label className="text-gray-600">Registrado por</Label>
-                    <p className="font-semibold">{selectedMovement.userName}</p>
-                  </div>
-                  <div>
-                    <Label className="text-gray-600">Fecha y Hora</Label>
-                    <p className="font-semibold">{selectedMovement.timestamp.toLocaleString()}</p>
-                  </div>
-                  {selectedMovement.approvedBy && (
-                    <>
-                      <div>
-                        <Label className="text-gray-600">Aprobado por</Label>
-                        <p className="font-semibold">{selectedMovement.approvedBy}</p>
-                      </div>
-                      <div>
-                        <Label className="text-gray-600">Fecha de Aprobación</Label>
-                        <p className="font-semibold">{selectedMovement.approvedAt?.toLocaleString()}</p>
-                      </div>
-                    </>
                   )}
                 </div>
               </div>
@@ -741,11 +552,11 @@ const StockMovements: React.FC = () => {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)} className="dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600">
               Cerrar
             </Button>
             {selectedMovement?.reference && (
-              <Button variant="outline">
+              <Button variant="outline" className="dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600">
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Ver Documento
               </Button>

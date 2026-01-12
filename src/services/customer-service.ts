@@ -224,6 +224,23 @@ class CustomerService {
         console.log('Updating with user:', session.user.id)
       }
 
+      // Pre-check existence to avoid ambiguous 0-row updates
+      const { data: existing, error: existError } = await this.supabase
+        .from('customers')
+        .select('id')
+        .eq('id', queryId)
+        .maybeSingle()
+
+      if (existError) {
+        console.warn('Existence check error:', existError)
+      }
+      if (!existing) {
+        return {
+          success: false,
+          error: 'Cliente no encontrado'
+        }
+      }
+
       // Pre-process data to remove invalid values
       const preprocessedData = preprocessCustomerData(customerData)
       console.log('Preprocessed data:', preprocessedData) // Debug log
@@ -265,26 +282,57 @@ class CustomerService {
 
       console.log('Data to be sent to DB:', dbData) // Debug log
 
-      const { data, error } = await this.supabase
+      const { data: updatedRow, error: updateError } = await this.supabase
         .from('customers')
         .update(dbData)
         .eq('id', queryId)
-        .select()
-        .single()
+        .select('*')
+        .maybeSingle()
 
-      if (error) {
-        console.error('Supabase error details:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        }) 
-        throw error
+      if (updateError) {
+        const errInfo: any = {
+          code: (updateError as any)?.code,
+          message: (updateError as any)?.message,
+          details: (updateError as any)?.details,
+          hint: (updateError as any)?.hint,
+          status: (updateError as any)?.status,
+          name: (updateError as any)?.name || 'SupabaseUpdateError',
+        }
+        try {
+          errInfo.raw = JSON.parse(JSON.stringify(updateError))
+        } catch {
+          errInfo.raw = String(updateError)
+        }
+        console.error('Supabase error details:', JSON.stringify(errInfo))
+
+        const fullError: any = new Error(errInfo.message || 'Error al actualizar cliente en Supabase')
+        fullError.code = errInfo.code
+        fullError.details = errInfo.details
+        fullError.hint = errInfo.hint
+        fullError.status = errInfo.status
+        fullError.name = errInfo.name || 'SupabaseUpdateError'
+        throw fullError
+      }
+
+      // If update returned a row, use it; otherwise perform a safe fetch
+      const { data: refreshed, error: fetchError } = updatedRow
+        ? { data: updatedRow, error: null as any }
+        : await this.supabase
+            .from('customers')
+            .select('*')
+            .eq('id', queryId)
+            .maybeSingle()
+
+      if (fetchError || !refreshed) {
+        return {
+          success: false,
+          error: 'La actualización no afectó ninguna fila o no se pudo recuperar el cliente actualizado'
+        }
       }
 
       return {
         success: true,
-        data: this.mapSupabaseToCustomer(data)
+        data: this.mapSupabaseToCustomer(refreshed)
       }
     } catch (error: unknown) {
       console.error('Error updating customer:', error)

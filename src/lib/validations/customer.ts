@@ -47,10 +47,10 @@ const rucSchema = z.string()
 export const customerTypeSchema = z.enum(["premium", "empresa", "regular"])
 
 // Customer status enum
-export const customerStatusSchema = z.enum(["active", "inactive", "suspended"])
+export const customerStatusSchema = z.enum(["active", "inactive", "suspended", "pending"])
 
 // Customer segment enum
-export const customerSegmentSchema = z.enum(["vip", "premium", "regular", "new"])
+export const customerSegmentSchema = z.enum(["vip", "premium", "regular", "new", "high_value", "low_value", "business", "wholesale"])
 
 // Purchase frequency enum
 export const purchaseFrequencySchema = z.enum(["high", "medium", "low", "none"])

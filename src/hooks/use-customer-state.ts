@@ -65,6 +65,9 @@ export interface CustomerFilters {
   credit_score_range: [number, number]
   lifetime_value_range: [number, number]
   tags: string[]
+  purchases_min: number
+  spent_min: number
+  loyalty_points_min: number
 }
 
 export interface CustomerState {
@@ -96,8 +99,11 @@ const initialFilters: CustomerFilters = {
   assigned_salesperson: "all",
   date_range: { from: null, to: null },
   credit_score_range: [0, 10],
-  lifetime_value_range: [0, 10000],
-  tags: []
+  lifetime_value_range: [0, Number.MAX_SAFE_INTEGER],
+  tags: [],
+  purchases_min: 0,
+  spent_min: 0,
+  loyalty_points_min: 0
 }
 
 export function useCustomerState() {
@@ -489,6 +495,21 @@ export function useCustomerState() {
       customer.lifetime_value >= state.filters.lifetime_value_range[0] &&
       customer.lifetime_value <= state.filters.lifetime_value_range[1]
     )
+
+    // Purchases min filter
+    if (state.filters.purchases_min > 0) {
+      filtered = filtered.filter(customer => (customer.total_purchases || 0) >= state.filters.purchases_min)
+    }
+
+    // Spent min filter (uses total_spent_this_year fallback to lifetime_value)
+    if (state.filters.spent_min > 0) {
+      filtered = filtered.filter(customer => (((customer.total_spent_this_year as number) ?? customer.lifetime_value) || 0) >= state.filters.spent_min)
+    }
+
+    // Loyalty points min filter
+    if (state.filters.loyalty_points_min > 0) {
+      filtered = filtered.filter(customer => ((customer as any).loyalty_points ?? 0) >= state.filters.loyalty_points_min)
+    }
 
     // Tags filter
     if (state.filters.tags.length > 0) {

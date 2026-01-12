@@ -154,8 +154,13 @@ export function PermissionDebugger({ requirements }: { requirements: PermissionR
   const { user } = useAuth()
   const { isAuthorized, getUserPermissions } = usePermissions()
   const userPermissions = getUserPermissions()
+  const [mounted, setMounted] = React.useState(false)
 
-  if (process.env.NODE_ENV !== 'development') {
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (process.env.NODE_ENV !== 'development' || !mounted) {
     return null
   }
 

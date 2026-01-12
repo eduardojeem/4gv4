@@ -224,21 +224,21 @@ const StockControl: React.FC = () => {
   // Funciones utilitarias
   const getAlertSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'critical': return 'bg-red-100 text-red-800 border-red-200'
-      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200'
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'low': return 'bg-blue-100 text-blue-800 border-blue-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'critical': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
+      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800'
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800'
+      case 'low': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
     }
   }
 
   const getMovementTypeColor = (type: string) => {
     switch (type) {
-      case 'entrada': return 'bg-green-100 text-green-800'
-      case 'salida': return 'bg-red-100 text-red-800'
-      case 'ajuste': return 'bg-blue-100 text-blue-800'
-      case 'transferencia': return 'bg-purple-100 text-purple-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'entrada': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+      case 'salida': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+      case 'ajuste': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+      case 'transferencia': return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
     }
   }
 
@@ -356,20 +356,21 @@ const StockControl: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Control de Stock</h2>
-          <p className="text-gray-600">Gestión avanzada de inventario y movimientos</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Control de Stock</h2>
+          <p className="text-gray-600 dark:text-gray-400">Gestión avanzada de inventario y movimientos</p>
         </div>
         <div className="flex gap-2">
           <Button 
             variant="outline"
             onClick={() => setIsAlertSettingsOpen(true)}
+            className="dark:border-gray-700 dark:text-gray-300"
           >
             <Settings className="h-4 w-4 mr-2" />
             Configurar Alertas
           </Button>
           <Button 
             onClick={() => setIsMovementDialogOpen(true)}
-            className="bg-green-600 hover:bg-green-700"
+            className="bg-green-600 hover:bg-green-700 text-white dark:bg-green-600 dark:hover:bg-green-700"
           >
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Movimiento
@@ -379,9 +380,9 @@ const StockControl: React.FC = () => {
 
       {/* Alertas Críticas */}
       {criticalAlerts.length > 0 && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-800">
           <CardHeader className="pb-3">
-            <CardTitle className="text-red-900 flex items-center">
+            <CardTitle className="text-red-900 dark:text-red-300 flex items-center">
               <AlertTriangle className="h-5 w-5 mr-2" />
               Alertas Críticas ({criticalAlerts.length})
             </CardTitle>
@@ -389,19 +390,19 @@ const StockControl: React.FC = () => {
           <CardContent>
             <div className="space-y-2">
               {criticalAlerts.map(alert => (
-                <div key={alert.id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-red-200">
+                <div key={alert.id} className="flex items-center justify-between bg-white dark:bg-gray-800 p-3 rounded-lg border border-red-200 dark:border-red-800">
                   <div className="flex items-center space-x-3">
-                    <XCircle className="h-5 w-5 text-red-600" />
+                    <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
                     <div>
-                      <p className="font-medium text-red-900">{alert.productName}</p>
-                      <p className="text-sm text-red-700">{alert.message}</p>
+                      <p className="font-medium text-red-900 dark:text-red-300">{alert.productName}</p>
+                      <p className="text-sm text-red-700 dark:text-red-400">{alert.message}</p>
                     </div>
                   </div>
                   <Button 
                     size="sm" 
                     variant="outline"
                     onClick={() => acknowledgeAlert(alert.id)}
-                    className="border-red-300 text-red-700 hover:bg-red-100"
+                    className="border-red-300 text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/30"
                   >
                     Reconocer
                   </Button>
@@ -414,56 +415,56 @@ const StockControl: React.FC = () => {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="dark:bg-gray-800 dark:border-gray-700">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Alertas Activas</p>
-                <p className="text-2xl font-bold text-orange-600">{activeAlerts.length}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Alertas Activas</p>
+                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{activeAlerts.length}</p>
               </div>
-              <Bell className="h-8 w-8 text-orange-600" />
+              <Bell className="h-8 w-8 text-orange-600 dark:text-orange-400" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="dark:bg-gray-800 dark:border-gray-700">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Movimientos Hoy</p>
-                <p className="text-2xl font-bold text-blue-600">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Movimientos Hoy</p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                   {movements.filter(m => 
                     m.timestamp.toDateString() === new Date().toDateString()
                   ).length}
                 </p>
               </div>
-              <ArrowUpDown className="h-8 w-8 text-blue-600" />
+              <ArrowUpDown className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="dark:bg-gray-800 dark:border-gray-700">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Productos Críticos</p>
-                <p className="text-2xl font-bold text-red-600">{criticalAlerts.length}</p>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Productos Críticos</p>
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400">{criticalAlerts.length}</p>
               </div>
-              <AlertTriangle className="h-8 w-8 text-red-600" />
+              <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="dark:bg-gray-800 dark:border-gray-700">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Stock Total</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Stock Total</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                   {products.reduce((sum, p) => sum + p.stock, 0)}
                 </p>
               </div>
-              <Package className="h-8 w-8 text-green-600" />
+              <Package className="h-8 w-8 text-green-600 dark:text-green-400" />
             </div>
           </CardContent>
         </Card>
@@ -471,20 +472,20 @@ const StockControl: React.FC = () => {
 
       {/* Tabs */}
       <Tabs defaultValue="movements" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="movements" className="flex items-center space-x-2">
+        <TabsList className="grid w-full grid-cols-4 bg-gray-100 dark:bg-gray-800 p-1">
+          <TabsTrigger value="movements" className="flex items-center space-x-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-gray-100">
             <ArrowUpDown className="h-4 w-4" />
             <span>Movimientos</span>
           </TabsTrigger>
-          <TabsTrigger value="history" className="flex items-center space-x-2">
+          <TabsTrigger value="history" className="flex items-center space-x-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-gray-100">
             <History className="h-4 w-4" />
             <span>Historial</span>
           </TabsTrigger>
-          <TabsTrigger value="alerts" className="flex items-center space-x-2">
+          <TabsTrigger value="alerts" className="flex items-center space-x-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-gray-100">
             <AlertTriangle className="h-4 w-4" />
             <span>Alertas</span>
           </TabsTrigger>
-          <TabsTrigger value="analytics" className="flex items-center space-x-2">
+          <TabsTrigger value="analytics" className="flex items-center space-x-2 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 dark:data-[state=active]:text-gray-100">
             <BarChart3 className="h-4 w-4" />
             <span>Análisis</span>
           </TabsTrigger>
@@ -492,16 +493,16 @@ const StockControl: React.FC = () => {
 
         {/* Tab: Movimientos */}
         <TabsContent value="movements" className="space-y-4">
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardHeader>
               <div className="flex justify-between items-center">
                 <div>
-                  <CardTitle>Historial de Movimientos</CardTitle>
-                  <CardDescription>Registro detallado de todos los movimientos de stock</CardDescription>
+                  <CardTitle className="dark:text-gray-100">Historial de Movimientos</CardTitle>
+                  <CardDescription className="dark:text-gray-400">Registro detallado de todos los movimientos de stock</CardDescription>
                 </div>
                 <div className="flex gap-2">
                   <Select value={filterType} onValueChange={setFilterType}>
-                    <SelectTrigger className="w-40">
+                    <SelectTrigger className="w-40 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
                       <SelectValue placeholder="Filtrar por tipo" />
                     </SelectTrigger>
                     <SelectContent>
@@ -515,9 +516,9 @@ const StockControl: React.FC = () => {
                     type="date"
                     value={filterDate}
                     onChange={(e) => setFilterDate(e.target.value)}
-                    className="w-40"
+                    className="w-40 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
                   />
-                  <Button variant="outline">
+                  <Button variant="outline" className="dark:border-gray-700 dark:text-gray-300">
                     <Download className="h-4 w-4 mr-2" />
                     Exportar
                   </Button>
@@ -527,7 +528,7 @@ const StockControl: React.FC = () => {
             <CardContent>
               <div className="space-y-3">
                 {filteredMovements.map(movement => (
-                  <div key={movement.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                  <div key={movement.id} className="border rounded-lg p-4 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className={`p-2 rounded-lg ${getMovementTypeColor(movement.type)}`}>
@@ -535,28 +536,28 @@ const StockControl: React.FC = () => {
                         </div>
                         <div>
                           <div className="flex items-center space-x-2">
-                            <h4 className="font-medium">{movement.productName}</h4>
-                            <Badge variant="outline">{movement.productSku}</Badge>
+                            <h4 className="font-medium dark:text-gray-100">{movement.productName}</h4>
+                            <Badge variant="outline" className="dark:border-gray-600 dark:text-gray-300">{movement.productSku}</Badge>
                             <Badge className={getMovementTypeColor(movement.type)}>
                               {movement.type.toUpperCase()}
                             </Badge>
                           </div>
-                          <p className="text-sm text-gray-600">{movement.reason}</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{movement.reason}</p>
                           {movement.reference && (
-                            <p className="text-xs text-gray-500">Ref: {movement.reference}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-500">Ref: {movement.reference}</p>
                           )}
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="flex items-center space-x-2">
-                          <span className="text-lg font-semibold">
+                          <span className="text-lg font-semibold dark:text-gray-100">
                             {movement.type === 'entrada' ? '+' : '-'}{movement.quantity}
                           </span>
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
                             ({movement.previousStock} → {movement.newStock})
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 dark:text-gray-500">
                           {movement.timestamp.toLocaleString()} - {movement.userName}
                         </p>
                       </div>
@@ -575,15 +576,15 @@ const StockControl: React.FC = () => {
 
         {/* Tab: Alertas */}
         <TabsContent value="alerts" className="space-y-4">
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardHeader>
-              <CardTitle>Gestión de Alertas</CardTitle>
-              <CardDescription>Configuración y seguimiento de alertas de inventario</CardDescription>
+              <CardTitle className="dark:text-gray-100">Gestión de Alertas</CardTitle>
+              <CardDescription className="dark:text-gray-400">Configuración y seguimiento de alertas de inventario</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {alerts.map(alert => (
-                  <div key={alert.id} className={`border rounded-lg p-4 ${alert.isActive ? '' : 'opacity-50'}`}>
+                  <div key={alert.id} className={`border rounded-lg p-4 ${alert.isActive ? '' : 'opacity-50'} dark:border-gray-700`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div className={`p-2 rounded-lg ${getAlertSeverityColor(alert.severity)}`}>
@@ -591,14 +592,14 @@ const StockControl: React.FC = () => {
                         </div>
                         <div>
                           <div className="flex items-center space-x-2">
-                            <h4 className="font-medium">{alert.productName}</h4>
-                            <Badge variant="outline">{alert.productSku}</Badge>
+                            <h4 className="font-medium dark:text-gray-100">{alert.productName}</h4>
+                            <Badge variant="outline" className="dark:border-gray-600 dark:text-gray-300">{alert.productSku}</Badge>
                             <Badge className={getAlertSeverityColor(alert.severity)}>
                               {alert.severity.toUpperCase()}
                             </Badge>
                           </div>
-                          <p className="text-sm text-gray-600">{alert.message}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">{alert.message}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-500">
                             Stock actual: {alert.currentStock} | Umbral: {alert.threshold}
                           </p>
                         </div>
@@ -609,12 +610,13 @@ const StockControl: React.FC = () => {
                             size="sm" 
                             variant="outline"
                             onClick={() => acknowledgeAlert(alert.id)}
+                            className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                           >
                             <CheckCircle className="h-4 w-4 mr-2" />
                             Reconocer
                           </Button>
                         ) : (
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-500 dark:text-gray-500">
                             <p>Reconocida</p>
                             <p>{alert.acknowledgedAt?.toLocaleString()}</p>
                           </div>
@@ -631,21 +633,21 @@ const StockControl: React.FC = () => {
         {/* Tab: Análisis */}
         <TabsContent value="analytics" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
+            <Card className="dark:bg-gray-800 dark:border-gray-700">
               <CardHeader>
-                <CardTitle>Productos con Stock Bajo</CardTitle>
+                <CardTitle className="dark:text-gray-100">Productos con Stock Bajo</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {products.filter(p => p.stock <= p.minStock).map(product => (
-                    <div key={product.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <div key={product.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200 dark:bg-yellow-900/10 dark:border-yellow-800">
                       <div>
-                        <p className="font-medium">{product.name}</p>
-                        <p className="text-sm text-gray-600">{product.sku}</p>
+                        <p className="font-medium dark:text-gray-200">{product.name}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{product.sku}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-semibold text-yellow-700">{product.stock} / {product.minStock}</p>
-                        <p className="text-xs text-gray-500">Stock / Mínimo</p>
+                        <p className="font-semibold text-yellow-700 dark:text-yellow-400">{product.stock} / {product.minStock}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500">Stock / Mínimo</p>
                       </div>
                     </div>
                   ))}
@@ -653,25 +655,25 @@ const StockControl: React.FC = () => {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="dark:bg-gray-800 dark:border-gray-700">
               <CardHeader>
-                <CardTitle>Movimientos Recientes</CardTitle>
+                <CardTitle className="dark:text-gray-100">Movimientos Recientes</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {movements.slice(0, 5).map(movement => (
-                    <div key={movement.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div key={movement.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg dark:bg-gray-900">
                       <div className="flex items-center space-x-3">
                         <div className={`p-1 rounded ${getMovementTypeColor(movement.type)}`}>
                           {getMovementIcon(movement.type)}
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{movement.productName}</p>
-                          <p className="text-xs text-gray-500">{movement.timestamp.toLocaleDateString()}</p>
+                          <p className="font-medium text-sm dark:text-gray-200">{movement.productName}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{movement.timestamp.toLocaleDateString()}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-semibold text-sm">
+                        <p className="font-semibold text-sm dark:text-gray-200">
                           {movement.type === 'entrada' ? '+' : '-'}{movement.quantity}
                         </p>
                       </div>
@@ -686,13 +688,13 @@ const StockControl: React.FC = () => {
 
       {/* Dialog: Nuevo Movimiento */}
       <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl dark:bg-gray-800 dark:border-gray-700">
           <DialogHeader>
-            <DialogTitle className="flex items-center">
+            <DialogTitle className="flex items-center dark:text-gray-100">
               <ArrowUpDown className="h-5 w-5 mr-2" />
               Registrar Movimiento de Stock
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="dark:text-gray-400">
               Registra una entrada, salida o ajuste de inventario
             </DialogDescription>
           </DialogHeader>
@@ -700,12 +702,12 @@ const StockControl: React.FC = () => {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Producto</Label>
+                <Label className="dark:text-gray-300">Producto</Label>
                 <Select 
                   value={selectedProduct?.id || ''} 
                   onValueChange={(value) => setSelectedProduct(products.find(p => p.id === value) || null)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100">
                     <SelectValue placeholder="Seleccionar producto" />
                   </SelectTrigger>
                   <SelectContent>
@@ -719,9 +721,9 @@ const StockControl: React.FC = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Tipo de Movimiento</Label>
+                <Label className="dark:text-gray-300">Tipo de Movimiento</Label>
                 <Select value={movementType} onValueChange={(value: any) => setMovementType(value)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -735,21 +737,23 @@ const StockControl: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Cantidad</Label>
+                <Label className="dark:text-gray-300">Cantidad</Label>
                 <Input
                   type="number"
                   value={movementQuantity}
                   onChange={(e) => setMovementQuantity(parseInt(e.target.value) || 0)}
                   placeholder="0"
+                  className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Referencia</Label>
+                <Label className="dark:text-gray-300">Referencia</Label>
                 <Input
                   value={movementReference}
                   onChange={(e) => setMovementReference(e.target.value)}
                   placeholder="PO-2024-001"
+                  className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100"
                 />
               </div>
             </div>
@@ -757,54 +761,57 @@ const StockControl: React.FC = () => {
             {movementType === 'entrada' && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Costo Unitario</Label>
+                  <Label className="dark:text-gray-300">Costo Unitario</Label>
                   <Input
                     type="number"
                     step="0.01"
                     value={movementCost}
                     onChange={(e) => setMovementCost(parseFloat(e.target.value) || 0)}
                     placeholder="0.00"
+                    className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Proveedor</Label>
+                  <Label className="dark:text-gray-300">Proveedor</Label>
                   <Input
                     value={movementSupplier}
                     onChange={(e) => setMovementSupplier(e.target.value)}
                     placeholder="Nombre del proveedor"
+                    className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100"
                   />
                 </div>
               </div>
             )}
 
             <div className="space-y-2">
-              <Label>Motivo</Label>
+              <Label className="dark:text-gray-300">Motivo</Label>
               <Textarea
                 value={movementReason}
                 onChange={(e) => setMovementReason(e.target.value)}
                 placeholder="Describe el motivo del movimiento"
                 rows={3}
+                className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100"
               />
             </div>
 
             {selectedProduct && (
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h4 className="font-medium text-blue-900 mb-2">Resumen del Movimiento</h4>
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 dark:bg-blue-900/10 dark:border-blue-800">
+                <h4 className="font-medium text-blue-900 dark:text-blue-300 mb-2">Resumen del Movimiento</h4>
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
-                    <p className="text-blue-700">Stock Actual</p>
-                    <p className="font-semibold">{selectedProduct.stock}</p>
+                    <p className="text-blue-700 dark:text-blue-400">Stock Actual</p>
+                    <p className="font-semibold dark:text-gray-200">{selectedProduct.stock}</p>
                   </div>
                   <div>
-                    <p className="text-blue-700">Cambio</p>
-                    <p className="font-semibold">
+                    <p className="text-blue-700 dark:text-blue-400">Cambio</p>
+                    <p className="font-semibold dark:text-gray-200">
                       {movementType === 'entrada' ? '+' : '-'}{movementQuantity}
                     </p>
                   </div>
                   <div>
-                    <p className="text-blue-700">Stock Final</p>
-                    <p className="font-semibold">
+                    <p className="text-blue-700 dark:text-blue-400">Stock Final</p>
+                    <p className="font-semibold dark:text-gray-200">
                       {movementType === 'entrada' 
                         ? selectedProduct.stock + movementQuantity 
                         : selectedProduct.stock - movementQuantity}
@@ -816,13 +823,13 @@ const StockControl: React.FC = () => {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMovementDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsMovementDialogOpen(false)} className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">
               Cancelar
             </Button>
             <Button 
               onClick={handleCreateMovement}
               disabled={!selectedProduct || movementQuantity <= 0 || !movementReason || isLoading}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white"
             >
               {isLoading ? (
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />

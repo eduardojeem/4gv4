@@ -1,16 +1,17 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence  } from '../../../components/ui/motion'
+import { motion, AnimatePresence } from '@/components/ui/motion'
 import {
   Plus, Download, LayoutGrid, List, Trash2,
   CheckCircle, XCircle, RefreshCw, FolderTree,
-  MoreHorizontal
+  MoreHorizontal, AlertTriangle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { RouteGuard } from '@/components/auth/permission-guard'
+import { usePermissions } from '@/hooks/use-permissions'
 
 // Hooks & Utils
 import { useCategories, type Category } from '@/hooks/useCategories'
@@ -19,7 +20,6 @@ import { exportCategories } from '@/lib/utils/export-categories'
 
 // Components
 import { HeroHeader } from '@/components/suppliers/HeroHeader'
-import { StatsGrid } from '@/components/suppliers/StatsCards'
 import { SearchBar } from '@/components/suppliers/SearchBar'
 import { FilterTags } from '@/components/suppliers/FilterTags'
 import { EmptyState } from '@/components/suppliers/EmptyState'
@@ -34,8 +34,25 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 export default function CategoriesPage() {
+  console.log('CategoriesPage rendering...')
+  
+  // Permissions
+  const { hasPermission } = usePermissions()
+  const canManage = hasPermission('products.manage')
+
   // Hooks
   const {
     categories,
@@ -57,6 +74,13 @@ export default function CategoriesPage() {
   const [initialParentId, setInitialParentId] = useState<string | null>(null)
   const [isCommandOpen, setIsCommandOpen] = useState(false)
 
+  // Delete Confirmation State
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    id: string | null;
+    isBulk: boolean;
+  }>({ isOpen: false, id: null, isBulk: false })
+
   // Derived State
   const stats = useMemo(() => computeCategoryStats(categories), [categories])
 
@@ -73,37 +97,6 @@ export default function CategoriesPage() {
     })
   }, [categories, filters])
 
-  // Stats Cards Data
-  const statCards = useMemo(() => [
-    {
-      icon: LayoutGrid,
-      label: 'Total Categorías',
-      value: stats.total_categories,
-      color: 'blue' as const,
-      trend: { value: 12, isPositive: true } // Placeholder trend
-    },
-    {
-      icon: CheckCircle,
-      label: 'Activas',
-      value: stats.active_categories,
-      color: 'green' as const,
-      trend: { value: 5, isPositive: true }
-    },
-    {
-      icon: XCircle,
-      label: 'Inactivas',
-      value: stats.inactive_categories,
-      color: 'red' as const,
-      trend: { value: -2, isPositive: false }
-    },
-    {
-      icon: FolderTree,
-      label: 'Subcategorías',
-      value: stats.total_subcategories,
-      color: 'purple' as const
-    }
-  ], [stats])
-
   // Handlers
   const handleEdit = (category: Category) => {
     setEditingCategory(category)
@@ -111,17 +104,38 @@ export default function CategoriesPage() {
     setIsModalOpen(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar esta categoría?')) return
+  const handleDeleteClick = (id: string) => {
+    setDeleteDialog({ isOpen: true, id, isBulk: false })
+  }
 
-    const res = await deleteCategory(id)
-    if (res.success) {
-      toast.success('Categoría eliminada')
-      if (selectedIds.includes(id)) {
-        setSelectedIds(prev => prev.filter(i => i !== id))
+  const handleBulkDelete = () => {
+    setDeleteDialog({ isOpen: true, id: null, isBulk: true })
+  }
+
+  const handleConfirmDelete = async () => {
+    setDeleteDialog(prev => ({ ...prev, isOpen: false }))
+
+    if (deleteDialog.isBulk) {
+      let successCount = 0
+      for (const id of selectedIds) {
+        const res = await deleteCategory(id)
+        if (res.success) successCount++
       }
-    } else {
-      toast.error(res.error)
+
+      if (successCount > 0) {
+        toast.success(`${successCount} categorías eliminadas`)
+        setSelectedIds([])
+      }
+    } else if (deleteDialog.id) {
+      const res = await deleteCategory(deleteDialog.id)
+      if (res.success) {
+        toast.success('Categoría eliminada')
+        if (selectedIds.includes(deleteDialog.id)) {
+          setSelectedIds(prev => prev.filter(i => i !== deleteDialog.id))
+        }
+      } else {
+        toast.error(res.error)
+      }
     }
   }
 
@@ -134,20 +148,7 @@ export default function CategoriesPage() {
     }
   }
 
-  const handleBulkDelete = async () => {
-    if (!confirm(`¿Eliminar ${selectedIds.length} categorías seleccionadas?`)) return
 
-    let successCount = 0
-    for (const id of selectedIds) {
-      const res = await deleteCategory(id)
-      if (res.success) successCount++
-    }
-
-    if (successCount > 0) {
-      toast.success(`${successCount} categorías eliminadas`)
-      setSelectedIds([])
-    }
-  }
 
   const handleBulkToggle = async (active: boolean) => {
     let successCount = 0
@@ -268,12 +269,22 @@ export default function CategoriesPage() {
             active: stats.active_categories
           }}
           actions={
-            <Button onClick={() => { setIsModalOpen(true); setEditingCategory(undefined); setInitialParentId(null) }} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nueva Categoría
-            </Button>
+            canManage && (
+              <Button onClick={() => { setIsModalOpen(true); setEditingCategory(undefined); setInitialParentId(null) }} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Nueva Categoría
+              </Button>
+            )
           }
         />
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
         {/* Main Content */}
         <div className="space-y-6">
@@ -289,7 +300,7 @@ export default function CategoriesPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {selectedIds.length > 0 && (
+              {selectedIds.length > 0 && canManage && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline">
@@ -304,7 +315,7 @@ export default function CategoriesPage() {
                     <DropdownMenuItem onClick={() => handleBulkToggle(false)}>
                       <XCircle className="mr-2 h-4 w-4" /> Desactivar seleccionados
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleBulkDelete} className="text-red-600">
+                    <DropdownMenuItem onClick={handleBulkDeleteClick} className="text-red-600">
                       <Trash2 className="mr-2 h-4 w-4" /> Eliminar seleccionados
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -334,7 +345,7 @@ export default function CategoriesPage() {
             onRemove={(id) => {
               if (id === 'status') setFilters(prev => ({ ...prev, isActive: undefined }))
             }}
-            onClearAll={() => setFilters({})}
+            onClearAll={() => setFilters({ isActive: undefined, search: '' })}
           />
 
           {/* Views */}
@@ -358,7 +369,7 @@ export default function CategoriesPage() {
             </div>
 
             <AnimatePresence mode="wait">
-              {loading ? (
+              {loading && categories.length === 0 ? (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -373,7 +384,7 @@ export default function CategoriesPage() {
                   description="Intenta ajustar los filtros o crea una nueva categoría"
                   action={{
                     label: 'Limpiar filtros',
-                    onClick: () => setFilters({}),
+                    onClick: () => setFilters({ isActive: undefined, search: '' }),
                     icon: XCircle
                   }}
                 />
@@ -389,7 +400,7 @@ export default function CategoriesPage() {
                     <CategoryGrid
                       categories={filteredCategories}
                       onEdit={handleEdit}
-                      onDelete={handleDelete}
+                      onDelete={handleDeleteClick}
                       onToggleActive={handleToggleActive}
                       selectedIds={selectedIds}
                       onSelectionChange={setSelectedIds}
@@ -401,7 +412,7 @@ export default function CategoriesPage() {
                     <CategoryListView
                       categories={filteredCategories}
                       onEdit={handleEdit}
-                      onDelete={handleDelete}
+                      onDelete={handleDeleteClick}
                       onToggleActive={handleToggleActive}
                       selectedIds={selectedIds}
                       onSelectionChange={setSelectedIds}
@@ -418,7 +429,7 @@ export default function CategoriesPage() {
                     <CategoryTreeViewImproved
                       categories={filteredCategories}
                       onEdit={handleEdit}
-                      onDelete={handleDelete}
+                      onDelete={handleDeleteClick}
                       onToggleActive={handleToggleActive}
                       selectedIds={selectedIds}
                       onSelectionChange={setSelectedIds}
@@ -451,6 +462,26 @@ export default function CategoriesPage() {
           onClose={() => setIsCommandOpen(false)}
           commands={commands}
         />
+
+        <AlertDialog open={deleteDialog.isOpen} onOpenChange={(open) => !open && setDeleteDialog(prev => ({ ...prev, isOpen: false }))}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteDialog.isBulk 
+                  ? `Se eliminarán ${selectedIds.length} categorías seleccionadas. Esta acción no se puede deshacer.`
+                  : "Esta acción no se puede deshacer. La categoría se eliminará permanentemente."
+                }
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Eliminar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </RouteGuard>
   )

@@ -42,6 +42,7 @@ interface UseOptimizedCartReturn {
   removeFromCart: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
   updateItemDiscount: (productId: string, discount: number) => void
+  updateItemPromoCode: (productId: string, promoCode: string | null) => void
   clearCart: (force?: boolean) => void
   getCartItemQuantity: (productId: string) => number
   
@@ -258,6 +259,15 @@ export const useOptimizedCart = (
     }))
   }, [])
 
+  const updateItemPromoCode = useCallback((id: string, promoCode: string | null) => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return { ...item, promoCode: promoCode || undefined }
+      }
+      return item
+    }))
+  }, [])
+
   /**
    * Vaciar carrito
    */
@@ -372,6 +382,8 @@ export const useOptimizedCart = (
     addVariantToCart,
     removeFromCart,
     updateQuantity,
+    updateItemDiscount,
+    updateItemPromoCode,
     clearCart,
     getCartItemQuantity,
     checkAvailability

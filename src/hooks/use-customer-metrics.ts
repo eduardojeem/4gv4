@@ -1,190 +1,125 @@
-import { useMemo } from 'react'
-import { Customer } from './use-customer-state'
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns'
-import { es } from 'date-fns/locale'
+'use client'
 
-export interface CustomerMetrics {
-  // Métricas básicas
-  totalCustomers: number
-  activeCustomers: number
-  inactiveCustomers: number
-  suspendedCustomers: number
-  vipCustomers: number
-  
-  // Métricas financieras
-  totalRevenue: number
-  avgCustomerValue: number
-  avgOrderValue: number
-  totalLifetimeValue: number
-  
-  // Métricas de rendimiento
-  retentionRate: number
-  churnRate: number
-  clv: number
-  cac: number
-  nps: number
-  
-  // Métricas de segmentación
-  segmentDistribution: Array<{
-    name: string
-    count: number
-    percentage: number
-    revenue: number
-    avgValue: number
-  }>
-  
-  // Métricas temporales
-  monthlyData: Array<{
-    month: string
-    monthShort: string
-    newCustomers: number
-    totalRevenue: number
-    avgOrderValue: number
-    activeCustomers: number
-  }>
-  
-  // Top customers
-  topCustomers: Array<{
-    customer: Customer
-    value: number
-    rank: number
-  }>
+import { useEffect, useMemo, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import type { Customer } from '@/hooks/use-customer-state'
+
+export type CustomerMetrics = {
+  count: number
+  total: number
+  lastAmount: number
+  lastDate: string | null
 }
 
-export interface UseCustomerMetricsOptions {
+export type UseCustomerMetricsOptions = {
   timeRange?: '3months' | '6months' | '12months'
   includeInactive?: boolean
-  segmentBy?: 'segment' | 'customer_type' | 'city'
+  segmentBy?: 'segment' | 'city' | 'customer_type'
 }
 
-export function useCustomerMetrics(
-  customers: Customer[], 
-  options: UseCustomerMetricsOptions = {}
-): CustomerMetrics {
-  const {
-    timeRange = '6months',
-    includeInactive = true,
-    segmentBy = 'segment'
-  } = options
-
-  return useMemo(() => {
-    const filteredCustomers = includeInactive 
-      ? customers 
-      : customers.filter(c => c.status === 'active')
-
-    // Métricas básicas
-    const totalCustomers = filteredCustomers.length
-    const activeCustomers = filteredCustomers.filter(c => c.status === 'active').length
-    const inactiveCustomers = filteredCustomers.filter(c => c.status === 'inactive').length
-    const suspendedCustomers = filteredCustomers.filter(c => c.status === 'suspended').length
-    const vipCustomers = filteredCustomers.filter(c => 
-      c.customer_type === 'premium' || (c.lifetime_value || 0) > 1000000
-    ).length
-
-    // Métricas financieras
-    const totalRevenue = filteredCustomers.reduce((sum, c) => sum + (c.lifetime_value || 0), 0)
-    const avgCustomerValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0
-    const avgOrderValue = filteredCustomers.reduce((sum, c) => sum + (c.avg_order_value || 0), 0) / totalCustomers || 0
-    const totalLifetimeValue = totalRevenue
-
-    // Métricas de rendimiento (simuladas por ahora)
-    const retentionRate = activeCustomers / totalCustomers * 100 || 0
-    const churnRate = 100 - retentionRate
-    const clv = avgCustomerValue * 2.5 // Estimación simple
-    const cac = avgCustomerValue * 0.2 // Estimación simple
-    const nps = Math.random() * 100 // Simulado
-
-    // Análisis por segmento
-    const segmentAnalysis = filteredCustomers.reduce((acc, customer) => {
-      const segmentKey = customer[segmentBy as keyof Customer] as string || 'Sin Clasificar'
-      if (!acc[segmentKey]) {
-        acc[segmentKey] = {
-          name: segmentKey,
-          count: 0,
-          revenue: 0
+// Map de métricas por cliente (para listas)
+export function useCustomerSalesMetricsMap(customerIds: string[]) {
+  const [metrics, setMetrics] = useState<Record<string, CustomerMetrics>>({})
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      if (!customerIds || customerIds.length === 0) {
+        setMetrics({})
+        return
+      }
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('sales')
+        .select('customer_id, total_amount, created_at')
+        .in('customer_id', customerIds)
+        .order('created_at', { ascending: false })
+      if (error) {
+        setMetrics({})
+        return
+      }
+      const agg: Record<string, CustomerMetrics> = {}
+      for (const row of data || []) {
+        const cid = String((row as any).customer_id || '')
+        if (!cid) continue
+        const totalAmt = Number((row as any).total_amount) || 0
+        const created = (row as any).created_at as string | null
+        if (!agg[cid]) {
+          agg[cid] = { count: 1, total: totalAmt, lastAmount: totalAmt, lastDate: created || null }
+        } else {
+          agg[cid].count += 1
+          agg[cid].total += totalAmt
         }
       }
-      acc[segmentKey].count++
-      acc[segmentKey].revenue += customer.lifetime_value || 0
-      return acc
-    }, {} as Record<string, { name: string; count: number; revenue: number }>)
-
-    const segmentDistribution = Object.values(segmentAnalysis).map(segment => ({
-      ...segment,
-      percentage: (segment.count / totalCustomers) * 100,
-      avgValue: segment.count > 0 ? segment.revenue / segment.count : 0
-    }))
-
-    // Datos mensuales
-    const now = new Date()
-    const monthCount = timeRange === '12months' ? 12 : timeRange === '6months' ? 6 : 3
-    
-    const monthlyData = []
-    for (let i = monthCount - 1; i >= 0; i--) {
-      const monthDate = subMonths(now, i)
-      const monthStart = startOfMonth(monthDate)
-      const monthEnd = endOfMonth(monthDate)
-      
-      const monthCustomers = filteredCustomers.filter(customer => {
-        const customerDate = new Date(customer.registration_date || customer.last_activity || now)
-        return isWithinInterval(customerDate, { start: monthStart, end: monthEnd })
-      })
-      
-      monthlyData.push({
-        month: format(monthDate, 'MMM yyyy', { locale: es }),
-        monthShort: format(monthDate, 'MMM', { locale: es }),
-        newCustomers: monthCustomers.length,
-        totalRevenue: monthCustomers.reduce((sum, c) => sum + (c.lifetime_value || 0), 0),
-        avgOrderValue: monthCustomers.length > 0 
-          ? monthCustomers.reduce((sum, c) => sum + (c.lifetime_value || 0), 0) / monthCustomers.length 
-          : 0,
-        activeCustomers: monthCustomers.filter(c => c.status === 'active').length
-      })
+      setMetrics(agg)
     }
-
-    // Top customers
-    const topCustomers = filteredCustomers
-      .sort((a, b) => (b.lifetime_value || 0) - (a.lifetime_value || 0))
-      .slice(0, 10)
-      .map((customer, index) => ({
-        customer,
-        value: customer.lifetime_value || 0,
-        rank: index + 1
-      }))
-
-    return {
-      totalCustomers,
-      activeCustomers,
-      inactiveCustomers,
-      suspendedCustomers,
-      vipCustomers,
-      totalRevenue,
-      avgCustomerValue,
-      avgOrderValue,
-      totalLifetimeValue,
-      retentionRate,
-      churnRate,
-      clv,
-      cac,
-      nps,
-      segmentDistribution,
-      monthlyData,
-      topCustomers
-    }
-  }, [customers, timeRange, includeInactive, segmentBy])
+    fetchMetrics()
+  }, [JSON.stringify(customerIds)])
+  return metrics
 }
 
-// Hook para formateo de valores
-export function useMetricFormatters() {
-  return useMemo(() => ({
-    currency: (value: number) => `Gs ${value.toLocaleString()}`,
-    percentage: (value: number) => `${value.toFixed(1)}%`,
-    number: (value: number) => value.toLocaleString(),
-    decimal: (value: number, places = 2) => value.toFixed(places),
-    compact: (value: number) => {
-      if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
-      if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
-      return value.toString()
+// Métricas agregadas para AnalyticsDashboard (compatibles)
+export function useCustomerMetrics(customers: Customer[], options?: UseCustomerMetricsOptions) {
+  const timeRange = options?.timeRange || '6months'
+  const includeInactive = options?.includeInactive ?? true
+  const segmentBy = options?.segmentBy || 'segment'
+
+  const totalCustomers = customers.length
+  const totalRevenue = customers.reduce((sum, c) => sum + ((c as any).total_spent_this_year ?? c.lifetime_value ?? 0), 0)
+  const avgCustomerValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0
+  const activeCustomers = customers.filter(c => c.status === 'active').length
+  const inactiveCustomers = customers.filter(c => c.status === 'inactive').length
+  const suspendedCustomers = customers.filter(c => c.status === 'suspended').length
+  const vipCustomers = customers.filter(c => c.segment === 'vip').length
+
+  // Mock mensual basado en fechas de registro para compatibilidad visual
+  const monthlyData = useMemo(() => {
+    const now = new Date()
+    const months = timeRange === '12months' ? 12 : timeRange === '6months' ? 6 : 3
+    const data: Array<{ monthShort: string; totalRevenue: number; avgOrderValue: number; newCustomers: number }> = []
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now)
+      d.setMonth(now.getMonth() - i)
+      const monthShort = d.toLocaleString('es-ES', { month: 'short' })
+      const newCustomers = customers.filter(c => {
+        const reg = new Date(c.registration_date)
+        return reg.getMonth() === d.getMonth() && reg.getFullYear() === d.getFullYear()
+      }).length
+      // Simple distribución homogénea del revenue
+      const totalRevenueMonth = totalRevenue / months
+      const avgOrderValue = totalCustomers > 0 ? totalRevenueMonth / Math.max(1, totalCustomers / months) : 0
+      data.push({ monthShort, totalRevenue: totalRevenueMonth, avgOrderValue, newCustomers })
     }
-  }), [])
+    return data
+  }, [customers, totalRevenue, totalCustomers, timeRange])
+
+  const segmentDistribution = useMemo(() => {
+    const map: Record<string, number> = {}
+    customers.forEach(c => {
+      const key = (c as any)[segmentBy] || 'desconocido'
+      map[key] = (map[key] || 0) + 1
+    })
+    return Object.entries(map).map(([name, value]) => ({ name, value }))
+  }, [customers, segmentBy])
+
+  const topCustomers = useMemo(() => {
+    const ranked = customers
+      .map(c => ({ customer: c, value: ((c as any).total_spent_this_year ?? c.lifetime_value ?? 0) as number }))
+      .sort((a, b) => b.value - a.value)
+    return ranked.map((item, idx) => ({ ...item, rank: idx + 1 }))
+  }, [customers])
+
+  const retentionRate = totalCustomers > 0 ? Math.round((activeCustomers / totalCustomers) * 1000) / 10 : 0
+
+  return {
+    totalCustomers,
+    totalRevenue,
+    avgCustomerValue,
+    retentionRate,
+    activeCustomers: includeInactive ? activeCustomers : undefined,
+    inactiveCustomers: includeInactive ? inactiveCustomers : undefined,
+    suspendedCustomers: includeInactive ? suspendedCustomers : undefined,
+    vipCustomers,
+    monthlyData,
+    segmentDistribution,
+    topCustomers
+  }
 }

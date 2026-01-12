@@ -9,7 +9,7 @@ import { GlobalSearch } from '@/components/ui/global-search'
 import { NotificationBell } from '@/components/ui/notification-bell'
 
 import { MobileNavSheet } from '@/components/ui/mobile-nav-sheet'
-import { ChevronDown, ChevronRight, Sun, Moon, ArrowLeft } from 'lucide-react'
+import { ChevronDown, ChevronRight, Sun, Moon, ArrowLeft, Search } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
@@ -44,17 +44,10 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
     const toggleCategory = useCallback((categoryId: string) => {
         setExpandedCategories(prev =>
             prev.includes(categoryId)
-                ? prev.filter(id => id !== categoryId)
-                : [...prev, categoryId]
+            ? prev.filter(id => id !== categoryId)
+            : [...prev, categoryId]
         )
     }, [])
-
-    const handleNavigate = useCallback((key: string) => {
-        // Navigate by updating the 'tab' search param
-        const params = new URLSearchParams(searchParams.toString())
-        params.set('tab', key)
-        router.push(`${pathname}?${params.toString()}`)
-    }, [router, pathname, searchParams])
 
     const handleKeydown = useCallback((e: KeyboardEvent) => {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -72,45 +65,68 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
         return () => window.removeEventListener('keydown', handleKeydown)
     }, [handleKeydown])
 
-    // Mock search function (can be replaced with real logic or passed as prop if needed)
+    // Mock search function
     const onSearch = (input: { query: string }) => {
         console.log('Searching:', input.query)
         return []
     }
 
     return (
-        <div className="min-h-[calc(100vh-4rem)] grid grid-cols-1 lg:grid-cols-[240px_1fr]">
+        <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-900">
+            {/* Sidebar Overlay for Mobile */}
+            {!collapsed && (
+                <div 
+                    className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+                    onClick={toggleSidebar}
+                />
+            )}
 
+            {/* Sidebar */}
             <aside
                 aria-label="Menú lateral"
                 className={cn(
-                    "border-r bg-background transition-all duration-300 ease-in-out flex flex-col",
-                    collapsed ? 'w-14' : 'w-full lg:w-[240px]',
-                    "hidden lg:block" // Hide on mobile by default, handled by overlay/sheet if needed, or just keep simple
+                    "fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-white dark:bg-gray-800 transition-all duration-300 ease-in-out lg:static shadow-lg lg:shadow-none",
+                    collapsed ? 'w-20 -translate-x-full lg:translate-x-0' : 'w-72 translate-x-0'
                 )}
             >
-                <div className="flex items-center justify-between px-3 py-3 h-14 border-b">
-                    {!collapsed && <div className="text-sm font-semibold">Panel Admin</div>}
-                    <Button variant="ghost" size="sm" onClick={toggleSidebar} aria-label="Alternar menú" className={cn("ml-auto", collapsed && "mx-auto")}>
-                        {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4 rotate-90" />}
+                {/* Sidebar Header */}
+                <div className="flex h-16 items-center justify-between px-6 border-b border-gray-100 dark:border-gray-700">
+                    {!collapsed && (
+                        <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                            Admin Panel
+                        </span>
+                    )}
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={toggleSidebar} 
+                        className={cn("hidden lg:flex ml-auto text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white", collapsed && "mx-auto")}
+                    >
+                        {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronDown className="h-5 w-5 rotate-90" />}
+                    </Button>
+                    {/* Mobile Close Button */}
+                     <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={toggleSidebar} 
+                        className="lg:hidden text-gray-500"
+                    >
+                         <ArrowLeft className="h-5 w-5" />
                     </Button>
                 </div>
-                <nav className="space-y-2 p-2 flex-1 overflow-y-auto" role="navigation">
+
+                {/* Navigation */}
+                <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-6">
                     {visibleCategories.map((category) => {
                         const isExpanded = expandedCategories.includes(category.id)
 
                         return (
-                            <div key={category.id} className="space-y-1">
-                                {/* Category Header */}
+                            <div key={category.id} className="space-y-2">
+                                {/* Category Label */}
                                 {!collapsed && (
                                     <button
                                         onClick={() => toggleCategory(category.id)}
-                                        className={cn(
-                                            "w-full flex items-center justify-between px-2 py-1.5 text-xs font-semibold uppercase tracking-wider",
-                                            "text-muted-foreground hover:text-foreground transition-colors",
-                                            "focus:outline-none focus:text-foreground"
-                                        )}
-                                        aria-expanded={isExpanded}
+                                        className="flex w-full items-center justify-between px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                                     >
                                         <span>{category.label}</span>
                                         {isExpanded ? (
@@ -120,15 +136,12 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                                         )}
                                     </button>
                                 )}
-
-                                {/* Category separator when collapsed */}
-                                {collapsed && (
-                                    <div className="w-full h-px bg-border my-2" aria-hidden="true" />
-                                )}
+                                
+                                {collapsed && <div className="h-px bg-gray-200 dark:bg-gray-700 mx-2" />}
 
                                 {/* Category Items */}
                                 {(collapsed || isExpanded) && (
-                                    <div className={cn("space-y-0.5", !collapsed && "pl-1")}>
+                                    <div className="space-y-1">
                                         {category.items.map(({ key, label, icon: Icon, description, href }) => {
                                             const isActive = href === '/admin'
                                                 ? pathname === href
@@ -139,18 +152,27 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                                                     key={key}
                                                     href={href || '#'}
                                                     className={cn(
-                                                        "w-full flex items-center rounded-md transition-all duration-200",
-                                                        collapsed ? 'justify-center px-2 py-2' : 'gap-2 px-3 py-2 text-sm',
-                                                        "hover:bg-accent hover:text-accent-foreground",
+                                                        "group flex items-center rounded-xl transition-all duration-200",
+                                                        collapsed 
+                                                            ? 'justify-center p-3' 
+                                                            : 'gap-3 px-3 py-2.5',
                                                         isActive
-                                                            ? 'bg-primary text-primary-foreground font-medium shadow-sm'
-                                                            : 'text-foreground'
+                                                            ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-medium'
+                                                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-gray-200'
                                                     )}
                                                     title={collapsed ? label : description}
-                                                    aria-label={label}
                                                 >
-                                                    <Icon className={cn("flex-shrink-0", "h-4 w-4")} aria-hidden />
-                                                    {!collapsed && <span className="truncate">{label}</span>}
+                                                    <Icon className={cn(
+                                                        "flex-shrink-0 transition-colors",
+                                                        collapsed ? "h-6 w-6" : "h-5 w-5",
+                                                        isActive ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-500 group-hover:text-gray-900 dark:group-hover:text-gray-200"
+                                                    )} />
+                                                    {!collapsed && <span>{label}</span>}
+                                                    
+                                                    {/* Active Indicator */}
+                                                    {!collapsed && isActive && (
+                                                        <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />
+                                                    )}
                                                 </Link>
                                             )
                                         })}
@@ -161,123 +183,116 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                     })}
                 </nav>
 
-                <div className="p-2 border-t mt-auto">
+                {/* Footer Actions */}
+                <div className="p-4 border-t border-gray-100 dark:border-gray-700 space-y-2 bg-gray-50/50 dark:bg-gray-800/50">
                     <Link
                         href="/dashboard"
                         className={cn(
-                            "w-full flex items-center rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent",
-                            collapsed ? 'justify-center px-2 py-2' : 'gap-2 px-3 py-2 text-sm'
+                            "flex items-center rounded-xl transition-all duration-200 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700 shadow-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-600",
+                            collapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'
                         )}
                         title="Volver al Dashboard"
                     >
-                        <ArrowLeft className="h-4 w-4" />
-                        {!collapsed && <span>Volver al Dashboard</span>}
+                        <ArrowLeft className={cn("flex-shrink-0", collapsed ? "h-5 w-5" : "h-4 w-4")} />
+                        {!collapsed && <span className="text-sm font-medium">Volver al Dashboard</span>}
                     </Link>
                 </div>
             </aside>
 
-            <section className="flex flex-col min-w-0">
-                <header className="border-b bg-background h-14 flex items-center px-4 gap-4 sticky top-0 z-10">
-                    <MobileNavSheet
-                        categories={visibleCategories}
-                        title="Panel Admin"
-                        description="Accede a todas las secciones administrativas"
-                    />
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                {/* Top Header */}
+                <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between px-6 sticky top-0 z-30 shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="lg:hidden" 
+                            onClick={toggleSidebar}
+                        >
+                            <Search className="h-5 w-5" /> {/* Using Search icon as menu trigger placeholder if needed or generic menu */}
+                        </Button>
+                        
+                        <Breadcrumbs items={[
+                            { label: 'Dashboard', href: '/dashboard' },
+                            { label: 'Admin', href: '/admin' },
+                            { label: currentItem?.label ?? 'Sección' }
+                        ]} />
+                    </div>
 
-                    <Breadcrumbs items={[
-                        { label: 'Dashboard', href: '/dashboard' },
-                        { label: 'Admin', href: '/admin' },
-                        { label: currentItem?.label ?? 'Sección' }
-                    ]} />
-
-                    <div className="ml-auto flex items-center gap-2">
-                        <div className="hidden md:block relative">
-                            <div className="relative">
-                                <Input
-                                    className="w-64 pl-8"
-                                    placeholder="Buscar (Ctrl+K)"
-                                    readOnly
-                                    onClick={() => setSearchOpen(true)}
-                                />
-                                <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <div className="flex items-center gap-3">
+                        {/* Search Bar */}
+                        <div className="hidden md:flex relative group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                            <Input
+                                className="w-64 pl-10 bg-gray-50 dark:bg-gray-900 border-transparent focus:bg-white dark:focus:bg-gray-800 transition-all duration-200"
+                                placeholder="Buscar (Ctrl+K)"
+                                readOnly
+                                onClick={() => setSearchOpen(true)}
+                            />
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
+                                <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                                    <span className="text-xs">⌘</span>K
+                                </kbd>
                             </div>
                         </div>
 
+                        <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2" />
+
+                        {/* Theme Toggle */}
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={toggleDarkMode}
-                            title={darkMode ? 'Modo claro' : 'Modo oscuro'}
+                            className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
                         >
-                            {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                            {darkMode ? <Sun className="h-5 w-5 text-yellow-500" /> : <Moon className="h-5 w-5 text-gray-500" />}
                         </Button>
 
+                        {/* Notifications */}
                         <NotificationBell />
                     </div>
                 </header>
 
-                <main id="main-content" className="flex-1 p-4 overflow-y-auto">
-                    {children}
+                {/* Page Content */}
+                <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
+                    <div className="max-w-7xl mx-auto space-y-6">
+                        {children}
+                    </div>
                 </main>
-            </section>
+            </div>
 
             <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} onSearch={onSearch} />
         </div>
     )
 }
 
-function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
-    return (
-        <svg
-            {...props}
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-        </svg>
-    )
-}
-
-// Loading fallback component
 function AdminLayoutFallback() {
     return (
-        <div className="min-h-[calc(100vh-4rem)] grid grid-cols-1 lg:grid-cols-[240px_1fr]">
-            <aside className="border-r bg-background w-full lg:w-[240px] hidden lg:block">
-                <div className="flex items-center justify-between px-3 py-3 h-14 border-b">
-                    <div className="text-sm font-semibold">Panel Admin</div>
+        <div className="flex h-screen bg-gray-50">
+            <div className="w-72 border-r bg-white hidden lg:block p-6 space-y-6">
+                <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
+                <div className="space-y-4">
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />
+                    ))}
                 </div>
-                <nav className="space-y-2 p-2 flex-1 overflow-y-auto">
-                    <div className="animate-pulse space-y-2">
-                        {[...Array(6)].map((_, i) => (
-                            <div key={i} className="h-8 bg-gray-200 rounded"></div>
-                        ))}
+            </div>
+            <div className="flex-1 flex flex-col">
+                <div className="h-16 border-b bg-white" />
+                <div className="p-8 space-y-6">
+                    <div className="h-32 bg-gray-200 rounded-xl animate-pulse" />
+                    <div className="grid grid-cols-3 gap-6">
+                        <div className="h-64 bg-gray-200 rounded-xl animate-pulse" />
+                        <div className="h-64 bg-gray-200 rounded-xl animate-pulse" />
+                        <div className="h-64 bg-gray-200 rounded-xl animate-pulse" />
                     </div>
-                </nav>
-            </aside>
-            <section className="flex flex-col min-w-0">
-                <header className="border-b bg-background h-14 flex items-center px-4 gap-4">
-                    <div className="animate-pulse h-6 bg-gray-200 rounded w-48"></div>
-                </header>
-                <main className="flex-1 p-4">
-                    <div className="animate-pulse space-y-4">
-                        <div className="h-8 bg-gray-200 rounded w-64"></div>
-                        <div className="h-32 bg-gray-200 rounded"></div>
-                    </div>
-                </main>
-            </section>
+                </div>
+            </div>
         </div>
     )
 }
 
-// Main export with Suspense wrapper
 export function AdminLayout({ children }: AdminLayoutProps) {
     return (
         <Suspense fallback={<AdminLayoutFallback />}>

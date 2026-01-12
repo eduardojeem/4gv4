@@ -30,6 +30,7 @@ import { Badge } from '@/components/ui/badge'
 import { PaymentMethods } from './checkout/PaymentMethods'
 import { CustomerSelection } from './checkout/CustomerSelection'
 import { SaleSummary } from './checkout/SaleSummary'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 
 import { useCheckout } from '../contexts/CheckoutContext'
 import { usePOSCustomer } from '../contexts/POSCustomerContext'
@@ -138,7 +139,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   }
 
   const getRemainingAmount = () => {
-    return cartCalculations.total - getTotalPaid()
+    return Math.round((cartCalculations.total - getTotalPaid()) * 100) / 100
   }
 
   // Sistema de créditos
@@ -165,6 +166,16 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     
     const success = await createCreditSale(activeCustomer, saleData)
     if (success) {
+      try {
+        if (selectedRepairIds.length > 0) {
+          const supabase = createSupabaseClient()
+          await (supabase
+            .from('repairs')
+            .update({ status: 'entregado', delivered_at: new Date().toISOString() })
+            .in('id', selectedRepairIds)
+            .select())
+        }
+      } catch {}
       // Limpiar carrito y cerrar modal
       onCancel()
     }
@@ -230,13 +241,17 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               showCreditHistory={showCreditHistory}
               setShowCreditHistory={setShowCreditHistory}
               formatCurrency={formatCurrency}
+              customerRepairs={customerRepairs}
+              selectedRepairIds={selectedRepairIds}
+              supabaseStatusToLabel={supabaseStatusToLabel}
+              paymentStatus={paymentStatus}
             />
 
             {/* Selector de reparación vinculada (Múltiple) */}
             {selectedCustomer && (
               <div className="mt-6 border-t pt-4">
                 {(() => {
-                   const activeRepairs = customerRepairs.filter(r => r.status !== 'entregado')
+                   const activeRepairs = customerRepairs.filter(r => r.status !== 'entregado' && !(paymentStatus === 'success' && selectedRepairIds.includes(r.id)))
                    
                    return (
                    <>

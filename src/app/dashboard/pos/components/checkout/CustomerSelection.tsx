@@ -38,13 +38,22 @@ interface CustomerSelectionProps {
   setShowCreditHistory: (show: boolean) => void
   
   formatCurrency: (amount: number) => string
+  // Reparaciones del cliente
+  customerRepairs?: any[]
+  selectedRepairIds?: string[]
+  supabaseStatusToLabel?: Record<string, string>
+  paymentStatus?: 'idle' | 'processing' | 'success' | 'failed'
 }
 
 export function CustomerSelection({
   creditSummary,
   showCreditHistory,
   setShowCreditHistory,
-  formatCurrency
+  formatCurrency,
+  customerRepairs = [],
+  selectedRepairIds = [],
+  supabaseStatusToLabel = {},
+  paymentStatus = 'idle'
 }: CustomerSelectionProps) {
   
   const {
@@ -234,6 +243,46 @@ export function CustomerSelection({
                     {formatCurrency(activeCustomer.current_balance || 0)}
                   </span>
                 </div>
+              </div>
+
+              {/* Resumen de reparaciones del cliente */}
+              <div className="mt-4 pt-3 border-t border-border/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Reparaciones del cliente</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px]">Total: {customerRepairs.length}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Activas: {customerRepairs.filter(r => r.status !== 'entregado').length}</Badge>
+                    <Badge variant="outline" className="text-[10px]">Seleccionadas: {selectedRepairIds.length}</Badge>
+                  </div>
+                </div>
+
+                {/* Indicador de entrega tras venta */}
+                {paymentStatus === 'success' && selectedRepairIds.length > 0 && (
+                  <div className="flex items-center gap-2 rounded-md border border-green-300 bg-green-50 px-3 py-2 text-green-800 dark:bg-green-900/20">
+                    <span className="text-xs font-medium">Entregadas {selectedRepairIds.length} reparaciones vinculadas</span>
+                  </div>
+                )}
+
+                {/* Lista compacta de reparaciones seleccionadas */}
+                {selectedRepairIds.length > 0 && (
+                  <div className="space-y-1">
+                    {customerRepairs.filter(r => selectedRepairIds.includes(r.id)).map((repair) => (
+                      <div key={repair.id} className="flex items-center justify-between text-xs border rounded p-2 bg-background">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="capitalize text-[10px]">
+                            {supabaseStatusToLabel[repair.status] || repair.status}
+                          </Badge>
+                          <span className="font-medium">
+                            {repair.device_brand || 'Equipo'} {repair.device_model || ''}
+                          </span>
+                        </div>
+                        <div className={`text-[10px] ${repair.status === 'entregado' ? 'text-green-600' : 'text-muted-foreground'}`}>
+                          {repair.status === 'entregado' ? 'Entregado' : 'Pendiente'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               
               {/* Información de crédito */}

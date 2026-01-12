@@ -1,202 +1,221 @@
-"use client"
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Customer } from './use-customer-state'
-import { analyticsService, AnalyticsData, PredictionData } from '@/services/analytics-service'
-import { toast } from 'sonner'
+import { useState, useEffect, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { startOfMonth, endOfMonth, subMonths, format, parseISO, startOfDay, subDays } from 'date-fns'
+import { es } from 'date-fns/locale'
 
-export interface AnalyticsMetric {
+export interface SalesData {
+  name: string
+  ventas: number
+  ingresos: number
+}
+
+export interface CategoryData {
+  name: string
+  value: number
+  color: string
+}
+
+export interface ProductPerformance {
   id: string
   name: string
-  enabled: boolean
-  type: 'currency' | 'percentage' | 'number' | 'count'
+  sales: number
+  revenue: number
 }
 
-export interface ComparisonData {
-  current: number
-  previous: number
-  change: number
-  changePercentage: number
+export interface AnalyticsMetrics {
+  totalRevenue: number
+  totalSales: number
+  averageTicket: number
+  revenueChange: number // percentage
+  salesChange: number // percentage
 }
 
-export function useAnalytics(customers: Customer[]) {
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
-  const [predictions, setPredictions] = useState<PredictionData | null>(null)
-  const [comparisons, setComparisons] = useState<Record<string, ComparisonData> | null>(null)
+export function useAnalytics(timeRange: '7d' | '30d' | '90d' | '1y' = '30d') {
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedPeriod, setSelectedPeriod] = useState<'7d' | '30d' | '90d' | '1y'>('30d')
+  const [salesData, setSalesData] = useState<SalesData[]>([])
+  const [categoryData, setCategoryData] = useState<CategoryData[]>([])
+  const [topProducts, setTopProducts] = useState<ProductPerformance[]>([])
+  const [metrics, setMetrics] = useState<AnalyticsMetrics>({
+    totalRevenue: 0,
+    totalSales: 0,
+    averageTicket: 0,
+    revenueChange: 0,
+    salesChange: 0
+  })
 
-  // Métricas configurables
-  const [selectedMetrics, setSelectedMetrics] = useState<AnalyticsMetric[]>([
-    { id: 'clv', name: 'Customer Lifetime Value', enabled: true, type: 'currency' },
-    { id: 'cac', name: 'Customer Acquisition Cost', enabled: true, type: 'currency' },
-    { id: 'churn', name: 'Churn Rate', enabled: true, type: 'percentage' },
-    { id: 'nps', name: 'Net Promoter Score', enabled: true, type: 'number' },
-    { id: 'arpu', name: 'Average Revenue Per User', enabled: false, type: 'currency' },
-    { id: 'retention', name: 'Retention Rate', enabled: false, type: 'percentage' }
-  ])
+  const supabase = createClient()
 
-  // Cargar datos de analíticas
-  const loadAnalytics = useCallback(async () => {
+  const fetchAnalytics = useCallback(async () => {
+    setLoading(true)
     try {
-      setLoading(true)
-      setError(null)
+      // Determinar rango de fechas
+      const now = new Date()
+      let startDate = subDays(now, 30)
+      
+      if (timeRange === '7d') startDate = subDays(now, 7)
+      if (timeRange === '90d') startDate = subDays(now, 90)
+      if (timeRange === '1y') startDate = subDays(now, 365)
 
-      // Cargar analíticas principales
-      const analyticsResult = await analyticsService.getAnalytics(customers, selectedPeriod)
-      if (analyticsResult.success && analyticsResult.data) {
-        setAnalytics(analyticsResult.data)
-      } else {
-        throw new Error(analyticsResult.error || 'Error loading analytics')
+      // 1. Fetch Sales with Items and Products
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select(`
+          id,
+          created_at,
+          total_amount,
+          sale_items (
+            id,
+            quantity,
+            unit_price,
+            subtotal,
+            product_id
+          )
+        `)
+        .gte('created_at', startDate.toISOString())
+        .order('created_at', { ascending: true })
+
+      if (salesError) {
+        console.error('Supabase sales fetch error:', salesError)
+        throw salesError
       }
 
-      // Cargar predicciones
-      const predictionsResult = await analyticsService.getPredictions(customers, selectedPeriod)
-      if (predictionsResult.success && predictionsResult.data) {
-        setPredictions(predictionsResult.data)
+      // 2. Fetch Products separately (lightweight)
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, name, category_id')
+      
+      if (productsError) {
+        console.error('Supabase products fetch error:', productsError)
       }
 
-      // Cargar comparaciones
-      const comparisonsResult = await analyticsService.getComparisons(customers, selectedPeriod)
-      if (comparisonsResult.success && comparisonsResult.data) {
-        setComparisons(comparisonsResult.data)
+      // 3. Fetch Categories separately
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('categories')
+        .select('id, name')
+      
+      if (categoriesError) {
+        console.error('Supabase categories fetch error:', categoriesError)
       }
 
-    } catch (err: any) {
-      console.error('Error loading analytics:', err)
-      setError(err.message)
+      // Create Lookups
+      const categoryLookup = new Map<string, string>()
+      categoriesData?.forEach(cat => {
+        categoryLookup.set(cat.id, cat.name)
+      })
+
+      const productLookup = new Map<string, { name: string, categoryId: string | null }>()
+      productsData?.forEach(prod => {
+        productLookup.set(prod.id, { 
+          name: prod.name, 
+          categoryId: prod.category_id 
+        })
+      })
+
+      // Process Sales Data for Chart
+      const salesMap = new Map<string, { ventas: number, ingresos: number }>()
+      const categoryMap = new Map<string, number>()
+      const productMap = new Map<string, { name: string, sales: number, revenue: number }>()
+      
+      salesData?.forEach(sale => {
+        // Sales Chart Data
+        const date = parseISO(sale.created_at)
+        let key = format(date, 'dd MMM', { locale: es })
+        if (timeRange === '1y') key = format(date, 'MMM yyyy', { locale: es })
+        
+        const current = salesMap.get(key) || { ventas: 0, ingresos: 0 }
+        salesMap.set(key, {
+          ventas: current.ventas + 1,
+          ingresos: current.ingresos + (sale.total_amount || 0)
+        })
+
+        // Process Items
+        sale.sale_items?.forEach((item: any) => {
+          if (item.product_id) {
+            // Resolve Product Info
+            const productInfo = productLookup.get(item.product_id)
+            const prodName = productInfo?.name || 'Desconocido'
+            
+            // Resolve Category Info
+            const catId = productInfo?.categoryId
+            const catName = catId ? categoryLookup.get(catId) || 'Sin Categoría' : 'Sin Categoría'
+            
+            // Calculate item total using subtotal or fallback
+            const itemTotal = item.subtotal || (item.quantity * item.unit_price) || 0
+
+            // Update Category Stats
+            const currentCatVal = categoryMap.get(catName) || 0
+            categoryMap.set(catName, currentCatVal + itemTotal)
+
+            // Update Product Stats
+            const currentProd = productMap.get(item.product_id) || { name: prodName, sales: 0, revenue: 0 }
+            
+            productMap.set(item.product_id, {
+              name: prodName,
+              sales: currentProd.sales + (item.quantity || 0),
+              revenue: currentProd.revenue + itemTotal
+            })
+          }
+        })
+      })
+
+      const chartData: SalesData[] = Array.from(salesMap.entries()).map(([name, data]) => ({
+        name,
+        ventas: data.ventas,
+        ingresos: data.ingresos
+      }))
+
+      setSalesData(chartData)
+
+      // Process Metrics
+      const totalRevenue = salesData?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0
+      const totalSales = salesData?.length || 0
+      const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0
+
+      setMetrics({
+        totalRevenue,
+        totalSales,
+        averageTicket,
+        revenueChange: 0, // Placeholder
+        salesChange: 0 // Placeholder
+      })
+
+      const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d']
+      const processedCategories = Array.from(categoryMap.entries())
+        .map(([name, value], index) => ({
+          name,
+          value,
+          color: COLORS[index % COLORS.length]
+        }))
+        .sort((a, b) => b.value - a.value)
+
+      setCategoryData(processedCategories)
+
+      const processedProducts = Array.from(productMap.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10) // Top 10
+
+      setTopProducts(processedProducts)
+
+    } catch (err) {
+      console.error('Error fetching analytics:', err)
+      // Log full details for debugging
+      console.error('Error details:', JSON.stringify(err, null, 2))
     } finally {
       setLoading(false)
     }
-  }, [customers, selectedPeriod])
+  }, [timeRange, supabase])
 
-  // Actualizar período seleccionado
-  const updatePeriod = useCallback((period: '7d' | '30d' | '90d' | '1y') => {
-    setSelectedPeriod(period)
-  }, [])
-
-  // Toggle métrica
-  const toggleMetric = useCallback((metricId: string) => {
-    setSelectedMetrics(prev => prev.map(metric => 
-      metric.id === metricId ? { ...metric, enabled: !metric.enabled } : metric
-    ))
-  }, [])
-
-  // Exportar datos
-  const exportData = useCallback(async (format: 'pdf' | 'excel') => {
-    if (!analytics) {
-      throw new Error('No hay datos para exportar')
-    }
-
-    try {
-      const result = await analyticsService.exportData(analytics, format)
-      if (!result.success) {
-        throw new Error(result.error || 'Error al exportar datos')
-      }
-      
-      return result.data
-    } catch (error: any) {
-      console.error('Error exporting data:', error)
-      throw error
-    }
-  }, [analytics])
-
-  // Refrescar datos
-  const refreshData = useCallback(() => {
-    loadAnalytics()
-  }, [loadAnalytics])
-
-  // Cargar datos iniciales
   useEffect(() => {
-    if (customers.length > 0) {
-      loadAnalytics()
-    }
-  }, [customers, loadAnalytics])
-
-  // Métricas calculadas
-  const calculatedMetrics = useMemo(() => {
-    if (!analytics) return null
-
-    return {
-      totalRevenue: analytics.monthlyRevenue.reduce((sum, month) => sum + month.revenue, 0),
-      totalCustomers: analytics.monthlyRevenue.reduce((sum, month) => sum + month.newCustomers, 0),
-      averageOrderValue: analytics.metrics.averageLifetimeValue / Math.max(analytics.metrics.averageOrderCount, 1),
-      growthRate: analytics.monthlyRevenue.length > 1 
-        ? ((analytics.monthlyRevenue[analytics.monthlyRevenue.length - 1].revenue - 
-            analytics.monthlyRevenue[0].revenue) / analytics.monthlyRevenue[0].revenue) * 100
-        : 0
-    }
-  }, [analytics])
-
-  // Insights automáticos
-  const insights = useMemo(() => {
-    if (!analytics || !calculatedMetrics) return []
-
-    const insights = []
-
-    // Insight de crecimiento
-    if (calculatedMetrics.growthRate > 10) {
-      insights.push({
-        type: 'positive',
-        title: 'Crecimiento Acelerado',
-        description: `Los ingresos han crecido un ${calculatedMetrics.growthRate.toFixed(1)}% en el período seleccionado`,
-        action: 'Considerar expandir estrategias exitosas'
-      })
-    } else if (calculatedMetrics.growthRate < -5) {
-      insights.push({
-        type: 'warning',
-        title: 'Declive en Ingresos',
-        description: `Los ingresos han disminuido un ${Math.abs(calculatedMetrics.growthRate).toFixed(1)}% en el período`,
-        action: 'Revisar estrategias de retención y adquisición'
-      })
-    }
-
-    // Insight de churn rate
-    if (analytics.metrics.churnRate > 10) {
-      insights.push({
-        type: 'warning',
-        title: 'Alta Tasa de Abandono',
-        description: `La tasa de churn es del ${analytics.metrics.churnRate.toFixed(1)}%, por encima del objetivo`,
-        action: 'Implementar programas de retención'
-      })
-    }
-
-    // Insight de CLV vs CAC
-    const clvCacRatio = analytics.metrics.averageLifetimeValue / analytics.metrics.customerAcquisitionCost
-    if (clvCacRatio < 3) {
-      insights.push({
-        type: 'warning',
-        title: 'Ratio CLV/CAC Bajo',
-        description: `El ratio CLV/CAC es ${clvCacRatio.toFixed(1)}, debería ser mayor a 3`,
-        action: 'Optimizar costos de adquisición o aumentar valor de vida'
-      })
-    }
-
-    return insights
-  }, [analytics, calculatedMetrics])
+    fetchAnalytics()
+  }, [fetchAnalytics])
 
   return {
-    // Datos
-    analytics,
-    predictions,
-    comparisons,
-    calculatedMetrics,
-    insights,
-    
-    // Estados
     loading,
-    error,
-    selectedPeriod,
-    selectedMetrics,
-    
-    // Acciones
-    setSelectedPeriod: updatePeriod,
-    toggleMetric,
-    exportData,
-    refreshData,
-    
-    // Métricas habilitadas
-    enabledMetrics: selectedMetrics.filter(m => m.enabled)
+    salesData,
+    categoryData,
+    topProducts,
+    metrics,
+    refreshAnalytics: fetchAnalytics
   }
 }

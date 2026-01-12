@@ -43,6 +43,7 @@ import { toast } from 'sonner'
 // Types and utilities
 import { Customer } from '@/hooks/use-customer-state'
 import { cn } from '@/lib/utils'
+import customerService from '@/services/customer-service'
 
 // Validation Schema
 const customerEditSchema = z.object({
@@ -114,6 +115,37 @@ export function CustomerEditFormV2({
 
   const { watch, setValue, getValues } = form
   const watchedValues = watch()
+
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      const res = await customerService.getCustomer(customer.id)
+      if (mounted && res.success && res.data) {
+        form.reset({
+          name: res.data.name || '',
+          email: res.data.email || '',
+          phone: res.data.phone || '',
+          whatsapp: (res.data as any).whatsapp || '',
+          address: res.data.address || '',
+          city: res.data.city || '',
+          company: (res.data as any).company || '',
+          position: (res.data as any).position || '',
+          ruc: (res.data as any).ruc || '',
+          customer_type: res.data.customer_type || 'regular',
+          segment: res.data.segment || 'regular',
+          status: (res.data.status as any) || 'active',
+          credit_limit: res.data.credit_limit || 0,
+          discount_percentage: res.data.discount_percentage || 0,
+          payment_terms: res.data.payment_terms || '',
+          preferred_contact: res.data.preferred_contact || 'email',
+          tags: res.data.tags || [],
+          notes: (res.data as any).notes || '',
+          birthday: (res.data as any).birthday || '',
+        })
+      }
+    })()
+    return () => { mounted = false }
+  }, [customer.id])
 
   // Detectar cambios
   useEffect(() => {

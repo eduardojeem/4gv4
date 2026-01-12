@@ -50,6 +50,7 @@ import { VariantSelector } from '@/components/pos/VariantSelector'
 import { useProductVariants } from '@/hooks/useProductVariants'
 import { useSmartSearch } from './hooks/useSmartSearch'
 import { usePromotionEngine } from '@/hooks/use-promotion-engine'
+import { usePromotions } from '@/hooks/use-promotions'
 import { ProductWithVariants, ProductVariant } from '@/types/product-variants'
 import { usePerformanceMonitor, useRenderTimeMonitor } from './hooks/usePerformanceMonitor'
 import { recordMetric } from './utils/performance-monitor'
@@ -65,7 +66,6 @@ import { useCheckout } from './contexts/CheckoutContext'
 import { usePOSCustomer } from './contexts/POSCustomerContext'
 import { CartItem, PaymentSplit, PaymentMethodOption } from './types'
 import type { Product } from '@/types/product-unified'
-import { useCashRegister } from '@/hooks/useCashRegister'
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
@@ -208,6 +208,11 @@ export default function POSPage() {
       setFinalCostFromSale(false)
     }
   }, [isCheckoutOpen, selectedRepairIds])
+
+  useEffect(() => {
+    if (!isCheckoutOpen) return
+    setMarkRepairDelivered(selectedRepairIds.length > 0)
+  }, [selectedRepairIds, isCheckoutOpen])
   const [showFeatured, setShowFeatured] = useState(false)
   const [barcodeInput, setBarcodeInput] = useState('')
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
@@ -223,7 +228,12 @@ export default function POSPage() {
 
   // Hooks para variantes y promociones
   const { getProductWithVariants, convertVariantToCartItem } = useProductVariants()
-  const { calculateCartSummary } = usePromotionEngine()
+  const { applyPromotionByCode, calculateCartSummary } = usePromotionEngine()
+  const { allPromotions } = usePromotions()
+
+  // Descuento automático para clientes VIP
+  const VIP_DISCOUNT_RATE = 10
+  const [vipAutoApplied, setVipAutoApplied] = useState(false)
 
 
 
@@ -238,7 +248,8 @@ export default function POSPage() {
     registerState,
     setRegisterState,
     addMovement,
-    openRegister
+    openRegister,
+    registerSale
   } = useCashRegisterContext()
 
   const handleRegisterChange = useCallback((id: string) => {
@@ -315,6 +326,7 @@ export default function POSPage() {
     removeFromCart,
     updateQuantity,
     updateItemDiscount,
+    updateItemPromoCode,
     clearCart,
     checkAvailability: checkCartAvailability
   } = useOptimizedCart(inventoryProducts, {
@@ -330,8 +342,6 @@ export default function POSPage() {
   }, [isWholesale, setIsWholesale])
   
   const WHOLESALE_DISCOUNT_RATE = 10
-
-  const { currentSession, registerSale } = useCashRegister()
 
   // Función para verificar disponibilidad de stock
   const checkAvailability = useCallback((productId: string, quantity: number) => {
@@ -409,12 +419,19 @@ export default function POSPage() {
       phone: row.phone || '',
       type: row.customer_type || 'regular',
       updated_at: row.updated_at,
+      address: row.address || '',
+      city: row.city || '',
+      last_visit: row.last_visit || null,
+      loyalty_points: typeof row.loyalty_points === 'number' ? row.loyalty_points : 0,
+      total_purchases: typeof row.total_purchases === 'number' ? row.total_purchases : 0,
+      total_repairs: typeof row.total_repairs === 'number' ? row.total_repairs : 0,
+      current_balance: typeof row.current_balance === 'number' ? row.current_balance : 0,
     })
 
     const loadInitial = async (): Promise<boolean> => {
       const { data, error } = await supabase
         .from('customers')
-        .select('id,first_name,last_name,phone,email,customer_type,updated_at')
+        .select('id,first_name,last_name,phone,email,customer_type,updated_at,address,city,last_visit,loyalty_points,total_purchases,total_repairs,current_balance')
 
       if (error) {
         console.warn('Error cargando clientes:', error.message)
@@ -557,18 +574,28 @@ export default function POSPage() {
         const paymentMethodDb = methodMap[method] || 'efectivo'
 
         let saleId: string | undefined = existingSaleId
+        const productItems = items.filter(i => !i.isService)
+        const subtotalAmount = productItems.reduce((sum, i) => {
+          const unitApplied = isWholesale
+            ? (typeof i.wholesalePrice === 'number' ? i.wholesalePrice : (i.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
+            : i.price
+          return sum + unitApplied * i.quantity
+        }, 0)
+        const code = `POS-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0,14)}-${Math.floor(Math.random()*1000)}`
 
         if (!saleId) {
           const { data: saleRow, error: saleError } = await supabase
             .from('sales')
             .insert({
               customer_id: selectedCustomer || null,
-              user_id: userId,
+              created_by: userId,
+              code,
+              subtotal_amount: subtotalAmount,
               total_amount: totalValue,
-              tax_amount: taxValue || 0,
-              discount_amount: discountValue || 0,
+              tax_amount: (taxValue || 0),
+              discount_amount: (discountValue || 0),
               payment_method: paymentMethodDb,
-              status: 'completada',
+              status: 'completed',
             })
             .select()
             .single()
@@ -579,7 +606,6 @@ export default function POSPage() {
 
         if (saleId) {
           if (!existingSaleId) {
-            const productItems = items.filter(i => !i.isService)
             const saleItems = productItems.map((i) => {
               const unitApplied = isWholesale
                 ? (typeof i.wholesalePrice === 'number' ? i.wholesalePrice : (i.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
@@ -707,9 +733,9 @@ export default function POSPage() {
         }
       } catch (err: any) {
         const msg = String(err?.message || err || '')
-        const missingSalesTable = msg.includes("Could not find the table 'public.sales'")
-          || msg.includes('relation "sales" does not exist')
-          || (msg.toLowerCase().includes('sales') && msg.toLowerCase().includes('schema cache'))
+        const lower = msg.toLowerCase()
+        const missingSalesTable = lower.includes("could not find the table 'public.sales'")
+          || lower.includes('relation "sales" does not exist')
 
         if (missingSalesTable) {
           console.warn('Supabase: tabla sales no encontrada. Omitiendo persistencia y continuando.')
@@ -1142,6 +1168,29 @@ export default function POSPage() {
     totalItemCount: unifiedCalculations.totalItemCount
   }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid])
 
+  // Aplicación automática de descuento VIP después de cálculos del carrito
+  useEffect(() => {
+    try {
+      const activeCustomer = customers.find(c => c.id === selectedCustomer)
+      const isVip = activeCustomer && (
+        String(activeCustomer.type || '').toLowerCase() === 'vip' ||
+        String((activeCustomer as any).priority || '').toLowerCase() === 'vip'
+      )
+
+      if (isVip && generalDiscount === 0 && unifiedCalculations.subtotal > 0 && !vipAutoApplied) {
+        setGeneralDiscount(VIP_DISCOUNT_RATE)
+        setVipAutoApplied(true)
+        toast.success(`Descuento VIP aplicado (${VIP_DISCOUNT_RATE}%)`)
+      }
+
+      if (!isVip && vipAutoApplied) {
+        setGeneralDiscount(0)
+        setVipAutoApplied(false)
+        toast.info('Descuento VIP removido por cambio de cliente')
+      }
+    } catch {}
+  }, [customers, selectedCustomer, unifiedCalculations.subtotal, generalDiscount, vipAutoApplied])
+
   // Adapter for POSCart items
   const combinedCartItems = useMemo(() => {
     const repairItems: CartItem[] = selectedRepairs.map(repair => ({
@@ -1174,36 +1223,96 @@ export default function POSPage() {
   }, [selectedRepairIds, removeFromCart])
 
   const applyPromoCode = useCallback((code: string) => {
-    const promoCodes: Record<string, { type: 'percentage' | 'fixed'; value: number; minAmount: number }> = {
-      'DESCUENTO10': { type: 'percentage', value: 10, minAmount: 100 },
-      'VERANO2024': { type: 'percentage', value: 15, minAmount: 200 },
-      'CLIENTE_VIP': { type: 'percentage', value: 20, minAmount: 500 },
-      'PRIMERA_COMPRA': { type: 'fixed', value: 50, minAmount: 150 }
-    }
+    const cartItems = combinedCartItems
+      .map(item => ({
+        id: item.id,
+        product_id: item.id,
+        variant_id: undefined,
+        sku: item.sku || item.id,
+        name: item.name,
+        quantity: item.quantity,
+        unit_price: item.price,
+        category_id: (item as any).category,
+        total_price: item.price * item.quantity
+      }))
 
-    const promo = promoCodes[code.toUpperCase()]
-    if (!promo) {
-      toast.error('Código promocional inválido')
+    if (cartItems.length === 0) {
+      toast.error('No hay ítems en el carrito para aplicar promoción')
       return false
     }
 
-    if (unifiedCalculations.subtotal < promo.minAmount) {
-      toast.error(`Monto mínimo requerido: ${formatCurrency(promo.minAmount)}`)
+    // Use promotion engine to validate/apply code against DB promotions
+    const result = applyPromotionByCode(code, cartItems as any, allPromotions)
+
+    if (!result.applied) {
+      toast.error(result.reason || 'Código promocional inválido')
       return false
     }
 
-    if (promo.type === 'percentage') {
-      setGeneralDiscount(promo.value)
-      toast.success(`Código aplicado: ${promo.value}% de descuento`)
+    // Aplicación por item: solo a productos elegibles
+    const promotion = allPromotions.find(p => p.code.toLowerCase() === code.toLowerCase())
+    if (!promotion) {
+      toast.error('Promoción no encontrada en la base de datos')
+      return false
+    }
+
+    const isEligible = (item: typeof cartItems[number]) => {
+      const matchesProduct = !promotion.applicable_products?.length || promotion.applicable_products.includes(item.product_id)
+      const matchesCategory = !promotion.applicable_categories?.length || (!!item.category_id && promotion.applicable_categories.includes(String(item.category_id)))
+      return matchesProduct && matchesCategory
+    }
+
+    const eligibleItems = cartItems.filter(isEligible)
+    if (eligibleItems.length === 0) {
+      toast.error('No hay ítems elegibles para este código')
+      return false
+    }
+
+    // Base de línea según modo mayorista
+    const lineBase = (item: any) => {
+      const unitNonWholesale = item.unit_price
+      const existingItem = combinedCartItems.find(ci => ci.id === item.id)
+      const isService = existingItem?.isService === true
+      const unitWholesaleCandidate = (existingItem?.wholesalePrice ?? (unitNonWholesale * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
+      const unitApplied = isWholesale && !isService ? unitWholesaleCandidate : unitNonWholesale
+      return unitApplied * item.quantity
+    }
+
+    const totalApplicable = eligibleItems.reduce((sum, it) => sum + lineBase(it), 0)
+
+    setVipAutoApplied(false)
+
+    if (promotion.type === 'percentage') {
+      // Aplicar porcentaje directo a ítems elegibles
+      eligibleItems.forEach(it => {
+        const existingItem = combinedCartItems.find(ci => ci.id === it.id)
+        const currentDiscount = (existingItem as any)?.discount || 0
+        const newDiscount = Math.max(currentDiscount, promotion.value)
+        updateItemDiscount(it.id, Math.min(100, Math.max(0, newDiscount)))
+        updateItemPromoCode(it.id, code)
+      })
+      toast.success(`Código aplicado: ${promotion.value}% en ítems elegibles`)
     } else {
-      // Para descuentos fijos, convertir a porcentaje basado en el subtotal
-      const percentageEquivalent = (promo.value / unifiedCalculations.subtotal) * 100
-      setGeneralDiscount(Math.min(percentageEquivalent, 100))
-      toast.success(`Código aplicado: ${formatCurrency(promo.value)} de descuento`)
+      // Distribuir monto fijo proporcionalmente
+      if (totalApplicable <= 0) {
+        toast.error('Subtotal aplicable inválido para distribuir descuento')
+        return false
+      }
+      eligibleItems.forEach(it => {
+        const line = lineBase(it)
+        const share = (line / totalApplicable) * promotion.value
+        const percentShare = line > 0 ? (share / line) * 100 : 0
+        const existingItem = combinedCartItems.find(ci => ci.id === it.id)
+        const currentDiscount = (existingItem as any)?.discount || 0
+        const newDiscount = Math.min(100, Math.max(0, currentDiscount + percentShare))
+        updateItemDiscount(it.id, newDiscount)
+        updateItemPromoCode(it.id, code)
+      })
+      toast.success(`Código aplicado: ahorro ${formatCurrency(result.discount_amount)} distribuido en ítems elegibles`)
     }
 
     return true
-  }, [unifiedCalculations.subtotal, setGeneralDiscount])
+  }, [combinedCartItems, allPromotions, isWholesale, updateItemDiscount])
 
   const calculateLoyaltyPoints = useCallback((total: number) => {
     // 1 punto por cada $10 gastados
@@ -1298,9 +1407,9 @@ export default function POSPage() {
       setPaymentStatus('processing')
       setPaymentError('')
       addPaymentAttempt({ status: 'processing', method: 'single', amount: (cartCalculations as any).total, message: 'Procesando pago simple' })
+      let saleResult: any = null
       try {
         // Usar el hook de Supabase para procesar la venta solo si hay items
-        let saleResult = null
         const productItems = combinedCartItems.filter(item => !item.isService)
         if (productItems.length > 0) {
           saleResult = await processInventorySale({
@@ -1330,6 +1439,13 @@ export default function POSPage() {
         setPaymentStatus('success')
         toast.success('Venta procesada exitosamente')
         addPaymentAttempt({ status: 'success', method: 'single', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
+        if (markRepairDelivered && selectedRepairIds.length > 0) {
+          setCustomerRepairs(prev => prev.map(r => (
+            selectedRepairIds.includes(r.id)
+              ? { ...r, status: 'entregado', delivered_at: new Date().toISOString() }
+              : r
+          )))
+        }
       } catch (error) {
         const msg = normalizePaymentError(error)
         setPaymentStatus('failed')
@@ -1339,7 +1455,7 @@ export default function POSPage() {
         return
       }
       // Registrar venta en caja (Supabase)
-      if (currentSession) {
+      if (getCurrentRegister.isOpen) {
         const sid = (saleResult && (saleResult as any).saleId) ? String((saleResult as any).saleId) : 'POS'
         registerSale(sid, (cartCalculations as any).total, paymentMethod as any)
       }
@@ -1444,10 +1560,10 @@ export default function POSPage() {
     setPaymentStatus('processing')
     setPaymentError('')
     addPaymentAttempt({ status: 'processing', method: 'mixed', amount: (cartCalculations as any).total, message: 'Procesando pago mixto' })
+    let saleResult: any = null
     try {
       // Usar el hook de Supabase para procesar la venta
       const productItems = combinedCartItems.filter(item => !item.isService)
-      let saleResult = null
       
       if (productItems.length > 0) {
         saleResult = await processInventorySale({
@@ -1477,6 +1593,13 @@ export default function POSPage() {
       setPaymentStatus('success')
       toast.success('Venta procesada con múltiples métodos de pago')
       addPaymentAttempt({ status: 'success', method: 'mixed', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
+      if (markRepairDelivered && selectedRepairIds.length > 0) {
+        setCustomerRepairs(prev => prev.map(r => (
+          selectedRepairIds.includes(r.id)
+            ? { ...r, status: 'entregado', delivered_at: new Date().toISOString() }
+            : r
+        )))
+      }
     } catch (error) {
       const msg = normalizePaymentError(error)
       setPaymentStatus('failed')
@@ -1487,7 +1610,7 @@ export default function POSPage() {
     }
 
     // Registrar venta mixta en caja (Supabase)
-    if (currentSession) {
+    if (getCurrentRegister.isOpen) {
       const sid = (saleResult && (saleResult as any).saleId) ? String((saleResult as any).saleId) : 'POS'
       const cashPaid = paymentSplit.filter(split => split.method === 'cash').reduce((sum, split) => sum + split.amount, 0)
       const cardPaid = paymentSplit.filter(split => split.method === 'card').reduce((sum, split) => sum + split.amount, 0)
@@ -2319,6 +2442,7 @@ export default function POSPage() {
                 onApplyDiscount={updateItemDiscount}
                 onCheckout={() => setIsCheckoutOpen(true)}
                 onClearCart={() => clearCart()}
+                onApplyPromoCode={applyPromoCode}
                 isWholesale={isWholesale}
                 onToggleWholesale={handleWholesaleToggle}
                 discount={generalDiscount}

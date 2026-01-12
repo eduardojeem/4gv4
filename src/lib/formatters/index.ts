@@ -3,14 +3,27 @@ import { es } from 'date-fns/locale'
 
 // Formateadores de valores
 export const formatters = {
-  currency: (value: number) => `Gs ${value.toLocaleString()}`,
-  percentage: (value: number) => `${value.toFixed(1)}%`,
-  number: (value: number) => value.toLocaleString(),
-  decimal: (value: number, places = 2) => value.toFixed(places),
+  currency: (value: number | null | undefined) => {
+    if (value == null || isNaN(value)) return 'Gs 0'
+    return `Gs ${value.toLocaleString()}`
+  },
+  percentage: (value: number | null | undefined) => {
+    if (value == null || isNaN(value)) return '0.0%'
+    return `${value.toFixed(1)}%`
+  },
+  number: (value: number | null | undefined) => {
+    if (value == null || isNaN(value)) return '0'
+    return value.toLocaleString()
+  },
+  decimal: (value: number | null | undefined, places = 2) => {
+    if (value == null || isNaN(value)) return '0.00'
+    return value.toFixed(places)
+  },
   date: (date: string | Date) => format(new Date(date), 'dd/MM/yyyy', { locale: es }),
   time: (date: string | Date) => format(new Date(date), 'HH:mm', { locale: es }),
   datetime: (date: string | Date) => format(new Date(date), 'dd/MM/yyyy HH:mm', { locale: es }),
-  compact: (value: number) => {
+  compact: (value: number | null | undefined) => {
+    if (value == null || isNaN(value)) return '0'
     if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
     if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
     return value.toString()

@@ -273,7 +273,7 @@ export function AnalyticsDashboard({
                 <CardTitle>Crecimiento de Ingresos</CardTitle>
               </CardHeader>
               <CardContent>
-                <RevenueChart data={metrics.monthlyData} />
+                <RevenueChart data={Array.isArray(metrics.monthlyData) ? metrics.monthlyData : []} />
               </CardContent>
             </Card>
 
@@ -282,7 +282,7 @@ export function AnalyticsDashboard({
                 <CardTitle>Crecimiento de Clientes</CardTitle>
               </CardHeader>
               <CardContent>
-                <CustomerGrowthChart data={metrics.monthlyData} />
+                <CustomerGrowthChart data={Array.isArray(metrics.monthlyData) ? metrics.monthlyData : []} />
               </CardContent>
             </Card>
           </div>
@@ -292,7 +292,7 @@ export function AnalyticsDashboard({
               <CardTitle>Distribución por Segmentos</CardTitle>
             </CardHeader>
             <CardContent>
-              <SegmentDistributionChart data={metrics.segmentDistribution} />
+              <SegmentDistributionChart data={Array.isArray(metrics.segmentDistribution) ? metrics.segmentDistribution : []} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -306,7 +306,7 @@ export function AnalyticsDashboard({
               <CardContent>
                 <ChartWrapper
                   type="area"
-                  data={metrics.monthlyData}
+                  data={Array.isArray(metrics.monthlyData) ? metrics.monthlyData : []}
                   config={[
                     { dataKey: 'monthShort' },
                     { dataKey: 'totalRevenue', name: 'Ingresos', format: 'currency' },
@@ -322,7 +322,7 @@ export function AnalyticsDashboard({
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {metrics.topCustomers.slice(0, 5).map((item) => (
+                  {(Array.isArray(metrics.topCustomers) ? metrics.topCustomers : []).slice(0, 5).map((item) => (
                     <div key={item.customer.id} className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <Badge variant="outline" className="w-6 h-6 p-0 flex items-center justify-center">

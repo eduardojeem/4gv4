@@ -61,6 +61,29 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
 
       logger.info('Customers refreshed', { count: response.data.length })
       toast.success("Clientes actualizados")
+      // Actualizar estado global si setState está disponible
+      if (setState) {
+        setState(prev => {
+          const itemsPerPage = prev.pagination.itemsPerPage
+          const totalItems = response.pagination?.total || response.data.length
+          const totalPages = Math.ceil(totalItems / itemsPerPage)
+          const page = 1
+          const start = (page - 1) * itemsPerPage
+          const end = start + itemsPerPage
+          return {
+            ...prev,
+            customers: response.data,
+            filteredCustomers: response.data,
+            paginatedCustomers: response.data.slice(start, end),
+            pagination: {
+              ...prev.pagination,
+              currentPage: page,
+              totalItems,
+              totalPages
+            }
+          }
+        })
+      }
       return response.data
     } catch (error: any) {
       const appError = error instanceof AppError ? error : new AppError(
@@ -138,45 +161,33 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
           const { id: _, customerCode, registration_date, last_visit, last_activity, ...rawUpdateData } = customerData
 
           // Enhanced data cleaning to handle [REDACTED] and other edge cases
-          const cleanUpdateData = Object.fromEntries(
-            Object.entries(rawUpdateData).map(([key, value]) => {
-              // Handle string values
-              if (typeof value === 'string') {
-                const trimmed = value.trim()
-                // Filter out redacted values, empty strings, and invalid placeholders
-                if (!trimmed || 
-                    trimmed.includes('[REDACTED]') || 
-                    trimmed === 'undefined' || 
-                    trimmed === 'null' ||
-                    trimmed === 'N/A' ||
-                    trimmed === '--') {
-                  return [key, undefined]
-                }
-                return [key, trimmed]
+          const cleanUpdateData = Object.entries(rawUpdateData).reduce((acc, [key, value]) => {
+            if (typeof value === 'string') {
+              const trimmed = value.trim()
+              if (!trimmed ||
+                  trimmed.includes('[REDACTED]') ||
+                  trimmed === 'undefined' ||
+                  trimmed === 'null' ||
+                  trimmed === 'N/A' ||
+                  trimmed === '--') {
+                return acc
               }
-              
-              // Handle arrays
-              if (Array.isArray(value)) {
-                const filtered = value.filter(item => 
-                  item && 
-                  typeof item === 'string' && 
-                  item.trim() && 
-                  !item.includes('[REDACTED]')
-                )
-                return [key, filtered.length > 0 ? filtered : undefined]
-              }
-              
-              // Handle numbers
-              if (typeof value === 'number') {
-                return [key, isNaN(value) ? undefined : value]
-              }
-              
-              // Handle other types
-              return [key, value]
-            })
-          ).reduce((acc, [key, value]) => {
-            // Only include defined values
-            if (value !== undefined) {
+              acc[key] = trimmed
+              return acc
+            }
+
+            if (Array.isArray(value)) {
+              const filtered = value.filter(item => item && typeof item === 'string' && item.trim() && !item.includes('[REDACTED]'))
+              if (filtered.length > 0) acc[key] = filtered
+              return acc
+            }
+
+            if (typeof value === 'number') {
+              if (!isNaN(value)) acc[key] = value
+              return acc
+            }
+
+            if (value !== undefined && value !== null) {
               acc[key] = value
             }
             return acc

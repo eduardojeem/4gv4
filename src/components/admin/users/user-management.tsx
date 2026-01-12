@@ -199,20 +199,20 @@ export function UserManagement() {
   // Helpers de UI
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
-      case 'admin': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'supervisor': return 'bg-purple-100 text-purple-800 border-purple-200'
-      case 'tecnico': return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'vendedor': return 'bg-green-100 text-green-800 border-green-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'admin': return 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800'
+      case 'supervisor': return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'
+      case 'tecnico': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
+      case 'vendedor': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
     }
   }
 
   const getStatusBadgeColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800 border-green-200'
-      case 'inactive': return 'bg-red-100 text-red-800 border-red-200'
-      case 'suspended': return 'bg-orange-100 text-orange-800 border-orange-200'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+      case 'active': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
+      case 'inactive': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
+      case 'suspended': return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
     }
   }
 
@@ -221,10 +221,10 @@ export function UserManagement() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h2>
-          <p className="text-gray-500 mt-1">Administra el acceso y roles del sistema</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Gestión de Usuarios</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Administra el acceso y roles del sistema</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => syncUsers()} disabled={dataLoading} title="Sincronizar con Auth">
@@ -233,7 +233,7 @@ export function UserManagement() {
           </Button>
           <Button
             onClick={() => setIsCreateDialogOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-blue-200 transition-all"
+            className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-blue-200 transition-all dark:hover:shadow-blue-900/30"
           >
             <UserPlus className="h-4 w-4 mr-2" />
             Nuevo Usuario
@@ -246,12 +246,12 @@ export function UserManagement() {
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-white border p-1 rounded-lg">
-          <TabsTrigger value="users" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
+        <TabsList className="bg-white dark:bg-gray-800 border dark:border-gray-700 p-1 rounded-lg">
+          <TabsTrigger value="users" className="data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-900/20 data-[state=active]:text-blue-700 dark:data-[state=active]:text-blue-400">
             <Users className="h-4 w-4 mr-2" />
             Usuarios
           </TabsTrigger>
-          <TabsTrigger value="activity" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700">
+          <TabsTrigger value="activity" className="data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-900/20 data-[state=active]:text-blue-700 dark:data-[state=active]:text-blue-400">
             <Activity className="h-4 w-4 mr-2" />
             Actividad Reciente
           </TabsTrigger>
@@ -259,18 +259,18 @@ export function UserManagement() {
 
         <TabsContent value="users" className="space-y-4">
           {/* Filters */}
-          <div className="grid gap-4 md:grid-cols-4 bg-white p-4 rounded-lg border shadow-sm">
+          <div className="grid gap-4 md:grid-cols-4 bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 shadow-sm">
             <div className="relative md:col-span-2">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 placeholder="Buscar por nombre, email o departamento..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-10 dark:bg-gray-900 dark:border-gray-700"
               />
             </div>
             <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="dark:bg-gray-900 dark:border-gray-700">
                 <SelectValue placeholder="Filtrar por rol" />
               </SelectTrigger>
               <SelectContent>
@@ -283,7 +283,7 @@ export function UserManagement() {
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="dark:bg-gray-900 dark:border-gray-700">
                 <SelectValue placeholder="Filtrar por estado" />
               </SelectTrigger>
               <SelectContent>
@@ -296,12 +296,12 @@ export function UserManagement() {
           </div>
 
           {/* Users Table */}
-          <Card className="border-0 shadow-lg overflow-hidden">
+          <Card className="border-0 shadow-lg dark:shadow-none overflow-hidden dark:bg-gray-800 dark:border dark:border-gray-700">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-gray-50/50">
+                    <TableRow className="bg-gray-50/50 dark:bg-gray-900/50 hover:bg-gray-50/50 dark:hover:bg-gray-900/50">
                       <TableHead className="w-[300px]">Usuario</TableHead>
                       <TableHead>Rol</TableHead>
                       <TableHead>Estado</TableHead>
@@ -326,7 +326,7 @@ export function UserManagement() {
                       </TableRow>
                     ) : (
                       users.map((user) => (
-                        <TableRow key={user.id} className="hover:bg-blue-50/50 transition-colors group">
+                        <TableRow key={user.id} className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors group border-b dark:border-gray-700">
                           <TableCell>
                             <div className="flex items-center gap-3">
                               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold shadow-sm">
@@ -337,8 +337,8 @@ export function UserManagement() {
                                 )}
                               </div>
                               <div>
-                                <div className="font-medium text-gray-900">{user.name}</div>
-                                <div className="text-sm text-gray-500 flex items-center gap-1">
+                                <div className="font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
+                                <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
                                   <Mail className="h-3 w-3" /> {user.email}
                                 </div>
                               </div>
@@ -354,10 +354,10 @@ export function UserManagement() {
                               {user.status === 'active' ? 'Activo' : user.status === 'inactive' ? 'Inactivo' : 'Suspendido'}
                             </Badge>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell text-gray-600">
+                          <TableCell className="hidden md:table-cell text-gray-600 dark:text-gray-400">
                             {user.department || '-'}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell text-gray-500 text-sm">
+                          <TableCell className="hidden lg:table-cell text-gray-500 dark:text-gray-400 text-sm">
                             {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Nunca'}
                           </TableCell>
                           <TableCell className="text-right">
@@ -370,7 +370,7 @@ export function UserManagement() {
                                   setIsViewDialogOpen(true)
                                 }}
                               >
-                                <Eye className="h-4 w-4 text-gray-500" />
+                                <Eye className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -389,7 +389,7 @@ export function UserManagement() {
                                   setIsEditDialogOpen(true)
                                 }}
                               >
-                                <Edit className="h-4 w-4 text-blue-500" />
+                                <Edit className="h-4 w-4 text-blue-500 dark:text-blue-400" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -399,7 +399,7 @@ export function UserManagement() {
                                   setIsDeleteDialogOpen(true)
                                 }}
                               >
-                                <Trash2 className="h-4 w-4 text-red-500" />
+                                <Trash2 className="h-4 w-4 text-red-500 dark:text-red-400" />
                               </Button>
                             </div>
                           </TableCell>
@@ -411,8 +411,8 @@ export function UserManagement() {
               </div>
 
               {/* Pagination */}
-              <div className="flex items-center justify-between px-4 py-4 border-t">
-                <div className="text-sm text-gray-500">
+              <div className="flex items-center justify-between px-4 py-4 border-t dark:border-gray-700">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
                   Mostrando {((page - 1) * pageSize) + 1} a {Math.min(page * pageSize, totalCount)} de {totalCount} usuarios
                 </div>
                 <div className="flex gap-2">
@@ -441,9 +441,9 @@ export function UserManagement() {
         </TabsContent>
 
         <TabsContent value="activity">
-          <Card>
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardContent className="p-6">
-              <UserActivityTimeline logs={[]} /> {/* TODO: Implementar logs reales */}
+              <UserActivityTimeline />
             </CardContent>
           </Card>
         </TabsContent>

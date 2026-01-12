@@ -110,7 +110,7 @@ export function CustomerFilters({
     {
       label: "Alto Valor",
       icon: <GSIcon className="h-4 w-4" />,
-      action: () => handleFilterChange("lifetime_value_range", [5000, 10000]),
+      action: () => handleFilterChange("spent_min", 500000),
       ariaLabel: "Filtrar clientes de alto valor"
     },
     {
@@ -124,6 +124,12 @@ export function CustomerFilters({
       icon: <TrendingUp className="h-4 w-4" />,
       action: () => handleFilterChange("status", "active"),
       ariaLabel: "Filtrar clientes activos"
+    },
+    {
+      label: "Compras Frecuentes",
+      icon: <Users className="h-4 w-4" />,
+      action: () => handleFilterChange("purchases_min", 3),
+      ariaLabel: "Clientes con al menos 3 compras"
     }
   ]
 
@@ -138,8 +144,11 @@ export function CustomerFilters({
       assigned_salesperson: "all",
       date_range: { from: null, to: null },
       credit_score_range: [0, 10],
-      lifetime_value_range: [0, 10000],
-      tags: []
+      lifetime_value_range: [0, Number.MAX_SAFE_INTEGER],
+      tags: [],
+      purchases_min: 0,
+      spent_min: 0,
+      loyalty_points_min: 0
     })
   }, [onFiltersChange])
 
@@ -158,7 +167,10 @@ export function CustomerFilters({
     if (filters.assigned_salesperson !== "all") count++
     if (filters.date_range.from || filters.date_range.to) count++
     if (filters.credit_score_range[0] > 0 || filters.credit_score_range[1] < 10) count++
-    if (filters.lifetime_value_range[0] > 0 || filters.lifetime_value_range[1] < 10000) count++
+    if (filters.lifetime_value_range[0] > 0 || filters.lifetime_value_range[1] < Number.MAX_SAFE_INTEGER) count++
+    if (filters.purchases_min > 0) count++
+    if (filters.spent_min > 0) count++
+    if (filters.loyalty_points_min > 0) count++
     if (filters.tags.length > 0) count++
     return count
   }, [filters])
@@ -315,6 +327,12 @@ export function CustomerFilters({
               } else if (filter.includes('status:')) {
                 const status = filter.split(':')[1]
                 handleFilterChange('status', status)
+              } else if (filter.includes('purchases>=')) {
+                const v = Number(filter.split('>=')[1])
+                handleFilterChange('purchases_min', isNaN(v) ? 0 : v)
+              } else if (filter.includes('spent>=')) {
+                const v = Number(filter.split('>=')[1])
+                handleFilterChange('spent_min', isNaN(v) ? 0 : v)
               }
             }}
             onCustomerSelect={onCustomerSelect}
@@ -570,21 +588,39 @@ export function CustomerFilters({
                   </div>
                 </div>
 
-                {/* Lifetime Value Range */}
+                {/* Lifetime/Spent Range */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Valor de Vida</Label>
+                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Gasto Total</Label>
                     <Badge variant="outline" className="text-xs">
-                      ${filters.lifetime_value_range[0]} - ${filters.lifetime_value_range[1]}
+                      ${filters.spent_min}+
                     </Badge>
                   </div>
                   <div className={compact ? "px-2" : "px-3"}>
-                    <Slider
-                      value={filters.lifetime_value_range}
-                      onValueChange={(value) => handleFilterChange("lifetime_value_range", value)}
-                      max={10000}
-                      min={0}
-                      step={100}
+                    <Input
+                      type="number"
+                      value={filters.spent_min}
+                      onChange={(e) => handleFilterChange("spent_min", Number(e.target.value) || 0)}
+                      placeholder="Monto mínimo"
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Purchases Min */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Compras mínimas</Label>
+                    <Badge variant="outline" className="text-xs">
+                      {filters.purchases_min}
+                    </Badge>
+                  </div>
+                  <div className={compact ? "px-2" : "px-3"}>
+                    <Input
+                      type="number"
+                      value={filters.purchases_min}
+                      onChange={(e) => handleFilterChange("purchases_min", Number(e.target.value) || 0)}
+                      placeholder="Cantidad mínima"
                       className="w-full"
                     />
                   </div>

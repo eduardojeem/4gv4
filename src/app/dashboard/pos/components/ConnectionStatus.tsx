@@ -4,8 +4,8 @@ import React, { useState } from 'react'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { 
-  Wifi, WifiOff, Cloud, CloudOff, RefreshCw, 
+import {
+  Wifi, WifiOff, Cloud, CloudOff, RefreshCw,
   CheckCircle, AlertTriangle, Clock
 } from 'lucide-react'
 import { useCashRegisterContext } from '../contexts/CashRegisterContext'
@@ -95,9 +95,9 @@ export function ConnectionStatus() {
                 {isOnline ? 'Online' : 'Offline'}
               </span>
             </div>
-            
+
             <div className="h-4 w-px bg-border" />
-            
+
             <Badge className={status.color}>
               <StatusIcon className="h-3 w-3 mr-1" />
               {status.label}
@@ -110,7 +110,7 @@ export function ConnectionStatus() {
                 {lastSyncTime.toLocaleTimeString('es-PY')}
               </span>
             )}
-            
+
             <Button
               variant="outline"
               size="sm"
@@ -129,52 +129,48 @@ export function ConnectionStatus() {
 
         {/* Connection Details */}
         <div className="mt-3 pt-3 border-t">
-          <div className="grid grid-cols-2 gap-4 text-xs">
-            <div>
-              <span className="text-muted-foreground">Estado de red:</span>
-              <span className={`ml-2 font-medium ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
-                {isOnline ? 'Conectado' : 'Desconectado'}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Modo de trabajo:</span>
-              <span className="ml-2 font-medium">
-                {isOnline ? 'Híbrido' : 'Local'}
-              </span>
-            </div>
+          <div className="text-xs">
+            <span className="text-muted-foreground">Estado de red:</span>
+            <span className={`ml-2 font-medium ${isOnline ? 'text-green-600' : 'text-red-600'}`}>
+              {isOnline ? 'Conectado a Base de Datos' : 'Sin Conexión'}
+            </span>
           </div>
         </div>
 
         {/* Offline Warning */}
-        {!isOnline && (
-          <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
-              <div className="text-xs">
-                <p className="font-medium text-yellow-800">Modo Offline Activo</p>
-                <p className="text-yellow-700 mt-1">
-                  Los datos se guardan localmente y se sincronizarán cuando se restablezca la conexión.
-                </p>
+        {
+          !isOnline && (
+            <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
+                <div className="text-xs">
+                  <p className="font-medium text-yellow-800">Modo Offline Activo</p>
+                  <p className="text-yellow-700 mt-1">
+                    Los datos se guardan localmente y se sincronizarán cuando se restablezca la conexión.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
         {/* Sync Pending Warning */}
-        {isOnline && lastSyncTime && (Date.now() - lastSyncTime.getTime()) > 30 * 60 * 1000 && (
-          <div className="mt-3 p-2 bg-orange-50 border border-orange-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <Cloud className="h-4 w-4 text-orange-600 mt-0.5" />
-              <div className="text-xs">
-                <p className="font-medium text-orange-800">Sincronización Recomendada</p>
-                <p className="text-orange-700 mt-1">
-                  Han pasado más de 30 minutos desde la última sincronización.
-                </p>
+        {
+          isOnline && lastSyncTime && (Date.now() - lastSyncTime.getTime()) > 30 * 60 * 1000 && (
+            <div className="mt-3 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-start gap-2">
+                <Cloud className="h-4 w-4 text-orange-600 mt-0.5" />
+                <div className="text-xs">
+                  <p className="font-medium text-orange-800">Sincronización Recomendada</p>
+                  <p className="text-orange-700 mt-1">
+                    Han pasado más de 30 minutos desde la última sincronización.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          )
+        }
+      </CardContent >
+    </Card >
   )
 }

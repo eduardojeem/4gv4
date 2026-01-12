@@ -29,6 +29,7 @@ export interface CartItem {
   category?: string
   // Identificador para servicios/reparaciones
   isService?: boolean
+  promoCode?: string
 }
 
 export interface PaymentSplit {
@@ -50,10 +51,13 @@ export interface PaymentMethodOption {
 
 export interface CashMovement {
   id: string
-  type: 'opening' | 'sale' | 'in' | 'out' | 'closing'
+  type: 'opening' | 'sale' | 'in' | 'cash_in' | 'out' | 'cash_out' | 'closing'
   amount: number
   note?: string
-  timestamp: string
+  reason?: string // Alias for note
+  timestamp?: string
+  created_at?: string // Alias for timestamp
+  payment_method?: 'cash' | 'card' | 'transfer' | 'mixed'
 }
 
 export interface CashRegisterState {

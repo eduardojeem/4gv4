@@ -348,12 +348,15 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
         device: `${repair.device_brand} ${repair.device_model}`,
         deviceType: 'other' as const,
         issue: repair.problem_description,
-        status: repair.status === 'completed' ? 'completed' : 
-                repair.status === 'cancelled' ? 'cancelled' : 
-                repair.status === 'in_progress' ? 'in_progress' : 'pending',
-        cost: repair.estimated_cost || 0,
-        technician: 'No asignado', // CustomerRepair doesn't have technician info
-        notes: '' // CustomerRepair doesn't have notes
+        status:
+          repair.status === 'entregado' || repair.final_cost ? 'completed' :
+          repair.status === 'listo' ? 'completed' :
+          repair.status === 'cancelado' ? 'cancelled' :
+          repair.status === 'reparacion' || repair.status === 'diagnostico' ? 'in_progress' :
+          'pending',
+        cost: (repair.final_cost ?? repair.estimated_cost) || 0,
+        technician: 'No asignado',
+        notes: ''
       }))
     }
     return mockRepairs

@@ -27,18 +27,20 @@ export function useCustomerRepairs() {
             setLoading(true)
             const { data, error } = await supabase
                 .from('repairs')
-                .select('*')
+                .select('id, device_brand, device_model, problem_description, status, estimated_cost, final_cost, created_at')
                 .eq('customer_id', customerId)
-                .in('status', ['completed', 'entregado']) // Assuming these are the statuses ready for payment
-                .is('sale_id', null) // Only unpaid repairs
+                .in('status', ['listo', 'entregado'])
 
             if (error) throw error
 
             setRepairs(data || [])
             return data || []
         } catch (error: unknown) {
-            console.error('Error fetching customer repairs:', error)
-            toast.error('Error al cargar reparaciones del cliente')
+            const msg = error && typeof error === 'object' && 'message' in (error as any)
+                ? String((error as any).message)
+                : JSON.stringify(error)
+            console.error('Error fetching customer repairs:', msg)
+            toast.error(msg || 'Error al cargar reparaciones del cliente')
             return []
         } finally {
             setLoading(false)

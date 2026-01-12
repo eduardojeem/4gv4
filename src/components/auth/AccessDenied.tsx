@@ -15,8 +15,8 @@ interface AccessDeniedProps {
 }
 
 export function AccessDenied({
-    title = "Acceso Restringido",
-    message = "No tienes los permisos necesarios para acceder a esta sección. Si crees que esto es un error, contacta al administrador.",
+    title = "Sin Permisos",
+    message = "No puedes acceder a esta sección. Contacta al administrador si necesitas acceso.",
     className
 }: AccessDeniedProps) {
     const router = useRouter()

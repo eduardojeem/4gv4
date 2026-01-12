@@ -110,11 +110,11 @@ export function SecurityPanel({}: SecurityPanelProps) {
 
   const getSeverityColor = (severity: SecurityLog['severity']) => {
     switch (severity) {
-      case 'low': return 'bg-green-100 text-green-800'
-      case 'medium': return 'bg-yellow-100 text-yellow-800'
-      case 'high': return 'bg-orange-100 text-orange-800'
-      case 'critical': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'low': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+      case 'medium': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+      case 'high': return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
+      case 'critical': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
     }
   }
 
@@ -129,11 +129,11 @@ export function SecurityPanel({}: SecurityPanelProps) {
   }
 
   const getEventIcon = (event: string) => {
-    if (event.includes('inicio') || event.includes('login') || event.includes('exitoso')) return <Unlock className="h-4 w-4 text-green-600" />
-    if (event.includes('fallido') || event.includes('failed') || event.includes('denegado')) return <Lock className="h-4 w-4 text-red-600" />
-    if (event.includes('bloqueado') || event.includes('blocked')) return <Ban className="h-4 w-4 text-red-600" />
-    if (event.includes('contraseña') || event.includes('password')) return <Shield className="h-4 w-4 text-blue-600" />
-    return <Eye className="h-4 w-4 text-gray-600" />
+    if (event.includes('inicio') || event.includes('login') || event.includes('exitoso')) return <Unlock className="h-4 w-4 text-green-600 dark:text-green-400" />
+    if (event.includes('fallido') || event.includes('failed') || event.includes('denegado')) return <Lock className="h-4 w-4 text-red-600 dark:text-red-400" />
+    if (event.includes('bloqueado') || event.includes('blocked')) return <Ban className="h-4 w-4 text-red-600 dark:text-red-400" />
+    if (event.includes('contraseña') || event.includes('password')) return <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+    return <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
   }
 
   const formatTimestamp = (timestamp: string) => {
@@ -171,14 +171,14 @@ export function SecurityPanel({}: SecurityPanelProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-red-700 flex items-center">
-              <Shield className="h-6 w-6 mr-2 text-red-700" />
+            <h2 className="text-2xl font-bold text-red-700 dark:text-red-400 flex items-center">
+              <Shield className="h-6 w-6 mr-2 text-red-700 dark:text-red-400" />
               Panel de Seguridad
             </h2>
-            <p className="text-red-700 mt-1">Monitoreo y auditoría de eventos de seguridad</p>
+            <p className="text-red-700 dark:text-red-400 mt-1">Monitoreo y auditoría de eventos de seguridad</p>
           </div>
           
           <div className="flex space-x-2">
@@ -186,7 +186,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
               variant="outline" 
               onClick={handleRefresh}
               disabled={isLoading}
-              className="border-red-300 text-red-700 hover:bg-red-50"
+              className="border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -198,7 +198,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
             <Button 
               onClick={handleExport}
               disabled={isLoading || filteredLogs.length === 0}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-red-600 hover:bg-red-700 text-white dark:bg-red-600 dark:hover:bg-red-700"
             >
               <Download className="h-4 w-4 mr-2" />
               Exportar
@@ -209,73 +209,73 @@ export function SecurityPanel({}: SecurityPanelProps) {
 
       {/* Estadísticas de Seguridad */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow">
+        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800 shadow dark:shadow-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-blue-700">Total de Eventos</CardTitle>
+            <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">Total de Eventos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
               {isLoading ? '-' : stats.totalEvents}
             </div>
-            <p className="text-xs text-blue-600">Período seleccionado</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400">Período seleccionado</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-red-50 to-pink-50 border-red-200 shadow">
+        <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-800 shadow dark:shadow-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-red-700">Eventos Críticos</CardTitle>
+            <CardTitle className="text-sm font-medium text-red-700 dark:text-red-400">Eventos Críticos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
               {isLoading ? '-' : stats.criticalEvents}
             </div>
-            <p className="text-xs text-red-600">Requieren atención inmediata</p>
+            <p className="text-xs text-red-600 dark:text-red-400">Requieren atención inmediata</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-orange-50 to-yellow-50 border-orange-200 shadow">
+        <Card className="bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border-orange-200 dark:border-orange-800 shadow dark:shadow-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-orange-700">Eventos de Alto Riesgo</CardTitle>
+            <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-400">Eventos de Alto Riesgo</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
               {isLoading ? '-' : stats.highRiskEvents}
             </div>
-            <p className="text-xs text-orange-600">Eventos de alta prioridad</p>
+            <p className="text-xs text-orange-600 dark:text-orange-400">Eventos de alta prioridad</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-red-50 to-rose-50 border-red-200 shadow">
+        <Card className="bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 border-red-200 dark:border-red-800 shadow dark:shadow-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-red-700">Intentos Fallidos</CardTitle>
+            <CardTitle className="text-sm font-medium text-red-700 dark:text-red-400">Intentos Fallidos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
               {isLoading ? '-' : stats.failedAttempts}
             </div>
-            <p className="text-xs text-red-600">Accesos denegados</p>
+            <p className="text-xs text-red-600 dark:text-red-400">Accesos denegados</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Filtros */}
-      <Card>
+      <Card className="dark:bg-gray-800 dark:border-gray-700">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-red-500" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-red-500 dark:text-red-400" />
                 <Input
                   placeholder="Buscar eventos, usuarios o IPs..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 border-red-200 focus:border-red-500 focus:ring-red-500"
+                  className="pl-10 border-red-200 focus:border-red-500 focus:ring-red-500 dark:bg-gray-900 dark:border-red-900 dark:placeholder-gray-400"
                 />
               </div>
             </div>
             
             <Select value={severityFilter} onValueChange={setSeverityFilter}>
-              <SelectTrigger className="w-full sm:w-40 border-orange-200 focus:border-orange-500 focus:ring-orange-500">
+              <SelectTrigger className="w-full sm:w-40 border-orange-200 focus:border-orange-500 focus:ring-orange-500 dark:bg-gray-900 dark:border-orange-900">
                 <SelectValue placeholder="Severidad" />
               </SelectTrigger>
               <SelectContent>
@@ -308,7 +308,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
             </Select>
             
             <Select value={timeFilter} onValueChange={setTimeFilter}>
-              <SelectTrigger className="w-full sm:w-40 border-purple-200 focus:border-purple-500 focus:ring-purple-500">
+              <SelectTrigger className="w-full sm:w-40 border-purple-200 focus:border-purple-500 focus:ring-purple-500 dark:bg-gray-900 dark:border-purple-900">
                 <SelectValue placeholder="Período" />
               </SelectTrigger>
               <SelectContent>
@@ -322,7 +322,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
             {/* Filtros avanzados: Usuario */}
             {uniqueUsers.length > 0 && (
               <Select value={userFilter} onValueChange={setUserFilter}>
-                <SelectTrigger className="w-full sm:w-40 border-blue-200 focus:border-blue-500 focus:ring-blue-500">
+                <SelectTrigger className="w-full sm:w-40 border-blue-200 focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-900 dark:border-blue-900">
                   <SelectValue placeholder="Usuario" />
                 </SelectTrigger>
                 <SelectContent>
@@ -337,7 +337,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
             {/* Filtros avanzados: Ubicación/IP */}
             {uniqueLocations.length > 0 && (
               <Select value={locationFilter} onValueChange={setLocationFilter}>
-                <SelectTrigger className="w-full sm:w-48 border-teal-200 focus:border-teal-500 focus:ring-teal-500">
+                <SelectTrigger className="w-full sm:w-48 border-teal-200 focus:border-teal-500 focus:ring-teal-500 dark:bg-gray-900 dark:border-teal-900">
                   <SelectValue placeholder="Ubicación/IP" />
                 </SelectTrigger>
                 <SelectContent>
@@ -353,9 +353,9 @@ export function SecurityPanel({}: SecurityPanelProps) {
       </Card>
 
       {/* Tabla de Logs de Seguridad */}
-      <Card>
+      <Card className="dark:bg-gray-800 dark:border-gray-700">
         <CardHeader>
-          <CardTitle>
+          <CardTitle className="dark:text-gray-100">
             Registro de Eventos ({isLoading ? '...' : filteredLogs.length})
           </CardTitle>
         </CardHeader>
@@ -363,45 +363,45 @@ export function SecurityPanel({}: SecurityPanelProps) {
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              <span className="ml-2 text-gray-600">Cargando logs de seguridad...</span>
+              <span className="ml-2 text-gray-600 dark:text-gray-400">Cargando logs de seguridad...</span>
             </div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Evento</TableHead>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>Ubicación</TableHead>
-                  <TableHead>Severidad</TableHead>
-                  <TableHead>Fecha/Hora</TableHead>
+                <TableRow className="dark:border-gray-700 hover:bg-transparent">
+                  <TableHead className="dark:text-gray-400">Evento</TableHead>
+                  <TableHead className="dark:text-gray-400">Usuario</TableHead>
+                  <TableHead className="dark:text-gray-400">Ubicación</TableHead>
+                  <TableHead className="dark:text-gray-400">Severidad</TableHead>
+                  <TableHead className="dark:text-gray-400">Fecha/Hora</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLogs.map((log) => {
                   const { date, time } = formatTimestamp(log.timestamp)
                   return (
-                    <TableRow key={log.id}>
+                    <TableRow key={log.id} className="dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                       <TableCell>
                         <div className="flex items-center space-x-3">
                           {getEventIcon(log.event)}
                           <div>
-                            <div className="font-medium">{log.event}</div>
+                            <div className="font-medium dark:text-gray-200">{log.event}</div>
                             {log.details && (
-                              <div className="text-sm text-muted-foreground">{log.details}</div>
+                              <div className="text-sm text-muted-foreground dark:text-gray-400">{log.details}</div>
                             )}
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-mono text-sm">{log.user}</span>
+                          <User className="h-4 w-4 text-muted-foreground dark:text-gray-500" />
+                          <span className="font-mono text-sm dark:text-gray-300">{log.user}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          <MapPin className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-mono text-sm">{log.ip}</span>
+                          <MapPin className="h-4 w-4 text-muted-foreground dark:text-gray-500" />
+                          <span className="font-mono text-sm dark:text-gray-300">{log.ip}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -414,10 +414,10 @@ export function SecurityPanel({}: SecurityPanelProps) {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-2">
-                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <Clock className="h-4 w-4 text-muted-foreground dark:text-gray-500" />
                           <div className="text-sm">
-                            <div>{date}</div>
-                            <div className="text-muted-foreground">{time}</div>
+                            <div className="dark:text-gray-300">{date}</div>
+                            <div className="text-muted-foreground dark:text-gray-500">{time}</div>
                           </div>
                         </div>
                       </TableCell>
@@ -429,7 +429,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
           )}
           
           {!isLoading && filteredLogs.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-muted-foreground dark:text-gray-400">
               <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No se encontraron eventos de seguridad con los filtros aplicados</p>
             </div>
