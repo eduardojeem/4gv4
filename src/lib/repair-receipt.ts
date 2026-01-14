@@ -31,9 +31,10 @@ interface RepairCustomerInfo {
   document?: string
   city?: string
   country?: string
+  customerCode?: string
 }
 
-interface RepairPrintPayload {
+export interface RepairPrintPayload {
   ticketNumber?: string
   date?: Date
   customer: RepairCustomerInfo
@@ -165,235 +166,657 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
   const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
   const time = dateObj.toLocaleTimeString(config.locale || 'es-PY')
 
-  const title = type === 'customer' ? 'Comprobante de Recepción - Cliente' : 'Ficha de Trabajo - Técnico'
-  const subtitle = type === 'customer'
-    ? 'Detalles de recepción y contacto'
-    : 'Información técnica y datos del cliente'
-
-  const devicesHTML = payload.devices.map((d, idx) => `
-    <div class="device">
-      <div class="device-header">
-        <span class="device-index">Equipo ${idx + 1}</span>
-        <span class="device-type">${d.typeLabel}</span>
-      </div>
-      <div class="grid">
-        <div><strong>Marca:</strong> ${d.brand || '-'}</div>
-        <div><strong>Modelo:</strong> ${d.model || '-'}</div>
-        ${d.technician ? `<div><strong>Técnico:</strong> ${d.technician}</div>` : ''}
-        ${typeof d.estimatedCost === 'number' ? `<div><strong>Costo estimado:</strong> ${formatCurrency(d.estimatedCost)}</div>` : ''}
-      </div>
-      <div class="issue">
-        <div class="label">Problema reportado</div>
-        <div class="value">${d.issue || '-'}</div>
-      </div>
-      ${d.description ? `
-      <div class="issue">
-        <div class="label">Descripción adicional</div>
-        <div class="value">${d.description}</div>
-      </div>` : ''}
-    </div>
-  `).join('')
-
-  const customerHTML = `
-    <div class="section">
-      <h3>Datos del Cliente</h3>
-      <div class="grid">
-        <div><strong>Nombre:</strong> ${payload.customer.name || '-'}</div>
-        ${payload.customer.customerCode ? `<div><strong>Código Cliente:</strong> ${payload.customer.customerCode}</div>` : ''}
-        ${payload.customer.document ? `<div><strong>Documento:</strong> ${payload.customer.document}</div>` : ''}
-        ${payload.customer.phone ? `<div><strong>Teléfono:</strong> ${payload.customer.phone}</div>` : ''}
-        ${payload.customer.email ? `<div><strong>Email:</strong> ${payload.customer.email}</div>` : ''}
-        ${payload.customer.address ? `<div><strong>Dirección:</strong> ${payload.customer.address}</div>` : ''}
-        ${payload.customer.city ? `<div><strong>Ciudad:</strong> ${payload.customer.city}</div>` : ''}
-        ${payload.customer.country ? `<div><strong>País:</strong> ${payload.customer.country}</div>` : ''}
-      </div>
-    </div>
-  `
-
-  const metaHTML = `
-    <div class="section">
-      <h3>Datos de la Recepción</h3>
-      <div class="grid">
-        <div><strong>Ticket N°:</strong> ${ticketNumber}</div>
-        <div><strong>Fecha:</strong> ${date}</div>
-        <div><strong>Hora:</strong> ${time}</div>
-        ${payload.priority ? `<div><strong>Prioridad:</strong> ${payload.priority}</div>` : ''}
-        ${payload.urgency ? `<div><strong>Urgencia:</strong> ${payload.urgency}</div>` : ''}
-      </div>
-    </div>
-  `
-
-  const footerNote = type === 'customer'
-    ? `<p>Este comprobante confirma la recepción del/los equipo(s) para diagnóstico y reparación.</p>
-       <p><strong>Garantía:</strong> 30 días sobre el trabajo realizado (no cubre repuestos salvo defecto de fábrica).</p>
-       <p><strong>Retiro:</strong> Los equipos reparados deben ser retirados en un plazo máximo de 90 días.</p>
-       <p>Para consultas: ${company.email}</p>`
-    : `<p>Ficha de uso interno.</p>`
-
-  // Estilos unificados para formato ticket (80mm)
-  const styles = `
-      @media print {
-        @page { size: 80mm auto; margin: 0mm; }
-        body { margin: 0.2cm; width: 76mm; }
+  // Estilos modernos unificados para ambos tipos de comprobante
+  const modernStyles = `
+    @media print {
+      @page { 
+        size: 80mm auto; 
+        margin: 2mm; 
       }
+      body { 
+        margin: 0; 
+        width: 76mm; 
+      }
+    }
+    
+    * {
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #1a1a1a;
+      background: #fff;
+      line-height: 1.3;
+      padding: 4mm;
+      font-size: 12px;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .company-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 2px;
+    }
+    
+    .company-info {
+      font-size: 9px;
+      color: #6b7280;
+      line-height: 1.2;
+    }
+    
+    .date-time {
+      font-size: 10px;
+      color: #6b7280;
+    }
+    
+    .ticket-badge {
+      background: #1f2937;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 14px;
+      margin: 8px 0;
+      display: inline-block;
+    }
+    
+    .title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin: 8px 0;
+    }
+    
+    .section-card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 8px;
+      margin: 8px 0;
+    }
+    
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    
+    .info-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      font-size: 10px;
+    }
+    
+    .info-label {
+      color: #6b7280;
+      font-weight: 500;
+      min-width: 50px;
+    }
+    
+    .info-value {
+      color: #111827;
+      font-weight: 600;
+      text-align: right;
+      flex: 1;
+      margin-left: 8px;
+    }
+    
+    .device-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px;
+      margin: 8px 0;
+      background: #ffffff;
+    }
+    
+    .device-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    
+    .device-icon {
+      font-size: 14px;
+    }
+    
+    .device-name {
+      font-weight: 600;
+      font-size: 13px;
+      color: #111827;
+    }
+    
+    .device-type {
+      font-size: 10px;
+      color: #6b7280;
+      margin-bottom: 8px;
+    }
+    
+    .problem-section {
+      margin: 8px 0;
+    }
+    
+    .problem-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #dc2626;
+      margin-bottom: 2px;
+    }
+    
+    .problem-text {
+      font-size: 11px;
+      color: #374151;
+      line-height: 1.4;
+      padding: 4px 0;
+    }
+    
+    .notes-section {
+      margin: 6px 0;
+      padding-top: 6px;
+      border-top: 1px dashed #d1d5db;
+    }
+    
+    .notes-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #059669;
+      margin-bottom: 2px;
+    }
+    
+    .notes-text {
+      font-size: 10px;
+      color: #4b5563;
+      line-height: 1.4;
+    }
+    
+    .tech-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed #d1d5db;
+      font-size: 10px;
+    }
+    
+    .tech-item {
+      color: #7c3aed;
+      font-weight: 500;
+    }
+    
+    .cost-item {
+      color: #059669;
+      font-weight: 600;
+    }
+    
+    .warranty-box {
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-radius: 6px;
+      padding: 8px;
+      margin: 10px 0;
+    }
+    
+    .warranty-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: #92400e;
+      margin-bottom: 4px;
+    }
+    
+    .warranty-text {
+      font-size: 9px;
+      color: #78350f;
+      line-height: 1.3;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 9px;
+      color: #9ca3af;
+    }
+    
+    .qr-placeholder {
+      width: 40px;
+      height: 40px;
+      background: #f3f4f6;
+      border: 1px dashed #d1d5db;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      color: #9ca3af;
+      margin: 8px auto;
+    }
+  `
+
+  // HTML específico para el ticket técnico (más compacto y moderno)
+  if (type === 'technician') {
+    const techDevicesHTML = payload.devices.map((d, idx) => `
+      <div class="device-card">
+        <div class="device-title">
+          <span class="device-icon">📱</span>
+          <span class="device-name">${d.brand} ${d.model}</span>
+        </div>
+        <div class="device-type">${d.typeLabel}</div>
+        
+        <div class="problem-section">
+          <div class="problem-label">🔧 Problema</div>
+          <div class="problem-text">${d.issue || '-'}</div>
+        </div>
+        
+        ${d.description ? `
+        <div class="notes-section">
+          <div class="notes-label">📝 Notas</div>
+          <div class="notes-text">${d.description}</div>
+        </div>` : ''}
+        
+        <div class="tech-info">
+          ${d.technician ? `<div class="tech-item">👨‍🔧 ${d.technician}</div>` : ''}
+          ${typeof d.estimatedCost === 'number' ? `<div class="cost-item">💰 ${formatCurrency(d.estimatedCost)}</div>` : ''}
+        </div>
+      </div>
+    `).join('')
+
+    // Estilos modernos y optimizados para móvil
+    const modernStyles = `
+      @media print {
+        @page { 
+          size: 80mm auto; 
+          margin: 2mm; 
+        }
+        body { 
+          margin: 0; 
+          width: 76mm; 
+        }
+      }
+      
+      * {
+        box-sizing: border-box;
+      }
+      
       body {
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        color: #000;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        color: #1a1a1a;
         background: #fff;
-        line-height: 1.2;
-        padding: 0;
-        font-size: 11px;
+        line-height: 1.3;
+        padding: 4mm;
+        font-size: 12px;
         max-width: 300px;
         margin: 0 auto;
       }
-      .doc { width: 100%; }
+      
       .header {
         text-align: center;
-        border-bottom: 1px dashed #000;
+        margin-bottom: 12px;
         padding-bottom: 8px;
-        margin-bottom: 8px;
+        border-bottom: 2px solid #e5e7eb;
       }
-      .header .company {
-        font-weight: bold;
+      
+      .company-name {
+        font-size: 16px;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 2px;
+      }
+      
+      .date-time {
+        font-size: 10px;
+        color: #6b7280;
+      }
+      
+      .ticket-badge {
+        background: #1f2937;
+        color: white;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: 700;
         font-size: 14px;
-        text-transform: uppercase;
+        margin: 8px 0;
+        display: inline-block;
       }
-      .header .company-sub {
-        font-size: 10px;
-        margin-top: 2px;
-      }
+      
       .title {
-        font-size: 13px;
-        font-weight: bold;
-        margin: 6px 0;
-        text-align: center;
+        font-size: 14px;
+        font-weight: 600;
+        color: #374151;
+        margin: 8px 0;
       }
-      .subtitle {
+      
+      .customer-card {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 8px;
+        margin: 8px 0;
+      }
+      
+      .customer-name {
+        font-weight: 600;
+        font-size: 13px;
+        color: #111827;
+        margin-bottom: 2px;
+      }
+      
+      .customer-phone {
+        font-size: 11px;
+        color: #6b7280;
+      }
+      
+      .priority-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
         font-size: 10px;
-        text-align: center;
-        color: #444;
+        font-weight: 500;
+        background: #dbeafe;
+        color: #1e40af;
+        margin: 4px 0;
+      }
+      
+      .device-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px;
+        margin: 8px 0;
+        background: #ffffff;
+      }
+      
+      .device-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
         margin-bottom: 4px;
       }
-      .ticket-number {
-        font-size: 16px;
-        font-weight: bold;
-        text-align: center;
-        margin: 8px 0;
-        border: 2px solid #000;
-        padding: 4px;
+      
+      .device-icon {
+        font-size: 14px;
       }
-      .section { margin: 10px 0; border-bottom: 1px dashed #ccc; padding-bottom: 8px; }
-      .section h3 { font-size: 11px; margin: 0 0 4px 0; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #eee; padding-bottom: 2px; }
       
-      .grid { display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
-      .grid div { display: flex; justify-content: space-between; }
-      .grid div strong { margin-right: 4px; }
+      .device-name {
+        font-weight: 600;
+        font-size: 13px;
+        color: #111827;
+      }
       
-      .device { margin-bottom: 12px; }
-      .device-header { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #eee; font-size: 12px; }
-      .issue { margin-top: 6px; }
-      .issue .label { font-weight: bold; font-size: 10px; color: #444; }
-      .issue .value { font-size: 11px; padding: 2px 0; font-weight: 600; }
+      .device-type {
+        font-size: 10px;
+        color: #6b7280;
+        margin-bottom: 8px;
+      }
       
-      .footer { margin-top: 12px; text-align: center; font-size: 9px; color: #444; }
-      .footer p { margin: 4px 0; }
-  `
-
-  // HTML específico para el ticket técnico (más compacto)
-  if (type === 'technician') {
-    const techDevicesHTML = payload.devices.map((d, idx) => `
-      <div class="device">
-        <div class="device-header">
-          ${d.typeLabel} - ${d.brand} ${d.model}
-        </div>
-        <div class="grid">
-          ${d.technician ? `<div><strong>Técnico:</strong> <span>${d.technician}</span></div>` : ''}
-          ${typeof d.estimatedCost === 'number' ? `<div><strong>Costo:</strong> <span>${formatCurrency(d.estimatedCost)}</span></div>` : ''}
-        </div>
-        <div class="issue">
-          <div class="label">Problema:</div>
-          <div class="value">${d.issue || '-'}</div>
-        </div>
-        ${d.description ? `
-        <div class="issue" style="margin-top: 4px;">
-          <div class="label">Notas:</div>
-          <div class="value" style="font-weight: normal;">${d.description}</div>
-        </div>` : ''}
-      </div>
-    `).join('<hr style="border: 0; border-top: 1px dashed #000; margin: 8px 0;" />')
+      .problem-section {
+        margin: 8px 0;
+      }
+      
+      .problem-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: #dc2626;
+        margin-bottom: 2px;
+      }
+      
+      .problem-text {
+        font-size: 11px;
+        color: #374151;
+        line-height: 1.4;
+        padding: 4px 0;
+      }
+      
+      .notes-section {
+        margin: 6px 0;
+        padding-top: 6px;
+        border-top: 1px dashed #d1d5db;
+      }
+      
+      .notes-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: #059669;
+        margin-bottom: 2px;
+      }
+      
+      .notes-text {
+        font-size: 10px;
+        color: #4b5563;
+        line-height: 1.4;
+      }
+      
+      .tech-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px dashed #d1d5db;
+        font-size: 10px;
+      }
+      
+      .tech-item {
+        color: #7c3aed;
+        font-weight: 500;
+      }
+      
+      .cost-item {
+        color: #059669;
+        font-weight: 600;
+      }
+      
+      .footer {
+        text-align: center;
+        margin-top: 12px;
+        padding-top: 8px;
+        border-top: 1px solid #e5e7eb;
+        font-size: 9px;
+        color: #9ca3af;
+      }
+      
+      .qr-placeholder {
+        width: 40px;
+        height: 40px;
+        background: #f3f4f6;
+        border: 1px dashed #d1d5db;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 8px;
+        color: #9ca3af;
+        margin: 8px auto;
+      }
+    `
 
     return `
     <!DOCTYPE html>
     <html>
       <head>
         <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Ficha ${ticketNumber}</title>
-        <style>${styles}</style>
+        <style>${modernStyles}</style>
       </head>
       <body>
         <div class="header">
-          <div class="company">${company.name}</div>
-          <div class="company-sub">${date} ${time}</div>
+          <div class="company-name">${company.name}</div>
+          <div class="date-time">${date} • ${time}</div>
         </div>
         
-        <div class="ticket-number">${ticketNumber}</div>
-        <div class="title">FICHA TÉCNICA</div>
+        <div style="text-align: center;">
+          <span class="ticket-badge">${ticketNumber}</span>
+        </div>
         
-        <div class="section">
-          <h3>Cliente</h3>
-          <div class="grid">
-            <div><strong>Nombre:</strong> <span style="font-weight:bold">${payload.customer.name}</span></div>
-            ${payload.customer.phone ? `<div><strong>Tel:</strong> <span>${payload.customer.phone}</span></div>` : ''}
+        <div class="title">📋 FICHA TÉCNICA</div>
+        
+        <div class="customer-card">
+          <div class="customer-name">👤 ${payload.customer.name}</div>
+          ${payload.customer.phone ? `<div class="customer-phone">📞 ${payload.customer.phone}</div>` : ''}
+          <div class="priority-badge">
+            ${payload.priority === 'high' ? '🔴 Alta' : payload.priority === 'medium' ? '🟡 Media' : '🟢 Normal'} 
+            ${payload.urgency === 'urgent' ? '• ⚡ Urgente' : ''}
           </div>
         </div>
 
-        <div class="section">
-          <h3>Detalles</h3>
-          <div class="grid">
-            <div><strong>Prioridad:</strong> <span>${payload.priority || 'Normal'}</span></div>
-            <div><strong>Urgencia:</strong> <span>${payload.urgency || 'Normal'}</span></div>
-          </div>
-        </div>
-
-        <div class="section" style="border-bottom: none;">
-          <h3>Equipos (${payload.devices.length})</h3>
+        <div style="margin: 12px 0;">
           ${techDevicesHTML}
         </div>
 
+        <div class="qr-placeholder">
+          QR
+        </div>
+
         <div class="footer">
-          <p>Uso Interno - ${company.name}</p>
+          <div>Uso Interno • ${company.name}</div>
+          <div style="margin-top: 2px;">Generado automáticamente</div>
         </div>
       </body>
     </html>
     `
   }
 
+  // HTML para comprobante del cliente (moderno y optimizado)
+  const customerDevicesHTML = payload.devices.map((d, idx) => `
+    <div class="device-card">
+      <div class="device-title">
+        <span class="device-icon">📱</span>
+        <span class="device-name">${d.brand} ${d.model}</span>
+      </div>
+      <div class="device-type">${d.typeLabel}</div>
+      
+      <div class="problem-section">
+        <div class="problem-label">🔧 Problema Reportado</div>
+        <div class="problem-text">${d.issue || '-'}</div>
+      </div>
+      
+      ${d.description ? `
+      <div class="notes-section">
+        <div class="notes-label">📝 Descripción</div>
+        <div class="notes-text">${d.description}</div>
+      </div>` : ''}
+      
+      ${typeof d.estimatedCost === 'number' ? `
+      <div class="tech-info">
+        <div class="cost-item">💰 Costo Estimado: ${formatCurrency(d.estimatedCost)}</div>
+      </div>` : ''}
+    </div>
+  `).join('')
+
   return `
   <!DOCTYPE html>
   <html>
     <head>
       <meta charset="utf-8" />
-      <title>${title} - ${ticketNumber}</title>
-      <style>${styles}</style>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Comprobante ${ticketNumber}</title>
+      <style>${modernStyles}</style>
     </head>
     <body>
-      <div class="doc">
-        <div class="header">
-          <div class="company">${company.name}</div>
-          <div class="company-sub">${company.address} · Tel: ${company.phone} · ${company.email}</div>
-          <div class="title">${title}</div>
-          <div class="subtitle">${subtitle}</div>
+      <div class="header">
+        <div class="company-name">${company.name}</div>
+        <div class="company-info">${company.address}<br/>📞 ${company.phone} • 📧 ${company.email}</div>
+        <div class="date-time">${date} • ${time}</div>
+      </div>
+      
+      <div style="text-align: center;">
+        <span class="ticket-badge">${ticketNumber}</span>
+      </div>
+      
+      <div class="title">🧾 COMPROBANTE DE RECEPCIÓN</div>
+      
+      <div class="section-card">
+        <div class="section-title">👤 Cliente</div>
+        <div class="info-grid">
+          <div class="info-row">
+            <span class="info-label">Nombre:</span>
+            <span class="info-value">${payload.customer.name}</span>
+          </div>
+          ${payload.customer.customerCode ? `
+          <div class="info-row">
+            <span class="info-label">Código:</span>
+            <span class="info-value">${payload.customer.customerCode}</span>
+          </div>` : ''}
+          ${payload.customer.phone ? `
+          <div class="info-row">
+            <span class="info-label">Teléfono:</span>
+            <span class="info-value">${payload.customer.phone}</span>
+          </div>` : ''}
+          ${payload.customer.email ? `
+          <div class="info-row">
+            <span class="info-label">Email:</span>
+            <span class="info-value">${payload.customer.email}</span>
+          </div>` : ''}
         </div>
-        ${metaHTML}
-        ${customerHTML}
-        <div class="section devices">
-          <h3>Equipos y detalles</h3>
-          ${devicesHTML}
+      </div>
+
+      <div class="section-card">
+        <div class="section-title">📅 Detalles de Recepción</div>
+        <div class="info-grid">
+          <div class="info-row">
+            <span class="info-label">Fecha:</span>
+            <span class="info-value">${date}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Hora:</span>
+            <span class="info-value">${time}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Prioridad:</span>
+            <span class="info-value">${payload.priority === 'high' ? '🔴 Alta' : payload.priority === 'medium' ? '🟡 Media' : '🟢 Normal'}</span>
+          </div>
+          ${payload.urgency === 'urgent' ? `
+          <div class="info-row">
+            <span class="info-label">Urgencia:</span>
+            <span class="info-value">⚡ Urgente</span>
+          </div>` : ''}
         </div>
-        <div class="footer">
-          ${footerNote}
-          <p class="mt-2">Generado: ${date} ${time}</p>
+      </div>
+
+      <div style="margin: 12px 0;">
+        <div class="section-title" style="margin-bottom: 8px;">📱 Equipos Recibidos (${payload.devices.length})</div>
+        ${customerDevicesHTML}
+      </div>
+
+      <div class="warranty-box">
+        <div class="warranty-title">⚠️ Términos y Condiciones</div>
+        <div class="warranty-text">
+          • Garantía: 30 días sobre trabajo realizado<br/>
+          • Retiro máximo: 90 días calendario<br/>
+          • Repuestos no incluyen garantía salvo defecto<br/>
+          • Conserve este comprobante para el retiro
         </div>
+      </div>
+
+      <div class="qr-placeholder">
+        QR
+      </div>
+
+      <div class="footer">
+        <div>Gracias por confiar en ${company.name}</div>
+        <div style="margin-top: 2px;">Para consultas: ${company.phone}</div>
       </div>
     </body>
   </html>

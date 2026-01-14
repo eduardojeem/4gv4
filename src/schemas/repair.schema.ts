@@ -201,7 +201,29 @@ export const RepairFormSchema = z.object({
   devices: z
     .array(DeviceSchema)
     .min(1, 'Agrega al menos un dispositivo')
-    .max(10, 'Máximo 10 dispositivos por reparación')
+    .max(10, 'Máximo 10 dispositivos por reparación'),
+    
+  // Parts array
+  parts: z.array(RepairPartSchema).optional().default([]),
+
+  // Notes array
+  notes: z.array(RepairNoteSchema).optional().default([]),
+  
+  // Cost fields
+  laborCost: z
+    .number()
+    .min(0, 'El costo de mano de obra no puede ser negativo')
+    .max(1000000, 'El costo de mano de obra es demasiado alto')
+    .optional()
+    .default(0),
+    
+  finalCost: z
+    .number()
+    .min(0, 'El costo final no puede ser negativo')
+    .max(1000000, 'El costo final es demasiado alto')
+    .optional()
+    .nullable()
+    .default(null)
 })
 
 /**
@@ -235,7 +257,23 @@ export const RepairFormQuickSchema = z.object({
   parts: z.array(RepairPartSchema).optional().default([]),
 
   // Notes array
-  notes: z.array(RepairNoteSchema).optional().default([])
+  notes: z.array(RepairNoteSchema).optional().default([]),
+  
+  // Cost fields
+  laborCost: z
+    .number()
+    .min(0, 'El costo de mano de obra no puede ser negativo')
+    .max(1000000, 'El costo de mano de obra es demasiado alto')
+    .optional()
+    .default(0),
+    
+  finalCost: z
+    .number()
+    .min(0, 'El costo final no puede ser negativo')
+    .max(1000000, 'El costo final es demasiado alto')
+    .optional()
+    .nullable()
+    .default(null)
 })
 
 /**

@@ -17,7 +17,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Save, X, User, Phone, Mail, MapPin, Smartphone, Laptop, Tablet,
-  AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign
+  AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -55,6 +55,7 @@ import { AppError } from '@/lib/errors'
 import { createClient } from '@/lib/supabase/client'
 // import { uploadFile } from '@/lib/supabase-storage'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
+import { RepairCostCalculator } from './repairs/RepairCostCalculator'
 import { Repair } from '@/types/repairs'
 
 export type RepairFormMode = 'add' | 'edit'
@@ -145,7 +146,9 @@ export function RepairFormDialogV2({
         estimatedCost: 0
       }],
       parts: initialData?.parts || [],
-      notes: initialData?.notes || []
+      notes: initialData?.notes || [],
+      laborCost: initialData?.laborCost || 0,
+      finalCost: initialData?.finalCost || null
     }
   })
 
@@ -194,7 +197,9 @@ export function RepairFormDialogV2({
           estimatedCost: 0
         }],
         parts: initialData?.parts || [],
-        notes: initialData?.notes || []
+        notes: initialData?.notes || [],
+        laborCost: initialData?.laborCost || 0,
+        finalCost: initialData?.finalCost || null
       })
     }
   }, [open, initialData, reset])
@@ -1020,6 +1025,17 @@ export function RepairFormDialogV2({
                 ))}
               </CardContent>
             </Card>
+
+            {/* Cost Calculator */}
+            <RepairCostCalculator
+              laborCost={watch('laborCost') || 0}
+              onLaborCostChange={(cost) => setValue('laborCost', cost)}
+              finalCost={watch('finalCost')}
+              onFinalCostChange={(cost) => setValue('finalCost', cost)}
+              parts={watch('parts') || []}
+              disabled={isSubmitting}
+              error={errors.finalCost?.message || errors.laborCost?.message}
+            />
           </form>
         </div>
 

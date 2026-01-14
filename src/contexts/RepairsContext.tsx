@@ -26,6 +26,8 @@ export interface RepairFormData {
     urgency: 'normal' | 'urgent'
     technician_id?: string
     estimated_cost?: number
+    laborCost?: number
+    finalCost?: number | null
     metadata?: Record<string, unknown>
     parts?: any[]
     notes?: any[]
@@ -131,6 +133,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     urgency: repairData.urgency,
                     technician_id: repairData.technician_id,
                     estimated_cost: repairData.estimated_cost,
+                    labor_cost: repairData.laborCost || 0,
+                    final_cost: repairData.finalCost,
                     received_at: new Date().toISOString()
                 }])
                 .select()
@@ -221,6 +225,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             if (repairData.urgency !== undefined) dbUpdateData.urgency = repairData.urgency
             if (repairData.technician_id !== undefined) dbUpdateData.technician_id = repairData.technician_id
             if (repairData.estimatedCost !== undefined) dbUpdateData.estimated_cost = repairData.estimatedCost
+            if (repairData.laborCost !== undefined) dbUpdateData.labor_cost = repairData.laborCost
             if (repairData.finalCost !== undefined) dbUpdateData.final_cost = repairData.finalCost
 
             // Only update repair if there are fields to update
