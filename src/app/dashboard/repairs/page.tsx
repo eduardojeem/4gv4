@@ -275,22 +275,23 @@ function RepairsPageContent() {
         const d = data.devices[0]
         const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
 
-        const updatePayload = {
-          customer_id: data.existingCustomerId,
-          device_brand: d.brand,
-          device_model: d.model,
-          device_type: d.deviceType,
-          problem_description: d.issue,
-          diagnosis: d.description,
-          access_type: d.accessType || 'none',
-          access_password: d.accessPassword || null,
+        const updatePayload: Partial<Repair> = {
+          brand: d.brand,
+          model: d.model,
+          deviceType: d.deviceType,
+          issue: d.issue,
+          description: d.description,
+          accessType: d.accessType || 'none',
+          accessPassword: d.accessPassword || null,
           priority: data.priority,
           urgency,
-          technician_id: d.technician,
-          estimated_cost: d.estimatedCost,
+          estimatedCost: d.estimatedCost,
+          laborCost: data.laborCost || 0,
+          finalCost: data.finalCost,
+          technician: d.technician ? { id: d.technician, name: '' } : undefined
         }
         
-        await updateRepair(selectedRepair.id, updatePayload as unknown as Repair)
+        await updateRepair(selectedRepair.id, updatePayload)
       }
       setIsDialogOpen(false)
     } catch (error) {
@@ -327,6 +328,8 @@ function RepairsPageContent() {
     customerEmail: selectedRepair.customer.email,
     priority: selectedRepair.priority,
     urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
+    laborCost: selectedRepair.laborCost || 0,
+    finalCost: selectedRepair.finalCost,
     devices: [{
       deviceType: selectedRepair.deviceType,
       brand: selectedRepair.brand,

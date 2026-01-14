@@ -9,14 +9,13 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
-import { Smartphone, Loader2, Cpu, CircuitBoard, Wifi, WifiOff, AlertTriangle, Eye, EyeOff, ArrowRight } from 'lucide-react'
+import { Smartphone, Loader2, Eye, EyeOff, ArrowRight, Sparkles, Shield, Zap, TrendingUp, Cpu, CircuitBoard, Binary, Wifi, Lock, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { config, isDemoNoDb } from '@/lib/config'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
-import { useConnectionStatus } from '@/hooks/use-connection-status'
-import { motion  } from '../../components/ui/motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { config } from '@/lib/config'
+import { useEffect } from 'react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -27,10 +26,16 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [resetOpen, setResetOpen] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
+  const [focusedField, setFocusedField] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
 
-  const { status: connectionStatus } = useConnectionStatus()
   const router = useRouter()
   const supabase = createClient()
+
+  // Esperar a que el componente esté montado en el cliente
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -68,47 +73,10 @@ export default function LoginPage() {
     }
   }
 
-  const handleDemoLogin = async () => {
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem('app-settings') : null
-      const obj = raw ? JSON.parse(raw) : {}
-      obj['system.demoNoDb'] = true
-      if (typeof window !== 'undefined') localStorage.setItem('app-settings', JSON.stringify(obj))
-    } catch { }
-
-    setLoading(true)
-    setError('')
-
-    await new Promise(resolve => setTimeout(resolve, 800))
-
-    try {
-      const demoSupabase = createClient()
-      const { error } = await demoSupabase.auth.signInWithPassword({ email: 'admin@demo.com', password: 'demo123' })
-
-      if (error) {
-        console.warn('Demo auth failed (expected if no DB), forcing redirect')
-      }
-
-      toast.success('Modo Demo activado')
-      router.push('/dashboard')
-      router.refresh()
-    } catch {
-      router.push('/dashboard')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleResetPassword = async () => {
     if (!resetEmail) return
 
     try {
-      if (!config.supabase.isConfigured || isDemoNoDb() || connectionStatus === 'disconnected') {
-        toast.info('En modo demo o sin conexión, esta función es simulada.')
-        setResetOpen(false)
-        return
-      }
-
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
         redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback?next=/dashboard/profile` : undefined,
       })
@@ -125,55 +93,265 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex relative overflow-hidden bg-slate-50 dark:bg-slate-950">
-      {/* Background Elements */}
-      <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]" />
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-indigo-50/50 dark:from-blue-950/20 dark:to-indigo-950/20" />
+    <div className="min-h-screen w-full flex relative overflow-hidden bg-slate-950">
+      {/* Animated Tech Background */}
+      <div className="absolute inset-0">
+        {/* Grid Pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(6,182,212,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(6,182,212,0.03)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_50%,black,transparent)]" />
+        
+        {/* Animated Circuit Lines */}
+        <svg className="absolute inset-0 w-full h-full opacity-20">
+          <defs>
+            <linearGradient id="circuit-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.8" />
+              <stop offset="50%" stopColor="#3b82f6" stopOpacity="0.6" />
+              <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.4" />
+            </linearGradient>
+          </defs>
+          
+          {/* Horizontal lines */}
+          {[...Array(5)].map((_, i) => (
+            <motion.line
+              key={`h-${i}`}
+              x1="0"
+              y1={`${20 + i * 20}%`}
+              x2="100%"
+              y2={`${20 + i * 20}%`}
+              stroke="url(#circuit-gradient)"
+              strokeWidth="1"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 0.3 }}
+              transition={{
+                duration: 2,
+                delay: i * 0.2,
+                repeat: Infinity,
+                repeatType: "reverse",
+                ease: "easeInOut"
+              }}
+            />
+          ))}
+          
+          {/* Vertical lines */}
+          {[...Array(5)].map((_, i) => (
+            <motion.line
+              key={`v-${i}`}
+              x1={`${20 + i * 20}%`}
+              y1="0"
+              x2={`${20 + i * 20}%`}
+              y2="100%"
+              stroke="url(#circuit-gradient)"
+              strokeWidth="1"
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 0.3 }}
+              transition={{
+                duration: 2,
+                delay: i * 0.2 + 0.5,
+                repeat: Infinity,
+                repeatType: "reverse",
+                ease: "easeInOut"
+              }}
+            />
+          ))}
+        </svg>
 
-      {/* Left Panel - Branding */}
+        {/* Floating Particles */}
+        {mounted && [...Array(20)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-cyan-400 rounded-full"
+            initial={{
+              x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1920),
+              y: Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 1080),
+              opacity: 0
+            }}
+            animate={{
+              y: [null, Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 1080)],
+              opacity: [0, 0.6, 0],
+            }}
+            transition={{
+              duration: 3 + Math.random() * 2,
+              repeat: Infinity,
+              delay: Math.random() * 2,
+              ease: "linear"
+            }}
+          />
+        ))}
+
+        {/* Glowing Orbs */}
+        <motion.div
+          animate={{
+            scale: [1, 1.2, 1],
+            opacity: [0.3, 0.5, 0.3],
+          }}
+          transition={{
+            duration: 4,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl"
+        />
+        <motion.div
+          animate={{
+            scale: [1, 1.3, 1],
+            opacity: [0.2, 0.4, 0.2],
+          }}
+          transition={{
+            duration: 5,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: 1
+          }}
+          className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-3xl"
+        />
+      </div>
+
+      {/* Left Panel - Tech Branding */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.6 }}
-        className="hidden lg:flex w-1/2 relative flex-col justify-between p-12 text-white bg-slate-900 overflow-hidden"
+        className="hidden lg:flex w-1/2 relative flex-col justify-between p-12 overflow-hidden"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-700 to-violet-800 opacity-90" />
-        <div className="absolute inset-0 bg-[url('/noise.png')] opacity-20 mix-blend-overlay" />
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-cyan-600/10 via-blue-600/10 to-violet-600/10" />
 
-        {/* Abstract Shapes */}
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-blue-500 rounded-full blur-3xl opacity-20 animate-pulse" />
-        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-violet-500 rounded-full blur-3xl opacity-20 animate-pulse delay-1000" />
-
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="bg-white/10 backdrop-blur-md p-2.5 rounded-xl border border-white/20 shadow-xl">
-            <Smartphone className="h-6 w-6 text-white" />
-          </div>
-          <span className="text-xl font-bold tracking-tight">4G POS</span>
+        {/* Logo with Tech Animation */}
+        <div className="relative z-10">
+          <motion.div 
+            className="flex items-center gap-3"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <motion.div
+              whileHover={{ scale: 1.05, rotate: 5 }}
+              className="relative"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl blur-xl opacity-50" />
+              <div className="relative bg-gradient-to-br from-cyan-500 to-blue-600 p-3 rounded-2xl border border-cyan-400/20 shadow-2xl">
+                <Cpu className="h-7 w-7 text-white" />
+              </div>
+              {/* Animated Corner Brackets */}
+              <motion.div
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-cyan-400"
+              />
+              <motion.div
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
+                className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-cyan-400"
+              />
+            </motion.div>
+            <div>
+              <motion.span 
+                className="text-2xl font-bold tracking-tight bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent"
+                animate={{ backgroundPosition: ["0%", "100%", "0%"] }}
+                transition={{ duration: 5, repeat: Infinity }}
+              >
+                {config.company.name}
+              </motion.span>
+            </div>
+          </motion.div>
         </div>
 
-        <div className="relative z-10 space-y-6 max-w-md">
-          <h1 className="text-4xl font-bold tracking-tight leading-tight">
-            Gestiona tu negocio con <span className="text-blue-200">tecnología avanzada</span>
-          </h1>
-          <p className="text-lg text-blue-100/90 leading-relaxed">
-            Control total de ventas, inventario y reparaciones en una plataforma unificada y segura.
-          </p>
+        {/* Main Content with Tech Theme */}
+        <div className="relative z-10 space-y-8 max-w-lg">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <h1 className="text-5xl font-bold tracking-tight leading-tight mb-4">
+              <span className="text-white">Tecnología que </span>
+              <motion.span 
+                className="bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent"
+                animate={{ 
+                  backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"],
+                }}
+                transition={{ duration: 5, repeat: Infinity }}
+                style={{ backgroundSize: "200% auto" }}
+              >
+                impulsa tu negocio
+              </motion.span>
+            </h1>
+            <p className="text-lg text-slate-400 leading-relaxed">
+              Sistema integral de gestión para el sector de electrónica y tecnología. 
+              Control total de inventario, ventas y reparaciones.
+            </p>
+          </motion.div>
 
-          <div className="flex gap-4 pt-4">
-            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/10">
-              <Cpu className="h-4 w-4 text-blue-300" />
-              <span className="text-sm font-medium">Rendimiento</span>
-            </div>
-            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/10">
-              <CircuitBoard className="h-4 w-4 text-violet-300" />
-              <span className="text-sm font-medium">Automatización</span>
-            </div>
-          </div>
-        </div>
+          {/* Tech Features Grid */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="grid grid-cols-2 gap-4"
+          >
+            {[
+              { icon: Zap, label: 'Alto rendimiento', color: 'from-yellow-400 to-orange-500', delay: 0 },
+              { icon: Shield, label: 'Datos seguros', color: 'from-green-400 to-emerald-500', delay: 0.1 },
+              { icon: CircuitBoard, label: 'Automatización', color: 'from-cyan-400 to-blue-500', delay: 0.2 },
+              { icon: TrendingUp, label: 'Analytics en vivo', color: 'from-purple-400 to-pink-500', delay: 0.3 },
+            ].map((feature, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.8 + feature.delay }}
+                whileHover={{ scale: 1.05, y: -5 }}
+                className="group relative"
+              >
+                {/* Glow effect */}
+                <div className={cn(
+                  "absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity blur-xl bg-gradient-to-br",
+                  feature.color
+                )} />
+                
+                {/* Card */}
+                <div className="relative bg-slate-900/50 backdrop-blur-sm p-4 rounded-xl border border-slate-800 group-hover:border-cyan-500/50 transition-all">
+                  <div className={cn(
+                    "w-10 h-10 rounded-lg bg-gradient-to-br flex items-center justify-center mb-2",
+                    feature.color
+                  )}>
+                    <feature.icon className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors">
+                    {feature.label}
+                  </span>
+                  
+                  {/* Corner accents */}
+                  <div className="absolute top-2 right-2 w-2 h-2 border-t border-r border-cyan-500/0 group-hover:border-cyan-500/50 transition-colors" />
+                  <div className="absolute bottom-2 left-2 w-2 h-2 border-b border-l border-cyan-500/0 group-hover:border-cyan-500/50 transition-colors" />
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
 
-        <div className="relative z-10 flex items-center justify-between text-xs text-blue-200/60 font-mono">
-          <span>v4.2.0-stable</span>
-          <span>© 2024 4G System</span>
+          {/* Tech Stats */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.2 }}
+            className="flex items-center gap-6 pt-4"
+          >
+            {[
+              { icon: CheckCircle2, text: 'Sistema certificado' },
+              { icon: Lock, text: 'Encriptación SSL' },
+              { icon: Wifi, text: 'Cloud sync' },
+            ].map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 1.4 + i * 0.1 }}
+                className="flex items-center gap-2 text-xs text-slate-400"
+              >
+                <item.icon className="h-3.5 w-3.5 text-cyan-400" />
+                <span>{item.text}</span>
+              </motion.div>
+            ))}
+          </motion.div>
         </div>
       </motion.div>
 
@@ -182,193 +360,337 @@ export default function LoginPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="w-full max-w-[420px]"
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="w-full max-w-[460px]"
         >
-          <Card className="shadow-2xl border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
-            <CardHeader className="space-y-1 pb-6">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-2xl font-bold tracking-tight">Bienvenido</CardTitle>
-                {/* Connection Status Indicator */}
-                <div
-                  className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium border transition-colors",
-                    connectionStatus === 'connected'
-                      ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/50"
-                      : connectionStatus === 'checking'
-                        ? "bg-slate-50 text-slate-600 border-slate-200"
-                        : "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-900/50"
-                  )}
-                  title={connectionStatus === 'connected' ? 'Conectado a Supabase' : 'Sin conexión a base de datos'}
+          <Card className="shadow-2xl border-slate-800 bg-slate-900/80 backdrop-blur-2xl overflow-hidden relative">
+            {/* Animated Border */}
+            <motion.div
+              className="absolute top-0 left-0 right-0 h-[2px]"
+              style={{
+                background: "linear-gradient(90deg, transparent, #06b6d4, #3b82f6, #8b5cf6, transparent)"
+              }}
+              animate={{
+                x: ["-100%", "100%"],
+              }}
+              transition={{
+                duration: 3,
+                repeat: Infinity,
+                ease: "linear"
+              }}
+            />
+            
+            <CardHeader className="space-y-1 pb-6 pt-8">
+              <div className="space-y-1">
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
                 >
-                  {connectionStatus === 'connected' ? (
-                    <>
-                      <Wifi className="h-3 w-3" />
-                      <span>Online</span>
-                    </>
-                  ) : connectionStatus === 'checking' ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Conectando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <WifiOff className="h-3 w-3" />
-                      <span>Offline</span>
-                    </>
-                  )}
-                </div>
+                  <CardTitle className="text-3xl font-bold tracking-tight">
+                    <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
+                      Bienvenido
+                    </span>
+                  </CardTitle>
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                >
+                  <CardDescription className="text-base text-slate-400">
+                    Ingresa tus credenciales para continuar
+                  </CardDescription>
+                </motion.div>
               </div>
-              <CardDescription>Ingresa tus credenciales para acceder al panel</CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-6">
-              {connectionStatus === 'disconnected' && !isDemoNoDb() && (
-                <Alert variant="destructive" className="py-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle className="text-sm font-semibold ml-2">Problema de conexión</AlertTitle>
-                  <AlertDescription className="text-xs ml-2 mt-1">
-                    No se pudo conectar con la base de datos. Verifica tu configuración o usa el modo demo.
-                  </AlertDescription>
-                </Alert>
-              )}
+            <CardContent className="space-y-6 pb-8">
+              <form onSubmit={handleLogin} className="space-y-5">
+                {/* Email Field */}
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.6 }}
+                  className="space-y-2"
+                >
+                  <Label htmlFor="email" className="text-sm font-semibold text-slate-300">
+                    Correo electrónico
+                  </Label>
+                  <div className="relative group">
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="nombre@empresa.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onFocus={() => setFocusedField('email')}
+                      onBlur={() => setFocusedField(null)}
+                      required
+                      autoComplete="email"
+                      className="h-11 bg-slate-950/50 border-slate-800 focus:border-cyan-500 transition-all pl-4 text-white placeholder:text-slate-500"
+                      disabled={loading}
+                    />
+                    {/* Animated underline */}
+                    <motion.div
+                      className="absolute bottom-0 left-0 h-[2px] bg-gradient-to-r from-cyan-500 to-blue-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: focusedField === 'email' ? '100%' : 0 }}
+                      transition={{ duration: 0.3 }}
+                    />
+                    {/* Corner brackets */}
+                    <AnimatePresence>
+                      {focusedField === 'email' && (
+                        <>
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0 }}
+                            className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-cyan-500"
+                          />
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0 }}
+                            className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-cyan-500"
+                          />
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
 
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Correo electrónico</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="nombre@empresa.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                    className="h-10 bg-slate-50 dark:bg-slate-950/50"
-                    disabled={loading}
-                  />
-                </div>
-
-                <div className="space-y-2">
+                {/* Password Field */}
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.7 }}
+                  className="space-y-2"
+                >
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="password">Contraseña</Label>
+                    <Label htmlFor="password" className="text-sm font-semibold text-slate-300">
+                      Contraseña
+                    </Label>
                     <button
                       type="button"
-                      className="text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                      className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold transition-colors hover:underline"
                       onClick={() => setResetOpen(true)}
                     >
                       ¿Olvidaste tu contraseña?
                     </button>
                   </div>
-                  <div className="relative">
+                  <div className="relative group">
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      onFocus={() => setFocusedField('password')}
+                      onBlur={() => setFocusedField(null)}
                       required
                       autoComplete="current-password"
-                      className="h-10 bg-slate-50 dark:bg-slate-950/50 pr-10"
+                      className="h-11 bg-slate-950/50 border-slate-800 focus:border-cyan-500 transition-all pr-11 pl-4 text-white placeholder:text-slate-500"
                       disabled={loading}
                     />
-                    <button
+                    <motion.button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-400 transition-colors p-1 rounded-md"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+                    </motion.button>
+                    {/* Animated underline */}
+                    <motion.div
+                      className="absolute bottom-0 left-0 h-[2px] bg-gradient-to-r from-cyan-500 to-blue-500"
+                      initial={{ width: 0 }}
+                      animate={{ width: focusedField === 'password' ? '100%' : 0 }}
+                      transition={{ duration: 0.3 }}
+                    />
+                    {/* Corner brackets */}
+                    <AnimatePresence>
+                      {focusedField === 'password' && (
+                        <>
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0 }}
+                            className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-cyan-500"
+                          />
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0 }}
+                            className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-cyan-500"
+                          />
+                        </>
+                      )}
+                    </AnimatePresence>
                   </div>
-                </div>
+                </motion.div>
 
-                <div className="flex items-center space-x-2">
-                  <Switch id="remember" checked={rememberMe} onCheckedChange={setRememberMe} />
-                  <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground cursor-pointer">
+                {/* Remember Me */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.8 }}
+                  className="flex items-center space-x-2 py-1"
+                >
+                  <Switch 
+                    id="remember" 
+                    checked={rememberMe} 
+                    onCheckedChange={setRememberMe}
+                    className="data-[state=checked]:bg-cyan-600"
+                  />
+                  <Label htmlFor="remember" className="text-sm font-normal text-slate-400 cursor-pointer">
                     Mantener sesión iniciada
                   </Label>
-                </div>
+                </motion.div>
 
-                {error && (
-                  <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded-md flex items-start gap-2 animate-in fade-in slide-in-from-top-1">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  className="w-full h-10 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg group"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Iniciando sesión...
-                    </>
-                  ) : (
-                    <>
-                      Acceder al Panel
-                      <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                    </>
+                {/* Error Message */}
+                <AnimatePresence>
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, y: -10, height: 0 }}
+                      className="text-sm text-red-400 bg-red-500/10 p-3.5 rounded-lg flex items-start gap-2.5 border border-red-500/20"
+                    >
+                      <Shield className="h-4 w-4 mt-0.5 shrink-0" />
+                      <span className="text-xs leading-relaxed">{error}</span>
+                    </motion.div>
                   )}
-                </Button>
+                </AnimatePresence>
+
+                {/* Submit Button */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.9 }}
+                >
+                  <Button
+                    type="submit"
+                    className="w-full h-11 bg-gradient-to-r from-cyan-600 via-blue-600 to-violet-600 hover:from-cyan-500 hover:via-blue-500 hover:to-violet-500 text-white font-semibold transition-all shadow-lg hover:shadow-cyan-500/50 group relative overflow-hidden"
+                    disabled={loading}
+                  >
+                    {/* Animated shine effect */}
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                      animate={{
+                        x: ['-100%', '100%'],
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        repeatDelay: 1,
+                      }}
+                    />
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Iniciando sesión...
+                      </>
+                    ) : (
+                      <>
+                        Acceder al Panel
+                        <motion.div
+                          animate={{ x: [0, 5, 0] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        >
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </motion.div>
+                      </>
+                    )}
+                  </Button>
+                </motion.div>
               </form>
 
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-slate-200 dark:border-slate-800" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white dark:bg-slate-900 px-2 text-muted-foreground">O continúa con</span>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleDemoLogin}
-                disabled={loading}
-                className="w-full h-10 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800"
+              {/* Register Link */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1 }}
+                className="text-center pt-2"
               >
-                <CircuitBoard className="mr-2 h-4 w-4 text-slate-500" />
-                Modo Demo (Sin Base de Datos)
-              </Button>
-
-              <p className="text-center text-sm text-muted-foreground pt-2">
-                ¿No tienes cuenta?{' '}
-                <Link href="/register" className="text-blue-600 hover:text-blue-700 font-medium hover:underline transition-colors">
-                  Solicitar acceso
-                </Link>
-              </p>
+                <p className="text-sm text-slate-400">
+                  ¿No tienes cuenta?{' '}
+                  <Link 
+                    href="/register" 
+                    className="text-cyan-400 hover:text-cyan-300 font-semibold hover:underline transition-colors inline-flex items-center gap-1 group"
+                  >
+                    Solicitar acceso
+                    <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
+                  </Link>
+                </p>
+              </motion.div>
             </CardContent>
           </Card>
+
+          {/* Trust Badges */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.1 }}
+            className="mt-8 flex items-center justify-center gap-6 text-xs text-slate-500"
+          >
+            <motion.div 
+              className="flex items-center gap-1.5"
+              whileHover={{ scale: 1.05 }}
+            >
+              <Shield className="h-3.5 w-3.5 text-green-500" />
+              <span>Conexión segura</span>
+            </motion.div>
+            <motion.div 
+              className="flex items-center gap-1.5"
+              whileHover={{ scale: 1.05 }}
+            >
+              <Lock className="h-3.5 w-3.5 text-cyan-500" />
+              <span>Encriptación SSL</span>
+            </motion.div>
+          </motion.div>
         </motion.div>
       </div>
 
       {/* Reset Password Dialog */}
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[440px] border-slate-200 dark:border-slate-800">
           <DialogHeader>
-            <DialogTitle>Restablecer contraseña</DialogTitle>
+            <DialogTitle className="text-2xl font-bold">Restablecer contraseña</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-5 py-4">
             <div className="space-y-2">
-              <Label htmlFor="resetEmail">Correo electrónico</Label>
+              <Label htmlFor="resetEmail" className="text-sm font-semibold">
+                Correo electrónico
+              </Label>
               <Input
                 id="resetEmail"
                 type="email"
                 placeholder="nombre@empresa.com"
                 value={resetEmail}
                 onChange={(e) => setResetEmail(e.target.value)}
+                className="h-11 bg-slate-50 dark:bg-slate-950/50"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                 Te enviaremos un enlace seguro para crear una nueva contraseña.
               </p>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setResetOpen(false)}>Cancelar</Button>
-              <Button onClick={handleResetPassword} disabled={!resetEmail}>Enviar enlace</Button>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button 
+                variant="ghost" 
+                onClick={() => setResetOpen(false)}
+                className="hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleResetPassword} 
+                disabled={!resetEmail}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              >
+                Enviar enlace
+              </Button>
             </div>
           </div>
         </DialogContent>

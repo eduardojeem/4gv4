@@ -1,36 +1,54 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Smartphone, Loader2, Eye, EyeOff, ArrowRight, Sparkles, Shield, Zap, TrendingUp, UserPlus } from 'lucide-react'
-import Link from 'next/link'
+import { Smartphone, Loader2, Eye, EyeOff, ArrowRight, Shield, CheckCircle2, Lock, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
+import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
-import { motion  } from '../../components/ui/motion'
+import Link from 'next/link'
 
-export default function RegisterPage() {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    confirmPassword: '',
-    fullName: '',
-  })
+export default function ResetPasswordContent() {
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
+  const [success, setSuccess] = useState(false)
+  const [validatingToken, setValidatingToken] = useState(true)
+  
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
+  // Validar que tenemos un token válido
+  useEffect(() => {
+    const validateSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error || !session) {
+          toast.error('El enlace de recuperación es inválido o ha expirado')
+          setTimeout(() => router.push('/login'), 2000)
+          return
+        }
+        
+        setValidatingToken(false)
+      } catch (err) {
+        console.error('Error validating session:', err)
+        toast.error('Error al validar el enlace')
+        setTimeout(() => router.push('/login'), 2000)
+      }
+    }
+
+    validateSession()
+  }, [router, supabase.auth])
 
   const validatePassword = (pwd: string): string | null => {
     if (pwd.length < 8) {
@@ -48,65 +66,83 @@ export default function RegisterPage() {
     return null
   }
 
-  const handleRegister = async (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
 
     // Validaciones
-    if (formData.password !== formData.confirmPassword) {
+    if (password !== confirmPassword) {
       setError('Las contraseñas no coinciden')
       setLoading(false)
       return
     }
 
-    const passwordError = validatePassword(formData.password)
+    const passwordError = validatePassword(password)
     if (passwordError) {
       setError(passwordError)
       setLoading(false)
       return
     }
 
-    if (!formData.fullName.trim()) {
-      setError('El nombre completo es requerido')
-      setLoading(false)
-      return
-    }
-
     try {
-      // Registrar usuario con Supabase Auth
-      // El trigger on_auth_user_created creará automáticamente el perfil con rol 'cliente'
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.fullName,
-          }
-        }
+      const { error } = await supabase.auth.updateUser({
+        password: password
       })
 
-      if (authError) {
-        setError(authError.message)
-        setLoading(false)
-        return
-      }
-
-      if (authData.user) {
-        toast.success('¡Cuenta creada exitosamente! Bienvenido.')
+      if (error) {
+        console.error('Reset password error:', error)
+        setError(error.message || 'Error al actualizar la contraseña')
+      } else {
+        setSuccess(true)
+        toast.success('Contraseña actualizada exitosamente')
         
-        // Redirigir al dashboard
+        // Redirigir al dashboard después de 2 segundos
         setTimeout(() => {
           router.push('/dashboard')
-          router.refresh()
-        }, 1000)
+        }, 2000)
       }
     } catch (err) {
       console.error('Unexpected error:', err)
-      setError('Error inesperado. Intenta de nuevo.')
+      setError('Ocurrió un error inesperado. Intenta de nuevo.')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (validatingToken) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/30">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+          <p className="text-sm text-slate-600 dark:text-slate-400">Validando enlace...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/30">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center space-y-6 max-w-md"
+        >
+          <div className="mx-auto w-20 h-20 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
+            <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+              ¡Contraseña actualizada!
+            </h2>
+            <p className="text-slate-600 dark:text-slate-400">
+              Tu contraseña ha sido actualizada exitosamente. Redirigiendo al panel...
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    )
   }
 
   return (
@@ -182,48 +218,49 @@ export default function RegisterPage() {
             transition={{ delay: 0.3 }}
           >
             <h1 className="text-5xl font-bold tracking-tight leading-tight mb-4">
-              Comienza tu{' '}
+              Protege tu{' '}
               <span className="bg-gradient-to-r from-blue-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
-                transformación digital
+                cuenta
               </span>
             </h1>
             <p className="text-lg text-blue-100/90 leading-relaxed">
-              Únete a cientos de empresas que ya optimizan su gestión con nuestra plataforma. 
-              Crea tu cuenta en minutos y comienza a crecer.
+              Crea una contraseña segura para mantener tu información protegida. 
+              Asegúrate de usar una combinación de letras, números y caracteres especiales.
             </p>
           </motion.div>
 
-          {/* Features Grid */}
+          {/* Security Tips */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="grid grid-cols-2 gap-4"
+            className="space-y-3"
           >
+            <h3 className="text-sm font-semibold text-blue-200/80 uppercase tracking-wider">
+              Consejos de seguridad
+            </h3>
             {[
-              { icon: Zap, label: 'Configuración rápida', color: 'from-yellow-400 to-orange-400' },
-              { icon: Shield, label: 'Datos protegidos', color: 'from-green-400 to-emerald-400' },
-              { icon: TrendingUp, label: 'Crece sin límites', color: 'from-blue-400 to-cyan-400' },
-              { icon: Sparkles, label: 'Fácil de usar', color: 'from-purple-400 to-pink-400' },
-            ].map((feature, i) => (
+              'Usa al menos 8 caracteres',
+              'Incluye mayúsculas y minúsculas',
+              'Agrega números y símbolos',
+              'Evita información personal',
+            ].map((tip, i) => (
               <motion.div
                 key={i}
-                whileHover={{ scale: 1.05, y: -5 }}
-                className="group relative bg-white/10 backdrop-blur-sm p-4 rounded-xl border border-white/10 hover:bg-white/15 transition-all cursor-pointer"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.6 + i * 0.1 }}
+                className="flex items-center gap-3 text-blue-100/80"
               >
-                <div className={cn(
-                  "absolute inset-0 rounded-xl opacity-0 group-hover:opacity-20 transition-opacity bg-gradient-to-br",
-                  feature.color
-                )} />
-                <feature.icon className="h-5 w-5 text-white mb-2" />
-                <span className="text-sm font-medium text-white/90">{feature.label}</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-300" />
+                <span className="text-sm">{tip}</span>
               </motion.div>
             ))}
           </motion.div>
         </div>
       </motion.div>
 
-      {/* Right Panel - Register Form */}
+      {/* Right Panel - Reset Form */}
       <div className="flex-1 flex items-center justify-center p-4 lg:p-8 relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -238,71 +275,31 @@ export default function RegisterPage() {
             <CardHeader className="space-y-1 pb-6 pt-8">
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-                  <UserPlus className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <Lock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <CardTitle className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
-                  Crear Cuenta
+                  Nueva Contraseña
                 </CardTitle>
               </div>
               <CardDescription className="text-base">
-                Completa tus datos para comenzar
+                Ingresa tu nueva contraseña para restablecer el acceso
               </CardDescription>
             </CardHeader>
 
             <CardContent className="space-y-6 pb-8">
-              <form onSubmit={handleRegister} className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Nombre completo
-                  </Label>
-                  <div className="relative group">
-                    <Input
-                      id="fullName"
-                      type="text"
-                      placeholder="Juan Pérez"
-                      value={formData.fullName}
-                      onChange={(e) => handleInputChange('fullName', e.target.value)}
-                      required
-                      className="h-11 bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:focus:border-blue-500 transition-all pl-4 group-hover:border-slate-300 dark:group-hover:border-slate-700"
-                      disabled={loading}
-                    />
-                    <div className="absolute inset-0 -z-10 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-lg blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Correo electrónico
-                  </Label>
-                  <div className="relative group">
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="nombre@empresa.com"
-                      value={formData.email}
-                      onChange={(e) => handleInputChange('email', e.target.value)}
-                      required
-                      autoComplete="email"
-                      className="h-11 bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:focus:border-blue-500 transition-all pl-4 group-hover:border-slate-300 dark:group-hover:border-slate-700"
-                      disabled={loading}
-                    />
-                    <div className="absolute inset-0 -z-10 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-lg blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                  </div>
-                </div>
-
+              <form onSubmit={handleResetPassword} className="space-y-5">
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Contraseña
+                    Nueva contraseña
                   </Label>
                   <div className="relative group">
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••"
-                      value={formData.password}
-                      onChange={(e) => handleInputChange('password', e.target.value)}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       required
-                      autoComplete="new-password"
                       className="h-11 bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:focus:border-blue-500 transition-all pr-11 pl-4 group-hover:border-slate-300 dark:group-hover:border-slate-700"
                       disabled={loading}
                     />
@@ -326,10 +323,9 @@ export default function RegisterPage() {
                       id="confirmPassword"
                       type={showConfirmPassword ? 'text' : 'password'}
                       placeholder="••••••••"
-                      value={formData.confirmPassword}
-                      onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
                       required
-                      autoComplete="new-password"
                       className="h-11 bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:focus:border-blue-500 transition-all pr-11 pl-4 group-hover:border-slate-300 dark:group-hover:border-slate-700"
                       disabled={loading}
                     />
@@ -352,41 +348,41 @@ export default function RegisterPage() {
                   <ul className="space-y-1 text-xs text-slate-600 dark:text-slate-400">
                     <li className={cn(
                       "flex items-center gap-2",
-                      formData.password.length >= 8 && "text-green-600 dark:text-green-400"
+                      password.length >= 8 && "text-green-600 dark:text-green-400"
                     )}>
                       <div className={cn(
                         "w-1 h-1 rounded-full",
-                        formData.password.length >= 8 ? "bg-green-600" : "bg-slate-400"
+                        password.length >= 8 ? "bg-green-600" : "bg-slate-400"
                       )} />
                       Mínimo 8 caracteres
                     </li>
                     <li className={cn(
                       "flex items-center gap-2",
-                      /[A-Z]/.test(formData.password) && "text-green-600 dark:text-green-400"
+                      /[A-Z]/.test(password) && "text-green-600 dark:text-green-400"
                     )}>
                       <div className={cn(
                         "w-1 h-1 rounded-full",
-                        /[A-Z]/.test(formData.password) ? "bg-green-600" : "bg-slate-400"
+                        /[A-Z]/.test(password) ? "bg-green-600" : "bg-slate-400"
                       )} />
                       Una letra mayúscula
                     </li>
                     <li className={cn(
                       "flex items-center gap-2",
-                      /[a-z]/.test(formData.password) && "text-green-600 dark:text-green-400"
+                      /[a-z]/.test(password) && "text-green-600 dark:text-green-400"
                     )}>
                       <div className={cn(
                         "w-1 h-1 rounded-full",
-                        /[a-z]/.test(formData.password) ? "bg-green-600" : "bg-slate-400"
+                        /[a-z]/.test(password) ? "bg-green-600" : "bg-slate-400"
                       )} />
                       Una letra minúscula
                     </li>
                     <li className={cn(
                       "flex items-center gap-2",
-                      /[0-9]/.test(formData.password) && "text-green-600 dark:text-green-400"
+                      /[0-9]/.test(password) && "text-green-600 dark:text-green-400"
                     )}>
                       <div className={cn(
                         "w-1 h-1 rounded-full",
-                        /[0-9]/.test(formData.password) ? "bg-green-600" : "bg-slate-400"
+                        /[0-9]/.test(password) ? "bg-green-600" : "bg-slate-400"
                       )} />
                       Un número
                     </li>
@@ -413,11 +409,11 @@ export default function RegisterPage() {
                   {loading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creando cuenta...
+                      Actualizando contraseña...
                     </>
                   ) : (
                     <>
-                      Crear Cuenta
+                      Restablecer Contraseña
                       <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                     </>
                   )}
@@ -426,12 +422,12 @@ export default function RegisterPage() {
 
               <div className="text-center pt-2">
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  ¿Ya tienes cuenta?{' '}
+                  ¿Recordaste tu contraseña?{' '}
                   <Link 
                     href="/login" 
                     className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold hover:underline transition-colors inline-flex items-center gap-1 group"
                   >
-                    Inicia sesión
+                    Volver al login
                     <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
                   </Link>
                 </p>
@@ -448,11 +444,11 @@ export default function RegisterPage() {
           >
             <div className="flex items-center gap-1.5">
               <Shield className="h-3.5 w-3.5 text-green-600" />
-              <span>Datos protegidos</span>
+              <span>Conexión segura</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-              <span>Gratis para empezar</span>
+              <span>Encriptación SSL</span>
             </div>
           </motion.div>
         </motion.div>

@@ -17,7 +17,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Save, X, User, Phone, Mail, MapPin, Smartphone, Laptop, Tablet,
-  AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator
+  AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator, FileText
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -259,30 +259,67 @@ export function RepairFormDialogV2({
     }
   }, [errors, setFocus])
 
+  // Estado para pantalla completa
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
   return (
     <>
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl w-[95vw] max-h-[95vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex-shrink-0 pb-4 border-b">
-          <DialogTitle className="text-xl font-semibold">
-            {mode === 'add' ? 'Nueva Reparación' : 'Editar Reparación'}
-          </DialogTitle>
-          <DialogDescription className="text-sm text-muted-foreground">
-            Complete los datos del cliente y los dispositivos a reparar
-          </DialogDescription>
+      <DialogContent className={`${isFullscreen ? 'max-w-full w-full max-h-full h-full' : 'max-w-[96vw] w-[96vw] max-h-[96vh] h-[96vh]'} overflow-hidden flex flex-col p-0 dark:bg-slate-950 dark:border-slate-800 transition-all duration-300`}>
+        <DialogHeader className="flex-shrink-0 px-8 pt-6 pb-5 border-b border-border bg-gradient-to-r from-primary/5 via-primary/3 to-transparent dark:from-primary/10 dark:via-primary/5 dark:to-transparent dark:border-slate-800">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent dark:from-primary dark:to-primary/80">
+                {mode === 'add' ? '✨ Nueva Reparación' : '✏️ Editar Reparación'}
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground mt-1 dark:text-slate-400">
+                Complete los datos del cliente y los dispositivos a reparar
+              </DialogDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              {mode === 'edit' && repair && (
+                <div className="text-right px-4 py-2 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20 dark:border-primary/30">
+                  <div className="text-xs text-muted-foreground dark:text-slate-400">Ticket</div>
+                  <div className="text-lg font-mono font-bold text-primary dark:text-primary">
+                    #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
+                  </div>
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="h-9 w-9 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors"
+                title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+              >
+                {isFullscreen ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                  </svg>
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-1">
-          <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-5 bg-gradient-to-b from-background to-muted/10 dark:from-slate-950 dark:to-slate-900/50">
+          <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-5 max-w-[1800px] mx-auto">
             {/* Quick Mode Toggle */}
-            <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
-              <div className="flex items-center gap-3">
-                <Zap className="h-5 w-5 text-primary" />
+            <div className="flex items-center justify-between p-5 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 rounded-xl border-2 border-amber-200/50 dark:border-amber-800/50 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 dark:from-amber-500 dark:to-orange-600 flex items-center justify-center shadow-lg">
+                  <Zap className="h-6 w-6 text-white" />
+                </div>
                 <div>
-                  <Label htmlFor="quick-mode" className="cursor-pointer font-medium">
+                  <Label htmlFor="quick-mode" className="cursor-pointer font-semibold text-base text-amber-900 dark:text-amber-100">
                     Modo Rápido
                   </Label>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
                     Validación simplificada para registro rápido
                   </p>
                 </div>
@@ -291,49 +328,61 @@ export function RepairFormDialogV2({
                 id="quick-mode"
                 checked={quickMode}
                 onCheckedChange={setQuickMode}
+                className="data-[state=checked]:bg-amber-500 dark:data-[state=checked]:bg-amber-600"
               />
             </div>
 
-            {/* Customer Selection */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-4">
+            {/* Sección 1: Información del Cliente (Ancho Completo) */}
+            <Card className="shadow-lg border-2 border-blue-200 dark:border-blue-900/50 hover:border-blue-400 dark:hover:border-blue-700 transition-all duration-200 bg-gradient-to-br from-white to-blue-50/20 dark:from-slate-900/50 dark:to-blue-950/10">
+              <CardHeader className="pb-3 bg-gradient-to-r from-blue-50/50 to-transparent dark:from-blue-950/30 dark:to-transparent border-b border-blue-100 dark:border-blue-900/30">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <User className="h-5 w-5 text-primary" />
-                    Información del Cliente
-                  </CardTitle>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 flex items-center justify-center shadow-lg">
+                      <User className="h-4 w-4 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-bold text-blue-800 dark:text-blue-300">
+                        Información del Cliente
+                      </CardTitle>
+                      {watch('customerName') && (
+                        <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
+                          {watch('customerName')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5">
                     {watch('existingCustomerId') && (
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
                         onClick={handleEditCustomer}
                         disabled={isSubmitting}
-                        className="gap-2 text-sm hover:bg-primary/5 hover:text-primary hover:border-primary/30"
+                        className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/50 dark:hover:text-blue-400 transition-colors"
+                        title="Editar cliente"
                       >
-                        <Pencil className="h-4 w-4" />
-                        Editar Cliente
+                        <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     )}
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       onClick={() => {
                         setEditingCustomer(null)
                         setShowQuickCustomerModal(true)
                       }}
                       disabled={isSubmitting}
-                      className="gap-2 text-sm hover:bg-primary/5 hover:text-primary hover:border-primary/30"
+                      className="h-8 w-8 p-0 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950/50 dark:hover:text-green-400 transition-colors"
+                      title="Nuevo cliente"
                     >
-                      <UserPlus className="h-4 w-4" />
-                      Nuevo Cliente
+                      <UserPlus className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4 space-y-3">
                 <CustomerSelectorV3
                   value={watch('existingCustomerId')}
                   initialCustomer={initialData?.existingCustomerId ? {
@@ -353,99 +402,47 @@ export function RepairFormDialogV2({
                   }}
                   error={errors.existingCustomerId?.message}
                 />
+                
+                {/* Información adicional del cliente si está seleccionado */}
+                {watch('existingCustomerId') && watch('customerPhone') && (
+                  <div className="pt-2 border-t border-blue-100 dark:border-blue-900/30 space-y-2">
+                    {watch('customerPhone') && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-slate-400">
+                        <Phone className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                        <span>{watch('customerPhone')}</span>
+                      </div>
+                    )}
+                    {watch('customerEmail') && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-slate-400">
+                        <Mail className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                        <span>{watch('customerEmail')}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            {/* Priority and Urgency */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <AlertCircle className="h-5 w-5 text-primary" />
-                  Prioridad y Urgencia
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Priority */}
-                  <div className="space-y-3">
-                    <Label htmlFor="priority" className="text-sm font-medium">
-                      Prioridad <span className="text-red-500">*</span>
-                    </Label>
-                    <Controller
-                      name="priority"
-                      control={control}
-                      render={({ field }) => (
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger className={`h-11 ${errors.priority ? 'border-red-500' : ''}`}>
-                            <SelectValue placeholder="Selecciona prioridad" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {priorityOptions.map(option => (
-                              <SelectItem key={option.value} value={option.value}>
-                                <div className="flex items-center gap-2">
-                                  <Badge className={`${option.color} text-xs`}>{option.label}</Badge>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                    {errors.priority && (
-                      <p className="text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        {errors.priority.message}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Urgency */}
-                  <div className="space-y-3">
-                    <Label htmlFor="urgency" className="text-sm font-medium">
-                      Urgencia <span className="text-red-500">*</span>
-                    </Label>
-                    <Controller
-                      name="urgency"
-                      control={control}
-                      render={({ field }) => (
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger className={`h-11 ${errors.urgency ? 'border-red-500' : ''}`}>
-                            <SelectValue placeholder="Selecciona urgencia" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {urgencyOptions.map(option => (
-                              <SelectItem key={option.value} value={option.value}>
-                                <div className="flex items-center gap-2">
-                                  <Badge className={`${option.color} text-xs`}>{option.label}</Badge>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                    {errors.urgency && (
-                      <p className="text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        {errors.urgency.message}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Devices */}
-            <Card className="shadow-sm">
-              <CardHeader className="pb-4">
+            {/* Sección 2: Dispositivos a Reparar (Ancho Completo) */}
+            <Card className="shadow-lg border-2 border-green-200 dark:border-green-900/50 hover:border-green-400 dark:hover:border-green-700 transition-all duration-200 bg-gradient-to-br from-white to-green-50/20 dark:from-slate-900/50 dark:to-green-950/10">
+              <CardHeader className="pb-3 bg-gradient-to-r from-green-50/50 to-transparent dark:from-green-950/30 dark:to-transparent border-b border-green-100 dark:border-green-900/30">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Smartphone className="h-5 w-5 text-primary" />
-                    Dispositivos a Reparar
-                  </CardTitle>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 flex items-center justify-center shadow-lg">
+                      <Smartphone className="h-4 w-4 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base font-bold text-green-800 dark:text-green-300">
+                        Dispositivos a Reparar
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
+                        {fields.length} {fields.length === 1 ? 'dispositivo' : 'dispositivos'} registrado{fields.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={() => append({
                       deviceType: 'smartphone',
@@ -458,14 +455,14 @@ export function RepairFormDialogV2({
                       technician: '',
                       estimatedCost: 0
                     })}
-                    className="gap-2"
+                    className="h-8 gap-1.5 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950/50 dark:hover:text-green-400 transition-colors text-xs"
                   >
-                    <Plus className="h-4 w-4" />
-                    Agregar Dispositivo
+                    <Plus className="h-3.5 w-3.5" />
+                    Agregar
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4 pt-4">
                 {mode === 'edit' && repair?.images?.length ? (
                   <div className="space-y-3">
                     <Label className="text-sm font-medium">Galería de imágenes existentes</Label>
@@ -482,35 +479,52 @@ export function RepairFormDialogV2({
                     </div>
                   </div>
                 ) : null}
-                {fields.map((field, index) => (
-                  <Card key={field.id} className="border-2 border-dashed border-muted-foreground/20 hover:border-primary/30 transition-colors">
-                    <CardHeader className="pb-3">
+                {fields.map((field, index) => {
+                  const deviceType = watch(`devices.${index}.deviceType`)
+                  const DeviceIcon = deviceTypeOptions.find(opt => opt.value === deviceType)?.icon || Smartphone
+                  
+                  return (
+                  <Card key={field.id} className="border-2 border-green-200 dark:border-green-900/50 hover:border-green-400 dark:hover:border-green-700 transition-all duration-200 bg-gradient-to-br from-white to-green-50/20 dark:from-slate-900/50 dark:to-green-950/10 shadow-md hover:shadow-lg">
+                    <CardHeader className="pb-2 bg-gradient-to-r from-green-50/50 to-transparent dark:from-green-950/30 dark:to-transparent border-b border-green-100 dark:border-green-900/30">
                       <div className="flex items-center justify-between">
-                        <CardTitle className="text-base font-medium flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 flex items-center justify-center text-xs font-bold text-white shadow-md">
                             {index + 1}
                           </div>
-                          Dispositivo {index + 1}
-                        </CardTitle>
+                          <div>
+                            <CardTitle className="text-sm font-bold text-green-800 dark:text-green-300 flex items-center gap-1.5">
+                              <DeviceIcon className="h-3.5 w-3.5" />
+                              Dispositivo {index + 1}
+                            </CardTitle>
+                            {watch(`devices.${index}.brand`) && watch(`devices.${index}.model`) && (
+                              <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
+                                {watch(`devices.${index}.brand`)} {watch(`devices.${index}.model`)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                         {fields.length > 1 && (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             onClick={() => remove(index)}
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/50 h-7 w-7 p-0"
+                            title="Eliminar dispositivo"
                           >
-                            <Trash className="h-4 w-4" />
+                            <Trash className="h-3.5 w-3.5" />
                           </Button>
                         )}
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-5">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    <CardContent className="space-y-3 pt-3">
+                      {/* Grid de 3 columnas para información básica */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         {/* Device Type */}
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium">
-                            Tipo de Dispositivo <span className="text-red-500">*</span>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
+                            <Smartphone className="h-3 w-3 text-green-600 dark:text-green-400" />
+                            Tipo <span className="text-red-500">*</span>
                           </Label>
                           <Controller
                             name={`devices.${index}.deviceType`}
@@ -518,9 +532,9 @@ export function RepairFormDialogV2({
                             render={({ field }) => (
                               <Select value={field.value} onValueChange={field.onChange}>
                                 <SelectTrigger
-                                  className={`h-11 ${errors.devices?.[index]?.deviceType ? 'border-red-500' : ''}`}
+                                  className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.deviceType ? 'border-red-500' : ''}`}
                                 >
-                                  <SelectValue placeholder="Selecciona el tipo" />
+                                  <SelectValue placeholder="Tipo" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {deviceTypeOptions.map(option => {
@@ -539,7 +553,7 @@ export function RepairFormDialogV2({
                             )}
                           />
                           {errors.devices?.[index]?.deviceType && (
-                            <p className="text-sm text-red-500 flex items-center gap-1">
+                            <p className="text-xs text-red-500 flex items-center gap-1">
                               <AlertCircle className="h-3 w-3" />
                               {errors.devices[index]?.deviceType?.message}
                             </p>
@@ -547,17 +561,17 @@ export function RepairFormDialogV2({
                         </div>
 
                         {/* Brand */}
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-muted-foreground dark:text-slate-400">
                             Marca <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             {...register(`devices.${index}.brand`)}
-                            placeholder="Apple, Samsung, Xiaomi..."
-                            className={`h-11 ${errors.devices?.[index]?.brand ? 'border-red-500' : ''}`}
+                            placeholder="Apple, Samsung..."
+                            className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.brand ? 'border-red-500' : ''}`}
                           />
                           {errors.devices?.[index]?.brand && (
-                            <p className="text-sm text-red-500 flex items-center gap-1">
+                            <p className="text-xs text-red-500 flex items-center gap-1">
                               <AlertCircle className="h-3 w-3" />
                               {errors.devices[index]?.brand?.message}
                             </p>
@@ -565,26 +579,30 @@ export function RepairFormDialogV2({
                         </div>
 
                         {/* Model */}
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-muted-foreground dark:text-slate-400">
                             Modelo <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             {...register(`devices.${index}.model`)}
-                            placeholder="iPhone 15 Pro, Galaxy S24..."
-                            className={`h-11 ${errors.devices?.[index]?.model ? 'border-red-500' : ''}`}
+                            placeholder="iPhone 15 Pro..."
+                            className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.model ? 'border-red-500' : ''}`}
                           />
                           {errors.devices?.[index]?.model && (
-                            <p className="text-sm text-red-500 flex items-center gap-1">
+                            <p className="text-xs text-red-500 flex items-center gap-1">
                               <AlertCircle className="h-3 w-3" />
                               {errors.devices[index]?.model?.message}
                             </p>
                           )}
                         </div>
+                      </div>
 
+                      {/* Grid de 2 columnas para técnico y costo */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {/* Technician */}
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
+                            <User className="h-3 w-3 text-green-600 dark:text-green-400" />
                             Técnico Asignado <span className="text-red-500">*</span>
                           </Label>
                           <Controller
@@ -593,7 +611,7 @@ export function RepairFormDialogV2({
                             render={({ field }) => (
                               <Select value={field.value} onValueChange={field.onChange}>
                                 <SelectTrigger
-                                  className={`h-11 ${errors.devices?.[index]?.technician ? 'border-red-500' : ''}`}
+                                  className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.technician ? 'border-red-500' : ''}`}
                                 >
                                   <SelectValue placeholder="Selecciona técnico" />
                                 </SelectTrigger>
@@ -611,26 +629,56 @@ export function RepairFormDialogV2({
                             )}
                           />
                           {errors.devices?.[index]?.technician && (
-                            <p className="text-sm text-red-500 flex items-center gap-1">
+                            <p className="text-xs text-red-500 flex items-center gap-1">
                               <AlertCircle className="h-3 w-3" />
                               {errors.devices[index]?.technician?.message}
                             </p>
                           )}
                         </div>
+
+                        {/* Estimated Cost */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
+                            <DollarSign className="h-3 w-3 text-green-600 dark:text-green-400" />
+                            Costo Estimado
+                            <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
+                          </Label>
+                          <div className="relative">
+                            <DollarSign className="absolute left-2.5 top-2 h-4 w-4 text-green-600 dark:text-green-400" />
+                            <Input
+                              type="number"
+                              step="0.01"
+                              {...register(`devices.${index}.estimatedCost`, {
+                                valueAsNumber: true
+                              })}
+                              placeholder="0.00"
+                              className={`h-9 text-sm pl-8 border-green-200 dark:border-green-900/50 font-semibold ${errors.devices?.[index]?.estimatedCost ? 'border-red-500' : ''}`}
+                            />
+                          </div>
+                          {errors.devices?.[index]?.estimatedCost && (
+                            <p className="text-xs text-red-500 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              {errors.devices[index]?.estimatedCost?.message}
+                            </p>
+                          )}
+                        </div>
                       </div>
 
+                      {/* Problema y Descripción en ancho completo */}
+                      <div className="space-y-3 pt-2 border-t border-green-100 dark:border-green-900/30">
                       {/* Issue */}
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
+                          <AlertCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
                           Problema Principal <span className="text-red-500">*</span>
                         </Label>
                         <Input
                           {...register(`devices.${index}.issue`)}
-                          placeholder="Pantalla rota, no enciende, batería agotada..."
-                          className={`h-11 ${errors.devices?.[index]?.issue ? 'border-red-500' : ''}`}
+                          placeholder="Pantalla rota, no enciende..."
+                          className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.issue ? 'border-red-500' : ''}`}
                         />
                         {errors.devices?.[index]?.issue && (
-                          <p className="text-sm text-red-500 flex items-center gap-1">
+                          <p className="text-xs text-red-500 flex items-center gap-1">
                             <AlertCircle className="h-3 w-3" />
                             {errors.devices[index]?.issue?.message}
                           </p>
@@ -638,28 +686,31 @@ export function RepairFormDialogV2({
                       </div>
 
                       {/* Description */}
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
+                          <FileText className="h-3 w-3 text-green-600 dark:text-green-400" />
                           Descripción Detallada
                         </Label>
                         <Textarea
                           {...register(`devices.${index}.description`)}
-                          placeholder="Describe el problema en detalle, síntomas, cuándo ocurrió..."
-                          rows={4}
-                          className={`resize-none ${errors.devices?.[index]?.description ? 'border-red-500' : ''}`}
+                          placeholder="Describe el problema en detalle..."
+                          rows={2}
+                          className={`resize-none text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.description ? 'border-red-500' : ''}`}
                         />
                         {errors.devices?.[index]?.description && (
-                          <p className="text-sm text-red-500 flex items-center gap-1">
+                          <p className="text-xs text-red-500 flex items-center gap-1">
                             <AlertCircle className="h-3 w-3" />
                             {errors.devices[index]?.description?.message}
                           </p>
                         )}
                       </div>
+                      </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                      {/* Acceso y Seguridad */}
+                      <div className="space-y-3 pt-2 border-t border-green-100 dark:border-green-900/30">
                         {/* Access Password */}
-                        <div className="space-y-3">
-                          <Label className="text-sm font-medium">
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium text-muted-foreground dark:text-slate-400">
                             Acceso al Dispositivo
                             <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
                           </Label>
@@ -670,7 +721,7 @@ export function RepairFormDialogV2({
                             control={control}
                             render={({ field }) => (
                               <Select value={field.value || 'none'} onValueChange={field.onChange}>
-                                <SelectTrigger className="h-10 text-sm">
+                                <SelectTrigger className="h-9 text-sm border-green-200 dark:border-green-900/50">
                                   <SelectValue placeholder="Tipo de acceso" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -748,7 +799,7 @@ export function RepairFormDialogV2({
                           {/* Access Password Input - Only show for text-based types */}
                           {watch(`devices.${index}.accessType`) && 
                            ['pin', 'password', 'other'].includes(watch(`devices.${index}.accessType`)) && (
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                               <Input
                                 type="text"
                                 {...register(`devices.${index}.accessPassword`)}
@@ -757,60 +808,37 @@ export function RepairFormDialogV2({
                                   watch(`devices.${index}.accessType`) === 'password' ? 'Ej: micontraseña123' :
                                   'Describe el método de acceso...'
                                 }
-                                className={`h-10 text-sm ${errors.devices?.[index]?.accessPassword ? 'border-red-500' : ''}`}
+                                className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.accessPassword ? 'border-red-500' : ''}`}
                               />
                             </div>
                           )}
 
                           {/* Biometric note */}
                           {watch(`devices.${index}.accessType`) === 'biometric' && (
-                            <div className="text-xs text-blue-600 bg-blue-50 rounded p-2 border border-blue-200">
-                              ℹ️ <strong>Acceso biométrico:</strong> El cliente deberá estar presente para desbloquear o proporcionar método alternativo
+                            <div className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 rounded p-2 border border-blue-200 dark:border-blue-900">
+                              ℹ️ El cliente deberá estar presente para desbloquear
                             </div>
                           )}
 
                           {/* No protection note */}
                           {watch(`devices.${index}.accessType`) === 'none' && (
-                            <div className="text-xs text-green-600 bg-green-50 rounded p-2 border border-green-200">
-                              ✅ <strong>Sin protección:</strong> El dispositivo se puede acceder libremente
+                            <div className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 rounded p-2 border border-green-200 dark:border-green-900">
+                              ✅ El dispositivo se puede acceder libremente
                             </div>
                           )}
 
                           {errors.devices?.[index]?.accessPassword && (
-                            <p className="text-sm text-red-500 flex items-center gap-1">
+                            <p className="text-xs text-red-500 flex items-center gap-1">
                               <AlertCircle className="h-3 w-3" />
                               {errors.devices[index]?.accessPassword?.message}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Estimated Cost */}
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium">
-                            Costo Estimado
-                            <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
-                          </Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            {...register(`devices.${index}.estimatedCost`, {
-                              valueAsNumber: true
-                            })}
-                            placeholder="0.00"
-                            className={`h-11 ${errors.devices?.[index]?.estimatedCost ? 'border-red-500' : ''}`}
-                          />
-                          {errors.devices?.[index]?.estimatedCost && (
-                            <p className="text-sm text-red-500 flex items-center gap-1">
-                              <AlertCircle className="h-3 w-3" />
-                              {errors.devices[index]?.estimatedCost?.message}
                             </p>
                           )}
                         </div>
                       </div>
 
                       {/* Images */}
-                      <div className="space-y-3">
-                        <Label className="text-sm font-medium">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium text-muted-foreground dark:text-slate-400">
                           Fotos del Dispositivo
                           <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
                         </Label>
@@ -871,7 +899,7 @@ export function RepairFormDialogV2({
                       </div>
                     </CardContent>
                   </Card>
-                ))}
+                )})}
 
                 {errors.devices && typeof errors.devices.message === 'string' && (
                   <p className="text-sm text-red-500 flex items-center gap-1">
@@ -882,14 +910,120 @@ export function RepairFormDialogV2({
               </CardContent>
             </Card>
 
+            {/* Sección 3: Prioridad y Urgencia (Ancho Completo) */}
+            <Card className="shadow-lg border-2 border-purple-200 dark:border-purple-900/50 hover:border-purple-400 dark:hover:border-purple-700 transition-all duration-200 bg-gradient-to-br from-white to-purple-50/20 dark:from-slate-900/50 dark:to-purple-950/10">
+              <CardHeader className="pb-3 bg-gradient-to-r from-purple-50/50 to-transparent dark:from-purple-950/30 dark:to-transparent border-b border-purple-100 dark:border-purple-900/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700 flex items-center justify-center shadow-lg">
+                    <AlertCircle className="h-4 w-4 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-bold text-purple-800 dark:text-purple-300">
+                      Prioridad y Urgencia
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
+                      Define la importancia de la reparación
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Priority */}
+                  <div className="space-y-2">
+                    <Label htmlFor="priority" className="text-xs font-medium text-muted-foreground dark:text-slate-400">
+                      Prioridad <span className="text-red-500">*</span>
+                    </Label>
+                    <Controller
+                      name="priority"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger className={`h-9 text-sm border-purple-200 dark:border-purple-900/50 ${errors.priority ? 'border-red-500' : ''}`}>
+                            <SelectValue placeholder="Selecciona" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {priorityOptions.map(option => (
+                              <SelectItem key={option.value} value={option.value}>
+                                <div className="flex items-center gap-2">
+                                  <Badge className={`${option.color} text-xs px-2 py-0`}>{option.label}</Badge>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.priority && (
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {errors.priority.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Urgency */}
+                  <div className="space-y-2">
+                    <Label htmlFor="urgency" className="text-xs font-medium text-muted-foreground dark:text-slate-400">
+                      Urgencia <span className="text-red-500">*</span>
+                    </Label>
+                    <Controller
+                      name="urgency"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger className={`h-9 text-sm border-purple-200 dark:border-purple-900/50 ${errors.urgency ? 'border-red-500' : ''}`}>
+                            <SelectValue placeholder="Selecciona" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {urgencyOptions.map(option => (
+                              <SelectItem key={option.value} value={option.value}>
+                                <div className="flex items-center gap-2">
+                                  <Badge className={`${option.color} text-xs px-2 py-0`}>{option.label}</Badge>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.urgency && (
+                      <p className="text-xs text-red-500 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {errors.urgency.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Secciones de ancho completo: Repuestos, Notas y Calculadora */}
             {/* Parts */}
-            <Card className="shadow-sm mt-4">
-              <CardHeader className="pb-4">
+            <Card className="shadow-lg border-2 hover:border-primary/30 transition-colors bg-gradient-to-br from-white to-orange-50/30 dark:from-slate-900 dark:to-orange-950/20 dark:border-slate-800 dark:hover:border-primary/50 mt-4">
+              <CardHeader className="pb-5 bg-gradient-to-r from-orange-50/50 to-transparent dark:from-orange-950/30 dark:to-transparent">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Package className="h-5 w-5 text-primary" />
-                    Repuestos y Materiales
-                  </CardTitle>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-600 dark:to-orange-700 flex items-center justify-center shadow-md">
+                      <Package className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="bg-gradient-to-r from-orange-700 to-orange-600 dark:from-orange-400 dark:to-orange-500 bg-clip-text text-transparent font-bold text-xl">
+                        Repuestos y Materiales
+                      </CardTitle>
+                      {partsFields.length > 0 && (
+                        <p className="text-xs text-muted-foreground dark:text-slate-400 mt-1">
+                          {partsFields.length} {partsFields.length === 1 ? 'repuesto' : 'repuestos'} • Total: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                            partsFields.reduce((acc, _, index) => {
+                              const cost = watch(`parts.${index}.cost`) || 0
+                              const quantity = watch(`parts.${index}.quantity`) || 0
+                              return acc + (cost * quantity)
+                            }, 0)
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
@@ -901,73 +1035,153 @@ export function RepairFormDialogV2({
                       supplier: '',
                       partNumber: ''
                     })}
-                    className="gap-2"
+                    className="gap-2 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300 dark:hover:bg-orange-950/50 dark:hover:text-orange-400 dark:hover:border-orange-700 transition-colors shadow-sm"
                   >
                     <Plus className="h-4 w-4" />
                     Agregar Repuesto
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 pt-6">
                 {partsFields.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
-                    No hay repuestos registrados
+                  <div className="text-center py-12 border-2 border-dashed rounded-xl bg-gradient-to-br from-orange-50/50 to-orange-100/30 dark:from-orange-950/20 dark:to-orange-900/10 border-orange-200 dark:border-orange-900/50">
+                    <div className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mx-auto mb-4">
+                      <Package className="h-8 w-8 text-orange-500 dark:text-orange-400" />
+                    </div>
+                    <p className="text-muted-foreground dark:text-slate-400 font-medium">No hay repuestos registrados</p>
+                    <p className="text-xs text-muted-foreground dark:text-slate-500 mt-1">Agrega los repuestos necesarios para esta reparación</p>
                   </div>
                 )}
-                {partsFields.map((field, index) => (
-                  <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start p-4 border rounded-lg bg-muted/20">
-                    <div className="md:col-span-4 space-y-2">
-                      <Label className="text-sm">Nombre del Repuesto</Label>
-                      <Input {...register(`parts.${index}.name`)} placeholder="Ej: Pantalla OLED" />
-                      {errors.parts?.[index]?.name && (
-                        <p className="text-xs text-red-500">{errors.parts[index]?.name?.message}</p>
-                      )}
-                    </div>
-                    <div className="md:col-span-2 space-y-2">
-                      <Label className="text-sm">Costo Unit.</Label>
-                      <div className="relative">
-                        <DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input 
-                          type="number" 
-                          className="pl-8" 
-                          {...register(`parts.${index}.cost`, { valueAsNumber: true })} 
-                        />
-                      </div>
-                    </div>
-                    <div className="md:col-span-2 space-y-2">
-                      <Label className="text-sm">Cantidad</Label>
-                      <Input 
-                        type="number" 
-                        {...register(`parts.${index}.quantity`, { valueAsNumber: true })} 
-                      />
-                    </div>
-                    <div className="md:col-span-3 space-y-2">
-                      <Label className="text-sm">Proveedor</Label>
-                      <Input {...register(`parts.${index}.supplier`)} placeholder="Ej: Amazon" />
-                    </div>
-                    <div className="md:col-span-1 flex justify-end pt-8">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removePart(index)}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                {partsFields.map((field, index) => {
+                  const cost = watch(`parts.${index}.cost`) || 0
+                  const quantity = watch(`parts.${index}.quantity`) || 0
+                  const total = cost * quantity
+                  
+                  return (
+                    <Card key={field.id} className="border-2 border-orange-200/50 dark:border-orange-900/30 hover:border-orange-300 dark:hover:border-orange-800 transition-colors bg-gradient-to-br from-white to-orange-50/20 dark:from-slate-900/50 dark:to-orange-950/10 shadow-sm">
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+                          {/* Número de item */}
+                          <div className="md:col-span-12 flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 dark:from-orange-600 dark:to-orange-700 flex items-center justify-center text-xs font-bold text-white shadow-sm">
+                                {index + 1}
+                              </div>
+                              <span className="text-sm font-semibold text-orange-800 dark:text-orange-300">Repuesto {index + 1}</span>
+                              {total > 0 && (
+                                <Badge variant="secondary" className="ml-2 bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border-orange-300 dark:border-orange-800">
+                                  Total: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(total)}
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removePart(index)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/50 h-8 w-8 p-0"
+                            >
+                              <Trash className="h-4 w-4" />
+                            </Button>
+                          </div>
+
+                          {/* Nombre del Repuesto */}
+                          <div className="md:col-span-5 space-y-2">
+                            <Label className="text-sm font-medium flex items-center gap-1">
+                              <Package className="h-3 w-3 text-orange-600 dark:text-orange-400" />
+                              Nombre del Repuesto
+                              <span className="text-red-500">*</span>
+                            </Label>
+                            <Input 
+                              {...register(`parts.${index}.name`)} 
+                              placeholder="Ej: Pantalla OLED, Batería, Conector USB..."
+                              className="border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600"
+                            />
+                            {errors.parts?.[index]?.name && (
+                              <p className="text-xs text-red-500 flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                {errors.parts[index]?.name?.message}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Costo Unitario */}
+                          <div className="md:col-span-2 space-y-2">
+                            <Label className="text-sm font-medium flex items-center gap-1">
+                              <DollarSign className="h-3 w-3 text-orange-600 dark:text-orange-400" />
+                              Costo Unit.
+                            </Label>
+                            <div className="relative">
+                              <DollarSign className="absolute left-3 top-2.5 h-4 w-4 text-orange-600 dark:text-orange-400" />
+                              <Input 
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                className="pl-9 border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600 font-semibold" 
+                                {...register(`parts.${index}.cost`, { valueAsNumber: true })} 
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Cantidad */}
+                          <div className="md:col-span-2 space-y-2">
+                            <Label className="text-sm font-medium flex items-center gap-1">
+                              <Calculator className="h-3 w-3 text-orange-600 dark:text-orange-400" />
+                              Cantidad
+                            </Label>
+                            <Input 
+                              type="number"
+                              min="1"
+                              className="border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600 font-semibold text-center" 
+                              {...register(`parts.${index}.quantity`, { valueAsNumber: true })} 
+                              placeholder="1"
+                            />
+                          </div>
+
+                          {/* Proveedor */}
+                          <div className="md:col-span-3 space-y-2">
+                            <Label className="text-sm font-medium flex items-center gap-1">
+                              <Package className="h-3 w-3 text-orange-600 dark:text-orange-400" />
+                              Proveedor
+                            </Label>
+                            <Input 
+                              {...register(`parts.${index}.supplier`)} 
+                              placeholder="Ej: Amazon, MercadoLibre..."
+                              className="border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600"
+                            />
+                          </div>
+
+                          {/* Número de Parte (opcional) */}
+                          <div className="md:col-span-12 space-y-2">
+                            <Label className="text-sm font-medium text-muted-foreground dark:text-slate-400">
+                              Número de Parte / SKU (opcional)
+                            </Label>
+                            <Input 
+                              {...register(`parts.${index}.partNumber`)} 
+                              placeholder="Ej: A2342, SKU-12345..."
+                              className="border-orange-200 dark:border-orange-900/50 focus:border-orange-400 dark:focus:border-orange-600 text-sm"
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </CardContent>
             </Card>
 
             {/* Notes */}
-            <Card className="shadow-sm mt-4">
-              <CardHeader className="pb-4">
+            <Card className="shadow-lg border-2 hover:border-primary/30 transition-colors bg-gradient-to-br from-white to-indigo-50/30 dark:from-slate-900 dark:to-indigo-950/20 dark:border-slate-800 dark:hover:border-primary/50 mt-4">
+              <CardHeader className="pb-5 bg-gradient-to-r from-indigo-50/50 to-transparent dark:from-indigo-950/30 dark:to-transparent">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <MessageSquare className="h-5 w-5 text-primary" />
-                    Notas de Reparación
+                  <CardTitle className="flex items-center gap-3 text-xl">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-600 dark:from-indigo-600 dark:to-indigo-700 flex items-center justify-center shadow-md">
+                      <MessageSquare className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="bg-gradient-to-r from-indigo-700 to-indigo-600 dark:from-indigo-400 dark:to-indigo-500 bg-clip-text text-transparent font-bold">
+                      Notas de Reparación
+                    </span>
                   </CardTitle>
                   <Button
                     type="button"
@@ -977,14 +1191,14 @@ export function RepairFormDialogV2({
                       text: '',
                       isInternal: false
                     })}
-                    className="gap-2"
+                    className="gap-2 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 dark:hover:bg-indigo-950/50 dark:hover:text-indigo-400 dark:hover:border-indigo-700 transition-colors"
                   >
                     <Plus className="h-4 w-4" />
                     Agregar Nota
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 pt-6">
                 {notesFields.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
                     No hay notas registradas
@@ -1040,12 +1254,12 @@ export function RepairFormDialogV2({
         </div>
 
         {/* Form Actions */}
-        <DialogFooter className="flex-shrink-0 pt-4 border-t bg-background">
+        <DialogFooter className="flex-shrink-0 px-8 py-6 border-t border-border bg-gradient-to-r from-muted/30 to-transparent dark:from-slate-900/50 dark:to-transparent dark:border-slate-800 backdrop-blur-sm">
           <div className="flex items-center justify-between w-full">
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm">
               {!isValid && Object.keys(errors).length > 0 && (
-                <span className="flex items-center gap-1 text-red-500">
-                  <AlertCircle className="h-3 w-3" />
+                <span className="flex items-center gap-2 text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/50 px-4 py-2 rounded-lg border border-red-200 dark:border-red-900">
+                  <AlertCircle className="h-4 w-4" />
                   Completa los campos requeridos
                 </span>
               )}
@@ -1056,7 +1270,7 @@ export function RepairFormDialogV2({
                 variant="outline"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="min-w-[100px]"
+                className="min-w-[120px] h-11 hover:bg-muted dark:hover:bg-slate-800"
               >
                 <X className="h-4 w-4 mr-2" />
                 Cancelar
@@ -1065,7 +1279,7 @@ export function RepairFormDialogV2({
                 type="submit"
                 disabled={!isValid || isSubmitting}
                 onClick={handleSubmit(onSubmitForm)}
-                className="min-w-[140px]"
+                className="min-w-[160px] h-11 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 dark:from-primary dark:to-primary/90 shadow-lg hover:shadow-xl transition-all"
               >
                 <Save className="h-4 w-4 mr-2" />
                 {isSubmitting ? 'Guardando...' : mode === 'add' ? 'Crear Reparación' : 'Guardar Cambios'}

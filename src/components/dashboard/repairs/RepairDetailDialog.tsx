@@ -322,6 +322,57 @@ export function RepairDetailDialog({
                     </div>
                   </div>
                 </div>
+
+                {/* Costo Final - Destacado */}
+                <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 p-6 rounded-xl shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-white" />
+                        <span className="text-white/90 text-sm font-medium uppercase tracking-wide">
+                          Costo de la Reparación
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-3">
+                        <span className="font-bold text-white text-4xl">
+                          {repair.finalCost !== null && repair.finalCost !== undefined 
+                            ? formatCurrency(repair.finalCost) 
+                            : formatCurrency(repair.estimatedCost || 0)
+                          }
+                        </span>
+                        {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
+                          <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+                            {repair.finalCost > repair.estimatedCost ? '↑' : '↓'} Ajustado
+                          </Badge>
+                        )}
+                      </div>
+                      {repair.finalCost === null || repair.finalCost === undefined ? (
+                        <p className="text-white/80 text-xs">
+                          * Costo estimado - El costo final será determinado al completar el diagnóstico
+                        </p>
+                      ) : (
+                        <div className="flex items-center gap-4 text-white/90 text-sm mt-2">
+                          <div className="flex items-center gap-1">
+                            <span className="text-white/70">Mano de obra:</span>
+                            <span className="font-semibold">{formatCurrency(repair.laborCost || 0)}</span>
+                          </div>
+                          <span className="text-white/50">•</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-white/70">Piezas:</span>
+                            <span className="font-semibold">
+                              {formatCurrency(
+                                (repair.parts || []).reduce((acc, part) => acc + (part.cost * part.quantity), 0)
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
+                      <DollarSign className="h-8 w-8 text-white" />
+                    </div>
+                  </div>
+                </div>
               </TabsContent>
 
               {/* Diagnóstico */}
@@ -409,12 +460,49 @@ export function RepairDetailDialog({
                         <span className="font-medium">Costo Estimado:</span>
                         <span className="font-medium">{formatCurrency(repair.estimatedCost || 0)}</span>
                       </div>
-                      <div className="bg-primary/10 p-2 rounded flex justify-between items-center mt-2">
-                        <span className="font-bold text-primary">Total Final:</span>
-                        <span className="font-bold text-primary text-lg">
-                          {repair.finalCost ? formatCurrency(repair.finalCost) : '---'}
-                        </span>
+                      <Separator className="my-3" />
+                      <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 p-4 rounded-lg shadow-lg">
+                        <div className="flex justify-between items-center">
+                          <div className="space-y-1">
+                            <span className="text-white/80 text-xs font-medium uppercase tracking-wide">Costo Final</span>
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-bold text-white text-2xl">
+                                {repair.finalCost !== null && repair.finalCost !== undefined 
+                                  ? formatCurrency(repair.finalCost) 
+                                  : formatCurrency(repair.estimatedCost || 0)
+                                }
+                              </span>
+                              {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
+                                <Badge variant="secondary" className="bg-white/20 text-white border-white/30 text-xs">
+                                  {repair.finalCost > repair.estimatedCost ? '↑' : '↓'} Ajustado
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                            <DollarSign className="h-6 w-6 text-white" />
+                          </div>
+                        </div>
+                        {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
+                          <div className="mt-3 pt-3 border-t border-white/20">
+                            <div className="flex items-center justify-between text-xs text-white/90">
+                              <span>Diferencia:</span>
+                              <span className="font-semibold">
+                                {repair.finalCost > repair.estimatedCost ? '+' : ''}
+                                {formatCurrency(repair.finalCost - repair.estimatedCost)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
+                      {repair.finalCost === null || repair.finalCost === undefined ? (
+                        <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-2 flex items-start gap-2">
+                          <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
+                          <span className="text-amber-700 dark:text-amber-400">
+                            El costo final aún no ha sido establecido. Se muestra el costo estimado.
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 

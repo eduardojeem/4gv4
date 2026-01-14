@@ -204,6 +204,8 @@ export function useRepairs() {
           problem_description: data.issue,
           diagnosis: data.description,
           estimated_cost: data.estimatedCost,
+          labor_cost: data.laborCost,
+          final_cost: data.finalCost,
           access_type: data.accessType || 'none',
           access_password: data.accessPassword || null,
           technician_id: data.technician?.id

@@ -185,6 +185,8 @@ interface RepairUpdateData {
                 problem_description: data.devices[0].issue,
                 diagnosis: data.devices[0].description,
                 estimated_cost: data.devices[0].estimatedCost,
+                labor_cost: data.laborCost,
+                final_cost: data.finalCost,
                 technician_id: data.devices[0].technician
             })
             .eq('id', id)
