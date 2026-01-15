@@ -222,7 +222,10 @@ function RepairsPageContent() {
             priority: data.priority,
             urgency,
             technician_id: d.technician,
-            estimated_cost: d.estimatedCost || 0
+            estimated_cost: d.estimatedCost || 0,
+            warrantyMonths: data.warrantyMonths,
+            warrantyType: data.warrantyType,
+            warrantyNotes: data.warrantyNotes
           }
           const created = await createRepair(payload)
           if (created?.id && Array.isArray(d.images) && d.images.length > 0) {
@@ -250,6 +253,9 @@ function RepairsPageContent() {
             ticketNumber: validRepairs.length === 1 ? validRepairs[0].id : undefined,
             priority: data.priority,
             urgency: data.urgency,
+            warrantyMonths: data.warrantyMonths,
+            warrantyType: data.warrantyType,
+            warrantyNotes: data.warrantyNotes,
             devices: data.devices.map((deviceFormData, index) => {
               const createdRepair = createdRepairs[index]
               if (!createdRepair) return null
@@ -288,6 +294,9 @@ function RepairsPageContent() {
           estimatedCost: d.estimatedCost,
           laborCost: data.laborCost || 0,
           finalCost: data.finalCost,
+          warrantyMonths: data.warrantyMonths,
+          warrantyType: data.warrantyType,
+          warrantyNotes: data.warrantyNotes,
           technician: d.technician ? { id: d.technician, name: '' } : undefined
         }
         
@@ -330,6 +339,9 @@ function RepairsPageContent() {
     urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
     laborCost: selectedRepair.laborCost || 0,
     finalCost: selectedRepair.finalCost,
+    warrantyMonths: selectedRepair.warrantyMonths ?? 3,
+    warrantyType: selectedRepair.warrantyType || 'full',
+    warrantyNotes: selectedRepair.warrantyNotes || '',
     devices: [{
       deviceType: selectedRepair.deviceType,
       brand: selectedRepair.brand,

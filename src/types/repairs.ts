@@ -90,6 +90,11 @@ export interface Repair {
   technician: Technician | null
   location: string
   warranty: string | null
+  warrantyMonths?: number
+  warrantyType?: 'labor' | 'parts' | 'full'
+  warrantyNotes?: string
+  warrantyExpiresAt?: string | null
+  pickedUpAt?: string | null  // Fecha en que el cliente retiró el equipo
   createdAt: string
   estimatedCompletion: string | null
   completedAt: string | null

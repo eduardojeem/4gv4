@@ -148,7 +148,10 @@ export function RepairFormDialogV2({
       parts: initialData?.parts || [],
       notes: initialData?.notes || [],
       laborCost: initialData?.laborCost || 0,
-      finalCost: initialData?.finalCost || null
+      finalCost: initialData?.finalCost || null,
+      warrantyMonths: initialData?.warrantyMonths ?? 3,
+      warrantyType: initialData?.warrantyType || 'full',
+      warrantyNotes: initialData?.warrantyNotes || ''
     }
   })
 
@@ -199,7 +202,10 @@ export function RepairFormDialogV2({
         parts: initialData?.parts || [],
         notes: initialData?.notes || [],
         laborCost: initialData?.laborCost || 0,
-        finalCost: initialData?.finalCost || null
+        finalCost: initialData?.finalCost || null,
+        warrantyMonths: initialData?.warrantyMonths ?? 3,
+        warrantyType: initialData?.warrantyType || 'full',
+        warrantyNotes: initialData?.warrantyNotes || ''
       })
     }
   }, [open, initialData, reset])
@@ -1250,6 +1256,173 @@ export function RepairFormDialogV2({
               disabled={isSubmitting}
               error={errors.finalCost?.message || errors.laborCost?.message}
             />
+
+            {/* Warranty Section */}
+            <Card className="shadow-lg border-2 border-amber-200 dark:border-amber-900/50 hover:border-amber-400 dark:hover:border-amber-700 transition-all duration-200 bg-gradient-to-br from-white to-amber-50/20 dark:from-slate-900/50 dark:to-amber-950/10">
+              <CardHeader className="pb-3 bg-gradient-to-r from-amber-50/50 to-transparent dark:from-amber-950/30 dark:to-transparent border-b border-amber-100 dark:border-amber-900/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-500 to-amber-600 dark:from-amber-600 dark:to-amber-700 flex items-center justify-center shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-bold text-amber-800 dark:text-amber-300">
+                      🛡️ Garantía
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
+                      Configure la garantía de la reparación
+                    </p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Warranty Months */}
+                  <div className="space-y-2">
+                    <Label htmlFor="warrantyMonths" className="text-sm font-medium flex items-center gap-2">
+                      Duración de Garantía
+                      <span className="text-xs text-muted-foreground font-normal">(meses)</span>
+                    </Label>
+                    <Controller
+                      name="warrantyMonths"
+                      control={control}
+                      defaultValue={3}
+                      render={({ field }) => (
+                        <Select
+                          value={String(field.value || 3)}
+                          onValueChange={(value) => field.onChange(Number(value))}
+                          disabled={isSubmitting}
+                        >
+                          <SelectTrigger className={errors.warrantyMonths ? 'border-red-500' : ''}>
+                            <SelectValue placeholder="Seleccionar duración" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Sin garantía</SelectItem>
+                            <SelectItem value="1">1 mes</SelectItem>
+                            <SelectItem value="3">3 meses (recomendado)</SelectItem>
+                            <SelectItem value="6">6 meses</SelectItem>
+                            <SelectItem value="12">1 año</SelectItem>
+                            <SelectItem value="24">2 años</SelectItem>
+                            <SelectItem value="36">3 años</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.warrantyMonths && (
+                      <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {errors.warrantyMonths.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Warranty Type */}
+                  <div className="space-y-2">
+                    <Label htmlFor="warrantyType" className="text-sm font-medium">
+                      Tipo de Cobertura
+                    </Label>
+                    <Controller
+                      name="warrantyType"
+                      control={control}
+                      defaultValue="labor"
+                      render={({ field }) => (
+                        <Select
+                          value={field.value || 'labor'}
+                          onValueChange={field.onChange}
+                          disabled={isSubmitting || watch('warrantyMonths') === 0}
+                        >
+                          <SelectTrigger className={errors.warrantyType ? 'border-red-500' : ''}>
+                            <SelectValue placeholder="Seleccionar tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="labor">
+                              <div className="flex flex-col">
+                                <span className="font-medium">Solo mano de obra</span>
+                                <span className="text-xs text-muted-foreground">Cubre el trabajo realizado</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="parts">
+                              <div className="flex flex-col">
+                                <span className="font-medium">Solo repuestos</span>
+                                <span className="text-xs text-muted-foreground">Cubre las piezas instaladas</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="full">
+                              <div className="flex flex-col">
+                                <span className="font-medium">Completa</span>
+                                <span className="text-xs text-muted-foreground">Cubre mano de obra y repuestos</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {errors.warrantyType && (
+                      <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {errors.warrantyType.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Warranty Notes */}
+                <div className="space-y-2">
+                  <Label htmlFor="warrantyNotes" className="text-sm font-medium flex items-center gap-2">
+                    Notas Adicionales
+                    <span className="text-xs text-muted-foreground font-normal">(opcional)</span>
+                  </Label>
+                  <Textarea
+                    id="warrantyNotes"
+                    placeholder="Ej: Incluye repuestos originales, no cubre daños por líquidos..."
+                    className={`min-h-[80px] resize-none ${errors.warrantyNotes ? 'border-red-500' : ''}`}
+                    disabled={isSubmitting || watch('warrantyMonths') === 0}
+                    {...register('warrantyNotes')}
+                  />
+                  {errors.warrantyNotes && (
+                    <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {errors.warrantyNotes.message}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Estas notas aparecerán en el comprobante de reparación
+                  </p>
+                </div>
+
+                {/* Warranty Preview */}
+                {watch('warrantyMonths') > 0 && (
+                  <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-600 dark:text-amber-400">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M12 16v-4"/>
+                          <path d="M12 8h.01"/>
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-100 mb-1">
+                          Vista Previa de Garantía
+                        </h4>
+                        <div className="text-xs text-amber-800 dark:text-amber-200 space-y-1">
+                          <p>• Duración: <strong>{watch('warrantyMonths')} {watch('warrantyMonths') === 1 ? 'mes' : 'meses'}</strong></p>
+                          <p>• Cubre: <strong>
+                            {watch('warrantyType') === 'labor' && 'Solo mano de obra'}
+                            {watch('warrantyType') === 'parts' && 'Solo repuestos'}
+                            {watch('warrantyType') === 'full' && 'Completa (mano de obra + repuestos)'}
+                          </strong></p>
+                          {watch('warrantyNotes') && (
+                            <p>• Notas: <strong>{watch('warrantyNotes')}</strong></p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </form>
         </div>
 

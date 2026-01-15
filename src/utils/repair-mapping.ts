@@ -62,6 +62,10 @@ interface SupabaseRepair {
     location?: string
     warranty?: string
     warranty_months?: number
+    warranty_type?: string
+    warranty_notes?: string
+    warranty_expires_at?: string
+    picked_up_at?: string
     created_at: string
     estimated_completion?: string
     completed_at?: string
@@ -112,6 +116,11 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         } : null,
         location: r.location || 'Taller Principal',
         warranty: r.warranty_months ? `${r.warranty_months} meses` : null,
+        warrantyMonths: r.warranty_months || 0,
+        warrantyType: (r.warranty_type as 'labor' | 'parts' | 'full') || 'full',
+        warrantyNotes: r.warranty_notes || undefined,
+        warrantyExpiresAt: r.warranty_expires_at || null,
+        pickedUpAt: r.picked_up_at || null,
         createdAt: r.created_at,
         estimatedCompletion: r.estimated_completion ?? null,
         completedAt: r.completed_at ?? null,

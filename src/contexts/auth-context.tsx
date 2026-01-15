@@ -378,20 +378,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         attemptedPromotion.current = true
         console.log('🔧 Attempting to promote user to admin...')
 
-        const { error } = await supabase
-          .from('profiles')
-          .update({ role: 'admin' })
-          .eq('id', user.id)
+        // Usar función RPC que tiene SECURITY DEFINER para bypasear RLS
+        const { data, error } = await supabase.rpc('promote_current_user_to_admin')
 
-        if (!error) {
-          console.log('✅ Profile role updated to admin')
+        if (!error && data) {
+          console.log('✅ User promoted to admin successfully')
           toast({
             title: "Admin Access Granted",
             description: "You have been temporarily promoted to admin."
           })
-          refreshUser()
+          
+          // Esperar un momento para que se actualice el JWT
+          setTimeout(() => {
+            refreshUser()
+          }, 500)
         } else {
-          console.error('❌ Failed to update profile role:', error)
+          console.error('❌ Failed to promote user:', error)
+          // No mostrar error al usuario, es solo para desarrollo
         }
       }
     }

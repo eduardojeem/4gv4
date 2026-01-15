@@ -94,6 +94,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
                         <TableHead className="hidden md:table-cell text-muted-foreground dark:text-muted-foreground/90">Problema</TableHead>
                         <TableHead className="text-muted-foreground dark:text-muted-foreground/90">Estado</TableHead>
                         <TableHead className="hidden lg:table-cell text-muted-foreground dark:text-muted-foreground/90">Prioridad</TableHead>
+                        <TableHead className="hidden xl:table-cell text-muted-foreground dark:text-muted-foreground/90">Garantía</TableHead>
                         <TableHead className="hidden xl:table-cell text-muted-foreground dark:text-muted-foreground/90">Técnico</TableHead>
                         <TableHead className="hidden sm:table-cell text-muted-foreground dark:text-muted-foreground/90">Creado</TableHead>
                         <TableHead className="hidden sm:table-cell w-[80px] text-muted-foreground dark:text-muted-foreground/90">Fotos</TableHead>

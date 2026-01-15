@@ -1,604 +1,650 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { 
-  Settings, Search, Save, RotateCcw, Download, Upload, 
-  BarChart3, AlertCircle, CheckCircle, FileText, Zap,
-  ChevronLeft, ChevronRight, Expand, Minimize, 
-  Palette, Shield, Database, Package, Bell
-} from 'lucide-react'
+import { useState } from 'react'
+import { Settings, Save, RotateCcw, AlertCircle, HelpCircle, Mail, Phone, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { useConfigurationManager } from '@/hooks/use-configuration-manager'
-import { useConfigurationSearch } from '@/hooks/use-configuration-search'
-import { ConfigurationSearch } from '@/components/dashboard/configuration-search'
-import { ConfigurationGroup } from '@/components/dashboard/configuration-groups/configuration-group'
+import { cn } from '@/lib/utils'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
 
-export default function SettingsPage() {
-  const configManager = useConfigurationManager()
-  const searchHook = useConfigurationSearch(configManager.groups)
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-  const [isCompactView, setIsCompactView] = useState(false)
-  const [showStatistics, setShowStatistics] = useState(false)
-  const [activeAnchor, setActiveAnchor] = useState<string | null>(null)
+export default function SettingsPageOptimized() {
+  const {
+    settings,
+    hasChanges,
+    isLoading,
+    updateSetting,
+    saveSettings,
+    resetSettings
+  } = useSharedSettings()
 
-  // Manejar cambios en configuraciones
-  const handleSettingChange = async (settingId: string, value: any) => {
-    configManager.updateSetting(settingId, value)
-  }
+  const [activeTab, setActiveTab] = useState('general')
+
+  // Contar cambios
+  const changedFields = Object.keys(settings).filter(
+    key => settings[key as keyof typeof settings] !== settings[key as keyof typeof settings]
+  ).length
 
   // Guardar configuraciones
   const handleSave = async () => {
-    const result = await configManager.saveSettings()
+    const result = await saveSettings()
+    
     if (result.success) {
-      toast.success('Configuraciones guardadas correctamente')
+      toast.success('Configuraciones guardadas correctamente', {
+        description: 'Los cambios se han aplicado exitosamente'
+      })
     } else {
-      toast.error('Error al guardar las configuraciones')
+      toast.error(result.error || 'Error al guardar las configuraciones')
     }
   }
 
   // Resetear configuraciones
   const handleReset = () => {
-    configManager.resetSettings()
-    toast.info('Configuraciones restablecidas a valores por defecto')
+    resetSettings()
+    toast.info('Cambios descartados')
   }
-
-  // Exportar configuraciones
-  const handleExport = () => {
-    configManager.exportSettings()
-    toast.success('Configuraciones exportadas correctamente')
-  }
-
-  // Importar configuraciones
-  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const result = await configManager.importSettings(file)
-    if (result.success) {
-      toast.success('Configuraciones importadas correctamente')
-    } else {
-      toast.error(result.error || 'Error al importar configuraciones')
-    }
-
-    // Limpiar el input
-    event.target.value = ''
-  }
-
-  // Alternar expansión de grupo
-  const toggleGroup = (groupId: string) => {
-    const newExpanded = new Set(expandedGroups)
-    if (newExpanded.has(groupId)) {
-      newExpanded.delete(groupId)
-    } else {
-      newExpanded.add(groupId)
-    }
-    setExpandedGroups(newExpanded)
-  }
-
-  // Expandir/contraer todos los grupos
-  const toggleAllGroups = () => {
-    if (expandedGroups.size === configManager.groups.length) {
-      setExpandedGroups(new Set())
-    } else {
-      setExpandedGroups(new Set(configManager.groups.map(g => g.id)))
-    }
-  }
-
-  // Filtrar grupos basado en búsqueda
-  const filteredGroups = searchHook.isSearching 
-    ? configManager.groups.filter(group => 
-        group.sections.some(section => 
-          section.settings.some(setting => 
-            searchHook.searchResults.some(result => result.setting.id === setting.id)
-          )
-        )
-      )
-    : configManager.groups
-
-  const statistics = configManager.getStatistics()
 
   return (
-    <div className="space-y-6">
-      {/* Header + acciones pegajosas */}
-      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border py-3">
-        <div className="flex items-center justify-between px-2">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
-              <Settings className="h-7 w-7 md:h-8 md:w-8" />
-              Configuración del Sistema
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Personaliza y configura todos los aspectos de tu sistema
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowStatistics(!showStatistics)}
-            >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Estadísticas
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsCompactView(!isCompactView)}
-            >
-              {isCompactView ? (
-                <Expand className="h-4 w-4 mr-2" />
-              ) : (
-                <Minimize className="h-4 w-4 mr-2" />
-              )}
-              {isCompactView ? 'Expandir' : 'Compactar'}
-            </Button>
-            {configManager.hasUnsavedChanges && (
-              <Badge variant="destructive" className="hidden md:flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                Cambios sin guardar
-              </Badge>
-            )}
-            <Button
-              onClick={handleSave}
-              disabled={!configManager.hasUnsavedChanges || configManager.isLoading}
-              className="flex items-center gap-2"
-            >
-              {configManager.isLoading ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              Guardar
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Estadísticas */}
-      {showStatistics && (
-        <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {statistics.totalGroups}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Header Mejorado */}
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
+                  <Settings className="h-6 w-6 text-white" />
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Grupos</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {statistics.totalSections}
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+                    Configuración
+                  </h1>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    Personaliza tu sistema según tus necesidades
+                  </p>
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Secciones</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {statistics.totalSettings}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Configuraciones</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                  {statistics.modifiedSettings}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Modificadas</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {statistics.groupsWithChanges}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Con Cambios</div>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Disposición principal con navegación lateral */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Sidebar de navegación */}
-        <aside className="lg:col-span-3">
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="text-sm">Navegación de configuraciones</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="space-y-1">
-                {configManager.groups.map((group) => (
-                  <a
-                    key={group.id}
-                    href={`#group-${group.id}`}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      const el = document.getElementById(`group-${group.id}`)
-                      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                      setActiveAnchor(group.id)
-                    }}
-                    className={
-                      `flex items-center justify-between rounded px-3 py-2 border hover:bg-muted transition-colors ${activeAnchor === group.id ? 'bg-muted border-primary/30' : 'border-border'}`
-                    }
+            {hasChanges && (
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="flex items-center gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                  <AlertCircle className="h-3 w-3" />
+                  {changedFields} cambio{changedFields !== 1 ? 's' : ''}
+                </Badge>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Barra de cambios flotante mejorada */}
+        {hasChanges && (
+          <div className="mb-6 animate-in slide-in-from-top-2 fade-in duration-300">
+            <Card className="border-blue-200 dark:border-blue-800 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 shadow-lg">
+              <CardContent className="p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-blue-500 rounded-lg">
+                      <AlertCircle className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-blue-900 dark:text-blue-100">
+                        Cambios sin guardar
+                      </p>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        Tienes modificaciones pendientes
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleReset}
+                      disabled={isLoading}
+                      className="flex-1 sm:flex-none border-blue-300 text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Descartar
+                    </Button>
+                    <Button 
+                      size="sm"
+                      onClick={handleSave} 
+                      disabled={isLoading}
+                      className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {isLoading ? (
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      {isLoading ? 'Guardando...' : 'Guardar'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Tabs Mejorados - Responsive */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          {/* TabsList con colores */}
+          <div className="sticky top-0 z-10 bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 pb-4">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2 bg-white dark:bg-gray-800 p-2 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+              <TabsTrigger 
+                value="general"
+                className={cn(
+                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-all",
+                  "data-[state=active]:bg-gradient-to-br data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+                )}
+              >
+                <Settings className="h-4 w-4" />
+                <span className="hidden sm:inline text-sm font-medium">General</span>
+                <span className="sm:hidden text-xs font-medium">General</span>
+              </TabsTrigger>
+              
+              <TabsTrigger 
+                value="inventory"
+                className={cn(
+                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-all",
+                  "data-[state=active]:bg-gradient-to-br data-[state=active]:from-purple-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+                )}
+              >
+                <span className="text-lg">📦</span>
+                <span className="hidden sm:inline text-sm font-medium">Inventario</span>
+                <span className="sm:hidden text-xs font-medium">Inventario</span>
+              </TabsTrigger>
+              
+              <TabsTrigger 
+                value="notifications"
+                className={cn(
+                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-all",
+                  "data-[state=active]:bg-gradient-to-br data-[state=active]:from-green-500 data-[state=active]:to-green-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+                )}
+              >
+                <span className="text-lg">🔔</span>
+                <span className="hidden sm:inline text-sm font-medium">Notificaciones</span>
+                <span className="sm:hidden text-xs font-medium">Notif.</span>
+              </TabsTrigger>
+              
+              <TabsTrigger 
+                value="security"
+                className={cn(
+                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-all",
+                  "data-[state=active]:bg-gradient-to-br data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-md"
+                )}
+              >
+                <span className="text-lg">🛡️</span>
+                <span className="hidden sm:inline text-sm font-medium">Seguridad</span>
+                <span className="sm:hidden text-xs font-medium">Seguridad</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* Tab: General */}
+          <TabsContent value="general" className="space-y-4 sm:space-y-6">
+            <Card className="border-blue-100 dark:border-blue-900 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-500 rounded-lg">
+                    <span className="text-lg text-white">🏢</span>
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Información de la Empresa</CardTitle>
+                    <CardDescription>Configuración básica de tu negocio</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="companyName">
+                    Nombre de la Empresa
+                    <span className="text-red-500 ml-1">*</span>
+                  </Label>
+                  <Input
+                    id="companyName"
+                    value={settings.companyName}
+                    onChange={(e) => updateSetting('companyName', e.target.value)}
+                    placeholder="Mi Empresa"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Aparecerá en reportes y documentos
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="companyEmail" className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    Email de Contacto
+                  </Label>
+                  <Input
+                    id="companyEmail"
+                    type="email"
+                    value={settings.companyEmail}
+                    onChange={(e) => updateSetting('companyEmail', e.target.value)}
+                    placeholder="info@empresa.com"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Email principal de la empresa
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="companyPhone" className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    Teléfono
+                  </Label>
+                  <Input
+                    id="companyPhone"
+                    value={settings.companyPhone}
+                    onChange={(e) => updateSetting('companyPhone', e.target.value)}
+                    placeholder="+595 21 123-4567"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Teléfono de contacto principal
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="city" className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    Ciudad
+                  </Label>
+                  <Input
+                    id="city"
+                    value={settings.city}
+                    onChange={(e) => updateSetting('city', e.target.value)}
+                    placeholder="Asunción"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Ciudad donde se encuentra la empresa
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="currency">Moneda</Label>
+                  <Select
+                    value={settings.currency}
+                    onValueChange={(value) => updateSetting('currency', value)}
                   >
-                    <span className="flex items-center gap-2 text-sm">
-                      {group.icon === 'Palette' && <Palette className="h-4 w-4" />}
-                      {group.icon === 'Settings' && <Settings className="h-4 w-4" />}
-                      {group.icon === 'Bell' && <Bell className="h-4 w-4" />}
-                      {group.icon === 'Package' && <Package className="h-4 w-4" />}
-                      {group.icon === 'Shield' && <Shield className="h-4 w-4" />}
-                      {group.icon === 'Database' && <Database className="h-4 w-4" />}
-                      {group.title}
-                    </span>
-                    <Badge variant="outline" className="text-xs">
-                      {group.sections.length}
-                    </Badge>
-                  </a>
-                ))}
+                    <SelectTrigger id="currency">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PYG">PYG - Guaraní Paraguayo</SelectItem>
+                      <SelectItem value="USD">USD - Dólar</SelectItem>
+                      <SelectItem value="EUR">EUR - Euro</SelectItem>
+                      <SelectItem value="MXN">MXN - Peso Mexicano</SelectItem>
+                      <SelectItem value="COP">COP - Peso Colombiano</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="taxRate" className="flex items-center gap-2">
+                    Tasa de Impuesto (%)
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Se aplicará a todas las ventas por defecto</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <Input
+                    id="taxRate"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={settings.taxRate}
+                    onChange={(e) => updateSetting('taxRate', parseFloat(e.target.value) || 0)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="sessionTimeout">Tiempo de Sesión (minutos)</Label>
+                  <Input
+                    id="sessionTimeout"
+                    type="number"
+                    min="5"
+                    max="480"
+                    value={settings.sessionTimeout}
+                    onChange={(e) => updateSetting('sessionTimeout', parseInt(e.target.value) || 60)}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Cerrar sesión automáticamente después de inactividad
+                  </p>
+                </div>
               </div>
 
-              {/* Acciones rápidas */}
-              <div className="flex items-center gap-2 pt-2">
-                <Button variant="outline" size="sm" onClick={toggleAllGroups} className="flex-1">
-                  {expandedGroups.size === configManager.groups.length ? (
-                    <>
-                      <ChevronLeft className="h-4 w-4 mr-2" /> Contraer
-                    </>
-                  ) : (
-                    <>
-                      <ChevronRight className="h-4 w-4 mr-2" /> Expandir
-                    </>
-                  )}
-                </Button>
+              <Separator />
+
+              <div className="space-y-2">
+                <Label htmlFor="companyAddress" className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  Dirección Física
+                </Label>
+                <Textarea
+                  id="companyAddress"
+                  value={settings.companyAddress}
+                  onChange={(e) => updateSetting('companyAddress', e.target.value)}
+                  rows={3}
+                  className="resize-none"
+                  placeholder="Av. Principal 1234, Ciudad, País"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Dirección completa de la empresa
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+            <Card className="border-blue-100 dark:border-blue-900 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-500 rounded-lg">
+                    <span className="text-lg text-white">🎨</span>
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Apariencia</CardTitle>
+                    <CardDescription>Personaliza cómo se ve tu sistema</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="theme">Tema</Label>
+                  <Select
+                    value={settings.theme}
+                    onValueChange={(value) => updateSetting('theme', value)}
+                  >
+                    <SelectTrigger id="theme">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Claro</SelectItem>
+                      <SelectItem value="dark">Oscuro</SelectItem>
+                      <SelectItem value="system">Sistema</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="colorScheme">Esquema de Color</Label>
+                  <Select
+                    value={settings.colorScheme}
+                    onValueChange={(value) => updateSetting('colorScheme', value)}
+                  >
+                    <SelectTrigger id="colorScheme">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="blue">Azul</SelectItem>
+                      <SelectItem value="green">Verde</SelectItem>
+                      <SelectItem value="purple">Púrpura</SelectItem>
+                      <SelectItem value="orange">Naranja</SelectItem>
+                      <SelectItem value="red">Rojo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+          {/* Tab: Inventario */}
+          <TabsContent value="inventory" className="space-y-4 sm:space-y-6">
+            <Card className="border-purple-100 dark:border-purple-900 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-purple-50 to-transparent dark:from-purple-950">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-500 rounded-lg">
+                    <span className="text-lg text-white">📦</span>
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Gestión de Inventario</CardTitle>
+                    <CardDescription>Configuración de stock y productos</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="lowStockThreshold">Umbral de Stock Bajo</Label>
+                <Input
+                  id="lowStockThreshold"
+                  type="number"
+                  min="1"
+                  value={settings.lowStockThreshold}
+                  onChange={(e) => updateSetting('lowStockThreshold', parseInt(e.target.value) || 10)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Cantidad mínima antes de alertar stock bajo
+                </p>
               </div>
 
-              {/* Barra de búsqueda */}
-              <div className="pt-2">
-                <ConfigurationSearch
-                  searchQuery={searchHook.searchQuery}
-                  onSearchChange={searchHook.setSearchQuery}
-                  selectedCategory={searchHook.selectedCategory}
-                  onCategoryChange={searchHook.setSelectedCategory}
-                  availableCategories={searchHook.availableCategories}
-                  suggestions={searchHook.getSearchSuggestions(searchHook.searchQuery)}
-                  onSuggestionSelect={searchHook.setSearchQuery}
-                  onClear={searchHook.clearSearch}
-                  placeholder="Buscar en configuraciones..."
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="requireSupplier">Requerir Proveedor</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Obligar a asignar proveedor al crear producto
+                  </p>
+                </div>
+                <Switch
+                  id="requireSupplier"
+                  checked={settings.requireSupplier}
+                  onCheckedChange={(checked) => updateSetting('requireSupplier', checked)}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="autoGenerateSKU">Generar SKU Automático</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Crear código SKU automáticamente para nuevos productos
+                  </p>
+                </div>
+                <Switch
+                  id="autoGenerateSKU"
+                  checked={settings.autoGenerateSKU}
+                  onCheckedChange={(checked) => updateSetting('autoGenerateSKU', checked)}
                 />
               </div>
             </CardContent>
           </Card>
-        </aside>
+        </TabsContent>
 
-        {/* Contenido principal */}
-        <section className="lg:col-span-9 space-y-6">
-          {/* Panel de esenciales */}
-          <EssentialsPanel
-            searchHook={searchHook}
-            onSettingChange={handleSettingChange}
-            isCompactView={isCompactView}
-          />
-
-          {/* Estadísticas */}
-          {showStatistics && (
-            <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {statistics.totalGroups}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Grupos</div>
+          {/* Tab: Notificaciones */}
+          <TabsContent value="notifications" className="space-y-4 sm:space-y-6">
+            <Card className="border-green-100 dark:border-green-900 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-green-50 to-transparent dark:from-green-950">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-500 rounded-lg">
+                    <span className="text-lg text-white">🔔</span>
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {statistics.totalSections}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Secciones</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {statistics.totalSettings}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Configuraciones</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                      {statistics.modifiedSettings}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Modificadas</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      {statistics.groupsWithChanges}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Con Cambios</div>
+                  <div>
+                    <CardTitle className="text-xl">Preferencias de Notificaciones</CardTitle>
+                    <CardDescription>Configura cómo y cuándo recibir alertas</CardDescription>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Barra de acciones */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {searchHook.hasResults && (
-                <Badge variant="secondary">
-                  {searchHook.searchResults.length} resultado{searchHook.searchResults.length !== 1 ? 's' : ''}
-                </Badge>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              {configManager.hasUnsavedChanges && (
-                <Badge variant="destructive" className="flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  Cambios sin guardar
-                </Badge>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleReset}
-                disabled={configManager.isLoading}
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Resetear
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExport}
-                disabled={configManager.isLoading}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Exportar
-              </Button>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleImport}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  disabled={configManager.isLoading}
-                />
-                <Button variant="outline" size="sm" disabled={configManager.isLoading}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Importar
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Resultados de búsqueda */}
-          {searchHook.isSearching && searchHook.hasResults && (
-            <Card className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Search className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  <span className="font-medium text-green-800 dark:text-green-200">
-                    Resultados de búsqueda para "{searchHook.searchQuery}"
-                  </span>
-                  <Badge variant="outline" className="ml-auto">
-                    {searchHook.searchResults.length} encontrado{searchHook.searchResults.length !== 1 ? 's' : ''}
-                  </Badge>
+              </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="emailNotifications">Notificaciones por Email</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Recibir notificaciones importantes por correo
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  {searchHook.searchResults.slice(0, 5).map((result, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-background rounded border border-border">
-                      <div>
-                        <span className="font-medium">{result.setting.title}</span>
-                        <span className="text-sm text-muted-foreground ml-2">
-                          en {result.group.title} → {result.section.title}
-                        </span>
-                      </div>
-                      <Badge variant="secondary" className="text-xs">
-                        {Math.round(result.relevanceScore)}% relevancia
-                      </Badge>
-                    </div>
-                  ))}
-                  {searchHook.searchResults.length > 5 && (
-                    <p className="text-sm text-muted-foreground text-center pt-2">
-                      Y {searchHook.searchResults.length - 5} resultado{searchHook.searchResults.length - 5 !== 1 ? 's' : ''} más...
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Grupos de configuración */}
-          <div className="space-y-4">
-            {filteredGroups.map((group) => (
-              <div key={group.id} id={`group-${group.id}`} className="scroll-mt-24">
-                <ConfigurationGroup
-                  group={group}
-                  isExpanded={expandedGroups.has(group.id)}
-                  onToggle={() => toggleGroup(group.id)}
-                  onSettingChange={handleSettingChange}
-                  searchQuery={searchHook.searchQuery}
-                  className={isCompactView ? 'text-sm' : ''}
+                <Switch
+                  id="emailNotifications"
+                  checked={settings.emailNotifications}
+                  onCheckedChange={(checked) => updateSetting('emailNotifications', checked)}
                 />
               </div>
-            ))}
-            {filteredGroups.length === 0 && searchHook.isSearching && (
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-center py-8">
-                    <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-foreground mb-2">No se encontraron resultados</h3>
-                    <p className="text-muted-foreground mb-4">
-                      No hay configuraciones que coincidan con "{searchHook.searchQuery}"
-                    </p>
-                    <Button variant="outline" onClick={searchHook.clearSearch}>Limpiar búsqueda</Button>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="smsNotifications">Notificaciones por SMS</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Recibir alertas críticas por mensaje de texto
+                  </p>
+                </div>
+                <Switch
+                  id="smsNotifications"
+                  checked={settings.smsNotifications}
+                  onCheckedChange={(checked) => updateSetting('smsNotifications', checked)}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="lowStockAlerts">Alertas de Stock Bajo</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Notificar cuando productos tengan stock bajo
+                  </p>
+                </div>
+                <Switch
+                  id="lowStockAlerts"
+                  checked={settings.lowStockAlerts}
+                  onCheckedChange={(checked) => updateSetting('lowStockAlerts', checked)}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="salesAlerts">Alertas de Ventas Importantes</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Notificar ventas mayores a un monto específico
+                  </p>
+                </div>
+                <Switch
+                  id="salesAlerts"
+                  checked={settings.salesAlerts}
+                  onCheckedChange={(checked) => updateSetting('salesAlerts', checked)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+          {/* Tab: Seguridad */}
+          <TabsContent value="security" className="space-y-4 sm:space-y-6">
+            <Card className="border-red-100 dark:border-red-900 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-red-50 to-transparent dark:from-red-950">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-red-500 rounded-lg">
+                    <span className="text-lg text-white">🛡️</span>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </section>
+                  <div>
+                    <CardTitle className="text-xl">Seguridad y Acceso</CardTitle>
+                    <CardDescription>Configuración de autenticación y contraseñas</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="passwordMinLength">Longitud Mínima de Contraseña</Label>
+                <Input
+                  id="passwordMinLength"
+                  type="number"
+                  min="6"
+                  max="32"
+                  value={settings.passwordMinLength}
+                  onChange={(e) => updateSetting('passwordMinLength', parseInt(e.target.value) || 8)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Número mínimo de caracteres para contraseñas
+                </p>
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="requireSpecialChars">Requerir Caracteres Especiales</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Las contraseñas deben incluir caracteres especiales (!@#$%)
+                  </p>
+                </div>
+                <Switch
+                  id="requireSpecialChars"
+                  checked={settings.requireSpecialChars}
+                  onCheckedChange={(checked) => updateSetting('requireSpecialChars', checked)}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="twoFactorAuth">Autenticación de Dos Factores</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Requerir código adicional al iniciar sesión
+                  </p>
+                </div>
+                <Switch
+                  id="twoFactorAuth"
+                  checked={settings.twoFactorAuth}
+                  onCheckedChange={(checked) => updateSetting('twoFactorAuth', checked)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        </Tabs>
       </div>
 
-      
-
-      
-    </div>
-  )
-}
-
-// Panel de configuraciones esenciales con controles rápidos
-function EssentialsPanel({
-  searchHook,
-  onSettingChange,
-  isCompactView
-}: {
-  searchHook: ReturnType<typeof useConfigurationSearch>
-  onSettingChange: (settingId: string, value: any) => void
-  isCompactView: boolean
-}) {
-  const getSetting = (id: string) => searchHook.findSettingById(id)?.setting
-  const themeMode = getSetting('theme-mode')
-  const colorScheme = getSetting('color-scheme')
-  const emailEnabled = getSetting('email-notifications')
-  const autoBackup = getSetting('auto-backup')
-  const companyName = getSetting('company-name')
-  const currency = getSetting('currency')
-
-  return (
-    <Card className="border-primary/20">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Zap className="h-4 w-4 text-primary" />
-          Configuraciones esenciales
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isCompactView ? 'text-sm' : ''}`}>
-          {/* Nombre de empresa */}
-          {companyName && (
-            <div>
-              <label className="block text-muted-foreground mb-1">Nombre de la Empresa</label>
-              <Input
-                value={String(companyName.value ?? '')}
-                onChange={(e) => onSettingChange(companyName.id, e.target.value)}
-                placeholder="Mi Empresa"
-              />
-            </div>
-          )}
-
-          {/* Moneda */}
-          {currency && (
-            <div>
-              <label className="block text-muted-foreground mb-1">Moneda</label>
-              <SelectControl
-                value={currency.value}
-                options={currency.options ?? []}
-                onChange={(val) => onSettingChange(currency.id, val)}
-              />
-            </div>
-          )}
-
-          {/* Modo de tema */}
-          {themeMode && (
-            <div>
-              <label className="block text-muted-foreground mb-1">Modo de Tema</label>
-              <SelectControl
-                value={themeMode.value}
-                options={themeMode.options ?? []}
-                onChange={(val) => onSettingChange(themeMode.id, val)}
-              />
-            </div>
-          )}
-
-          {/* Esquema de color */}
-          {colorScheme && (
-            <div>
-              <label className="block text-muted-foreground mb-1">Esquema de Color</label>
-              <SelectControl
-                value={colorScheme.value}
-                options={colorScheme.options ?? []}
-                onChange={(val) => onSettingChange(colorScheme.id, val)}
-              />
-            </div>
-          )}
-
-          {/* Notificaciones por email */}
-          {emailEnabled && (
-            <div className="flex items-center justify-between gap-4 border rounded px-3 py-2">
-              <div>
-                <div className="font-medium">Notificaciones por Email</div>
-                <div className="text-muted-foreground">Recibir notificaciones importantes</div>
-              </div>
-              <SwitchControl
-                checked={!!emailEnabled.value}
-                onCheckedChange={(val) => onSettingChange(emailEnabled.id, val)}
-              />
-            </div>
-          )}
-
-          {/* Respaldo automático */}
-          {autoBackup && (
-            <div className="flex items-center justify-between gap-4 border rounded px-3 py-2">
-              <div>
-                <div className="font-medium">Respaldo Automático</div>
-                <div className="text-muted-foreground">Crear respaldos diarios</div>
-              </div>
-              <SwitchControl
-                checked={!!autoBackup.value}
-                onCheckedChange={(val) => onSettingChange(autoBackup.id, val)}
-              />
-            </div>
-          )}
+      {/* Botón flotante de guardar mejorado */}
+      {hasChanges && (
+        <div className="fixed bottom-6 right-6 flex items-center gap-2 z-50 animate-in slide-in-from-bottom-2 fade-in duration-300">
+          <Button
+            variant="outline"
+            onClick={handleReset}
+            disabled={isLoading}
+            className="shadow-lg border-blue-300 text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Descartar
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isLoading}
+            size="lg"
+            className="shadow-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white"
+          >
+            {isLoading ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Guardar Cambios
+          </Button>
         </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function SelectControl({
-  value,
-  options,
-  onChange
-}: {
-  value: any
-  options: { label: string; value: any }[]
-  onChange: (val: any) => void
-}) {
-  return (
-    <div className="relative">
-      <select
-        className="w-full appearance-none rounded border border-border bg-background px-3 py-2 text-foreground"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">▾</span>
+      )}
     </div>
-  )
-}
-
-function SwitchControl({
-  checked,
-  onCheckedChange
-}: {
-  checked: boolean
-  onCheckedChange: (val: boolean) => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onCheckedChange(!checked)}
-      className={
-        `inline-flex h-6 w-10 items-center rounded-full transition-colors ${checked ? 'bg-primary' : 'bg-muted'}`
-      }
-    >
-      <span className={`h-5 w-5 rounded-full bg-background shadow transform transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
-    </button>
   )
 }

@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { WarrantyBadge } from './WarrantyBadge'
 
 interface RepairRowProps {
   repair: Repair
@@ -127,6 +128,14 @@ export const RepairRow = memo<RepairRowProps>(
             <span>{priority.icon}</span>
             <span className="text-xs">{priority.label}</span>
           </Badge>
+        </TableCell>
+
+        <TableCell className="hidden xl:table-cell">
+          {repair.warrantyMonths && repair.warrantyMonths > 0 ? (
+            <WarrantyBadge repair={repair} showDaysRemaining />
+          ) : (
+            <span className="text-xs text-muted-foreground dark:text-muted-foreground/70">Sin garantía</span>
+          )}
         </TableCell>
 
         <TableCell className="hidden xl:table-cell">

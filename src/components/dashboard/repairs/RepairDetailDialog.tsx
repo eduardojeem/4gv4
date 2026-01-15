@@ -23,7 +23,7 @@ import {
   Smartphone, Tablet, Laptop, Monitor, AlertCircle, 
   DollarSign, Clock, FileText, Image as ImageIcon,
   Edit, Trash, Printer, Package as PackageIcon, CheckCircle,
-  Maximize2, Minimize2, Share2, MessageCircle, Copy
+  Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -34,6 +34,14 @@ import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@
 import { cn } from '@/lib/utils'
 import { PatternDrawer } from './PatternDrawer'
 import { printRepairReceipt, generateRepairShareText, RepairPrintPayload } from '@/lib/repair-receipt'
+import { 
+  getWarrantyStatus, 
+  getDaysRemaining, 
+  getWarrantyStatusColor,
+  getWarrantyTypeLabel,
+  formatWarrantyDuration,
+  formatWarrantyExpiration 
+} from '@/lib/warranty-utils'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -373,6 +381,203 @@ export function RepairDetailDialog({
                     </div>
                   </div>
                 </div>
+
+                {/* Garantía */}
+                {repair.warrantyMonths && repair.warrantyMonths > 0 ? (
+                  <div className={cn(
+                    "relative overflow-hidden rounded-2xl shadow-xl border-2 transition-all duration-300 hover:shadow-2xl",
+                    getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).bg,
+                    getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).border
+                  )}>
+                    {/* Decorative gradient bar */}
+                    <div className={cn(
+                      "absolute top-0 left-0 right-0 h-1.5",
+                      getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).gradient
+                    )} />
+                    
+                    <div className="p-6 pt-8">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-4 flex-1">
+                          {/* Header */}
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              "p-2.5 rounded-xl shadow-md",
+                              getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).badge
+                            )}>
+                              <Shield className={cn(
+                                "h-5 w-5",
+                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).icon
+                              )} />
+                            </div>
+                            <div>
+                              <h3 className={cn(
+                                "text-lg font-bold tracking-tight",
+                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
+                              )}>
+                                Garantía de Reparación
+                              </h3>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired' 
+                                  ? 'Esta garantía ha expirado'
+                                  : getWarrantyStatus(repair.warrantyExpiresAt) === 'expiring'
+                                  ? 'La garantía está por vencer'
+                                  : 'Garantía activa y vigente'
+                                }
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* Info Grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-white/50 dark:bg-black/20 rounded-xl p-4 backdrop-blur-sm border border-white/20 dark:border-white/10">
+                              <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">Duración</p>
+                              <p className={cn(
+                                "font-bold text-xl",
+                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
+                              )}>
+                                {formatWarrantyDuration(repair.warrantyMonths)}
+                              </p>
+                            </div>
+                            
+                            <div className="bg-white/50 dark:bg-black/20 rounded-xl p-4 backdrop-blur-sm border border-white/20 dark:border-white/10">
+                              <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">Cobertura</p>
+                              <p className={cn(
+                                "font-bold text-xl",
+                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
+                              )}>
+                                {getWarrantyTypeLabel(repair.warrantyType || 'full').split(' ')[0]}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {repair.warrantyType === 'labor' && 'Mano de obra'}
+                                {repair.warrantyType === 'parts' && 'Repuestos'}
+                                {repair.warrantyType === 'full' && 'Total'}
+                              </p>
+                            </div>
+                            
+                            {repair.warrantyExpiresAt && (
+                              <div className="bg-white/50 dark:bg-black/20 rounded-xl p-4 backdrop-blur-sm border border-white/20 dark:border-white/10">
+                                <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
+                                  {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired' ? 'Venció' : 'Vence'}
+                                </p>
+                                <p className={cn(
+                                  "font-bold text-xl",
+                                  getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
+                                )}>
+                                  {formatWarrantyExpiration(repair.warrantyExpiresAt).split(' de ')[0]}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {formatWarrantyExpiration(repair.warrantyExpiresAt).split(' de ').slice(1).join(' de ')}
+                                </p>
+                                {getWarrantyStatus(repair.warrantyExpiresAt) !== 'expired' && (
+                                  <div className={cn(
+                                    "mt-2 px-2 py-1 rounded-md text-xs font-semibold inline-block",
+                                    getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).badge
+                                  )}>
+                                    {getDaysRemaining(repair.warrantyExpiresAt)} días restantes
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Fecha de retiro del equipo */}
+                          {repair.pickedUpAt && (
+                            <div className="bg-white/50 dark:bg-black/20 rounded-xl p-4 backdrop-blur-sm border border-white/20 dark:border-white/10">
+                              <div className="flex items-start gap-3">
+                                <div className={cn(
+                                  "p-2 rounded-lg",
+                                  getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).badge
+                                )}>
+                                  <Calendar className={cn(
+                                    "h-4 w-4",
+                                    getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).icon
+                                  )} />
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Equipo retirado</p>
+                                  <p className={cn(
+                                    "text-sm font-semibold mt-1",
+                                    getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
+                                  )}>
+                                    {formatDate(repair.pickedUpAt)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    La garantía comenzó desde esta fecha
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Warranty Notes */}
+                          {repair.warrantyNotes && (
+                            <div className="bg-white/50 dark:bg-black/20 rounded-xl p-4 backdrop-blur-sm border border-white/20 dark:border-white/10">
+                              <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Notas Adicionales</p>
+                              <p className={cn(
+                                "text-sm leading-relaxed",
+                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
+                              )}>
+                                {repair.warrantyNotes}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Footer Message */}
+                          <div className={cn(
+                            "rounded-xl p-4 border-2 border-dashed",
+                            getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).border,
+                            "bg-white/30 dark:bg-black/10"
+                          )}>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired' 
+                                ? '⚠️ La garantía ha expirado. Contacte al taller para más información sobre extensiones o nuevas reparaciones.'
+                                : getWarrantyStatus(repair.warrantyExpiresAt) === 'expiring'
+                                ? '⚠️ La garantía está por vencer. Conserve su comprobante y verifique el estado de su equipo antes de que expire.'
+                                : '✓ Garantía activa. Conserve este comprobante para hacer válida la garantía en caso de ser necesario.'
+                              }
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="flex flex-col items-center gap-2">
+                          <div className={cn(
+                            "w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg",
+                            getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).gradient,
+                            "ring-4 ring-white/50 dark:ring-black/50"
+                          )}>
+                            <Shield className="h-10 w-10 text-white drop-shadow-lg" />
+                          </div>
+                          <div className={cn(
+                            "px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider shadow-md",
+                            getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).badge
+                          )}>
+                            {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired' 
+                              ? 'Vencida'
+                              : getWarrantyStatus(repair.warrantyExpiresAt) === 'expiring'
+                              ? 'Por vencer'
+                              : 'Activa'
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-50 dark:from-slate-950/30 dark:via-gray-950/30 dark:to-zinc-950/30 shadow-md">
+                    <div className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-900/50">
+                          <Shield className="h-6 w-6 text-slate-400" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-slate-700 dark:text-slate-300">Sin Garantía</p>
+                          <p className="text-sm text-muted-foreground mt-0.5">Esta reparación no incluye garantía.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
 
               {/* Diagnóstico */}

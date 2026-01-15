@@ -28,6 +28,9 @@ export interface RepairFormData {
     estimated_cost?: number
     laborCost?: number
     finalCost?: number | null
+    warrantyMonths?: number
+    warrantyType?: 'labor' | 'parts' | 'full'
+    warrantyNotes?: string
     metadata?: Record<string, unknown>
     parts?: any[]
     notes?: any[]
@@ -116,6 +119,14 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
 
             const { parts, notes, ...repairData } = data
 
+            // Calculate warranty expiration if warranty months > 0
+            let warrantyExpiresAt = null
+            if (repairData.warrantyMonths && repairData.warrantyMonths > 0) {
+                const expirationDate = new Date()
+                expirationDate.setMonth(expirationDate.getMonth() + repairData.warrantyMonths)
+                warrantyExpiresAt = expirationDate.toISOString()
+            }
+
             // 1. Create Repair
             const { data: newRepair, error: createError } = await supabase
                 .from('repairs')
@@ -135,6 +146,10 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     estimated_cost: repairData.estimated_cost,
                     labor_cost: repairData.laborCost || 0,
                     final_cost: repairData.finalCost,
+                    warranty_months: repairData.warrantyMonths || 0,
+                    warranty_type: repairData.warrantyType || 'full',
+                    warranty_notes: repairData.warrantyNotes || null,
+                    warranty_expires_at: warrantyExpiresAt,
                     received_at: new Date().toISOString()
                 }])
                 .select()
@@ -227,6 +242,22 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             if (repairData.estimatedCost !== undefined) dbUpdateData.estimated_cost = repairData.estimatedCost
             if (repairData.laborCost !== undefined) dbUpdateData.labor_cost = repairData.laborCost
             if (repairData.finalCost !== undefined) dbUpdateData.final_cost = repairData.finalCost
+            
+            // Warranty fields
+            if (repairData.warrantyMonths !== undefined) {
+                dbUpdateData.warranty_months = repairData.warrantyMonths
+                
+                // Recalculate expiration if warranty months changed
+                if (repairData.warrantyMonths > 0) {
+                    const expirationDate = new Date()
+                    expirationDate.setMonth(expirationDate.getMonth() + repairData.warrantyMonths)
+                    dbUpdateData.warranty_expires_at = expirationDate.toISOString()
+                } else {
+                    dbUpdateData.warranty_expires_at = null
+                }
+            }
+            if (repairData.warrantyType !== undefined) dbUpdateData.warranty_type = repairData.warrantyType
+            if (repairData.warrantyNotes !== undefined) dbUpdateData.warranty_notes = repairData.warrantyNotes
 
             // Only update repair if there are fields to update
             if (Object.keys(dbUpdateData).length > 0) {

@@ -512,22 +512,6 @@ export function SystemConfiguration({
                   
                   <div className={cn(
                     "space-y-2 p-3 rounded-lg transition-colors",
-                    matchesSearch('Ciudad city') && 'bg-yellow-50 dark:bg-yellow-900/20'
-                  )}>
-                    <Label htmlFor="city" className="flex items-center gap-2">
-                      <Globe className="h-4 w-4 text-blue-500" />
-                      Ciudad
-                    </Label>
-                    <Input
-                      id="city"
-                      value={formData.city}
-                      onChange={(e) => handleInputChange('city', e.target.value)}
-                      placeholder="Asunción"
-                    />
-                  </div>
-                  
-                  <div className={cn(
-                    "space-y-2 p-3 rounded-lg transition-colors",
                     matchesSearch('Moneda currency') && 'bg-yellow-50 dark:bg-yellow-900/20'
                   )}>
                     <Label htmlFor="currency" className="flex items-center gap-2">

@@ -177,6 +177,30 @@ export const RepairNoteSchema = z.object({
 })
 
 /**
+ * Warranty Type Enum
+ */
+export const WarrantyTypeEnum = z.enum(['labor', 'parts', 'full'], 'Selecciona un tipo de garantía válido')
+
+/**
+ * Warranty Schema
+ */
+export const WarrantySchema = z.object({
+  warrantyMonths: z
+    .number()
+    .min(0, 'Los meses de garantía no pueden ser negativos')
+    .max(36, 'La garantía máxima es de 36 meses')
+    .default(3),
+  
+  warrantyType: WarrantyTypeEnum.default('full'),
+  
+  warrantyNotes: z
+    .string()
+    .max(500, 'Las notas de garantía son demasiado largas (máximo 500 caracteres)')
+    .optional()
+    .or(z.literal(''))
+})
+
+/**
  * Complete repair form schema
  */
 export const RepairFormSchema = z.object({
@@ -223,7 +247,22 @@ export const RepairFormSchema = z.object({
     .max(1000000, 'El costo final es demasiado alto')
     .optional()
     .nullable()
-    .default(null)
+    .default(null),
+  
+  // Warranty fields
+  warrantyMonths: z
+    .number()
+    .min(0, 'Los meses de garantía no pueden ser negativos')
+    .max(36, 'La garantía máxima es de 36 meses')
+    .default(3),
+  
+  warrantyType: WarrantyTypeEnum.default('full'),
+  
+  warrantyNotes: z
+    .string()
+    .max(500, 'Las notas de garantía son demasiado largas (máximo 500 caracteres)')
+    .optional()
+    .or(z.literal(''))
 })
 
 /**
@@ -273,7 +312,22 @@ export const RepairFormQuickSchema = z.object({
     .max(1000000, 'El costo final es demasiado alto')
     .optional()
     .nullable()
-    .default(null)
+    .default(null),
+  
+  // Warranty fields
+  warrantyMonths: z
+    .number()
+    .min(0, 'Los meses de garantía no pueden ser negativos')
+    .max(36, 'La garantía máxima es de 36 meses')
+    .default(3),
+  
+  warrantyType: WarrantyTypeEnum.default('full'),
+  
+  warrantyNotes: z
+    .string()
+    .max(500, 'Las notas de garantía son demasiado largas (máximo 500 caracteres)')
+    .optional()
+    .or(z.literal(''))
 })
 
 /**
@@ -288,6 +342,7 @@ export type DeviceType = z.infer<typeof DeviceTypeEnum>
 export type AccessType = z.infer<typeof AccessTypeEnum>
 export type Priority = z.infer<typeof PriorityEnum>
 export type Urgency = z.infer<typeof UrgencyEnum>
+export type WarrantyType = z.infer<typeof WarrantyTypeEnum>
 
 /**
  * Validation helper - validate data against schema

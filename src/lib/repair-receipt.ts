@@ -41,6 +41,9 @@ export interface RepairPrintPayload {
   devices: RepairDevicePrintItem[]
   priority?: string
   urgency?: string
+  warrantyMonths?: number
+  warrantyType?: 'labor' | 'parts' | 'full'
+  warrantyNotes?: string
 }
 
 /**
@@ -801,12 +804,19 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
       </div>
 
       <div class="warranty-box">
-        <div class="warranty-title">⚠️ Términos y Condiciones</div>
+        <div class="warranty-title">🛡️ Garantía</div>
         <div class="warranty-text">
-          • Garantía: 30 días sobre trabajo realizado<br/>
+          ${payload.warrantyMonths && payload.warrantyMonths > 0 ? `
+          • Duración: ${payload.warrantyMonths} ${payload.warrantyMonths === 1 ? 'mes' : 'meses'}<br/>
+          • Cubre: ${payload.warrantyType === 'labor' ? 'Solo mano de obra' : payload.warrantyType === 'parts' ? 'Solo repuestos' : 'Completa (mano de obra + repuestos)'}<br/>
+          ${payload.warrantyNotes ? `• ${payload.warrantyNotes}<br/>` : ''}
+          • Conserve este comprobante para hacer válida la garantía<br/>
+          • Retiro máximo: 90 días calendario
+          ` : `
+          • Esta reparación no incluye garantía<br/>
           • Retiro máximo: 90 días calendario<br/>
-          • Repuestos no incluyen garantía salvo defecto<br/>
           • Conserve este comprobante para el retiro
+          `}
         </div>
       </div>
 
