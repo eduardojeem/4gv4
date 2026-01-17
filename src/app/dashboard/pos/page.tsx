@@ -431,7 +431,7 @@ export default function POSPage() {
     const loadInitial = async (): Promise<boolean> => {
       const { data, error } = await supabase
         .from('customers')
-        .select('id,first_name,last_name,phone,email,customer_type,updated_at,address,city,last_visit,loyalty_points,total_purchases,total_repairs,current_balance')
+        .select('id,first_name,last_name,phone,email,customer_type,updated_at,address,city,last_visit,loyalty_points,total_purchases,total_repairs,current_balance,credit_limit')
 
       if (error) {
         console.warn('Error cargando clientes:', error.message)
@@ -2513,6 +2513,8 @@ export default function POSPage() {
         processSale={processSale}
         processMixedPayment={processMixedPayment}
         formatCurrency={formatCurrency}
+        allPromotions={allPromotions}
+        onApplyPromoCode={applyPromoCode}
         isRegisterOpen={getCurrentRegister.isOpen}
         onOpenRegister={() => setIsOpenRegisterDialogOpen(true)}
         onCancel={() => {

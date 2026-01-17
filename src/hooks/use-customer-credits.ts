@@ -80,6 +80,7 @@ export function useCustomerCredits(customerId?: string) {
   const [credits, setCredits] = useState<CreditInfo[]>([])
   const [installments, setInstallments] = useState<InstallmentInfo[]>([])
   const [payments, setPayments] = useState<PaymentInfo[]>([])
+  const [customerLimit, setCustomerLimit] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
@@ -98,7 +99,19 @@ export function useCustomerCredits(customerId?: string) {
           setCredits([])
           setInstallments([])
           setPayments([])
+          setCustomerLimit(0)
           return
+        }
+
+        // Cargar límite de crédito del cliente
+        const { data: customerData, error: customerError } = await supabase
+          .from('customers')
+          .select('credit_limit')
+          .eq('id', customerId)
+          .single()
+
+        if (!customerError && customerData) {
+          setCustomerLimit(customerData.credit_limit || 0)
         }
 
         // Use API to bypass RLS

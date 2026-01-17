@@ -81,8 +81,8 @@ export function ConnectionStatus() {
   const StatusIcon = status.icon
 
   return (
-    <Card className="w-full">
-      <CardContent className="p-4">
+    <div className="w-full">
+      <div className="p-4 bg-card text-card-foreground rounded-xl border shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
@@ -170,7 +170,7 @@ export function ConnectionStatus() {
             </div>
           )
         }
-      </CardContent >
-    </Card >
+      </div>
+    </div>
   )
 }

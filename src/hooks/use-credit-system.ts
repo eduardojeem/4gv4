@@ -1,13 +1,54 @@
 /**
  * Hook para manejar el sistema de créditos de clientes
  * Incluye ventas a crédito, pagos, historial y límites
+ * 
+ * SINCRONIZADO CON useCustomerCredits - Usa datos reales de Supabase
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Customer } from './use-customer-state'
 import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase/client'
+import { config } from '@/lib/config'
 
+// Interfaces sincronizadas con Supabase
+export interface CreditInfo {
+  id: string
+  customer_id: string
+  principal: number
+  interest_rate: number
+  term_months: number
+  start_date: string
+  status: 'active' | 'completed' | 'defaulted' | 'cancelled'
+  created_at: string
+  updated_at: string
+}
+
+export interface InstallmentInfo {
+  id: string
+  credit_id: string
+  installment_number: number
+  due_date: string
+  amount: number
+  status: 'pending' | 'paid' | 'late'
+  paid_at?: string | null
+  payment_method?: 'cash' | 'card' | 'transfer' | null
+  amount_paid?: number | null
+  created_at: string
+}
+
+export interface PaymentInfo {
+  id: string
+  credit_id: string
+  installment_id?: string | null
+  amount: number
+  payment_method?: 'cash' | 'card' | 'transfer' | null
+  created_at: string
+  notes?: string
+}
+
+// Interfaces legacy para compatibilidad
 export interface CreditTransaction {
   id: string
   customerId: string
@@ -53,12 +94,29 @@ export interface CreditSummary {
   overdueAmount: number
   pendingSales: number
   creditUtilization: number // Porcentaje usado del límite
+  // Campos adicionales sincronizados con useCustomerCredits
+  activeCredits?: number
+  completedCredits?: number
+  totalPaid?: number
+  nextPayment?: {
+    amount: number
+    due_date: string
+    days_until_due: number
+    is_overdue: boolean
+  } | null
 }
 
 export interface UseCreditSystemReturn {
   // Estado
   creditTransactions: CreditTransaction[]
   creditSales: CreditSale[]
+  loading: boolean
+  error: string | null
+  
+  // Datos reales de Supabase
+  credits: CreditInfo[]
+  installments: InstallmentInfo[]
+  payments: PaymentInfo[]
   
   // Funciones principales
   canSellOnCredit: (customer: Customer, amount: number) => boolean
@@ -80,6 +138,10 @@ export interface UseCreditSystemReturn {
   formatCreditStatus: (status: string) => string
   getCreditStatusColor: (status: string) => string
   calculateDaysOverdue: (dueDate: string) => number
+  
+  // Carga de datos
+  loadCreditData: (customerId?: string) => Promise<void>
+  refresh: () => void
 }
 
 // Datos mock para desarrollo
@@ -152,22 +214,92 @@ const mockCreditSales: CreditSale[] = [
 ]
 
 export function useCreditSystem(): UseCreditSystemReturn {
-  const [creditTransactions] = useState<CreditTransaction[]>(mockTransactions)
-  const [creditSales, setCreditSales] = useState<CreditSale[]>(mockCreditSales)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Datos reales de Supabase
+  const [credits, setCredits] = useState<CreditInfo[]>([])
+  const [installments, setInstallments] = useState<InstallmentInfo[]>([])
+  const [payments, setPayments] = useState<PaymentInfo[]>([])
+  
+  // Legacy data (convertido desde datos reales)
+  const [creditTransactions] = useState<CreditTransaction[]>([])
+  const [creditSales, setCreditSales] = useState<CreditSale[]>([])
+  
+  const supabase = useMemo(() => createClient(), [])
 
-  // Verificar si un cliente puede comprar a crédito
+  // Cargar datos de créditos desde Supabase
+  const loadCreditData = useCallback(async (customerId?: string) => {
+    if (!customerId) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      if (!config.supabase.isConfigured) {
+        console.warn('Supabase not configured, using mock data')
+        // Usar datos mock si Supabase no está configurado
+        const mockCustomerCredits = credits.filter(c => c.customer_id === customerId)
+        const mockCustomerInstallments = installments.filter(i => 
+          mockCustomerCredits.map(c => c.id).includes(i.credit_id)
+        )
+        setCredits(mockCustomerCredits)
+        setInstallments(mockCustomerInstallments)
+        setPayments([])
+        setLoading(false)
+        return
+      }
+
+      // Usar API para bypass RLS
+      const response = await fetch('/api/credits/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerIds: [customerId] })
+      })
+
+      if (!response.ok) throw new Error('Failed to fetch credit data')
+
+      const { credits: creditsData, installments: installmentsData, payments: paymentsData } = await response.json()
+      
+      setCredits(creditsData || [])
+      setInstallments(installmentsData || [])
+      setPayments(paymentsData || [])
+
+    } catch (err: any) {
+      setError(err.message || 'Error al cargar datos de créditos')
+      console.error('Error loading credit data:', err)
+      // En caso de error, usar datos vacíos
+      setCredits([])
+      setInstallments([])
+      setPayments([])
+    } finally {
+      setLoading(false)
+    }
+  }, [supabase])
+
+  // Verificar si un cliente puede comprar a crédito (SINCRONIZADO)
   const canSellOnCredit = useCallback((customer: Customer, amount: number): boolean => {
     if (!customer.credit_limit || customer.credit_limit <= 0) {
       return false
     }
 
-    const currentBalance = customer.current_balance || 0
+    // Calcular balance real desde las cuotas pendientes (igual que useCustomerCredits)
+    const customerCreditIds = credits
+      .filter(c => c.customer_id === customer.id)
+      .map(c => c.id)
+    
+    const pendingInstallments = installments.filter(i => 
+      customerCreditIds.includes(i.credit_id) && 
+      (i.status === 'pending' || i.status === 'late')
+    )
+    
+    const currentBalance = pendingInstallments.reduce((sum, i) => sum + i.amount, 0)
     const availableCredit = customer.credit_limit - currentBalance
     
     return availableCredit >= amount
-  }, [])
+  }, [credits, installments])
 
-  // Crear una venta a crédito
+  // Crear una venta a crédito (Implementación REAL con Supabase)
   const createCreditSale = useCallback(async (
     customer: Customer, 
     saleData: {
@@ -187,82 +319,80 @@ export function useCreditSystem(): UseCreditSystemReturn {
         return false
       }
 
-      // Calcular fechas de vencimiento para cuotas
-      let dueDate = saleData.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-      let installmentInfo = undefined
+      const installmentCount = saleData.installments?.count || 1
+      const frequency = saleData.installments?.frequency || 'monthly'
 
-      if (saleData.installments && saleData.installments.count > 1) {
-        const installmentAmount = Math.round(saleData.amount / saleData.installments.count)
-        
-        // Calcular próxima fecha de vencimiento según frecuencia
-        const nextDueDate = new Date()
-        switch (saleData.installments.frequency) {
-          case 'weekly':
-            nextDueDate.setDate(nextDueDate.getDate() + 7)
-            break
-          case 'biweekly':
-            nextDueDate.setDate(nextDueDate.getDate() + 14)
-            break
-          case 'monthly':
-            nextDueDate.setMonth(nextDueDate.getMonth() + 1)
-            break
-        }
+      // 1. Crear el crédito principal
+      const { data: creditData, error: creditError } = await supabase
+        .from('customer_credits')
+        .insert({
+          customer_id: customer.id,
+          principal: saleData.amount,
+          interest_rate: 0, // Por ahora 0% interés en POS
+          term_months: installmentCount, // Aproximación si es mensual
+          start_date: new Date().toISOString(),
+          status: 'active'
+        })
+        .select()
+        .single()
 
-        installmentInfo = {
-          total: saleData.installments.count,
-          current: 1,
-          amount: installmentAmount,
-          frequency: saleData.installments.frequency,
-          nextDue: nextDueDate.toISOString().split('T')[0]
-        }
-
-        dueDate = nextDueDate.toISOString().split('T')[0]
+      if (creditError) {
+        console.error('Error creating credit header:', creditError)
+        throw new Error('Error al crear el registro de crédito')
       }
 
-      const newSale: CreditSale = {
-        id: `cs-${Date.now()}`,
-        customerId: customer.id,
-        saleId: `sale-${Date.now()}`,
-        amount: saleData.amount,
-        remainingAmount: saleData.amount,
-        dueDate,
-        status: 'pending',
-        createdAt: new Date().toISOString().split('T')[0],
-        items: saleData.items,
-        repairIds: saleData.repairIds,
-        installments: installmentInfo
+      const creditId = creditData.id
+
+      // 2. Generar cuotas
+      const installmentsToInsert = []
+      const baseAmount = Math.floor(saleData.amount / installmentCount)
+      const remainder = saleData.amount % installmentCount
+
+      for (let i = 0; i < installmentCount; i++) {
+        const dueDate = new Date()
+        // Calcular fecha según frecuencia
+        if (frequency === 'weekly') dueDate.setDate(dueDate.getDate() + (7 * (i + 1)))
+        else if (frequency === 'biweekly') dueDate.setDate(dueDate.getDate() + (14 * (i + 1)))
+        else dueDate.setMonth(dueDate.getMonth() + (i + 1)) // Mensual default
+
+        installmentsToInsert.push({
+          credit_id: creditId,
+          installment_number: i + 1,
+          amount: i === installmentCount - 1 ? baseAmount + remainder : baseAmount,
+          due_date: dueDate.toISOString(),
+          status: 'pending'
+        })
       }
 
-      const newTransaction: CreditTransaction = {
-        id: `tx-${Date.now()}`,
-        customerId: customer.id,
-        type: 'sale',
-        amount: saleData.amount,
-        description: installmentInfo 
-          ? `Venta a crédito (${installmentInfo.total} cuotas) - ${saleData.items.map(i => i.name).join(', ')}`
-          : `Venta a crédito - ${saleData.items.map(i => i.name).join(', ')}`,
-        date: new Date().toISOString().split('T')[0],
-        saleId: newSale.saleId,
-        status: 'completed',
-        createdBy: 'current-user'
+      const { error: installmentsError } = await supabase
+        .from('credit_installments')
+        .insert(installmentsToInsert)
+
+      if (installmentsError) {
+        console.error('Error creating installments:', installmentsError)
+        // Idealmente aquí haríamos rollback del credit header
+        await supabase.from('customer_credits').delete().eq('id', creditId)
+        throw new Error('Error al generar las cuotas')
       }
 
-      setCreditSales(prev => [...prev, newSale])
+      // 3. (Opcional) Vincular reparaciones si existen
+      // Esto requeriría una tabla intermedia o actualizar la tabla repairs con el credit_id
+      // Por ahora el CheckoutModal maneja la actualización de estado de repairs a 'entregado'
+
+      toast.success(`Venta a crédito creada exitosamente`)
       
-      const successMessage = installmentInfo 
-        ? `Venta a crédito creada: ${formatCurrency(saleData.amount)} en ${installmentInfo.total} cuotas de ${formatCurrency(installmentInfo.amount)}`
-        : `Venta a crédito creada por ${formatCurrency(saleData.amount)}`
+      // Recargar datos
+      await loadCreditData(customer.id)
       
-      toast.success(successMessage)
       return true
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating credit sale:', error)
-      toast.error('Error al crear la venta a crédito')
+      toast.error(error.message || 'Error al crear la venta a crédito')
       return false
     }
-  }, [canSellOnCredit])
+  }, [canSellOnCredit, loadCreditData, supabase])
 
-  // Registrar un pago
+  // Registrar un pago (Implementación REAL con Supabase)
   const recordPayment = useCallback(async (
     customerId: string, 
     amount: number, 
@@ -270,65 +400,124 @@ export function useCreditSystem(): UseCreditSystemReturn {
     reference?: string
   ): Promise<boolean> => {
     try {
-      const newTransaction: CreditTransaction = {
-        id: `tx-${Date.now()}`,
-        customerId,
-        type: 'payment',
-        amount: -amount, // Negativo porque reduce el balance
-        description: `Pago - ${paymentMethod}`,
-        date: new Date().toISOString().split('T')[0],
-        paymentMethod,
-        reference,
-        status: 'completed',
-        createdBy: 'current-user'
+      // 1. Obtener cuotas pendientes del cliente (FIFO)
+      const customerCreditIds = credits
+        .filter(c => c.customer_id === customerId)
+        .map(c => c.id)
+      
+      const pendingInstallments = installments
+        .filter(i => 
+          customerCreditIds.includes(i.credit_id) && 
+          (i.status === 'pending' || i.status === 'late')
+        )
+        .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+
+      if (pendingInstallments.length === 0) {
+        toast.error('El cliente no tiene deuda pendiente')
+        return false
       }
 
-      // Aplicar el pago a las ventas pendientes (FIFO)
-      setCreditSales(prev => {
-        const customerSales = prev.filter(s => s.customerId === customerId && s.remainingAmount > 0)
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-        
-        let remainingPayment = amount
-        const updatedSales = prev.map(sale => {
-          if (sale.customerId === customerId && sale.remainingAmount > 0 && remainingPayment > 0) {
-            const paymentToApply = Math.min(remainingPayment, sale.remainingAmount)
-            remainingPayment -= paymentToApply
-            
-            const newRemainingAmount = sale.remainingAmount - paymentToApply
-            return {
-              ...sale,
-              remainingAmount: newRemainingAmount,
-              status: newRemainingAmount === 0 ? 'paid' as const : 'partial' as const
-            }
-          }
-          return sale
-        })
+      let remainingPayment = amount
+      const paymentsToInsert = []
 
-        return updatedSales
-      })
+      for (const installment of pendingInstallments) {
+        if (remainingPayment <= 0) break
 
-      toast.success(`Pago registrado: ${formatCurrency(amount)}`)
+        const currentBalance = installment.amount - (installment.amount_paid || 0)
+        const paymentAmount = Math.min(remainingPayment, currentBalance)
+
+        if (paymentAmount > 0) {
+          paymentsToInsert.push({
+            credit_id: installment.credit_id,
+            installment_id: installment.id,
+            amount: paymentAmount,
+            payment_method: paymentMethod,
+            notes: reference ? `Referencia: ${reference}` : undefined
+          })
+          remainingPayment -= paymentAmount
+        }
+      }
+
+      if (paymentsToInsert.length === 0) {
+        toast.error('No se pudo aplicar el pago a ninguna cuota')
+        return false
+      }
+
+      // 2. Insertar pagos (Los triggers de BD deberían actualizar estados)
+      const { error: paymentError } = await supabase
+        .from('credit_payments')
+        .insert(paymentsToInsert)
+
+      if (paymentError) {
+        console.error('Error recording payments:', paymentError)
+        throw new Error('Error al registrar los pagos en base de datos')
+      }
+
+      if (remainingPayment > 0) {
+        toast.success(`Pago registrado parcialmente. Sobraron ${formatCurrency(remainingPayment)}`)
+      } else {
+        toast.success(`Pago registrado: ${formatCurrency(amount)}`)
+      }
+
+      // Recargar datos
+      await loadCreditData(customerId)
+      
       return true
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error recording payment:', error)
-      toast.error('Error al registrar el pago')
+      toast.error(error.message || 'Error al registrar el pago')
       return false
     }
-  }, [])
+  }, [credits, installments, loadCreditData, supabase])
 
-  // Obtener resumen de crédito del cliente
+  // Obtener resumen de crédito del cliente (SINCRONIZADO)
   const getCreditSummary = useCallback((customer: Customer): CreditSummary => {
-    const customerSales = creditSales.filter(s => s.customerId === customer.id)
+    const customerCredits = credits.filter(c => c.customer_id === customer.id)
+    const customerCreditIds = customerCredits.map(c => c.id)
+    const customerInstallments = installments.filter(i => customerCreditIds.includes(i.credit_id))
+    
     const totalCredit = customer.credit_limit || 0
-    const usedCredit = customer.current_balance || 0
+    
+    // Calcular balance real desde cuotas pendientes (SINCRONIZADO)
+    const pendingInstallments = customerInstallments.filter(i => 
+      i.status === 'pending' || i.status === 'late'
+    )
+    const usedCredit = pendingInstallments.reduce((sum, i) => sum + i.amount, 0)
     const availableCredit = totalCredit - usedCredit
     
-    const overdueAmount = customerSales
-      .filter(s => s.status !== 'paid' && new Date(s.dueDate) < new Date())
-      .reduce((sum, s) => sum + s.remainingAmount, 0)
+    // Calcular cuotas vencidas
+    const today = new Date()
+    const overdueAmount = pendingInstallments
+      .filter(i => new Date(i.due_date) < today)
+      .reduce((sum, i) => sum + i.amount, 0)
     
-    const pendingSales = customerSales.filter(s => s.status !== 'paid').length
+    const pendingSales = customerCredits.filter(c => c.status === 'active').length
     const creditUtilization = totalCredit > 0 ? (usedCredit / totalCredit) * 100 : 0
+
+    // Datos adicionales
+    const activeCredits = customerCredits.filter(c => c.status === 'active').length
+    const completedCredits = customerCredits.filter(c => c.status === 'completed').length
+    
+    const paidInstallments = customerInstallments.filter(i => i.status === 'paid')
+    const totalPaid = paidInstallments.reduce((sum, i) => sum + (i.amount_paid || i.amount), 0)
+    
+    // Próximo pago
+    const nextInstallment = pendingInstallments
+      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())[0]
+    
+    let nextPayment = null
+    if (nextInstallment) {
+      const dueDate = new Date(nextInstallment.due_date)
+      const now = new Date()
+      const daysUntilDue = Math.ceil((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      
+      nextPayment = {
+        amount: nextInstallment.amount,
+        due_date: nextInstallment.due_date,
+        days_until_due: daysUntilDue,
+        is_overdue: daysUntilDue < 0
+      }
+    }
 
     return {
       totalCredit,
@@ -336,9 +525,13 @@ export function useCreditSystem(): UseCreditSystemReturn {
       usedCredit,
       overdueAmount,
       pendingSales,
-      creditUtilization
+      creditUtilization,
+      activeCredits,
+      completedCredits,
+      totalPaid,
+      nextPayment
     }
-  }, [creditSales])
+  }, [credits, installments])
 
   // Obtener transacciones del cliente
   const getCustomerTransactions = useCallback((customerId: string): CreditTransaction[] => {
@@ -397,9 +590,21 @@ export function useCreditSystem(): UseCreditSystemReturn {
     return Math.max(0, diffDays)
   }, [])
 
+  // Función refresh para recargar datos
+  const refresh = useCallback(() => {
+    setCredits([])
+    setInstallments([])
+    setPayments([])
+  }, [])
+
   return {
     creditTransactions,
     creditSales,
+    loading,
+    error,
+    credits,
+    installments,
+    payments,
     canSellOnCredit,
     createCreditSale,
     recordPayment,
@@ -409,6 +614,8 @@ export function useCreditSystem(): UseCreditSystemReturn {
     getOverdueSales,
     formatCreditStatus,
     getCreditStatusColor,
-    calculateDaysOverdue
+    calculateDaysOverdue,
+    loadCreditData,
+    refresh
   }
 }

@@ -7,10 +7,11 @@ import React, { useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CreditCard, Users, Clock } from 'lucide-react'
+import { CreditCard, Users, Clock, AlertCircle } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
 import { useCheckout } from '../../contexts/CheckoutContext'
+import { CreditStatusPanel } from './CreditStatusPanel'
 
 interface PaymentMethodsProps {
   // Cálculos
@@ -94,34 +95,100 @@ export function PaymentMethods({
             <Button
               key={method.id}
               variant={paymentMethod === method.id ? "default" : "outline"}
-              className="w-full justify-start"
+              className={`w-full justify-start transition-all ${
+                method.id === 'credit' && !canUseCredit 
+                  ? 'opacity-70' // Visualmente distinto pero interactivo
+                  : paymentMethod === method.id 
+                  ? 'ring-2 ring-primary ring-offset-2' 
+                  : 'hover:bg-accent'
+              }`}
               onClick={() => setPaymentMethod(method.id)}
-              disabled={method.id === 'credit' && !canUseCredit}
+              // Permitimos seleccionar crédito incluso si no es válido para mostrar la advertencia
+              // disabled={method.id === 'credit' && !canUseCredit}
             >
               <method.icon className={`h-4 w-4 mr-2 ${method.color}`} />
-              {method.label}
-              {method.id === 'credit' && creditSummary && (
-                <span className="ml-auto text-xs">
-                  {canUseCredit ? 
-                    `Disponible: ${formatCurrency(creditSummary.availableCredit)}` : 
-                    'Sin crédito'
-                  }
-                </span>
+              <span className="flex-1 text-left">{method.label}</span>
+              {method.id === 'credit' && (
+                <div className="ml-auto flex flex-col items-end">
+                  {creditSummary && (creditSummary.availableCredit + creditSummary.usedCredit) > 0 ? (
+                    // Cliente con crédito configurado
+                    <>
+                      <span className={`text-xs font-semibold ${
+                        canUseCredit ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                      }`}>
+                        {canUseCredit ? 
+                          `${formatCurrency(creditSummary.availableCredit)}` : 
+                          'Insuficiente'
+                        }
+                      </span>
+                      {canUseCredit && (
+                        <span className="text-[10px] text-muted-foreground">
+                          disponible
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    // Cliente sin crédito configurado
+                    <span className="text-[10px] text-muted-foreground">
+                      No habilitado
+                    </span>
+                  )}
+                </div>
               )}
             </Button>
           ))}
           
           {/* Información adicional para venta a crédito */}
           {paymentMethod === 'credit' && canUseCredit && creditSummary && (
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2 text-blue-800 mb-2">
-                <Clock className="h-4 w-4" />
-                <span className="font-medium">Venta a Crédito</span>
-              </div>
-              <div className="text-sm text-blue-700 space-y-1">
-                <div>Total: {formatCurrency(cartTotal)}</div>
-                <div>Crédito disponible: {formatCurrency(creditSummary.availableCredit)}</div>
-                <div>Nuevo saldo: {formatCurrency(creditSummary.usedCredit + cartTotal)}</div>
+            <CreditStatusPanel
+              cartTotal={cartTotal}
+              creditSummary={creditSummary}
+              formatCurrency={formatCurrency}
+            />
+          )}
+          
+          {/* Advertencia si no tiene crédito suficiente */}
+          {paymentMethod === 'credit' && !canUseCredit && (
+            <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  {!creditSummary || (creditSummary.availableCredit + creditSummary.usedCredit) === 0 ? (
+                    // Cliente sin límite de crédito configurado
+                    <>
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
+                        Crédito no habilitado
+                      </p>
+                      <p className="text-xs text-red-700 dark:text-red-300">
+                        Este cliente no tiene un límite de crédito asignado. Configure el límite de crédito en la ficha del cliente para habilitar ventas a crédito.
+                      </p>
+                    </>
+                  ) : (
+                    // Cliente con crédito insuficiente
+                    <>
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
+                        Cliente con crédito insuficiente
+                      </p>
+                      <p className="text-xs text-red-700 dark:text-red-300 mb-2">
+                        El cliente no tiene suficiente crédito disponible para esta venta.
+                      </p>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-red-600 dark:text-red-400">Total de la venta:</span>
+                          <span className="font-semibold text-red-800 dark:text-red-200">{formatCurrency(cartTotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-red-600 dark:text-red-400">Crédito disponible:</span>
+                          <span className="font-semibold text-red-800 dark:text-red-200">{formatCurrency(creditSummary.availableCredit)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-red-300 dark:border-red-700 pt-1 mt-1">
+                          <span className="text-red-700 dark:text-red-300 font-medium">Faltante:</span>
+                          <span className="font-bold text-red-900 dark:text-red-100">{formatCurrency(cartTotal - creditSummary.availableCredit)}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}

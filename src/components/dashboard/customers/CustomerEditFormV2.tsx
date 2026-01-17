@@ -767,15 +767,20 @@ export function CustomerEditFormV2({
                     name="credit_limit"
                     control={form.control}
                     render={({ field }) => (
-                      <Input
-                        {...field}
-                        id="credit_limit"
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        onChange={(e) => field.onChange(Number(e.target.value))}
-                        className="bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"
-                      />
+                      <div className="space-y-1">
+                        <Input
+                          {...field}
+                          id="credit_limit"
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          onChange={(e) => field.onChange(Number(e.target.value))}
+                          className="bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600"
+                        />
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Establece el monto máximo que el cliente puede adeudar. Un valor mayor a 0 habilita la opción de "Venta a Crédito" en el POS.
+                        </p>
+                      </div>
                     )}
                   />
                 </div>

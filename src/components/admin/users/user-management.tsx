@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUsersSupabase, SupabaseUser } from '@/hooks/use-users-supabase'
 import { useAuth } from '@/contexts/auth-context'
@@ -8,31 +8,34 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  Search,
   UserPlus,
-  Edit,
-  Trash2,
-  Mail,
   Loader2,
   RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  Eye,
   ShieldAlert,
   Activity,
   Users,
-  AlertTriangle
+  AlertTriangle,
+  Edit,
+  Trash2,
+  Mail,
+  Eye,
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { UserStatsCards } from './user-stats-cards'
 import { UserAvatarUpload } from './user-avatar-upload'
 import { UserActivityTimeline } from './user-activity-timeline'
+import { UsersTable } from './users-table'
+import { UsersFilters } from './users-filters'
 import { useDebounce } from '@/hooks/use-debounce'
+
+import { Checkbox } from "@/components/ui/checkbox"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export function UserManagement() {
   const router = useRouter()
@@ -52,6 +55,8 @@ export function UserManagement() {
   const {
     users,
     totalCount,
+    totalPages,
+    stats,
     isLoading: dataLoading,
     refreshUsers,
     createUser,
@@ -95,27 +100,76 @@ export function UserManagement() {
     role: 'cliente' as SupabaseUser['role'],
     department: '',
     status: 'active' as SupabaseUser['status'],
-    notes: ''
+    notes: '',
+    permissions: [] as string[]
   })
+
+  // Permission groups
+  const PERMISSION_GROUPS = [
+    {
+      id: 'sales',
+      label: 'Ventas y Caja',
+      permissions: [
+        { id: 'pos_access', label: 'Acceso a POS' },
+        { id: 'process_sale', label: 'Procesar Ventas' },
+        { id: 'view_sales', label: 'Ver Historial de Ventas' },
+        { id: 'apply_discount', label: 'Aplicar Descuentos' },
+        { id: 'cash_close', label: 'Realizar Cierre de Caja' },
+      ]
+    },
+    {
+      id: 'inventory',
+      label: 'Inventario y Productos',
+      permissions: [
+        { id: 'view_inventory', label: 'Ver Inventario' },
+        { id: 'manage_products', label: 'Crear/Editar Productos' },
+        { id: 'adjust_stock', label: 'Ajustar Stock' },
+        { id: 'manage_categories', label: 'Gestionar Categorías' },
+      ]
+    },
+    {
+      id: 'admin',
+      label: 'Administración',
+      permissions: [
+        { id: 'manage_users', label: 'Gestionar Usuarios' },
+        { id: 'view_reports', label: 'Ver Reportes Financieros' },
+        { id: 'system_settings', label: 'Configuración del Sistema' },
+      ]
+    }
+  ]
+
+  const handlePermissionChange = (permissionId: string, checked: boolean) => {
+    setFormData(prev => {
+      const currentPermissions = prev.permissions || []
+      if (checked) {
+        return { ...prev, permissions: [...currentPermissions, permissionId] }
+      } else {
+        return { ...prev, permissions: currentPermissions.filter(p => p !== permissionId) }
+      }
+    })
+  }
+
+  // Helper to check if permission is active (mocked for now, assumes role based defaults if empty)
+  const isPermissionActive = (permissionId: string) => {
+    return formData.permissions?.includes(permissionId)
+  }
 
   // Reset page when filters change
   useEffect(() => {
     setPage(1)
   }, [debouncedSearch, roleFilter, statusFilter])
 
-  // Estadísticas calculadas (aproximadas con los datos actuales de la página + totalCount)
-  const stats = useMemo(() => ({
-    totalUsers: totalCount,
-    // Estas estadísticas son solo de la página actual, idealmente deberían venir del backend
-    activeUsers: users.filter(u => u.status === 'active').length,
-    inactiveUsers: users.filter(u => u.status === 'inactive').length,
-    adminsCount: users.filter(u => u.role === 'admin').length,
-    newUsersThisMonth: users.filter(u => {
-      const date = new Date(u.createdAt)
-      const now = new Date()
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    }).length
-  }), [users, totalCount])
+  // Stats for cards (now coming from backend)
+  const dashboardStats = {
+    totalUsers: stats.total,
+    activeUsers: stats.active,
+    inactiveUsers: stats.inactive,
+    adminsCount: stats.admins,
+    newUsersThisMonth: stats.newThisMonth
+  }
+
+  // No need to calculate totalPages manually anymore, use the one from hook
+  // const totalPages = Math.ceil(totalCount / pageSize)
 
   if (authLoading) {
     return (
@@ -196,28 +250,6 @@ export function UserManagement() {
     return result
   }
 
-  // Helpers de UI
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'admin': return 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800'
-      case 'supervisor': return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'
-      case 'tecnico': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
-      case 'vendedor': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
-    }
-  }
-
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
-      case 'inactive': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
-      case 'suspended': return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
-    }
-  }
-
-  const totalPages = Math.ceil(totalCount / pageSize)
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Header */}
@@ -242,7 +274,7 @@ export function UserManagement() {
       </div>
 
       {/* Stats Cards */}
-      <UserStatsCards stats={stats} isLoading={dataLoading} />
+      <UserStatsCards stats={dashboardStats} isLoading={dataLoading} />
 
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -258,184 +290,47 @@ export function UserManagement() {
         </TabsList>
 
         <TabsContent value="users" className="space-y-4">
-          {/* Filters */}
-          <div className="grid gap-4 md:grid-cols-4 bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 shadow-sm">
-            <div className="relative md:col-span-2">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Buscar por nombre, email o departamento..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 dark:bg-gray-900 dark:border-gray-700"
-              />
-            </div>
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="dark:bg-gray-900 dark:border-gray-700">
-                <SelectValue placeholder="Filtrar por rol" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los roles</SelectItem>
-                <SelectItem value="admin">Administrador</SelectItem>
-                <SelectItem value="supervisor">Supervisor</SelectItem>
-                <SelectItem value="vendedor">Vendedor</SelectItem>
-                <SelectItem value="tecnico">Técnico</SelectItem>
-                <SelectItem value="cliente">Cliente</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="dark:bg-gray-900 dark:border-gray-700">
-                <SelectValue placeholder="Filtrar por estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                <SelectItem value="active">Activo</SelectItem>
-                <SelectItem value="inactive">Inactivo</SelectItem>
-                <SelectItem value="suspended">Suspendido</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <UsersFilters
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            roleFilter={roleFilter}
+            onRoleFilterChange={setRoleFilter}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+          />
 
-          {/* Users Table */}
           <Card className="border-0 shadow-lg dark:shadow-none overflow-hidden dark:bg-gray-800 dark:border dark:border-gray-700">
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50/50 dark:bg-gray-900/50 hover:bg-gray-50/50 dark:hover:bg-gray-900/50">
-                      <TableHead className="w-[300px]">Usuario</TableHead>
-                      <TableHead>Rol</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead className="hidden md:table-cell">Departamento</TableHead>
-                      <TableHead className="hidden lg:table-cell">Último Acceso</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {dataLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center">
-                          <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-500" />
-                          <p className="text-gray-500 mt-2">Cargando usuarios...</p>
-                        </TableCell>
-                      </TableRow>
-                    ) : users.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center text-gray-500">
-                          No se encontraron usuarios
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      users.map((user) => (
-                        <TableRow key={user.id} className="hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors group border-b dark:border-gray-700">
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold shadow-sm">
-                                {user.avatar_url ? (
-                                  <img src={user.avatar_url} alt={user.name} className="h-full w-full rounded-full object-cover" />
-                                ) : (
-                                  user.name.charAt(0).toUpperCase()
-                                )}
-                              </div>
-                              <div>
-                                <div className="font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
-                                <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                                  <Mail className="h-3 w-3" /> {user.email}
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={getRoleBadgeColor(user.role)}>
-                              {user.role}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={getStatusBadgeColor(user.status)}>
-                              {user.status === 'active' ? 'Activo' : user.status === 'inactive' ? 'Inactivo' : 'Suspendido'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-gray-600 dark:text-gray-400">
-                            {user.department || '-'}
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell text-gray-500 dark:text-gray-400 text-sm">
-                            {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Nunca'}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setSelectedUser(user)
-                                  setIsViewDialogOpen(true)
-                                }}
-                              >
-                                <Eye className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setSelectedUser(user)
-                                  setFormData({
-                                    name: user.name,
-                                    email: user.email,
-                                    phone: user.phone || '',
-                                    role: user.role,
-                                    department: user.department || '',
-                                    status: user.status,
-                                    notes: user.notes || ''
-                                  })
-                                  setIsEditDialogOpen(true)
-                                }}
-                              >
-                                <Edit className="h-4 w-4 text-blue-500 dark:text-blue-400" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setSelectedUser(user)
-                                  setIsDeleteDialogOpen(true)
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500 dark:text-red-400" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Pagination */}
-              <div className="flex items-center justify-between px-4 py-4 border-t dark:border-gray-700">
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Mostrando {((page - 1) * pageSize) + 1} a {Math.min(page * pageSize, totalCount)} de {totalCount} usuarios
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page === 1 || dataLoading}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Anterior
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages || dataLoading}
-                  >
-                    Siguiente
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              <UsersTable
+                users={users}
+                isLoading={dataLoading}
+                page={page}
+                pageSize={pageSize}
+                totalCount={totalCount}
+                onPageChange={setPage}
+                onEdit={(user) => {
+                  setSelectedUser(user)
+                  setFormData({
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone || '',
+                    role: user.role,
+                    department: user.department || '',
+                    status: user.status,
+                    notes: user.notes || '',
+                    permissions: user.permissions || []
+                  })
+                  setIsEditDialogOpen(true)
+                }}
+                onDelete={(user) => {
+                  setSelectedUser(user)
+                  setIsDeleteDialogOpen(true)
+                }}
+                onView={(user) => {
+                  setSelectedUser(user)
+                  setIsViewDialogOpen(true)
+                }}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -520,81 +415,139 @@ export function UserManagement() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="p-6 pb-2">
             <DialogTitle>Editar Usuario</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            {selectedUser && (
-              <div className="flex justify-center mb-4">
-                <UserAvatarUpload
-                  userName={selectedUser.name}
-                  currentAvatarUrl={selectedUser.avatar_url}
-                  onUpload={handleAvatarUpload}
-                />
+          
+          <ScrollArea className="flex-1 px-6">
+            <div className="grid gap-6 py-4">
+              {/* Avatar Section */}
+              {selectedUser && (
+                <div className="flex justify-center">
+                  <UserAvatarUpload
+                    userName={selectedUser.name}
+                    currentAvatarUrl={selectedUser.avatar_url}
+                    onUpload={handleAvatarUpload}
+                  />
+                </div>
+              )}
+
+              {/* Personal Information */}
+              <div className="space-y-4">
+                  <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Información Personal</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Nombre Completo</Label>
+                      <Input
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Teléfono</Label>
+                      <Input
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      />
+                    </div>
+                  </div>
               </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nombre Completo</Label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
+
+              {/* Access Control */}
+              <div className="space-y-4">
+                  <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Control de Acceso</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Rol Principal</Label>
+                      <Select
+                        value={formData.role}
+                        onValueChange={(v: any) => setFormData({ ...formData, role: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="admin">Administrador</SelectItem>
+                          <SelectItem value="supervisor">Supervisor</SelectItem>
+                          <SelectItem value="vendedor">Vendedor</SelectItem>
+                          <SelectItem value="tecnico">Técnico</SelectItem>
+                          <SelectItem value="cliente">Cliente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Define el nivel base de acceso.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Estado</Label>
+                      <Select
+                        value={formData.status}
+                        onValueChange={(v: any) => setFormData({ ...formData, status: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Activo</SelectItem>
+                          <SelectItem value="inactive">Inactivo</SelectItem>
+                          <SelectItem value="suspended">Suspendido</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                      <Label>Departamento</Label>
+                      <Input
+                        value={formData.department}
+                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                      />
+                  </div>
               </div>
-              <div className="space-y-2">
-                <Label>Teléfono</Label>
-                <Input
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
+
+              {/* Permissions */}
+              <div className="space-y-4 pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Permisos Específicos</h3>
+                      <span className="text-xs text-muted-foreground">
+                          {formData.permissions?.length || 0} activos
+                      </span>
+                  </div>
+                  
+                  <div className="grid gap-4">
+                      {PERMISSION_GROUPS.map(group => (
+                          <div key={group.id} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border">
+                              <h4 className="font-medium text-sm mb-3 text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                  {group.id === 'sales' && <Activity className="h-4 w-4 text-blue-500" />}
+                                  {group.id === 'inventory' && <RefreshCw className="h-4 w-4 text-green-500" />}
+                                  {group.id === 'admin' && <ShieldAlert className="h-4 w-4 text-purple-500" />}
+                                  {group.label}
+                              </h4>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {group.permissions.map(perm => (
+                                      <div key={perm.id} className="flex items-start space-x-2">
+                                          <Checkbox 
+                                              id={`perm-${perm.id}`} 
+                                              checked={isPermissionActive(perm.id)}
+                                              onCheckedChange={(checked) => handlePermissionChange(perm.id, checked as boolean)}
+                                          />
+                                          <div className="grid gap-1.5 leading-none">
+                                              <label
+                                                  htmlFor={`perm-${perm.id}`}
+                                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                                              >
+                                                  {perm.label}
+                                              </label>
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Rol</Label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(v: any) => setFormData({ ...formData, role: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="admin">Administrador</SelectItem>
-                    <SelectItem value="supervisor">Supervisor</SelectItem>
-                    <SelectItem value="vendedor">Vendedor</SelectItem>
-                    <SelectItem value="tecnico">Técnico</SelectItem>
-                    <SelectItem value="cliente">Cliente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Departamento</Label>
-                <Input
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Estado</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(v: any) => setFormData({ ...formData, status: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Activo</SelectItem>
-                  <SelectItem value="inactive">Inactivo</SelectItem>
-                  <SelectItem value="suspended">Suspendido</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
+          </ScrollArea>
+
+          <DialogFooter className="p-6 pt-2">
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleUpdateSubmit} disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

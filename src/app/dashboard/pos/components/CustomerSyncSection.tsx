@@ -23,6 +23,7 @@ export const CustomerSyncSection: React.FC<CustomerSyncSectionProps> = ({ onSync
       total_purchases: c.total_purchases || 0,
       total_repairs: c.total_repairs || 0,
       current_balance: c.current_balance || 0,
+      credit_limit: c.credit_limit || 0,
       last_visit: c.last_visit || null,
       updated_at: c.updated_at || c.last_activity
     }))

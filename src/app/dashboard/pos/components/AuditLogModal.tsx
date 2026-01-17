@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Shield, Search, Download, Filter, Calendar,
   User, DollarSign, AlertTriangle, CheckCircle,
-  XCircle, Clock, Eye
+  XCircle, Clock, Eye, Lock, ArrowUpCircle, ArrowDownCircle,
+  Activity
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useCashRegisterContext, AuditLogEntry } from '../contexts/CashRegisterContext'
@@ -20,16 +21,22 @@ interface AuditLogModalProps {
   onClose: () => void
 }
 
+// Enhanced Action Types Mapping with better icons and colors
 const ACTION_TYPES = {
-  REGISTER_OPEN: { label: 'Apertura de Caja', color: 'bg-green-100 text-green-800', icon: CheckCircle },
-  REGISTER_CLOSE: { label: 'Cierre de Caja', color: 'bg-red-100 text-red-800', icon: XCircle },
-  CASH_IN: { label: 'Ingreso de Efectivo', color: 'bg-blue-100 text-blue-800', icon: DollarSign },
-  CASH_OUT: { label: 'Egreso de Efectivo', color: 'bg-orange-100 text-orange-800', icon: DollarSign },
-  CASH_SALE: { label: 'Venta', color: 'bg-purple-100 text-purple-800', icon: DollarSign },
-  Z_CLOSURE: { label: 'Cierre Z', color: 'bg-gray-100 text-gray-800', icon: Shield },
-  CASH_COUNT: { label: 'Arqueo de Caja', color: 'bg-yellow-100 text-yellow-800', icon: Eye },
-  PERMISSION_CHANGE: { label: 'Cambio de Permisos', color: 'bg-indigo-100 text-indigo-800', icon: Shield },
-  ERROR: { label: 'Error', color: 'bg-red-100 text-red-800', icon: AlertTriangle }
+  // Session Management
+  REGISTER_OPEN: { label: 'Apertura de Caja', color: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CheckCircle },
+  REGISTER_CLOSE: { label: 'Cierre de Caja', color: 'bg-rose-100 text-rose-800 border-rose-200', icon: XCircle },
+  Z_CLOSURE: { label: 'Cierre Z', color: 'bg-purple-100 text-purple-800 border-purple-200', icon: Shield },
+  
+  // Money Flow
+  CASH_IN: { label: 'Ingreso de Efectivo', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: ArrowUpCircle },
+  CASH_OUT: { label: 'Egreso de Efectivo', color: 'bg-amber-100 text-amber-800 border-amber-200', icon: ArrowDownCircle },
+  CASH_SALE: { label: 'Venta Registrada', color: 'bg-green-50 text-green-700 border-green-200', icon: DollarSign },
+  
+  // Admin & Security
+  CASH_COUNT: { label: 'Arqueo de Caja', color: 'bg-indigo-100 text-indigo-800 border-indigo-200', icon: Eye },
+  PERMISSION_CHANGE: { label: 'Cambio de Permisos', color: 'bg-gray-100 text-gray-800 border-gray-200', icon: Lock },
+  ERROR: { label: 'Error del Sistema', color: 'bg-red-50 text-red-600 border-red-200', icon: AlertTriangle }
 }
 
 export function AuditLogModal({ isOpen, onClose }: AuditLogModalProps) {
@@ -274,85 +281,103 @@ export function AuditLogModal({ isOpen, onClose }: AuditLogModalProps) {
           </div>
 
           {/* Audit Log Table */}
-          <div className="border rounded-lg overflow-hidden">
-            <div className="bg-muted/50 px-4 py-3 border-b">
-              <div className="grid grid-cols-12 gap-4 text-sm font-medium">
-                <div className="col-span-2">Fecha/Hora</div>
-                <div className="col-span-2">Usuario</div>
-                <div className="col-span-2">Acción</div>
-                <div className="col-span-3">Detalles</div>
-                <div className="col-span-1">Caja</div>
-                <div className="col-span-2">Monto/Saldo</div>
-              </div>
+          <div className="border rounded-xl overflow-hidden bg-white dark:bg-gray-950 shadow-sm">
+            <div className="bg-gray-50/80 dark:bg-gray-900/50 px-6 py-3 border-b flex items-center text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <div className="w-[180px]">Fecha / Hora</div>
+              <div className="w-[200px]">Usuario</div>
+              <div className="w-[220px]">Acción</div>
+              <div className="flex-1">Detalles</div>
+              <div className="w-[150px] text-right">Monto</div>
             </div>
             
             <ScrollArea className="h-[500px]">
-              <div className="divide-y">
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {filteredLog.map((entry) => {
                   const actionType = ACTION_TYPES[entry.action as keyof typeof ACTION_TYPES]
-                  const IconComponent = actionType?.icon || AlertTriangle
+                  const IconComponent = actionType?.icon || Activity
 
                   return (
-                    <div key={entry.id} className="px-4 py-3 hover:bg-muted/20">
-                      <div className="grid grid-cols-12 gap-4 items-center text-sm">
-                        <div className="col-span-2">
-                          <div className="font-medium">
-                            {new Date(entry.timestamp).toLocaleDateString('es-PY')}
+                    <div key={entry.id} className="px-6 py-4 hover:bg-gray-50/50 dark:hover:bg-gray-900/50 transition-colors flex items-center gap-4 group">
+                      {/* Date & Time */}
+                      <div className="w-[180px] shrink-0">
+                        <div className="font-medium text-sm text-gray-900 dark:text-gray-100">
+                          {new Date(entry.timestamp).toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Clock className="h-3 w-3" />
+                          {new Date(entry.timestamp).toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                      
+                      {/* User */}
+                      <div className="w-[200px] shrink-0">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-600 font-bold text-xs">
+                            {entry.userName.charAt(0).toUpperCase()}
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(entry.timestamp).toLocaleTimeString('es-PY')}
+                          <div className="truncate">
+                            <p className="text-sm font-medium truncate" title={entry.userName}>{entry.userName}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">ID: {entry.userId.slice(0,8)}...</p>
                           </div>
                         </div>
-                        
-                        <div className="col-span-2">
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{entry.userName}</span>
+                      </div>
+                      
+                      {/* Action Badge */}
+                      <div className="w-[220px] shrink-0">
+                        <Badge variant="outline" className={`${actionType?.color || 'bg-gray-100 text-gray-700'} py-1 pl-1 pr-3 gap-2 font-normal border`}>
+                          <div className="p-1 bg-white/50 rounded-full">
+                            <IconComponent className="h-3 w-3" />
                           </div>
-                        </div>
-                        
-                        <div className="col-span-2">
-                          <Badge className={actionType?.color || 'bg-gray-100 text-gray-800'}>
-                            <IconComponent className="h-3 w-3 mr-1" />
-                            {actionType?.label || entry.action}
-                          </Badge>
-                        </div>
-                        
-                        <div className="col-span-3">
-                          <p className="text-sm">{entry.details}</p>
-                        </div>
-                        
-                        <div className="col-span-1">
-                          <Badge variant="outline" className="text-xs">
-                            {entry.registerId}
-                          </Badge>
-                        </div>
-                        
-                        <div className="col-span-2">
-                          {entry.amount && (
-                            <div className={`font-medium ${entry.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {actionType?.label || entry.action}
+                        </Badge>
+                      </div>
+                      
+                      {/* Details */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-700 dark:text-gray-300 truncate" title={entry.details}>
+                          {entry.details}
+                        </p>
+                        {entry.registerId && (
+                           <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground mt-1 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                             <Shield className="h-2.5 w-2.5" /> {entry.registerId}
+                           </span>
+                        )}
+                      </div>
+                      
+                      {/* Amount */}
+                      <div className="w-[150px] shrink-0 text-right">
+                        {entry.amount ? (
+                          <div>
+                            <span className={`text-sm font-bold font-mono ${entry.amount > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                               {entry.amount > 0 ? '+' : ''}{formatCurrency(entry.amount)}
-                            </div>
-                          )}
-                          {entry.newBalance !== undefined && (
-                            <div className="text-xs text-muted-foreground">
-                              Saldo: {formatCurrency(entry.newBalance)}
-                            </div>
-                          )}
-                        </div>
+                            </span>
+                            {entry.newBalance !== undefined && (
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                Saldo: {formatCurrency(entry.newBalance)}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
                       </div>
                     </div>
                   )
                 })}
                 
                 {filteredLog.length === 0 && (
-                  <div className="px-4 py-8 text-center text-muted-foreground">
-                    <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No se encontraron entradas de auditoría</p>
+                  <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+                    <div className="h-16 w-16 bg-gray-50 dark:bg-gray-900 rounded-full flex items-center justify-center mb-4">
+                      <Shield className="h-8 w-8 opacity-20" />
+                    </div>
+                    <p className="text-lg font-medium">No se encontraron registros</p>
+                    <p className="text-sm max-w-xs mx-auto mt-1">
+                      No hay actividad que coincida con los filtros seleccionados.
+                    </p>
                     {(searchTerm || selectedAction !== 'all' || selectedRegister !== 'all') && (
-                      <p className="text-sm mt-2">
-                        Intenta ajustar los filtros de búsqueda
-                      </p>
+                      <Button variant="link" onClick={clearFilters} className="mt-4">
+                        Limpiar todos los filtros
+                      </Button>
                     )}
                   </div>
                 )}

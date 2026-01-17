@@ -5,9 +5,10 @@ import Link from 'next/link'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, FileText, Shield } from 'lucide-react'
+import { ArrowLeft, FileText, Shield, RefreshCw } from 'lucide-react'
 import { ConnectionStatus } from '../../components/ConnectionStatus'
 import { useCashRegisterContext } from '../../contexts/CashRegisterContext'
+import { toast } from 'sonner'
 
 interface CashRegisterHeaderProps {
     onOpenPermissions: () => void
@@ -24,11 +25,20 @@ export function CashRegisterHeader({ onOpenPermissions, onOpenAudit }: CashRegis
         syncWithServer
     } = useCashRegisterContext()
 
+    const handleSync = async () => {
+        const success = await syncWithServer()
+        if (success) {
+            toast.success("Datos sincronizados")
+        } else {
+            toast.error("Error al sincronizar")
+        }
+    }
+
     const registerName = registers.find(r => r.id === activeRegisterId)?.name || 'Caja'
     const isRegisterOpen = getCurrentRegister.isOpen
 
     return (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
                 <Link href="/dashboard/pos">
                     <Button variant="outline" size="icon">
@@ -50,7 +60,7 @@ export function CashRegisterHeader({ onOpenPermissions, onOpenAudit }: CashRegis
                 </div>
             </div>
 
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-center flex-wrap">
                 <div className="mr-2">
                     <Select value={activeRegisterId} onValueChange={(val) => setActiveRegisterId(val)}>
                         <SelectTrigger className="h-9 w-48">
@@ -63,6 +73,15 @@ export function CashRegisterHeader({ onOpenPermissions, onOpenAudit }: CashRegis
                         </SelectContent>
                     </Select>
                 </div>
+
+                <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleSync}
+                    title="Sincronizar datos"
+                >
+                    <RefreshCw className="h-4 w-4" />
+                </Button>
 
                 <ConnectionStatus
                     status={isOnline ? 'online' : 'offline'}

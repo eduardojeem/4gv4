@@ -13,6 +13,7 @@ export interface CashMovement {
     payment_method?: 'cash' | 'card' | 'transfer' | 'mixed'
     created_at: string
     created_by?: string
+    userName?: string
 }
 
 export interface CashRegisterSession {
@@ -170,8 +171,32 @@ export function useCashRegister() {
             return []
         }
 
-        setAuditLog(data || [])
-        return data
+        // Fetch user names
+        const movements = data || []
+        const userIds = [...new Set(movements.map(m => m.created_by).filter(Boolean))] as string[]
+        let userMap: Record<string, string> = {}
+        
+        if (userIds.length > 0) {
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', userIds)
+            
+            if (profiles) {
+                userMap = profiles.reduce((acc, p) => {
+                    acc[p.id] = p.full_name || 'Usuario'
+                    return acc
+                }, {} as Record<string, string>)
+            }
+        }
+
+        const formatted = movements.map(item => ({
+            ...item,
+            userName: item.created_by ? (userMap[item.created_by] || 'Usuario Desconocido') : 'Sistema'
+        }))
+
+        setAuditLog(formatted)
+        return formatted
     }, [supabase])
 
     // Analytics
@@ -258,7 +283,15 @@ export function useCashRegister() {
 
             return null
         } catch (error: unknown) {
-            console.error('Error checking open session:', error, JSON.stringify(error))
+            // Check if error is due to network/fetch failure
+            const isNetworkError = error instanceof TypeError && error.message.includes('Failed to fetch')
+            
+            if (!isNetworkError) {
+                 console.error('Error checking open session:', error, JSON.stringify(error))
+            } else {
+                 console.warn('Network error checking open session, using local fallback if available')
+            }
+
             // On error (e.g. network), if we have a valid local session for this register, keep it alive
             if (currentSession && currentSession.register_id === registerId) {
                 console.warn('Using local session as fallback due to check error')
@@ -632,14 +665,17 @@ export function useCashRegister() {
             mixedSales: 0
         })
 
-        // Fetch opening balance of sessions
-        const { data: sessions } = await supabase
+        // Fetch opening balance of the first session in the period
+        const { data: firstSession } = await supabase
             .from('cash_closures')
-            .select('opening_balance, closing_balance')
+            .select('opening_balance, created_at')
             .gte('created_at', startIso)
             .lte('created_at', endIso)
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
 
-        const openingBalance = sessions?.reduce((sum, s) => sum + (Number(s.opening_balance) || 0), 0) || 0
+        const openingBalance = Number(firstSession?.opening_balance) || 0
         const closingBalance = (openingBalance + report.incomes) - report.expenses
 
         return {

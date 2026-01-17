@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 export interface SupabaseUser extends User {
     avatar_url?: string
     updated_at?: string
+    permissions?: string[]
 }
 
 interface UseUsersOptions {
@@ -24,16 +25,55 @@ export function useUsersSupabase({
     statusFilter = 'all'
 }: UseUsersOptions = {}) {
     const [users, setUsers] = useState<SupabaseUser[]>([])
+    const [stats, setStats] = useState({
+        total: 0,
+        active: 0,
+        inactive: 0,
+        admins: 0,
+        newThisMonth: 0
+    })
     const [totalCount, setTotalCount] = useState(0)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
     const supabase = createClient()
 
+    const fetchStats = useCallback(async () => {
+        try {
+            // Run parallel count queries
+            const [
+                { count: total },
+                { count: active },
+                { count: inactive },
+                { count: admins },
+                { count: newThisMonth }
+            ] = await Promise.all([
+                supabase.from('profiles').select('*', { count: 'exact', head: true }),
+                supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+                supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'inactive'),
+                supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
+                supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString())
+            ])
+
+            setStats({
+                total: total || 0,
+                active: active || 0,
+                inactive: inactive || 0,
+                admins: admins || 0,
+                newThisMonth: newThisMonth || 0
+            })
+        } catch (error) {
+            console.error('Error fetching user stats:', error)
+        }
+    }, [supabase])
+
     const fetchUsers = useCallback(async () => {
         try {
             setIsLoading(true)
             setError(null)
+            
+            // Fetch stats alongside users
+            fetchStats()
 
             let query = supabase
                 .from('profiles')
@@ -74,7 +114,7 @@ export function useUsersSupabase({
                 department: profile.department || '',
                 phone: profile.phone || '',
                 avatar_url: profile.avatar_url,
-                permissions: [], // Se cargarían según el rol
+                permissions: profile.permissions || [], // Se cargarían según el rol
                 lastLogin: profile.updated_at || new Date().toISOString(), // Aproximación
                 createdAt: profile.created_at || new Date().toISOString(),
                 loginAttempts: 0,
@@ -139,7 +179,8 @@ export function useUsersSupabase({
                     department: userData.department,
                     phone: userData.phone,
                     status: userData.status,
-                    avatar_url: userData.avatar_url
+                    avatar_url: userData.avatar_url,
+                    permissions: userData.permissions
                 })
                 .eq('id', userId)
 
@@ -226,6 +267,8 @@ export function useUsersSupabase({
     return {
         users,
         totalCount,
+        totalPages: Math.ceil(totalCount / pageSize),
+        stats,
         isLoading,
         error,
         refreshUsers: fetchUsers,

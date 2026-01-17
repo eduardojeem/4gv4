@@ -274,7 +274,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
       id: m.id,
       timestamp: m.created_at,
       userId: m.created_by || 'system',
-      userName: m.created_by || 'Sistema',
+      userName: m.userName || m.created_by || 'Sistema',
       action: m.type.toUpperCase(),
       details: m.reason || m.type,
       registerId: activeRegisterId, // Approximation

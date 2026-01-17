@@ -21,6 +21,7 @@ import {
   DollarSign,
   Calendar,
   Users,
+  Clock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { CustomerCreditHistory } from '@/components/pos/CustomerCreditHistory'
@@ -30,7 +31,10 @@ import { Badge } from '@/components/ui/badge'
 import { PaymentMethods } from './checkout/PaymentMethods'
 import { CustomerSelection } from './checkout/CustomerSelection'
 import { SaleSummary } from './checkout/SaleSummary'
+import { PromotionsSection } from './checkout/PromotionsSection'
+import { CreditDebugInline } from './checkout/CreditDebugInline'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
+import type { Promotion } from '@/types/promotion'
 
 import { useCheckout } from '../contexts/CheckoutContext'
 import { usePOSCustomer } from '../contexts/POSCustomerContext'
@@ -73,6 +77,10 @@ export interface CheckoutModalProps {
   processMixedPayment: () => void
   formatCurrency: (amount: number) => string
   
+  // Promotions
+  allPromotions: Promotion[]
+  onApplyPromoCode: (code: string) => void
+  
   // Register State
   isRegisterOpen: boolean
   onOpenRegister?: () => void
@@ -98,6 +106,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   processSale,
   processMixedPayment,
   formatCurrency,
+  allPromotions,
+  onApplyPromoCode,
   isRegisterOpen,
   onOpenRegister,
   onCancel
@@ -143,8 +153,15 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   }
 
   // Sistema de créditos
-  const { canSellOnCredit, createCreditSale, getCreditSummary } = useCreditSystem()
+  const { canSellOnCredit, createCreditSale, getCreditSummary, loadCreditData } = useCreditSystem()
   const [showCreditHistory, setShowCreditHistory] = React.useState(false)
+  
+  // Cargar datos de crédito cuando cambia el cliente
+  React.useEffect(() => {
+    if (activeCustomer?.id) {
+      loadCreditData(activeCustomer.id)
+    }
+  }, [activeCustomer?.id, loadCreditData])
   
   // Verificar si el cliente puede comprar a crédito
   const canUseCredit = activeCustomer && canSellOnCredit(activeCustomer, cartCalculations.total)
@@ -169,13 +186,18 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
       try {
         if (selectedRepairIds.length > 0) {
           const supabase = createSupabaseClient()
-          await (supabase
+          const { error } = await supabase
             .from('repairs')
             .update({ status: 'entregado', delivered_at: new Date().toISOString() })
             .in('id', selectedRepairIds)
-            .select())
+            .select()
+            
+          if (error) throw error
         }
-      } catch {}
+      } catch (error) {
+        console.error('Error updating repair status:', error)
+        toast.error('La venta se procesó pero hubo un error al actualizar el estado de las reparaciones. Por favor actualice manualmente.')
+      }
       // Limpiar carrito y cerrar modal
       onCancel()
     }
@@ -400,6 +422,17 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               formatCurrency={formatCurrency}
             />
 
+            {/* Sección de Promociones */}
+            <div className="mt-6">
+              <PromotionsSection
+                cart={cart}
+                cartTotal={cartCalculations.total}
+                allPromotions={allPromotions}
+                onApplyPromoCode={onApplyPromoCode}
+                formatCurrency={formatCurrency}
+              />
+            </div>
+
             <div className="mt-4">
               <label className="text-sm font-medium mb-2 block">Descuento (%)</label>
               <Input
@@ -435,7 +468,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <>
                   {paymentMethod === 'credit' ? (
                     <Button
-                      className="w-full"
+                      className="w-full h-12 text-base font-semibold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md"
                       onClick={processCreditSale}
                       disabled={
                         !isRegisterOpen ||
@@ -446,11 +479,19 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                     >
                       {paymentStatus === 'processing' ? (
                         <span className="flex items-center justify-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Procesando…
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          Procesando venta a crédito…
                         </span>
                       ) : (
-                        <>Vender a Crédito - {formatCurrency(cartCalculations.total)}</>
+                        <div className="flex flex-col items-center w-full">
+                          <span className="flex items-center gap-2">
+                            <Clock className="h-5 w-5" />
+                            Vender a Crédito
+                          </span>
+                          <span className="text-xs font-normal opacity-90 mt-0.5">
+                            Registrar deuda en cuenta corriente
+                          </span>
+                        </div>
                       )}
                     </Button>
                   ) : (

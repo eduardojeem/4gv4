@@ -3,9 +3,10 @@
 import React, { useState } from 'react'
 import { addDays } from 'date-fns'
 import { DateRange } from 'react-day-picker'
-import { Loader2 } from 'lucide-react'
+import { Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { usePosStats } from './hooks/usePosStats'
+import { Button } from '@/components/ui/button'
 
 // Components
 import { PosDashboardHeader } from './components/PosDashboardHeader'
@@ -14,6 +15,7 @@ import { SalesTrendChart } from './components/SalesTrendChart'
 import { PaymentDistributionChart } from './components/PaymentDistributionChart'
 import { TopProductsCard } from './components/TopProductsCard'
 import { RecentTransactionsList } from './components/RecentTransactionsList'
+import { CreditStatsCards } from './components/CreditStatsCards'
 
 export default function POSDashboard() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -21,7 +23,7 @@ export default function POSDashboard() {
     to: new Date(),
   })
 
-  const { stats, loading, error } = usePosStats(dateRange)
+  const { stats, loading, error, refetch } = usePosStats(dateRange)
 
   const handleExport = () => {
     // Basic CSV export functionality
@@ -62,6 +64,11 @@ export default function POSDashboard() {
     }
   }
 
+  const handleRefresh = async () => {
+    await refetch()
+    toast.success("Datos actualizados")
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[500px] p-12">
@@ -73,21 +80,30 @@ export default function POSDashboard() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full min-h-[500px] p-12 text-destructive">
+      <div className="flex flex-col items-center justify-center h-full min-h-[500px] p-12 text-destructive gap-4">
         <p>Error al cargar datos: {error.message}</p>
+        <Button variant="outline" onClick={() => refetch()}>Intentar de nuevo</Button>
       </div>
     )
   }
 
   return (
     <div className="flex-1 space-y-6 p-6">
-      <PosDashboardHeader
-        dateRange={dateRange}
-        setDateRange={setDateRange}
-        onExport={handleExport}
-      />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <PosDashboardHeader
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+          onExport={handleExport}
+        />
+        <Button variant="outline" size="icon" onClick={handleRefresh} title="Actualizar datos">
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </div>
 
       <PosStatsGrid stats={stats} />
+      
+      {/* Credit Stats Row */}
+      <CreditStatsCards stats={stats} />
 
       {/* Charts Row */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
