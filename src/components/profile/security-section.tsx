@@ -145,6 +145,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
   const handleLogoutSession = async (sessionId: string) => {
     try {
+      // Primero marcamos la sesión como cerrada en nuestra tabla
       const { data, error } = await supabase.rpc('close_user_session', {
         p_session_id: sessionId,
         p_user_id: userId
@@ -154,6 +155,11 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
       if (data) {
         toast.success('Sesión cerrada correctamente')
+        
+        // Si es posible, también invalidar el token en Supabase Auth
+        // Nota: Supabase Auth no permite invalidar tokens de otras sesiones directamente
+        // pero al marcar como cerrada en nuestra tabla, el usuario no podrá usarla
+        
         loadSessions()
       } else {
         toast.error('No se pudo cerrar la sesión')
@@ -165,6 +171,10 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
   }
 
   const handleLogoutAllSessions = async () => {
+    if (!window.confirm('¿Estás seguro de que quieres cerrar todas las demás sesiones? Tendrás que volver a iniciar sesión en esos dispositivos.')) {
+      return
+    }
+
     try {
       const { data: { session: currentSession } } = await supabase.auth.getSession()
       if (!currentSession) return
@@ -180,14 +190,44 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
       const closedCount = data as number
       if (closedCount > 0) {
-        toast.success(`${closedCount} sesión(es) cerrada(s)`)
+        toast.success(`${closedCount} sesión(es) cerrada(s) correctamente`)
         loadSessions()
       } else {
-        toast.info('No hay otras sesiones activas')
+        toast.info('No hay otras sesiones activas para cerrar')
       }
     } catch (error) {
       console.error('Error closing all sessions:', error)
       toast.error('Error al cerrar sesiones')
+    }
+  }
+
+  const handleLogoutEverywhere = async () => {
+    if (!window.confirm('¿Estás seguro de que quieres cerrar TODAS las sesiones incluyendo esta? Serás redirigido al login.')) {
+      return
+    }
+
+    try {
+      // Cerrar todas las sesiones en nuestra tabla
+      await supabase
+        .from('user_sessions')
+        .update({
+          is_active: false,
+          ended_at: new Date().toISOString()
+        })
+        .eq('user_id', userId)
+        .eq('is_active', true)
+
+      // Cerrar sesión global en Supabase Auth
+      await supabase.auth.signOut({ scope: 'global' })
+      
+      toast.success('Todas las sesiones cerradas. Redirigiendo...')
+      
+      setTimeout(() => {
+        window.location.href = '/login'
+      }, 1500)
+    } catch (error) {
+      console.error('Error closing all sessions:', error)
+      toast.error('Error al cerrar todas las sesiones')
     }
   }
 
@@ -374,6 +414,49 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
           {!loadingSessions && !sessionsError && sessions.length > 0 && (
             <>
+              {/* Resumen de sesiones */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                      <Monitor className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{sessions.length}</p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">Sesiones activas</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                      <Smartphone className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                        {sessions.filter(s => s.device_type === 'mobile').length}
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400">Dispositivos móviles</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
+                      <Monitor className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+                        {sessions.filter(s => s.device_type === 'desktop').length}
+                      </p>
+                      <p className="text-xs text-purple-600 dark:text-purple-400">Computadoras</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-3">
                 {sessions.map((session) => {
                   const DeviceIcon = getDeviceIcon(session.device_type)
@@ -439,9 +522,11 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleLogoutSession(session.session_id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 gap-2 px-3"
+                            title="Cerrar esta sesión"
                           >
                             <LogOut className="h-4 w-4" />
+                            <span className="text-xs font-medium">Cerrar</span>
                           </Button>
                         )}
                       </div>
@@ -452,15 +537,63 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
               {sessions.length > 1 && (
                 <>
+                  <Separator className="my-6" />
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200 dark:border-amber-800">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-semibold text-amber-900 dark:text-amber-100 mb-1">
+                          Múltiples sesiones detectadas
+                        </p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300">
+                          Tienes {sessions.length} sesiones activas en diferentes dispositivos. 
+                          Si no reconoces alguna, ciérrala inmediatamente por seguridad.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Button
+                        variant="outline"
+                        size="lg"
+                        className="w-full gap-2 border-2 border-orange-300 hover:bg-orange-50 hover:border-orange-400 dark:border-orange-700 dark:hover:bg-orange-950/30 dark:hover:border-orange-600 transition-all duration-200"
+                        onClick={handleLogoutAllSessions}
+                      >
+                        <LogOut className="h-5 w-5" />
+                        <div className="text-left">
+                          <div className="font-semibold">Cerrar otras sesiones</div>
+                          <div className="text-xs opacity-75">Mantener solo esta sesión</div>
+                        </div>
+                      </Button>
+                      
+                      <Button
+                        variant="destructive"
+                        size="lg"
+                        className="w-full gap-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 transition-all duration-200"
+                        onClick={handleLogoutEverywhere}
+                      >
+                        <Trash2 className="h-5 w-5" />
+                        <div className="text-left">
+                          <div className="font-semibold">Cerrar todas</div>
+                          <div className="text-xs opacity-90">Incluida esta sesión</div>
+                        </div>
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {sessions.length === 1 && (
+                <>
                   <Separator />
-                  <Button
-                    variant="destructive"
-                    className="w-full gap-2"
-                    onClick={handleLogoutAllSessions}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Cerrar todas las sesiones
-                  </Button>
+                  <div className="text-center py-4">
+                    <Alert className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-sm text-green-800 dark:text-green-200">
+                        Solo tienes una sesión activa. Tu cuenta está segura.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
                 </>
               )}
             </>
