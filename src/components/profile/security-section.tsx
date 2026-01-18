@@ -28,11 +28,16 @@ import { cn } from '@/lib/utils'
 
 interface Session {
   id: string
+  session_id: string
   user_agent: string
   ip_address: string
+  device_type: string
+  browser: string
+  os: string
   created_at: string
-  last_active: string
-  is_current: boolean
+  last_activity: string
+  is_active: boolean
+  is_current?: boolean
 }
 
 interface SecuritySectionProps {
@@ -59,21 +64,33 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
     
     try {
       setLoadingSessions(true)
-      // Aquí cargarías las sesiones reales desde tu tabla de sesiones
-      // Por ahora simulamos con la sesión actual
-      const { data: { session } } = await supabase.auth.getSession()
       
-      if (session) {
-        const mockSession: Session = {
-          id: session.user.id,
-          user_agent: navigator.userAgent,
-          ip_address: 'Tu IP actual',
-          created_at: new Date().toISOString(),
-          last_active: new Date().toISOString(),
-          is_current: true
-        }
-        setSessions([mockSession])
-      }
+      // Obtener sesiones activas desde la base de datos
+      const { data, error } = await supabase.rpc('get_user_active_sessions', {
+        p_user_id: userId
+      })
+
+      if (error) throw error
+
+      // Obtener la sesión actual para marcarla
+      const { data: { session: currentSession } } = await supabase.auth.getSession()
+      const currentSessionId = currentSession?.access_token.substring(0, 50)
+
+      const sessionsData: Session[] = (data || []).map((s: any) => ({
+        id: s.id,
+        session_id: s.session_id,
+        user_agent: s.user_agent || navigator.userAgent,
+        ip_address: s.ip_address || 'IP no disponible',
+        device_type: s.device_type || 'desktop',
+        browser: s.browser || 'Desconocido',
+        os: s.os || 'Desconocido',
+        created_at: s.created_at,
+        last_activity: s.last_activity,
+        is_active: s.is_active,
+        is_current: s.session_id === currentSessionId
+      }))
+
+      setSessions(sessionsData)
     } catch (error) {
       console.error('Error loading sessions:', error)
       setSessionsError('No se pudieron cargar las sesiones')
@@ -128,41 +145,62 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
   const handleLogoutSession = async (sessionId: string) => {
     try {
-      // Implementar logout de sesión específica
-      toast.success('Sesión cerrada correctamente')
-      loadSessions()
+      const { data, error } = await supabase.rpc('close_user_session', {
+        p_session_id: sessionId,
+        p_user_id: userId
+      })
+
+      if (error) throw error
+
+      if (data) {
+        toast.success('Sesión cerrada correctamente')
+        loadSessions()
+      } else {
+        toast.error('No se pudo cerrar la sesión')
+      }
     } catch (error) {
+      console.error('Error closing session:', error)
       toast.error('Error al cerrar sesión')
     }
   }
 
   const handleLogoutAllSessions = async () => {
     try {
-      await supabase.auth.signOut({ scope: 'global' })
-      toast.success('Todas las sesiones cerradas')
-      window.location.href = '/login'
+      const { data: { session: currentSession } } = await supabase.auth.getSession()
+      if (!currentSession) return
+
+      const currentSessionId = currentSession.access_token.substring(0, 50)
+
+      const { data, error } = await supabase.rpc('close_all_user_sessions_except_current', {
+        p_user_id: userId,
+        p_current_session_id: currentSessionId
+      })
+
+      if (error) throw error
+
+      const closedCount = data as number
+      if (closedCount > 0) {
+        toast.success(`${closedCount} sesión(es) cerrada(s)`)
+        loadSessions()
+      } else {
+        toast.info('No hay otras sesiones activas')
+      }
     } catch (error) {
+      console.error('Error closing all sessions:', error)
       toast.error('Error al cerrar sesiones')
     }
   }
 
-  const getDeviceIcon = (userAgent: string) => {
-    if (/mobile/i.test(userAgent)) return Smartphone
+  const getDeviceIcon = (deviceType: string) => {
+    if (deviceType === 'mobile') return Smartphone
+    if (deviceType === 'tablet') return Smartphone
     return Monitor
   }
 
-  const getDeviceType = (userAgent: string) => {
-    if (/mobile/i.test(userAgent)) return 'Móvil'
-    if (/tablet/i.test(userAgent)) return 'Tablet'
+  const getDeviceType = (deviceType: string) => {
+    if (deviceType === 'mobile') return 'Móvil'
+    if (deviceType === 'tablet') return 'Tablet'
     return 'Escritorio'
-  }
-
-  const getBrowser = (userAgent: string) => {
-    if (/chrome/i.test(userAgent)) return 'Chrome'
-    if (/firefox/i.test(userAgent)) return 'Firefox'
-    if (/safari/i.test(userAgent)) return 'Safari'
-    if (/edge/i.test(userAgent)) return 'Edge'
-    return 'Navegador desconocido'
   }
 
   const formatDate = (dateString: string) => {
@@ -338,16 +376,17 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
             <>
               <div className="space-y-3">
                 {sessions.map((session) => {
-                  const DeviceIcon = getDeviceIcon(session.user_agent)
-                  const deviceType = getDeviceType(session.user_agent)
-                  const browser = getBrowser(session.user_agent)
+                  const DeviceIcon = getDeviceIcon(session.device_type)
+                  const deviceType = getDeviceType(session.device_type)
+                  const browser = session.browser
+                  const isCurrentSession = session.is_current
 
                   return (
                     <div
                       key={session.id}
                       className={cn(
                         "p-4 rounded-xl border-2 transition-all duration-200",
-                        session.is_current
+                        isCurrentSession
                           ? "bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-500/50"
                           : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
                       )}
@@ -356,13 +395,13 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                         <div className="flex items-start gap-3 flex-1">
                           <div className={cn(
                             "p-2 rounded-lg",
-                            session.is_current
+                            isCurrentSession
                               ? "bg-green-100 dark:bg-green-900/50"
                               : "bg-slate-200 dark:bg-slate-700"
                           )}>
                             <DeviceIcon className={cn(
                               "h-5 w-5",
-                              session.is_current
+                              isCurrentSession
                                 ? "text-green-600 dark:text-green-400"
                                 : "text-slate-600 dark:text-slate-400"
                             )} />
@@ -372,7 +411,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                               <p className="font-semibold text-sm">
                                 {browser} • {deviceType}
                               </p>
-                              {session.is_current && (
+                              {isCurrentSession && (
                                 <Badge className="bg-green-500 text-white text-xs">
                                   <CheckCircle2 className="h-3 w-3 mr-1" />
                                   Sesión actual
@@ -381,21 +420,25 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                             </div>
                             <div className="space-y-1 text-xs text-muted-foreground">
                               <div className="flex items-center gap-1.5">
+                                <Monitor className="h-3 w-3" />
+                                <span>{session.os}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
                                 <MapPin className="h-3 w-3" />
                                 <span>{session.ip_address}</span>
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <Clock className="h-3 w-3" />
-                                <span>Última actividad: {formatDate(session.last_active)}</span>
+                                <span>Última actividad: {formatDate(session.last_activity)}</span>
                               </div>
                             </div>
                           </div>
                         </div>
-                        {!session.is_current && (
+                        {!isCurrentSession && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleLogoutSession(session.id)}
+                            onClick={() => handleLogoutSession(session.session_id)}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
                           >
                             <LogOut className="h-4 w-4" />
