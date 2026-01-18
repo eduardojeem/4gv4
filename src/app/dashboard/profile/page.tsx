@@ -33,10 +33,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AvatarUpload } from '@/components/profile/avatar-upload'
 import { StorageDiagnostics } from '@/components/admin/storage-diagnostics'
 import { ChangePasswordDialog } from '@/components/profile/change-password-dialog'
+import { SecuritySection } from '@/components/profile/security-section'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
-import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
 
 // Validaciones con Zod (mismo esquema)
 const profileSchema = z.object({
@@ -75,14 +74,6 @@ interface ProfileStats {
   completedTasks: number
   loginStreak: number
   lastActivity: string
-}
-
-interface UserSessionInfo {
-  id: string
-  startedAt: string
-  endedAt?: string
-  ipAddress: string | null
-  status: 'active' | 'closed'
 }
 
 export default function UserProfilePage() {
@@ -134,10 +125,6 @@ export default function UserProfilePage() {
     loginStreak: 0,
     lastActivity: 'Hace 5 minutos'
   })
-
-  const [sessions, setSessions] = useState<UserSessionInfo[]>([])
-  const [loadingSessions, setLoadingSessions] = useState(false)
-  const [sessionsError, setSessionsError] = useState<string | null>(null)
 
   // Cargar usuario actual y preferencias
   useEffect(() => {
@@ -336,84 +323,6 @@ export default function UserProfilePage() {
     loadUser()
     loadPrefs()
   }, [supabase])
-
-  useEffect(() => {
-    if (!userId || !config.supabase.isConfigured) return
-
-    const loadSessions = async () => {
-      try {
-        setLoadingSessions(true)
-        setSessionsError(null)
-
-        const { data, error } = await supabase.rpc('get_user_activity', {
-          p_user_id: userId,
-          p_limit: 200
-        })
-
-        if (error) {
-          console.warn('get_user_activity RPC error while loading sessions', error)
-          setSessions([])
-          return
-        }
-
-        const rows = (data || []) as Array<{
-          id: string
-          action: string
-          created_at: string
-          ip_address?: string | null
-        }>
-
-        const authEvents = rows
-          .filter(row =>
-            row.action === 'login' ||
-            row.action === 'logout' ||
-            row.action === 'login_failed' ||
-            row.action === 'account_locked' ||
-            row.action === 'sign_in' ||
-            row.action === 'sign_out'
-          )
-          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-
-        const sessionsList: UserSessionInfo[] = []
-        const openStack: UserSessionInfo[] = []
-
-        for (const ev of authEvents) {
-          const isLogin = ev.action === 'login' || ev.action === 'sign_in'
-          const isLogout = ev.action === 'logout' || ev.action === 'sign_out'
-
-          if (isLogin) {
-            const session: UserSessionInfo = {
-              id: ev.id,
-              startedAt: ev.created_at,
-              ipAddress: ev.ip_address ?? null,
-              status: 'active'
-            }
-            sessionsList.push(session)
-            openStack.push(session)
-          } else if (isLogout) {
-            const lastOpen = openStack.pop()
-            if (lastOpen) {
-              lastOpen.status = 'closed'
-              lastOpen.endedAt = ev.created_at
-            }
-          }
-        }
-
-        setSessions(sessionsList)
-      } catch (error) {
-        const message =
-          error && typeof error === 'object' && 'message' in error
-            ? String((error as any).message)
-            : String(error)
-        console.error('Error loading user sessions', message)
-        setSessionsError('No se pudieron cargar las sesiones')
-      } finally {
-        setLoadingSessions(false)
-      }
-    }
-
-    loadSessions()
-  }, [userId, supabase])
 
   // Detectar cambios
   useEffect(() => {
@@ -981,195 +890,8 @@ export default function UserProfilePage() {
             )}
 
             {activeSection === 'security' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Acceso</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">Contraseña</p>
-                      <p className="text-sm text-muted-foreground">Cambia tu contraseña periódicamente</p>
-                    </div>
-                    <ChangePasswordDialog />
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between opacity-50">
-                    <div>
-                      <p className="font-medium">Autenticación en 2 Pasos (2FA)</p>
-                      <p className="text-sm text-muted-foreground">Próximamente disponible</p>
-                    </div>
-                    <Switch disabled />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sesiones y dispositivos</CardTitle>
-                  <CardDescription>Revisa dónde tienes sesiones activas actualmente.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {loadingSessions && (
-                    <div className="space-y-3">
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                    </div>
-                  )}
-                  {!loadingSessions && sessionsError && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{sessionsError}</AlertDescription>
-                    </Alert>
-                  )}
-                  {!loadingSessions && !sessionsError && (
-                    <>
-                      {(() => {
-                        const activeSessions = sessions.filter(s => s.status === 'active')
-                        const closedSessions = sessions.filter(s => s.status === 'closed').slice(-5)
-                        const latestActiveId = activeSessions.length ? activeSessions[activeSessions.length - 1].id : null
-
-                        if (activeSessions.length === 0 && closedSessions.length === 0) {
-                          return (
-                            <p className="text-sm text-muted-foreground">
-                              No se encontraron sesiones recientes para tu cuenta.
-                            </p>
-                          )
-                        }
-
-                        return (
-                          <div className="space-y-4">
-                            <div>
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="text-sm font-medium">Sesiones abiertas</p>
-                                <Badge variant="outline">
-                                  {activeSessions.length} {activeSessions.length === 1 ? 'sesión' : 'sesiones'}
-                                </Badge>
-                              </div>
-                              {activeSessions.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                  No hay sesiones abiertas detectadas. La próxima vez que inicies sesión se mostrarán aquí.
-                                </p>
-                              ) : (
-                                <div className="space-y-2">
-                                  {activeSessions.map(session => (
-                                    <div
-                                      key={session.id}
-                                      className="flex items-center justify-between rounded-lg border bg-muted/60 px-3 py-2"
-                                    >
-                                      <div>
-                                        <p className="text-xs font-medium">
-                                          IP {session.ipAddress || 'desconocida'}
-                                        </p>
-                                        <p className="text-[11px] text-muted-foreground">
-                                          Inició hace{' '}
-                                          {formatDistanceToNow(new Date(session.startedAt), {
-                                            addSuffix: true,
-                                            locale: es
-                                          })}
-                                        </p>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        {latestActiveId === session.id && (
-                                          <Badge variant="secondary" className="text-[10px]">
-                                            Esta sesión
-                                          </Badge>
-                                        )}
-                                        <Badge className="text-[10px]">Activa</Badge>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {closedSessions.length > 0 && (
-                              <div className="pt-2 border-t">
-                                <p className="text-xs font-medium mb-2">Historial reciente</p>
-                                <div className="space-y-2">
-                                  {closedSessions
-                                    .slice()
-                                    .reverse()
-                                    .map(session => {
-                                      const end = session.endedAt ? new Date(session.endedAt) : null
-                                      const start = new Date(session.startedAt)
-                                      const durationMinutes =
-                                        end && !Number.isNaN(end.getTime())
-                                          ? Math.max(
-                                              1,
-                                              Math.round((end.getTime() - start.getTime()) / 60000)
-                                            )
-                                          : null
-
-                                      return (
-                                        <div
-                                          key={session.id}
-                                          className="flex items-center justify-between rounded-lg border bg-background px-3 py-2"
-                                        >
-                                          <div>
-                                            <p className="text-xs font-medium">
-                                              IP {session.ipAddress || 'desconocida'}
-                                            </p>
-                                            <p className="text-[11px] text-muted-foreground">
-                                              Cerrada{' '}
-                                              {end
-                                                ? formatDistanceToNow(end, {
-                                                    addSuffix: true,
-                                                    locale: es
-                                                  })
-                                                : 'recientemente'}
-                                            </p>
-                                          </div>
-                                          <div className="text-right">
-                                            <Badge variant="outline" className="text-[10px] mb-1">
-                                              Cerrada
-                                            </Badge>
-                                            {durationMinutes && (
-                                              <p className="text-[11px] text-muted-foreground">
-                                                Duración aprox. {durationMinutes} min
-                                              </p>
-                                            )}
-                                          </div>
-                                        </div>
-                                      )
-                                    })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })()}
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
-              {role === 'super_admin' && (
-                <Card className="border-orange-200 bg-orange-50/50 dark:bg-orange-950/10">
-                  <CardHeader>
-                    <CardTitle className="text-orange-700 dark:text-orange-400">Zona Administrativa</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm">Configuración de Almacenamiento</p>
-                      <Button variant="outline" size="sm" onClick={() => {
-                        toast.promise(fetch('/api/admin/setup-storage', { method: 'POST' }), {
-                          loading: 'Configurando...',
-                          success: 'Storage configurado',
-                          error: 'Error al configurar'
-                        })
-                      }}>
-                        Ejecutar Setup
-                      </Button>
-                    </div>
-                    <div className="mt-4">
-                      <StorageDiagnostics />
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
+              <SecuritySection userId={userId} role={role} />
+            )}
 
           {activeSection === 'activity' && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
