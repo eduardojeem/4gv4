@@ -1,53 +1,20 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, Package } from 'lucide-react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
-// Mock data - In real app, this would come from Supabase
-const lowStockItems = [
-  {
-    id: 1,
-    name: 'Pantalla iPhone 12',
-    sku: 'IP12-SCR-001',
-    currentStock: 2,
-    minStock: 5,
-    category: 'Repuestos'
-  },
-  {
-    id: 2,
-    name: 'Batería Samsung Galaxy S21',
-    sku: 'SGS21-BAT-001',
-    currentStock: 1,
-    minStock: 3,
-    category: 'Repuestos'
-  },
-  {
-    id: 3,
-    name: 'Cable USB-C',
-    sku: 'ACC-USBC-001',
-    currentStock: 3,
-    minStock: 10,
-    category: 'Accesorios'
-  },
-  {
-    id: 4,
-    name: 'Funda iPhone 13',
-    sku: 'IP13-CASE-001',
-    currentStock: 0,
-    minStock: 5,
-    category: 'Accesorios'
-  },
-  {
-    id: 5,
-    name: 'Destornillador Pentalobe',
-    sku: 'TOOL-PENT-001',
-    currentStock: 1,
-    minStock: 2,
-    category: 'Herramientas'
-  }
-]
+interface LowStockItem {
+  id: string
+  name: string
+  sku: string
+  currentStock: number
+  minStock: number
+  category: string
+}
 
 const getStockStatus = (current: number, min: number) => {
   if (current === 0) {
@@ -60,6 +27,69 @@ const getStockStatus = (current: number, min: number) => {
 }
 
 export function LowStockAlert() {
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const fetchLowStockItems = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, name, sku, stock, min_stock, category')
+          .lte('stock', supabase.rpc('min_stock'))
+          .order('stock', { ascending: true })
+          .limit(5)
+
+        if (error) throw error
+
+        const items: LowStockItem[] = (data || []).map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          sku: item.sku || 'N/A',
+          currentStock: item.stock || 0,
+          minStock: item.min_stock || 0,
+          category: item.category || 'Sin categoría'
+        }))
+
+        setLowStockItems(items)
+      } catch (error) {
+        console.error('Error fetching low stock items:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchLowStockItems()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg animate-pulse">
+            <div className="flex items-center space-x-3 flex-1">
+              <div className="h-5 w-5 bg-gray-300 rounded" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-gray-300 rounded w-3/4" />
+                <div className="h-3 bg-gray-300 rounded w-1/2" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (lowStockItems.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+        <p>No hay productos con stock bajo</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       {lowStockItems.map((item) => {

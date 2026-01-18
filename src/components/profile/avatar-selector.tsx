@@ -25,7 +25,6 @@ import {
 import { 
   Palette, 
   Shuffle, 
-  Download, 
   Check, 
   RefreshCw,
   Sparkles,
@@ -34,7 +33,6 @@ import {
   Heart,
   Clock,
   Wand2,
-  Copy,
   Eye,
   Zap,
   X
@@ -73,6 +71,22 @@ export function AvatarSelector({
   const [activeCategory, setActiveCategory] = useState('human')
   const [isLoading, setIsLoading] = useState(false)
 
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open) {
+      setCustomSeed('')
+      setSelectedAvatar(null)
+      setPreviewAvatar(null)
+      setUseRoundedCorners(true)
+      setScale(100)
+      setFlip(false)
+      setRotate(0)
+      setBackgroundIndex(0)
+      setSelectedStyle('avataaars')
+      setActiveCategory('human')
+    }
+  }, [open])
+
   // Generar seed basado en usuario
   const userSeed = useMemo(() => 
     generateUserSeed(userId, email, name), 
@@ -103,6 +117,15 @@ export function AvatarSelector({
     
     return variants
   }, [selectedStyle, currentSeed, backgroundIndex, useRoundedCorners, scale, flip, rotate])
+
+  // Efecto para actualizar la selección inicial si no hay avatar seleccionado
+  useEffect(() => {
+    if (open && !selectedAvatar && avatarVariants.length > 0) {
+      // Opcional: Seleccionar el primero por defecto o dejarlo vacío
+      // setSelectedAvatar(avatarVariants[0].url)
+      // setPreviewAvatar(avatarVariants[0].url)
+    }
+  }, [open, avatarVariants, selectedAvatar])
 
   // Agrupar estilos por categoría
   const stylesByCategory = useMemo(() => {
@@ -146,7 +169,9 @@ export function AvatarSelector({
   }, [selectedStyle, currentSeed, backgroundIndex, useRoundedCorners, scale, flip, rotate])
 
   const handleStyleChange = useCallback((style: DiceBearStyle) => {
+    setIsLoading(true)
     setSelectedStyle(style)
+    // El efecto de useEffect se encargará de quitar el loading
   }, [])
 
   const handleAvatarClick = useCallback((avatarUrl: string) => {
@@ -190,242 +215,117 @@ export function AvatarSelector({
     }, 800)
   }, [])
 
-  const downloadAvatar = useCallback(async (avatarUrl: string) => {
-    try {
-      const response = await fetch(avatarUrl)
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `avatar-${Date.now()}.svg`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('Error descargando avatar:', error)
-    }
-  }, [])
-
-  const copyAvatarUrl = useCallback(async (avatarUrl: string) => {
-    try {
-      await navigator.clipboard.writeText(avatarUrl)
-      // Aquí podrías mostrar un toast de confirmación
-    } catch (error) {
-      console.error('Error copiando URL:', error)
-    }
-  }, [])
-
-  const generateMoreVariants = useCallback(() => {
-    const newSeed = Math.random().toString(36).substring(7)
-    setCustomSeed(newSeed)
-  }, [])
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-7xl h-[85vh] p-0 flex flex-col gap-0 overflow-hidden">
+      <DialogContent className="max-w-5xl h-[85vh] p-0 flex flex-col gap-0 overflow-hidden bg-background/95 backdrop-blur-xl border-border/50">
         {/* Header */}
-        <div className="px-4 py-2 border-b flex items-center justify-between bg-background z-10">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 rounded-lg bg-primary/10">
-              <Bot className="h-5 w-5 text-primary" />
+        <div className="px-6 py-4 border-b flex items-center justify-between bg-background/50 z-10 backdrop-blur-sm">
+          <div className="flex items-center gap-4">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary">
+              <Bot className="h-6 w-6" />
             </div>
             <div>
-              <DialogTitle className="text-lg">Seleccionar Avatar</DialogTitle>
-              <DialogDescription className="text-xs">
-                Personaliza y elige tu nuevo avatar
+              <DialogTitle className="text-xl font-semibold tracking-tight">Estudio de Avatares</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Diseña tu identidad digital única con IA
               </DialogDescription>
             </div>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onOpenChange(false)}>
-            <X className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full hover:bg-muted/80" onClick={() => onOpenChange(false)}>
+            <X className="h-5 w-5" />
           </Button>
         </div>
 
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar - Settings & Preview */}
-          <ScrollArea className="w-72 border-r bg-muted/10">
-            <div className="p-3 space-y-3">
-              {/* Preview Section - Compact Row */}
-              <div className="flex items-center gap-3 p-2 bg-background rounded-lg border shadow-sm">
-                <div className="relative shrink-0">
+          <ScrollArea className="w-80 border-r bg-muted/30">
+            <div className="p-6 space-y-6">
+              {/* Preview Section - Large & Centered */}
+              <div className="flex flex-col items-center gap-4">
+                <div className="relative group">
+                  <div className={cn(
+                    "absolute -inset-0.5 bg-gradient-to-tr from-primary to-purple-500 rounded-full opacity-75 blur group-hover:opacity-100 transition duration-500",
+                    useRoundedCorners ? "rounded-full" : "rounded-2xl"
+                  )} />
                   <Avatar className={cn(
-                    "w-16 h-16 border-2 border-muted transition-all",
-                    useRoundedCorners ? "rounded-full" : "rounded-lg"
+                    "w-40 h-40 border-4 border-background shadow-xl relative transition-all duration-300",
+                    useRoundedCorners ? "rounded-full" : "rounded-2xl"
                   )}>
                     <AvatarImage 
                       src={previewAvatar || avatarVariants[0]?.url} 
                       className="object-cover bg-white"
                     />
-                    <AvatarFallback>
-                      <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <AvatarFallback className="bg-muted">
+                      <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground/50" />
                     </AvatarFallback>
                   </Avatar>
-                </div>
-                <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                  <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                    Vista previa
+                  
+                  {/* Quick Actions Overlay */}
+                  <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 translate-y-2 group-hover:translate-y-0">
+                    <Button
+                      size="icon"
+                      variant="secondary"
+                      className="h-8 w-8 rounded-full shadow-lg"
+                      onClick={() => handleRandomize()}
+                      disabled={isGenerating}
+                      title="Aleatorio"
+                    >
+                      <Shuffle className={cn("h-4 w-4", isGenerating && "animate-spin")} />
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="w-full h-7 text-xs gap-2"
-                    onClick={handleRandomize}
-                    disabled={isGenerating}
-                  >
-                    <Shuffle className={cn("h-3 w-3", isGenerating && "animate-spin")} />
-                    Aleatorio
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Customization Grid */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Background Color - Full Width */}
-                <div className="col-span-2 space-y-1.5">
-                  <Label className="text-[10px] uppercase text-muted-foreground font-semibold">Fondo</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {BACKGROUND_COLORS.map((colorArr, index) => {
-                      const colorValue = colorArr[0]
-                      const isTransparent = colorValue === 'transparent'
-                      return (
-                        <button
-                          key={index}
-                          className={cn(
-                            "w-5 h-5 rounded-full border transition-all",
-                            backgroundIndex === index 
-                              ? "border-primary scale-110 shadow-sm" 
-                              : "border-transparent hover:scale-105"
-                          )}
-                          style={{ 
-                            backgroundColor: isTransparent ? '#ffffff' : colorValue,
-                            backgroundImage: isTransparent
-                              ? 'linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%)'
-                              : undefined,
-                            backgroundSize: '4px 4px'
-                          }}
-                          onClick={() => setBackgroundIndex(index)}
-                          title={isTransparent ? 'Transparente' : colorValue}
-                        />
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Scale */}
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase text-muted-foreground font-semibold">Escala ({scale}%)</Label>
-                  <Slider
-                    value={[scale]}
-                    onValueChange={(vals) => setScale(vals[0])}
-                    min={50}
-                    max={150}
-                    step={5}
-                    className="w-full [&>span:first-child]:h-1 [&>span:last-child]:h-3 [&>span:last-child]:w-3"
-                  />
-                </div>
-
-                {/* Rotate */}
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase text-muted-foreground font-semibold">Rotación ({rotate}°)</Label>
-                  <Slider
-                    value={[rotate]}
-                    onValueChange={(vals) => setRotate(vals[0])}
-                    min={-180}
-                    max={180}
-                    step={5}
-                    className="w-full [&>span:first-child]:h-1 [&>span:last-child]:h-3 [&>span:last-child]:w-3"
-                  />
-                </div>
-
-                {/* Toggles */}
-                <div className="flex items-center justify-between bg-background p-1.5 rounded border">
-                  <Label htmlFor="rounded" className="text-[10px] cursor-pointer">Redondo</Label>
-                  <Switch
-                    id="rounded"
-                    checked={useRoundedCorners}
-                    onCheckedChange={setUseRoundedCorners}
-                    className="scale-50 origin-right"
-                  />
                 </div>
                 
-                <div className="flex items-center justify-between bg-background p-1.5 rounded border">
-                  <Label htmlFor="flip" className="text-[10px] cursor-pointer">Voltear</Label>
-                  <Switch
-                    id="flip"
-                    checked={flip}
-                    onCheckedChange={setFlip}
-                    className="scale-50 origin-right"
-                  />
+                <div className="text-center space-y-1">
+                  <h3 className="font-medium text-sm">Vista previa</h3>
+                  <p className="text-xs text-muted-foreground">Así se verá tu avatar en el perfil.</p>
                 </div>
               </div>
 
-              <Separator />
-
-              {/* Seed Input */}
-              <div className="space-y-1.5">
-                 <div className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                  <Sparkles className="h-3 w-3" />
-                  Semilla
-                </div>
-                <div className="flex gap-1.5">
-                  <Input 
-                    value={customSeed}
-                    onChange={(e) => setCustomSeed(e.target.value)}
-                    placeholder="Semilla..."
-                    className="h-7 text-xs"
-                  />
-                  <Button 
-                    size="icon" 
-                    variant="outline" 
-                    className="h-7 w-7 shrink-0"
-                    onClick={generateMoreVariants}
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* URL Display */}
-              <div className="space-y-1.5">
-                 <Label className="text-[10px] uppercase font-semibold text-muted-foreground">URL</Label>
-                 <div className="relative">
-                   <Input 
-                     readOnly 
-                     value={previewAvatar || ''} 
-                     className="h-7 text-[10px] pr-7 bg-muted/50 font-mono" 
-                   />
-                   <Button
-                     size="icon"
-                     variant="ghost"
-                     className="absolute right-0 top-0 h-7 w-7 hover:bg-transparent text-muted-foreground hover:text-foreground"
-                     onClick={() => copyAvatarUrl(previewAvatar || '')}
-                     disabled={!previewAvatar}
-                   >
-                     <Copy className="h-3 w-3" />
-                   </Button>
-                 </div>
+              <div className="space-y-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleRandomize}
+                  disabled={isGenerating}
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Explorando estilos...
+                    </>
+                  ) : (
+                    <>
+                      <Shuffle className="h-4 w-4 mr-2" />
+                      Sugerir avatar
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Elige un estilo y haz clic en la opción que más te guste.
+                </p>
               </div>
             </div>
           </ScrollArea>
 
           {/* Main Content - Styles & Grid */}
-          <div className="flex-1 flex flex-col min-w-0 bg-background">
+          <div className="flex-1 flex flex-col min-w-0 bg-background/30">
             <Tabs value={activeCategory} onValueChange={setActiveCategory} className="flex-1 flex flex-col min-h-0">
-              <div className="px-4 border-b">
-                <TabsList className="w-full justify-start h-10 bg-transparent p-0 gap-4">
+              <div className="px-6 border-b bg-background/50 backdrop-blur-sm sticky top-0 z-10">
+                <TabsList className="w-full justify-start h-14 bg-transparent p-0 gap-6">
                   {Object.entries(categoryNames).map(([category, name]) => (
                     <TabsTrigger 
                       key={category} 
                       value={category}
-                      className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium text-muted-foreground data-[state=active]:text-foreground transition-none"
+                      className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0 text-sm font-medium text-muted-foreground data-[state=active]:text-primary transition-all hover:text-foreground"
                     >
-                      <div className="flex items-center gap-1.5">
-                        {categoryIcons[category as keyof typeof categoryIcons]}
+                      <div className="flex items-center gap-2">
+                        <div className={cn(
+                          "p-1.5 rounded-md transition-colors",
+                          activeCategory === category ? "bg-primary/10 text-primary" : "bg-muted"
+                        )}>
+                          {categoryIcons[category as keyof typeof categoryIcons]}
+                        </div>
                         {name}
                       </div>
                     </TabsTrigger>
@@ -435,98 +335,84 @@ export function AvatarSelector({
 
               <div className="flex-1 overflow-hidden">
                 <ScrollArea className="h-full">
-                  <div className="p-4 space-y-6">
+                  <div className="p-6 max-w-5xl mx-auto space-y-8">
                     {Object.entries(stylesByCategory).map(([category, styles]) => (
-                      <TabsContent key={category} value={category} className="mt-0 space-y-5">
+                      <TabsContent key={category} value={category} className="mt-0 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         {/* Styles Selection */}
-                        <div className="space-y-2.5">
-                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Estilo de Arte</Label>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Estilo Artístico</Label>
+                            <span className="text-xs text-muted-foreground">
+                              {styles.find(s => s.style === selectedStyle)?.name || 'Selecciona uno'}
+                            </span>
+                          </div>
                           <div className="flex flex-wrap gap-2">
                             {styles.map((style) => (
                               <button
                                 key={style.style}
                                 onClick={() => handleStyleChange(style.style)}
                                 className={cn(
-                                  "px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
+                                  "px-4 py-2 rounded-xl text-xs font-medium transition-all border shadow-sm",
                                   selectedStyle === style.style
-                                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                                    : "bg-background hover:bg-muted border-input text-foreground"
+                                    ? "bg-primary text-primary-foreground border-primary ring-2 ring-primary/20 scale-105"
+                                    : "bg-card hover:bg-accent border-border text-card-foreground hover:border-primary/50"
                                 )}
                               >
                                 {style.name}
                               </button>
                             ))}
                           </div>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-lg border border-border/50">
+                            <span className="font-semibold text-foreground mr-1">Info:</span>
                             {styles.find(s => s.style === selectedStyle)?.description}
                           </p>
                         </div>
 
-                        <Separator />
+                        <Separator className="bg-border/50" />
 
                         {/* Avatars Grid */}
-                        <div className="space-y-2.5">
-                          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Resultados</Label>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">Variaciones Disponibles</Label>
+                            <Badge variant="outline" className="text-xs font-normal">
+                              {avatarVariants.length} opciones
+                            </Badge>
+                          </div>
+                          
                           {isLoading ? (
-                            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 gap-3">
-                              {Array.from({ length: 28 }).map((_, i) => (
-                                <div key={i} className="aspect-square rounded-lg bg-muted animate-pulse" />
+                            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-4">
+                              {Array.from({ length: 24 }).map((_, i) => (
+                                <div key={i} className="aspect-square rounded-xl bg-muted/50 animate-pulse border border-border/50" />
                               ))}
                             </div>
                           ) : (
-                            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 gap-3">
+                            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-4 pb-8">
                               {avatarVariants.map((variant, index) => (
                                 <button
                                   key={`${variant.seed}-${index}`}
                                   className={cn(
-                                    "group relative aspect-square rounded-lg overflow-hidden border transition-all hover:shadow-md",
+                                    "group relative aspect-square rounded-xl overflow-hidden border bg-card transition-all duration-200 hover:shadow-lg hover:-translate-y-1",
                                     selectedAvatar === variant.url
-                                      ? "border-primary ring-2 ring-primary/30"
-                                      : "border-transparent hover:border-muted-foreground/20"
+                                      ? "border-primary ring-4 ring-primary/20 shadow-lg scale-105 z-10"
+                                      : "border-border hover:border-primary/50"
                                   )}
                                   onClick={() => handleAvatarClick(variant.url)}
                                   onMouseEnter={() => handleAvatarHover(variant.url)}
                                   onMouseLeave={handleAvatarLeave}
                                 >
-                                  <div className="absolute inset-0 bg-muted/20" />
+                                  <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                                   <img 
                                     src={variant.url} 
                                     alt="Avatar variant"
-                                    className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                                     loading="lazy"
                                   />
                                   
                                   {selectedAvatar === variant.url && (
-                                    <div className="absolute inset-0 bg-primary/20 flex items-center justify-center backdrop-blur-sm">
-                                      <Check className="h-6 w-6 text-primary drop-shadow-md" />
+                                    <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1 shadow-md animate-in zoom-in duration-200">
+                                      <Check className="h-3 w-3" />
                                     </div>
                                   )}
-
-                                  {/* Hover Actions */}
-                                  <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                                    <div 
-                                      role="button"
-                                      className="p-1 bg-background/90 rounded shadow-sm hover:bg-background text-foreground"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        copyAvatarUrl(variant.url)
-                                      }}
-                                      title="Copiar URL"
-                                    >
-                                      <Copy className="h-2.5 w-2.5" />
-                                    </div>
-                                    <div 
-                                      role="button"
-                                      className="p-1 bg-background/90 rounded shadow-sm hover:bg-background text-foreground"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        downloadAvatar(variant.url)
-                                      }}
-                                      title="Descargar"
-                                    >
-                                      <Download className="h-2.5 w-2.5" />
-                                    </div>
-                                  </div>
                                 </button>
                               ))}
                             </div>
@@ -542,21 +428,36 @@ export function AvatarSelector({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t bg-muted/10 flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">
-            {selectedAvatar ? '¡Excelente elección!' : 'Selecciona un avatar para continuar'}
+        <div className="px-6 py-4 border-t bg-background/80 backdrop-blur-md flex items-center justify-between z-10">
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              "w-2 h-2 rounded-full animate-pulse",
+              selectedAvatar ? "bg-green-500" : "bg-yellow-500"
+            )} />
+            <span className="text-xs text-muted-foreground font-medium">
+              {selectedAvatar ? 'Avatar seleccionado listo para usar' : 'Elige tu avatar favorito'}
+            </span>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="h-8">
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="h-10 px-4">
               Cancelar
             </Button>
             <Button 
               onClick={handleConfirm}
               disabled={!selectedAvatar}
-              className="px-6 h-8 text-xs"
-              size="sm"
+              className={cn(
+                "h-10 px-8 transition-all duration-300",
+                selectedAvatar ? "bg-primary shadow-lg shadow-primary/25" : "opacity-50"
+              )}
             >
-              Confirmar
+              {selectedAvatar ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Aplicar Avatar
+                </>
+              ) : (
+                'Seleccionar'
+              )}
             </Button>
           </div>
         </div>

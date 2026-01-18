@@ -45,38 +45,6 @@ export interface SecurityLog {
   details?: string
 }
 
-export interface SystemSettings {
-  companyName: string
-  companyEmail: string
-  companyPhone: string
-  companyAddress: string
-  city: string
-  currency: string
-  taxRate: number
-  lowStockThreshold: number
-  sessionTimeout: number
-  autoBackup: boolean
-  emailNotifications: boolean
-  smsNotifications: boolean
-  maintenanceMode: boolean
-  allowRegistration: boolean
-  requireEmailVerification: boolean
-  maxLoginAttempts: number
-  passwordMinLength: number
-  requireTwoFactor: boolean
-  // Campos adicionales del hook compartido
-  theme?: string
-  colorScheme?: string
-  requireSupplier?: boolean
-  autoGenerateSKU?: boolean
-  lowStockAlerts?: boolean
-  salesAlerts?: boolean
-  requireSpecialChars?: boolean
-  twoFactorAuth?: boolean
-  enableBackups?: boolean
-  backupFrequency?: string
-}
-
 // Mock data
 const mockUsers: User[] = [
   {

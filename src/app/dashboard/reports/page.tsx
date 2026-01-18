@@ -20,12 +20,12 @@ import { Line } from 'recharts/es6/cartesian/Line';
 import { PieChart } from 'recharts/es6/chart/PieChart';
 import { Pie } from 'recharts/es6/polar/Pie';
 import { Cell } from 'recharts/es6/component/Cell';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  DollarSign, 
-  ShoppingCart, 
-  Users, 
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  ShoppingCart,
+  Users,
   Package,
   Calendar as CalendarIcon,
   Download,
@@ -36,6 +36,7 @@ import { es } from 'date-fns/locale'
 import Link from 'next/link'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { Input } from '@/components/ui/input'
+import { chartColors } from '@/utils/chart-utils'
 
 interface SalesData {
   date: string
@@ -119,6 +120,7 @@ export default function ReportsPage() {
 
   const categoryComputed = useMemo(() => {
     const aggMap: Record<string, { sales: number; quantity: number; color: string; name: string }> = {}
+    const palette = chartColors.getColorPalette((saleItemsAll as any[]).length || 1)
     ;(saleItemsAll as any[]).forEach((item: any, idx: number) => {
       const status = item?.sale?.status
       const created = item?.sale?.created_at ? new Date(item.sale.created_at) : null
@@ -127,7 +129,14 @@ export default function ReportsPage() {
       const name = item.product?.category?.name || 'Sin categoría'
       const qty = Number(item.quantity) || 0
       const sales = Number(item.subtotal ?? qty * Number(item.unit_price ?? 0)) || 0
-      if (!aggMap[name]) aggMap[name] = { sales: 0, quantity: 0, color: `hsl(${idx * 45}, 70%, 50%)`, name }
+      if (!aggMap[name]) {
+        aggMap[name] = {
+          sales: 0,
+          quantity: 0,
+          color: palette[idx % palette.length],
+          name
+        }
+      }
       aggMap[name].sales += sales
       aggMap[name].quantity += qty
     })
@@ -138,7 +147,17 @@ export default function ReportsPage() {
     const top = sorted.slice(0, categoryTopCount)
     const rest = sorted.slice(categoryTopCount)
     const othersValue = categoryMetricBy === 'sales' ? rest.reduce((s, c) => s + c.sales, 0) : rest.reduce((s, c) => s + c.quantity, 0)
-    const visible = othersValue > 0 ? [...top, { name: 'Otros', sales: categoryMetricBy === 'sales' ? othersValue : 0, quantity: categoryMetricBy === 'quantity' ? othersValue : 0, color: 'hsl(0, 0%, 70%)' }] : top
+    const visible = othersValue > 0
+      ? [
+          ...top,
+          {
+            name: 'Otros',
+            sales: categoryMetricBy === 'sales' ? othersValue : 0,
+            quantity: categoryMetricBy === 'quantity' ? othersValue : 0,
+            color: '#e5e7eb'
+          }
+        ]
+      : top
     return { data, totalSales, totalQty, visible }
   }, [saleItemsAll, categoryDateRange, categoryMinSales, categoryMetricBy, categoryTopCount])
 
@@ -286,8 +305,14 @@ export default function ReportsPage() {
           .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
         setRepairsTrend(trendList)
 
-        const statuses = Object.entries(statusMap)
-          .map(([name, value], idx) => ({ name, value, color: `hsl(${idx * 45}, 70%, 50%)` }))
+        const statusEntries = Object.entries(statusMap)
+        const statusColors = chartColors.getColorPalette(statusEntries.length || 1)
+        const statuses = statusEntries
+          .map(([name, value], idx) => ({
+            name,
+            value,
+            color: statusColors[idx % statusColors.length]
+          }))
           .sort((a, b) => b.value - a.value)
         setRepairsStatusDist(statuses)
 
@@ -337,12 +362,13 @@ export default function ReportsPage() {
 
         // Categorías
         const allCategoryNames = Array.from(new Set([...Object.keys(categorySales), ...Object.keys(categoryQty)]))
+        const categoryColorsPalette = chartColors.getColorPalette(allCategoryNames.length || 1)
         const processedCategoryData: CategoryData[] = allCategoryNames
           .map((name, index) => ({
             name,
             sales: categorySales[name] || 0,
             quantity: categoryQty[name] || 0,
-            color: `hsl(${index * 45}, 70%, 50%)`
+            color: categoryColorsPalette[index % categoryColorsPalette.length]
           }))
           .sort((a, b) => b.sales - a.sales)
 
@@ -411,15 +437,22 @@ export default function ReportsPage() {
     }
   }
 
-      return (
-        <div className="container mx-auto p-4 space-y-6">
-          {errorMsg && (
-            <div className="p-3 border rounded text-red-600 bg-red-50">{errorMsg}</div>
-          )}
-      {/* Header con controles */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+  const salesLineColor = chartColors.primary[0]
+  const repairsLineColor = chartColors.danger[0]
+  const productSalesColor = chartColors.primary[0]
+  const productQuantityColor = chartColors.success[0]
+  const selectedProductSalesColor = chartColors.primary[1] || chartColors.primary[0]
+  const selectedProductQtyColor = chartColors.success[1] || chartColors.success[0]
+  const categoriesBarColor = chartColors.info[0]
+
+  return (
+    <div className="container mx-auto p-4 space-y-6">
+      {errorMsg && (
+        <div className="p-3 border rounded text-red-600 bg-red-50">{errorMsg}</div>
+      )}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-100 dark:border-blue-900 rounded-xl px-5 py-4 shadow-sm">
         <div>
-          <h1 className="text-3xl font-bold">Reportes y Analytics</h1>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Reportes y Analytics</h1>
           <p className="text-muted-foreground">
             Análisis detallado de ventas y rendimiento
           </p>
@@ -445,80 +478,95 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Métricas principales */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950/40 dark:to-emerald-900/40 border border-emerald-200 dark:border-emerald-700 shadow-sm">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Ventas Totales</p>
-                <p className="text-2xl font-bold">{formatFullPrice(totalSales)}</p>
+                <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-200">
+                  {formatFullPrice(totalSales)}
+                </p>
               </div>
-              <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
-                <DollarSign className="h-4 w-4 text-green-600" />
+              <div className="h-10 w-10 bg-emerald-100 dark:bg-emerald-900/60 rounded-full flex items-center justify-center shadow-sm">
+                <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
               </div>
             </div>
             <div className="flex items-center mt-2">
-              <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-              <span className="text-sm text-green-500">+12.5%</span>
-              <span className="text-sm text-muted-foreground ml-1">vs mes anterior</span>
+              <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
+              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-300">+12.5%</span>
+              <span className="text-sm text-emerald-900/70 dark:text-emerald-100/80 ml-1">
+                vs mes anterior
+              </span>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-blue-50 to-sky-50 dark:from-blue-950/40 dark:to-sky-950/40 border border-blue-200 dark:border-blue-800 shadow-sm">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Órdenes</p>
-                <p className="text-2xl font-bold">{totalOrders}</p>
+                <p className="text-2xl font-bold text-blue-700 dark:text-blue-200">
+                  {totalOrders}
+                </p>
               </div>
-              <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <ShoppingCart className="h-4 w-4 text-blue-600" />
+              <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/60 rounded-full flex items-center justify-center shadow-sm">
+                <ShoppingCart className="h-5 w-5 text-blue-600 dark:text-blue-300" />
               </div>
             </div>
             <div className="flex items-center mt-2">
-              <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-              <span className="text-sm text-green-500">+8.2%</span>
-              <span className="text-sm text-muted-foreground ml-1">vs mes anterior</span>
+              <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
+              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-300">+8.2%</span>
+              <span className="text-sm text-slate-700/80 dark:text-slate-100/80 ml-1">
+                vs mes anterior
+              </span>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/40 dark:to-purple-950/40 border border-violet-200 dark:border-violet-800 shadow-sm">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Clientes</p>
-                <p className="text-2xl font-bold">{totalCustomers}</p>
+                <p className="text-2xl font-bold text-violet-700 dark:text-violet-200">
+                  {totalCustomers}
+                </p>
               </div>
-              <div className="h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center">
-                <Users className="h-4 w-4 text-purple-600" />
+              <div className="h-10 w-10 bg-purple-100 dark:bg-purple-900/60 rounded-full flex items-center justify-center shadow-sm">
+                <Users className="h-5 w-5 text-purple-600 dark:text-purple-300" />
               </div>
             </div>
             <div className="flex items-center mt-2">
               <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-              <span className="text-sm text-red-500">-2.1%</span>
-              <span className="text-sm text-muted-foreground ml-1">vs mes anterior</span>
+              <span className="text-sm font-medium text-red-600 dark:text-red-400">-2.1%</span>
+              <span className="text-sm text-slate-700/80 dark:text-slate-100/80 ml-1">
+                vs mes anterior
+              </span>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 border border-amber-200 dark:border-amber-800 shadow-sm">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Valor Promedio</p>
-                <p className="text-2xl font-bold">{formatFullPrice(avgOrderValue)}</p>
+                <p className="text-2xl font-bold text-amber-700 dark:text-amber-200">
+                  {formatFullPrice(avgOrderValue)}
+                </p>
               </div>
-              <div className="h-8 w-8 bg-orange-100 rounded-full flex items-center justify-center">
-                <Package className="h-4 w-4 text-orange-600" />
+              <div className="h-10 w-10 bg-orange-100 dark:bg-orange-900/60 rounded-full flex items-center justify-center shadow-sm">
+                <Package className="h-5 w-5 text-orange-600 dark:text-orange-300" />
               </div>
             </div>
             <div className="flex items-center mt-2">
               <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-              <span className="text-sm text-green-500">+5.7%</span>
-              <span className="text-sm text-muted-foreground ml-1">vs mes anterior</span>
+              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-300">+5.7%</span>
+              <span className="text-sm text-slate-700/80 dark:text-slate-100/80 ml-1">
+                vs mes anterior
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -552,12 +600,12 @@ export default function ReportsPage() {
                     formatter={(value: number) => [formatFullPrice(value), 'Ventas']}
                     labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })}
                   />
-                  <Line 
-                    type="monotone" 
-                    dataKey="sales" 
-                    stroke="#8884d8" 
+                  <Line
+                    type="monotone"
+                    dataKey="sales"
+                    stroke={salesLineColor}
                     strokeWidth={2}
-                    dot={{ fill: '#8884d8' }}
+                    dot={{ fill: salesLineColor }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -577,7 +625,13 @@ export default function ReportsPage() {
                   <XAxis dataKey="date" tickFormatter={(value) => format(new Date(value), 'dd/MM', { locale: es })} />
                   <YAxis />
                   <Tooltip labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })} />
-                  <Line type="monotone" dataKey="count" stroke="#ef4444" strokeWidth={2} dot={{ fill: '#ef4444' }} />
+                  <Line
+                    type="monotone"
+                    dataKey="count"
+                    stroke={repairsLineColor}
+                    strokeWidth={2}
+                    dot={{ fill: repairsLineColor }}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -687,8 +741,8 @@ export default function ReportsPage() {
                     <XAxis dataKey="name" />
                     <YAxis tickFormatter={formatPrice} />
                   <Tooltip formatter={(value: number, n: any) => [n === 'sales' ? formatFullPrice(Number(value)) : String(value), n === 'sales' ? 'Ventas' : 'Cantidad']} />
-                  <Bar dataKey="sales" name="Ventas" fill="#3b82f6" />
-                  <Bar dataKey="quantity" name="Cantidad" fill="#10b981" />
+                  <Bar dataKey="sales" name="Ventas" fill={productSalesColor} />
+                  <Bar dataKey="quantity" name="Cantidad" fill={productQuantityColor} />
                   </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -707,8 +761,22 @@ export default function ReportsPage() {
                         <YAxis yAxisId="left" tickFormatter={formatPrice} />
                         <YAxis yAxisId="right" orientation="right" />
                         <Tooltip formatter={(v: number, n: any) => [n === 'sales' ? formatFullPrice(Number(v)) : String(v), n === 'sales' ? 'Ventas' : 'Unidades']} />
-                        <Line type="monotone" dataKey="sales" yAxisId="left" stroke="#2563eb" strokeWidth={2} dot={{ fill: '#2563eb' }} />
-                        <Line type="monotone" dataKey="qty" yAxisId="right" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981' }} />
+                        <Line
+                          type="monotone"
+                          dataKey="sales"
+                          yAxisId="left"
+                          stroke={selectedProductSalesColor}
+                          strokeWidth={2}
+                          dot={{ fill: selectedProductSalesColor }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="qty"
+                          yAxisId="right"
+                          stroke={selectedProductQtyColor}
+                          strokeWidth={2}
+                          dot={{ fill: selectedProductQtyColor }}
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                     <div className="flex justify-end mt-3">
@@ -853,7 +921,11 @@ export default function ReportsPage() {
                           <XAxis dataKey="name" />
                           <YAxis tickFormatter={categoryMetricBy === 'sales' ? formatPrice : (v: any) => String(v)} />
                           <Tooltip formatter={(v: number, n: any) => [n === 'sales' ? formatFullPrice(Number(v)) : String(v), n === 'sales' ? 'Ventas' : 'Cantidad']} />
-                          <Bar dataKey={categoryMetricBy === 'sales' ? 'sales' : 'quantity'} name={categoryMetricBy === 'sales' ? 'Ventas' : 'Cantidad'} fill="#a855f7" />
+                          <Bar
+                            dataKey={categoryMetricBy === 'sales' ? 'sales' : 'quantity'}
+                            name={categoryMetricBy === 'sales' ? 'Ventas' : 'Cantidad'}
+                            fill={categoriesBarColor}
+                          />
                         </BarChart>
                       )}
                     </ResponsiveContainer>
@@ -887,16 +959,22 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 border rounded">
-                  <p className="text-2xl font-bold text-blue-600">{customersNewCount}</p>
+                <div className="text-center p-4 border rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border-blue-100 dark:border-blue-900">
+                  <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                    {customersNewCount}
+                  </p>
                   <p className="text-sm text-muted-foreground">Clientes Nuevos</p>
                 </div>
-                <div className="text-center p-4 border rounded">
-                  <p className="text-2xl font-bold text-green-600">{retentionRate.toFixed(0)}%</p>
+                <div className="text-center p-4 border rounded-lg bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/40 dark:to-green-950/40 border-emerald-100 dark:border-emerald-900">
+                  <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+                    {retentionRate.toFixed(0)}%
+                  </p>
                   <p className="text-sm text-muted-foreground">Tasa de Retención</p>
                 </div>
-                <div className="text-center p-4 border rounded">
-                  <p className="text-2xl font-bold text-purple-600">{avgPurchasesPerCustomer.toFixed(1)}</p>
+                <div className="text-center p-4 border rounded-lg bg-gradient-to-br from-purple-50 to-fuchsia-50 dark:from-purple-950/40 dark:to-fuchsia-950/40 border-purple-100 dark:border-purple-900">
+                  <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                    {avgPurchasesPerCustomer.toFixed(1)}
+                  </p>
                   <p className="text-sm text-muted-foreground">Compras Promedio</p>
                 </div>
               </div>

@@ -72,60 +72,7 @@ interface InventoryAlertsProps {
   onProductUpdate?: (productId: string, updates: Partial<Product>) => void
 }
 
-const mockProducts: Product[] = [
-  {
-    id: '1',
-    name: 'Smartphone Galaxy S24',
-    sku: 'SGS24-001',
-    category: 'Electrónicos',
-    stock: 3,
-    minStock: 10,
-    maxStock: 50,
-    price: 899.99,
-    expiryDate: new Date('2024-12-15'),
-    lastRestocked: new Date('2024-01-15'),
-    supplier: 'Samsung'
-  },
-  {
-    id: '2',
-    name: 'Laptop Dell XPS 13',
-    sku: 'DXP13-002',
-    category: 'Computadoras',
-    stock: 1,
-    minStock: 5,
-    maxStock: 25,
-    price: 1299.99,
-    lastRestocked: new Date('2023-11-20'),
-    supplier: 'Dell'
-  },
-  {
-    id: '3',
-    name: 'Auriculares Sony WH-1000XM4',
-    sku: 'SWH-003',
-    category: 'Audio',
-    stock: 45,
-    minStock: 15,
-    maxStock: 30,
-    price: 349.99,
-    lastRestocked: new Date('2024-02-10'),
-    supplier: 'Sony'
-  },
-  {
-    id: '4',
-    name: 'Tablet iPad Air',
-    sku: 'IPA-004',
-    category: 'Tablets',
-    stock: 0,
-    minStock: 8,
-    maxStock: 40,
-    price: 599.99,
-    expiryDate: new Date('2024-11-30'),
-    lastRestocked: new Date('2024-01-05'),
-    supplier: 'Apple'
-  }
-]
-
-export function InventoryAlerts({ products = mockProducts, onProductUpdate }: InventoryAlertsProps) {
+export function InventoryAlerts({ products = [], onProductUpdate }: InventoryAlertsProps) {
   const [alertSettings, setAlertSettings] = useState<AlertSettings>({
     lowStockEnabled: true,
     lowStockThreshold: 10,

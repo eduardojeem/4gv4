@@ -36,7 +36,14 @@ import {
   TrendingUp,
   Zap,
   Eye,
-  EyeOff
+  EyeOff,
+  History,
+  Palette,
+  Layout,
+  Calendar,
+  Share2,
+  ToggleLeft,
+  Languages
 } from 'lucide-react'
 import { SystemSettings } from '@/hooks/use-admin-dashboard'
 import { toast } from 'sonner'
@@ -270,7 +277,9 @@ export function SystemConfiguration({
 
   const tabsConfig = [
     { id: 'company', label: 'Empresa', icon: Building, color: 'blue' },
-    { id: 'general', label: 'General', icon: Globe, color: 'purple' },
+    { id: 'appearance', label: 'Apariencia', icon: Palette, color: 'pink' },
+    { id: 'regional', label: 'Regional', icon: Globe, color: 'indigo' },
+    { id: 'features', label: 'Funciones', icon: Layout, color: 'cyan' },
     { id: 'security', label: 'Seguridad', icon: Shield, color: 'red' },
     { id: 'notifications', label: 'Notificaciones', icon: Bell, color: 'green' },
     { id: 'system', label: 'Sistema', icon: Server, color: 'orange' },
@@ -574,7 +583,301 @@ export function SystemConfiguration({
             </Card>
           </TabsContent>
 
-          {/* Continuará con los demás tabs... */}
+          {/* APARIENCIA */}
+          <TabsContent value="appearance" className="space-y-4 sm:space-y-6">
+            <Card className="border-pink-100 dark:border-pink-900 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-pink-50 to-transparent dark:from-pink-950">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-pink-500 rounded-lg">
+                    <Palette className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Apariencia e Interfaz</CardTitle>
+                    <CardDescription>Personaliza la experiencia visual del sistema</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="space-y-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                    <Label className="flex items-center gap-2">Tema por Defecto</Label>
+                    <Select 
+                      value={formData.theme} 
+                      onValueChange={(value: any) => handleInputChange('theme', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="light">☀️ Claro</SelectItem>
+                        <SelectItem value="dark">🌙 Oscuro</SelectItem>
+                        <SelectItem value="system">💻 Sistema</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                    <Label className="flex items-center gap-2">Color Principal</Label>
+                    <Select 
+                      value={formData.primaryColor} 
+                      onValueChange={(value) => handleInputChange('primaryColor', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="blue">🔵 Azul (Default)</SelectItem>
+                        <SelectItem value="purple">💜 Violeta</SelectItem>
+                        <SelectItem value="green">💚 Verde</SelectItem>
+                        <SelectItem value="orange">🧡 Naranja</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                    <Label className="flex items-center gap-2">Items por Página</Label>
+                    <Input
+                      type="number"
+                      value={formData.itemsPerPage}
+                      onChange={(e) => handleInputChange('itemsPerPage', parseInt(e.target.value))}
+                      min={5}
+                      max={100}
+                    />
+                    <p className="text-xs text-gray-500">Filas por defecto en tablas</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* REGIONAL */}
+          <TabsContent value="regional" className="space-y-4 sm:space-y-6">
+            <Card className="border-indigo-100 dark:border-indigo-900 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-indigo-50 to-transparent dark:from-indigo-950">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-500 rounded-lg">
+                    <Globe className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Configuración Regional</CardTitle>
+                    <CardDescription>Formatos de fecha, hora y localización</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="space-y-2">
+                    <Label>Idioma por Defecto</Label>
+                    <Select 
+                      value={formData.language} 
+                      onValueChange={(value) => handleInputChange('language', value)}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="es">🇪🇸 Español</SelectItem>
+                        <SelectItem value="en">🇺🇸 English</SelectItem>
+                        <SelectItem value="pt">🇧🇷 Português</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Zona Horaria</Label>
+                    <Select 
+                      value={formData.timeZone} 
+                      onValueChange={(value) => handleInputChange('timeZone', value)}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="America/Asuncion">America/Asuncion (GMT-4)</SelectItem>
+                        <SelectItem value="America/Argentina/Buenos_Aires">America/Buenos_Aires (GMT-3)</SelectItem>
+                        <SelectItem value="UTC">UTC</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Formato de Fecha</Label>
+                    <Select 
+                      value={formData.dateFormat} 
+                      onValueChange={(value) => handleInputChange('dateFormat', value)}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="DD/MM/YYYY">DD/MM/YYYY (31/12/2024)</SelectItem>
+                        <SelectItem value="MM/DD/YYYY">MM/DD/YYYY (12/31/2024)</SelectItem>
+                        <SelectItem value="YYYY-MM-DD">YYYY-MM-DD (2024-12-31)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Moneda Principal</Label>
+                    <Select 
+                      value={formData.currency} 
+                      onValueChange={(value: any) => handleInputChange('currency', value)}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PYG">🇵🇾 Guaraní (PYG)</SelectItem>
+                        <SelectItem value="USD">🇺🇸 Dólar (USD)</SelectItem>
+                        <SelectItem value="EUR">🇪🇺 Euro (EUR)</SelectItem>
+                        <SelectItem value="MXN">🇲🇽 Peso Mexicano (MXN)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Impuesto Base (%)</Label>
+                    <Input
+                      type="number"
+                      value={formData.taxRate}
+                      onChange={(e) => handleInputChange('taxRate', parseFloat(e.target.value))}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* FEATURES */}
+          <TabsContent value="features" className="space-y-4 sm:space-y-6">
+            <Card className="border-cyan-100 dark:border-cyan-900 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-cyan-50 to-transparent dark:from-cyan-950">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-cyan-500 rounded-lg">
+                    <Layout className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Funciones y Módulos</CardTitle>
+                    <CardDescription>Habilitar o deshabilitar características del sistema</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Módulos</h3>
+                    <div className="space-y-4">
+                      {['blog', 'reviews', 'api_access', 'inventory_tracking'].map((feature) => (
+                        <div key={feature} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-gray-800">
+                          <Label className="capitalize">{feature.replace('_', ' ')}</Label>
+                          <Switch
+                            checked={formData.features?.[feature] || false}
+                            onCheckedChange={(checked) => {
+                              const newFeatures = { ...formData.features, [feature]: checked }
+                              handleInputChange('features', newFeatures)
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                      <Label className="flex items-center gap-2 mb-2">
+                        Umbral de Stock Bajo
+                      </Label>
+                      <Input
+                        type="number"
+                        value={formData.lowStockThreshold}
+                        onChange={(e) => handleInputChange('lowStockThreshold', parseInt(e.target.value))}
+                        min={1}
+                        max={1000}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Alerta cuando el producto llega a esta cantidad</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">Redes Sociales</h3>
+                    <div className="space-y-3">
+                      {['facebook', 'instagram', 'twitter', 'linkedin'].map((social) => (
+                        <div key={social} className="space-y-1">
+                          <Label className="text-xs uppercase text-gray-500">{social}</Label>
+                          <Input
+                            placeholder={`URL de ${social}`}
+                            value={formData.socialLinks?.[social] || ''}
+                            onChange={(e) => {
+                              const newLinks = { ...formData.socialLinks, [social]: e.target.value }
+                              handleInputChange('socialLinks', newLinks)
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="system" className="space-y-4 sm:space-y-6">
+            <Card className="border-orange-100 dark:border-orange-900 shadow-lg">
+              <CardHeader className="bg-gradient-to-r from-orange-50 to-transparent dark:from-orange-950">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-500 rounded-lg">
+                    <Server className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Configuración del Sistema</CardTitle>
+                    <CardDescription>Ajustes técnicos y de mantenimiento</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="space-y-2 p-3 rounded-lg border border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-orange-500" />
+                        Retención de Auditoría
+                      </Label>
+                      <Badge variant="outline">{formData.retentionDays} días</Badge>
+                    </div>
+                    <Input
+                      type="number"
+                      value={formData.retentionDays}
+                      onChange={(e) => handleInputChange('retentionDays', parseInt(e.target.value))}
+                      min={30}
+                      max={3650}
+                    />
+                    <p className="text-xs text-gray-500">Días para mantener logs históricos</p>
+                  </div>
+
+                  <div className="space-y-2 p-3 rounded-lg border border-gray-100 dark:border-gray-800">
+                    <Label className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-orange-500" />
+                      Timeout de Sesión (min)
+                    </Label>
+                    <Input
+                      type="number"
+                      value={formData.sessionTimeout}
+                      onChange={(e) => handleInputChange('sessionTimeout', parseInt(e.target.value))}
+                    />
+                  </div>
+                </div>
+                
+                <Separator className="my-4" />
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-orange-200 dark:border-orange-900/50 bg-orange-50/50 dark:bg-orange-900/10">
+                    <div className="space-y-1">
+                      <Label className="text-base font-medium text-orange-900 dark:text-orange-100">
+                        Modo Mantenimiento
+                      </Label>
+                      <p className="text-sm text-orange-700 dark:text-orange-300">
+                        Bloquea el acceso a usuarios no administradores
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.maintenanceMode}
+                      onCheckedChange={handleMaintenanceModeChange}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
           
         </Tabs>
 

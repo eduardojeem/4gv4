@@ -50,6 +50,21 @@ export const SystemSettingsSchema = z.object({
     .int('Debe ser un número entero')
     .min(5, 'El timeout debe ser al menos 5 minutos')
     .max(480, 'El timeout no puede exceder 480 minutos (8 horas)'),
+
+  // Personalización e Interfaz
+  theme: z.enum(['light', 'dark', 'system']).default('system'),
+  primaryColor: z.string().default('blue'),
+  itemsPerPage: z.number().int().min(5).max(100).default(10),
+
+  // Configuración Regional
+  dateFormat: z.string().default('DD/MM/YYYY'),
+  timeZone: z.string().default('America/Asuncion'),
+  language: z.string().default('es'),
+
+  // Características y Redes
+  socialLinks: z.record(z.string()).default({}),
+  features: z.record(z.boolean()).default({}),
+  retentionDays: z.number().int().min(30).max(3650).default(90),
   
   // Opciones del sistema
   autoBackup: z.boolean(),
@@ -151,6 +166,17 @@ export function mapSettingsToDB(settings: SystemSettingsPartial): Record<string,
   if (settings.taxRate !== undefined) dbData.tax_rate = settings.taxRate
   if (settings.lowStockThreshold !== undefined) dbData.low_stock_threshold = settings.lowStockThreshold
   if (settings.sessionTimeout !== undefined) dbData.session_timeout = settings.sessionTimeout
+  
+  if (settings.theme !== undefined) dbData.theme = settings.theme
+  if (settings.primaryColor !== undefined) dbData.primary_color = settings.primaryColor
+  if (settings.dateFormat !== undefined) dbData.date_format = settings.dateFormat
+  if (settings.timeZone !== undefined) dbData.time_zone = settings.timeZone
+  if (settings.language !== undefined) dbData.language = settings.language
+  if (settings.itemsPerPage !== undefined) dbData.items_per_page = settings.itemsPerPage
+  if (settings.socialLinks !== undefined) dbData.social_links = settings.socialLinks
+  if (settings.features !== undefined) dbData.features = settings.features
+  if (settings.retentionDays !== undefined) dbData.retention_days = settings.retentionDays
+
   if (settings.autoBackup !== undefined) dbData.auto_backup = settings.autoBackup
   if (settings.emailNotifications !== undefined) dbData.email_notifications = settings.emailNotifications
   if (settings.smsNotifications !== undefined) dbData.sms_notifications = settings.smsNotifications

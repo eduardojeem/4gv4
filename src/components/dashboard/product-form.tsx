@@ -87,36 +87,6 @@ interface Category {
   subcategories: string[]
 }
 
-const mockSuppliers: Supplier[] = [
-  { id: '1', name: 'TechDistribuidor SA', contact: 'Juan Pérez', email: 'juan@techdist.com', phone: '+1234567890', isActive: true },
-  { id: '2', name: 'Electrónicos del Norte', contact: 'María García', email: 'maria@electronicos.com', phone: '+1234567891', isActive: true },
-  { id: '3', name: 'Importadora Global', contact: 'Carlos López', email: 'carlos@global.com', phone: '+1234567892', isActive: true },
-  { id: '4', name: 'Mayorista Central', contact: 'Ana Rodríguez', email: 'ana@mayorista.com', phone: '+1234567893', isActive: true },
-]
-
-const mockCategories: Category[] = [
-  { 
-    id: '1', 
-    name: 'Smartphones', 
-    subcategories: ['iPhone', 'Samsung Galaxy', 'Xiaomi', 'Huawei', 'OnePlus', 'Google Pixel'] 
-  },
-  { 
-    id: '2', 
-    name: 'Accesorios', 
-    subcategories: ['Fundas', 'Protectores de pantalla', 'Cargadores', 'Auriculares', 'Cables', 'Soportes'] 
-  },
-  { 
-    id: '3', 
-    name: 'Reparación', 
-    subcategories: ['Pantallas', 'Baterías', 'Cámaras', 'Altavoces', 'Conectores', 'Herramientas'] 
-  },
-  { 
-    id: '4', 
-    name: 'Tablets', 
-    subcategories: ['iPad', 'Samsung Tab', 'Lenovo', 'Huawei Tab', 'Amazon Fire'] 
-  },
-]
-
 interface ProductFormProps {
   initialData?: Partial<ProductFormData>
   onSubmit: (data: ProductFormData) => void
@@ -161,10 +131,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, isEditing = false
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
   const [newTag, setNewTag] = useState('')
-  const [categories, setCategories] = useState<Category[]>(mockCategories)
-  const [suppliers, setSuppliers] = useState<Supplier[]>(mockSuppliers)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
 
-  // Cargar categorías y proveedores reales desde Supabase si está configurado
+  // Cargar categorías y proveedores reales desde Supabase
   useEffect(() => {
     const loadData = async () => {
       if (!config.supabase.isConfigured) return
@@ -175,7 +145,7 @@ export function ProductForm({ initialData, onSubmit, onCancel, isEditing = false
         const { data: supData, error: supError } = supResult
         if (!catError && Array.isArray(catData)) {
           const mappedCats: Category[] = (catData as any[]).map(c => ({ id: c.id, name: c.name, subcategories: [] }))
-          if (mappedCats.length) setCategories(mappedCats)
+          setCategories(mappedCats)
         }
         if (!supError && Array.isArray(supData)) {
           const mappedSuppliers: Supplier[] = (supData as any[]).map(s => ({
@@ -186,10 +156,10 @@ export function ProductForm({ initialData, onSubmit, onCancel, isEditing = false
             phone: s.phone || '',
             isActive: true
           }))
-          if (mappedSuppliers.length) setSuppliers(mappedSuppliers)
+          setSuppliers(mappedSuppliers)
         }
       } catch (e) {
-        console.warn('No se pudo cargar datos desde Supabase, usando mocks:', (e as any)?.message)
+        console.error('Error al cargar datos desde Supabase:', (e as any)?.message)
       }
     }
     loadData()

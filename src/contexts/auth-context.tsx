@@ -178,14 +178,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: error.message }
       }
 
-      // Registrar el inicio de sesión en el audit log
       if (data.user) {
-        await supabase.from('audit_log').insert({
-          user_id: data.user.id,
-          action: 'sign_in',
-          resource_type: 'auth',
-          details: { email }
-        })
+        try {
+          const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
+          await supabase.rpc('log_auth_event', {
+            p_user_id: data.user.id,
+            p_action: 'login',
+            p_success: true,
+            p_ip_address: undefined,
+            p_user_agent: userAgent,
+            p_details: { email }
+          })
+        } catch (logError) {
+          console.error('Error logging auth event (login):', logError)
+        }
       }
 
       return {}
@@ -254,14 +260,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true)
 
-      // Registrar el cierre de sesión
       if (user) {
-        await supabase.from('audit_log').insert({
-          user_id: user.id,
-          action: 'sign_out',
-          resource_type: 'auth',
-          details: {}
-        })
+        try {
+          const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
+          await supabase.rpc('log_auth_event', {
+            p_user_id: user.id,
+            p_action: 'logout',
+            p_success: true,
+            p_ip_address: undefined,
+            p_user_agent: userAgent,
+            p_details: {}
+          })
+        } catch (logError) {
+          console.error('Error logging auth event (logout):', logError)
+        }
       }
 
       const { error } = await supabase.auth.signOut()
