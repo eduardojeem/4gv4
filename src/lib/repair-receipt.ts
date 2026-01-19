@@ -34,6 +34,14 @@ interface RepairCustomerInfo {
   customerCode?: string
 }
 
+export interface CompanyInfo {
+  name: string
+  phone?: string
+  address?: string
+  email?: string
+  logo?: string
+}
+
 export interface RepairPrintPayload {
   ticketNumber?: string
   date?: Date
@@ -44,6 +52,7 @@ export interface RepairPrintPayload {
   warrantyMonths?: number
   warrantyType?: 'labor' | 'parts' | 'full'
   warrantyNotes?: string
+  company?: CompanyInfo
 }
 
 /**
@@ -105,34 +114,40 @@ export const previewPersistentRepairTicketNumber = (): string => {
  * Genera un texto formateado para compartir por WhatsApp o copiar.
  */
 export const generateRepairShareText = (payload: RepairPrintPayload): string => {
-  const company = config.company
+  const company = payload.company || config.company
   const ticketNumber = payload.ticketNumber || 'N/A'
   const dateObj = payload.date || new Date()
   const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
   
-  let text = `*${company.name}* - Comprobante de Recepción\n`
+  let text = `*${company.name}* - Orden de Servicio\n`
   text += `--------------------------------\n`
-  text += `*Ticket N°:* ${ticketNumber}\n`
-  text += `*Fecha:* ${date}\n`
-  text += `*Cliente:* ${payload.customer.name}\n`
+  text += `📄 *Ticket:* ${ticketNumber}\n`
+  text += `📅 *Fecha:* ${date}\n`
+  text += `👤 *Cliente:* ${payload.customer.name}\n`
+  text += `--------------------------------\n`
+  text += `*DETALLES DEL EQUIPO*\n`
   
-  if (payload.customer.customerCode) {
-    text += `*Cód. Cliente:* ${payload.customer.customerCode}\n`
-  }
-
-  text += `\n*Equipos:*\n`
   payload.devices.forEach((d, i) => {
-    text += `${i + 1}. ${d.typeLabel} ${d.brand} ${d.model}\n`
-    text += `   Problema: ${d.issue}\n`
-    if (typeof d.estimatedCost === 'number') {
-      text += `   Costo Est.: ${formatCurrency(d.estimatedCost)}\n`
+    if (i > 0) text += `\n- - - - - - - - - - - -\n`
+    text += `📱 *Equipo:* ${d.brand} ${d.model}\n`
+    text += `🔧 *Problema:* ${d.issue}\n`
+    if (d.estimatedCost) {
+       text += `💰 *Costo Est:* ${formatCurrency(d.estimatedCost)}\n`
     }
   })
   
-  text += `\n--------------------------------\n`
-  text += `Para consultas: ${company.phone || company.email}\n`
-  text += `Gracias por confiar en nosotros!`
+  text += `--------------------------------\n`
   
+  if (payload.ticketNumber) {
+    // Si tienes una URL pública para consultar el estado
+    // text += `🔍 *Consulta tu estado aquí:*\n`
+    // text += `https://tu-dominio.com/estado/${payload.ticketNumber}\n`
+  }
+  
+  text += `📍 ${company.address}\n`
+  text += `📞 ${company.phone}\n`
+  text += `\n_Gracias por su preferencia_`
+
   return text
 }
 
@@ -150,10 +165,21 @@ export const printRepairReceipt = (type: RepairReceiptType, payload: RepairPrint
   const html = generateRepairReceiptHTML(type, payload)
   printWindow.document.write(html)
   printWindow.document.close()
-  printWindow.onload = () => {
-    printWindow.print()
-    printWindow.close()
-  }
+
+  // Esperar un momento para asegurar que el contenido se renderizó
+  // Usamos setTimeout en lugar de onload porque onload a veces falla con document.write
+  setTimeout(() => {
+    if (printWindow && !printWindow.closed) {
+      printWindow.focus()
+      try {
+        printWindow.print()
+      } catch (error) {
+        console.error('Error al intentar imprimir:', error)
+      }
+      // Cerrar después de que el diálogo de impresión se cierre (print es bloqueante en la mayoría de navegadores)
+      printWindow.close()
+    }
+  }, 500)
 }
 
 
@@ -163,7 +189,7 @@ export const printRepairReceipt = (type: RepairReceiptType, payload: RepairPrint
  * Incluye encabezado de empresa, meta de recepción, datos del cliente y equipos.
  */
 const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrintPayload): string => {
-  const company = config.company
+  const company = payload.company || config.company
   const ticketNumber = payload.ticketNumber || generateRepairTicketNumber()
   const dateObj = payload.date || new Date()
   const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
@@ -735,28 +761,49 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>Comprobante ${ticketNumber}</title>
-      <style>${modernStyles}</style>
+      <style>
+        ${modernStyles}
+        .legal-text {
+            font-size: 8px;
+            color: #9ca3af;
+            text-align: justify;
+            margin-top: 10px;
+            line-height: 1.2;
+            padding-top: 8px;
+            border-top: 1px solid #e5e7eb;
+        }
+      </style>
     </head>
     <body>
       <div class="header">
+        ${company.logo ? `<img src="${company.logo}" style="max-height: 50px; margin-bottom: 8px;" alt="Logo" />` : ''}
         <div class="company-name">${company.name}</div>
-        <div class="company-info">${company.address}<br/>📞 ${company.phone} • 📧 ${company.email}</div>
-        <div class="date-time">${date} • ${time}</div>
+        <div class="company-info">
+            ${company.address ? `📍 ${company.address}<br/>` : ''}
+            ${company.phone ? `📞 ${company.phone}` : ''} 
+            ${company.email ? `• 📧 ${company.email}` : ''}
+        </div>
+        <div class="date-time" style="margin-top: 4px;">${date} • ${time}</div>
       </div>
       
       <div style="text-align: center;">
-        <span class="ticket-badge">${ticketNumber}</span>
+        <span class="ticket-badge">Ticket: ${ticketNumber}</span>
       </div>
       
-      <div class="title">🧾 COMPROBANTE DE RECEPCIÓN</div>
+      <div class="title" style="text-align: center;">🧾 ORDEN DE SERVICIO</div>
       
       <div class="section-card">
-        <div class="section-title">👤 Cliente</div>
+        <div class="section-title">👤 Datos del Cliente</div>
         <div class="info-grid">
           <div class="info-row">
-            <span class="info-label">Nombre:</span>
-            <span class="info-value">${payload.customer.name}</span>
+            <span class="info-label">Cliente:</span>
+            <span class="info-value" style="font-size: 11px;">${payload.customer.name}</span>
           </div>
+          ${payload.customer.document ? `
+          <div class="info-row">
+            <span class="info-label">Doc/RUC:</span>
+            <span class="info-value">${payload.customer.document}</span>
+          </div>` : ''}
           ${payload.customer.customerCode ? `
           <div class="info-row">
             <span class="info-label">Código:</span>
@@ -771,6 +818,11 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
           <div class="info-row">
             <span class="info-label">Email:</span>
             <span class="info-value">${payload.customer.email}</span>
+          </div>` : ''}
+           ${payload.customer.address ? `
+          <div class="info-row">
+            <span class="info-label">Dirección:</span>
+            <span class="info-value">${payload.customer.address}</span>
           </div>` : ''}
         </div>
       </div>
@@ -804,29 +856,34 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
       </div>
 
       <div class="warranty-box">
-        <div class="warranty-title">🛡️ Garantía</div>
+        <div class="warranty-title">🛡️ Garantía y Términos</div>
         <div class="warranty-text">
           ${payload.warrantyMonths && payload.warrantyMonths > 0 ? `
-          • Duración: ${payload.warrantyMonths} ${payload.warrantyMonths === 1 ? 'mes' : 'meses'}<br/>
-          • Cubre: ${payload.warrantyType === 'labor' ? 'Solo mano de obra' : payload.warrantyType === 'parts' ? 'Solo repuestos' : 'Completa (mano de obra + repuestos)'}<br/>
+          • <strong>Garantía:</strong> ${payload.warrantyMonths} ${payload.warrantyMonths === 1 ? 'mes' : 'meses'} (${payload.warrantyType === 'labor' ? 'Mano de obra' : payload.warrantyType === 'parts' ? 'Repuestos' : 'Total'}).<br/>
           ${payload.warrantyNotes ? `• ${payload.warrantyNotes}<br/>` : ''}
-          • Conserve este comprobante para hacer válida la garantía<br/>
-          • Retiro máximo: 90 días calendario
           ` : `
-          • Esta reparación no incluye garantía<br/>
-          • Retiro máximo: 90 días calendario<br/>
-          • Conserve este comprobante para el retiro
+          • Esta reparación inicial no incluye garantía hasta su finalización.<br/>
           `}
+          • Pasados los 90 días de la notificación, el equipo se considerará abandonado.
+          • La garantía no cubre daños por humedad, golpes o mal uso posterior a la entrega.
+          • Es indispensable presentar este comprobante para el retiro.
         </div>
       </div>
 
+      <div class="legal-text">
+        Declaro haber leído y aceptado los términos y condiciones del servicio técnico. 
+        Autorizo la revisión y/o reparación de los equipos detallados. 
+        La empresa no se responsabiliza por pérdida de datos; se recomienda realizar copias de seguridad.
+      </div>
+
       <div class="qr-placeholder">
-        QR
+        <div style="font-size: 10px; font-weight: bold; color: #374151;">Firma Cliente</div>
       </div>
 
       <div class="footer">
-        <div>Gracias por confiar en ${company.name}</div>
-        <div style="margin-top: 2px;">Para consultas: ${company.phone}</div>
+        <div>Gracias por confiar en <strong>${company.name}</strong></div>
+        <div style="margin-top: 2px;">${company.address}</div>
+        <div style="margin-top: 2px;">${company.phone}</div>
       </div>
     </body>
   </html>

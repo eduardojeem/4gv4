@@ -98,6 +98,8 @@ export interface Repair {
   createdAt: string
   estimatedCompletion: string | null
   completedAt: string | null
+  paymentStatus?: 'pendiente' | 'parcial' | 'pagado'
+  paidAmount?: number
   lastUpdate: string
   progress: number
   customerRating: number | null

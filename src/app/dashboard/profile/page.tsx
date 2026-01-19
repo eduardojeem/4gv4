@@ -126,6 +126,22 @@ export default function UserProfilePage() {
     lastActivity: 'Hace 5 minutos'
   })
 
+  const getRoleLabel = (r: string | null) => {
+    if (!r) return 'Usuario'
+    const map: Record<string, string> = {
+      super_admin: 'Super Administrador',
+      admin: 'Administrador',
+      technician: 'Técnico',
+      vendedor: 'Vendedor',
+      manager: 'Gerente',
+      employee: 'Empleado',
+      client_normal: 'Cliente',
+      client_mayorista: 'Cliente Mayorista',
+      viewer: 'Visualizador'
+    }
+    return map[r] || r.charAt(0).toUpperCase() + r.slice(1)
+  }
+
   // Cargar usuario actual y preferencias
   useEffect(() => {
     const loadUser = async () => {
@@ -640,10 +656,10 @@ export default function UserProfilePage() {
                             Cargo / Título
                           </Label>
                           <Input 
-                            value={profile.jobTitle} 
-                            onChange={(e) => setProfile(p => ({ ...p, jobTitle: e.target.value }))}
-                            placeholder="Ej. Desarrollador" 
-                            className="border-2 border-slate-200 dark:border-slate-700 focus:border-purple-500 dark:focus:border-purple-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm h-11"
+                            value={getRoleLabel(role)} 
+                            readOnly
+                            disabled
+                            className="border-2 border-slate-200 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800/50 cursor-not-allowed h-11 font-medium text-slate-600 dark:text-slate-400"
                           />
                         </div>
                         <div className="space-y-2 sm:col-span-2">

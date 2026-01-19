@@ -42,6 +42,7 @@ import {
   formatWarrantyDuration,
   formatWarrantyExpiration 
 } from '@/lib/warranty-utils'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -57,6 +58,7 @@ export function RepairDetailDialog({
   onEdit
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
+  const { settings } = useSharedSettings()
 
   if (!repair) return null
 
@@ -105,7 +107,13 @@ export function RepairDetailDialog({
         technician: repair.technician?.name || 'Sin asignar',
         estimatedCost: repair.estimatedCost,
         ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()
-      }]
+      }],
+      company: {
+        name: settings.companyName,
+        phone: settings.companyPhone,
+        address: settings.companyAddress,
+        email: settings.companyEmail,
+      }
     }
   }
 
@@ -115,7 +123,7 @@ export function RepairDetailDialog({
     printRepairReceipt(type, payload)
   }
 
-  const handleShare = (method: 'whatsapp' | 'copy' | 'native') => {
+  const handleShare = async (method: 'whatsapp' | 'copy' | 'native' | 'whatsapp-pdf') => {
     if (!repair) return
     const payload = getPrintPayload()
     const shareText = generateRepairShareText(payload)
@@ -124,6 +132,15 @@ export function RepairDetailDialog({
       const encodedText = encodeURIComponent(shareText)
       const url = `https://wa.me/?text=${encodedText}`
       window.open(url, '_blank')
+    } else if (method === 'whatsapp-pdf') {
+       // Opción para abrir el diálogo de impresión directamente, 
+       // sugiriendo al usuario guardar como PDF y enviarlo
+       // Ya que compartir archivos directamente a WhatsApp Web no es posible vía API
+       // y Web Share API tiene soporte limitado en escritorio.
+       toast.info('Se abrirá la vista de impresión. Guarda como PDF y envíalo por WhatsApp.')
+       setTimeout(() => {
+          handlePrint('customer')
+       }, 1500)
     } else if (method === 'copy') {
       navigator.clipboard.writeText(shareText)
       toast.success('Texto copiado al portapapeles')
@@ -179,7 +196,7 @@ export function RepairDetailDialog({
             <div className="flex gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" title="Imprimir">
+                  <Button variant="ghost" size="icon" title="Imprimir" className="hidden sm:flex">
                     <Printer className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -220,39 +237,44 @@ export function RepairDetailDialog({
         </DialogHeader>
 
         <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col">
-          <div className="px-6 pt-2 border-b bg-muted/20">
-            <TabsList className="bg-transparent h-auto p-0 gap-6">
-              <TabsTrigger 
-                value="info" 
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-              >
-                Información
-              </TabsTrigger>
-              <TabsTrigger 
-                value="diagnostic" 
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-              >
-                Diagnóstico
-              </TabsTrigger>
-              <TabsTrigger 
-                value="finance" 
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-              >
-                Costos y Piezas
-              </TabsTrigger>
-              <TabsTrigger 
-                value="history" 
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-              >
-                Historial y Notas
-              </TabsTrigger>
-              <TabsTrigger 
-                value="images" 
-                className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-              >
-                Imágenes ({repair.images?.length || 0})
-              </TabsTrigger>
-            </TabsList>
+          <div className="border-b bg-muted/20">
+            <ScrollArea className="w-full">
+              <div className="px-6 pt-2">
+                <TabsList className="bg-transparent h-auto p-0 gap-6">
+                  <TabsTrigger 
+                    value="info" 
+                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
+                  >
+                    Información
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="diagnostic" 
+                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
+                  >
+                    Diagnóstico
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="finance" 
+                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
+                  >
+                    Costos y Piezas
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="history" 
+                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
+                  >
+                    Historial y Notas
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="images" 
+                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
+                  >
+                    Imágenes ({repair.images?.length || 0})
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <ScrollBar orientation="horizontal" />
+            </ScrollArea>
           </div>
 
           <ScrollArea className="flex-1 bg-background w-full">
@@ -260,6 +282,21 @@ export function RepairDetailDialog({
             <div className="p-6 min-w-full">
               {/* Información General */}
               <TabsContent value="info" className="mt-0 space-y-6">
+                {/* Mensaje de Estado de Pago */}
+                {repair.status === 'listo' && (
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900/50 rounded-lg p-4 mb-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-yellow-800 dark:text-yellow-400">Equipo Listo para Entrega</h4>
+                        <p className="text-sm text-yellow-700 dark:text-yellow-500/90 mt-1">
+                          El equipo está listo. Para entregarlo, debe procesar el pago desde el módulo de <strong>Punto de Venta (POS)</strong>.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Cliente */}
                   <div className="space-y-4">
@@ -340,6 +377,21 @@ export function RepairDetailDialog({
                         <span className="text-white/90 text-sm font-medium uppercase tracking-wide">
                           Costo de la Reparación
                         </span>
+                        {repair.status === 'entregado' && (
+                           <Badge variant="secondary" className="bg-white/90 text-emerald-700 hover:bg-white font-bold ml-2">
+                              PAGADO Y ENTREGADO
+                           </Badge>
+                        )}
+                        {repair.status === 'listo' && (
+                           <Badge variant="secondary" className="bg-yellow-400 text-yellow-900 hover:bg-yellow-400 font-bold ml-2 border-none">
+                              PENDIENTE DE PAGO
+                           </Badge>
+                        )}
+                        {repair.paymentStatus === 'parcial' && repair.status !== 'entregado' && (
+                           <Badge variant="secondary" className="bg-blue-400 text-blue-900 hover:bg-blue-400 font-bold ml-2 border-none">
+                              PAGO PARCIAL
+                           </Badge>
+                        )}
                       </div>
                       <div className="flex items-baseline gap-3">
                         <span className="font-bold text-white text-4xl">
@@ -354,6 +406,20 @@ export function RepairDetailDialog({
                           </Badge>
                         )}
                       </div>
+                      {/* Información detallada del pago */}
+                      {repair.paymentStatus === 'parcial' && repair.paidAmount !== undefined && repair.paidAmount > 0 && (
+                        <div className="mt-2 text-white/90 text-sm">
+                          <div className="flex justify-between border-b border-white/20 pb-1 mb-1">
+                            <span>Pagado:</span>
+                            <span className="font-semibold">{formatCurrency(repair.paidAmount)}</span>
+                          </div>
+                          <div className="flex justify-between font-bold text-white">
+                            <span>Restante:</span>
+                            <span>{formatCurrency((repair.finalCost || repair.estimatedCost || 0) - repair.paidAmount)}</span>
+                          </div>
+                        </div>
+                      )}
+                      
                       {repair.finalCost === null || repair.finalCost === undefined ? (
                         <p className="text-white/80 text-xs">
                           * Costo estimado - El costo final será determinado al completar el diagnóstico
@@ -722,8 +788,8 @@ export function RepairDetailDialog({
                         No hay piezas registradas para esta reparación.
                       </div>
                     ) : (
-                      <div className="border rounded-lg overflow-hidden">
-                        <table className="w-full text-sm">
+                      <div className="border rounded-lg overflow-x-auto">
+                        <table className="w-full text-sm min-w-[600px]">
                           <thead className="bg-muted/50 text-muted-foreground font-medium">
                             <tr>
                               <th className="px-4 py-3 text-left">Pieza</th>
@@ -833,10 +899,27 @@ export function RepairDetailDialog({
           </ScrollArea>
         </Tabs>
         
-        <DialogFooter className="p-4 border-t bg-background flex justify-between sm:justify-end gap-2">
+        <DialogFooter className="p-4 border-t bg-background flex flex-wrap justify-between sm:justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
             Cerrar
           </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2 sm:hidden">
+                <Printer className="h-4 w-4" />
+                Imprimir
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handlePrint('customer')}>
+                Comprobante Cliente
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handlePrint('technician')}>
+                Ficha Técnica
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -848,7 +931,15 @@ export function RepairDetailDialog({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => handleShare('whatsapp')}>
                 <MessageCircle className="mr-2 h-4 w-4" />
-                WhatsApp
+                Enviar Texto por WhatsApp
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleShare('whatsapp-pdf')}>
+                <FileText className="mr-2 h-4 w-4" />
+                PDF para WhatsApp
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handlePrint('customer')}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleShare('copy')}>
                 <Copy className="mr-2 h-4 w-4" />

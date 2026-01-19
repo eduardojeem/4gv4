@@ -19,7 +19,9 @@ import { Bell, Search, LogOut, User, Settings, Menu, AlertCircle } from 'lucide-
 import { Input } from '@/components/ui/input'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { NotificationSystem, useNotifications } from '@/components/dashboard/notification-system'
 import { useAuth } from '@/contexts/auth-context'
+import { useProducts } from '@/hooks/useProducts'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useDashboardSearch } from '@/hooks/use-dashboard-search'
 import { cn } from '@/lib/utils'
@@ -38,6 +40,41 @@ export const Header = memo(function Header() {
   const { toggleSidebar } = useDashboardLayout()
   const { search } = useDashboardSearch()
   const { user, signOut } = useAuth()
+  
+  // Products logic for notifications
+  const { products, loadProducts } = useProducts()
+
+  // Notifications logic
+  const { 
+    notifications, 
+    addNotification,
+    markAsRead, 
+    markAllAsRead, 
+    deleteNotification, 
+    clearAll,
+    generateStockNotifications
+  } = useNotifications()
+
+  // Load products periodically to check for low stock
+  useEffect(() => {
+    // Initial load
+    loadProducts({ is_active: true })
+
+    // Check every 5 minutes
+    const interval = setInterval(() => {
+      loadProducts({ is_active: true })
+    }, 5 * 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [loadProducts])
+
+  // Generate notifications when products change
+  useEffect(() => {
+    if (products.length > 0) {
+      generateStockNotifications(products)
+    }
+  }, [products, generateStockNotifications])
+
   // Prefetch critical routes
   useEffect(() => {
     router.prefetch('/dashboard/profile')
@@ -148,27 +185,35 @@ export const Header = memo(function Header() {
         />
 
         {/* Right side */}
-        <div className="flex items-center space-x-2 sm:space-x-4">
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSearchOpen(true)}>
-            <Search className="h-5 w-5" />
-          </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="md:hidden h-9 w-9" onClick={() => setSearchOpen(true)}>
+              <Search className="h-5 w-5" />
+            </Button>
 
-          {/* Notifications */}
-          <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground transition-colors">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold rounded-full h-2 w-2 ring-2 ring-background animate-pulse" />
-          </Button>
+            {/* Notifications */}
+            <NotificationSystem 
+              notifications={notifications}
+              onMarkAsRead={markAsRead}
+              onMarkAllAsRead={markAllAsRead}
+              onDeleteNotification={deleteNotification}
+              onClearAll={clearAll}
+            />
 
-          {/* Theme Toggle */}
-          <ThemeToggle />
+            {/* Theme Toggle */}
+            <ThemeToggle />
+          </div>
+
+          {/* Separator */}
+          <div className="h-5 w-px bg-border/60 mx-1 hidden sm:block" />
 
           {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-9 w-9 rounded-full ring-2 ring-transparent hover:ring-primary/10 transition-all ml-1">
-                <Avatar className="h-9 w-9 border border-border">
+              <Button variant="ghost" className="relative h-9 w-9 rounded-full ring-2 ring-transparent hover:ring-primary/10 transition-all p-0">
+                <Avatar className="h-8 w-8 border border-border shadow-sm">
                   <AvatarImage src={user?.profile?.avatar_url || "/avatars/01.svg"} alt={user?.profile?.name || "Usuario"} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-medium">{userInitials}</AvatarFallback>
+                  <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">{userInitials}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>

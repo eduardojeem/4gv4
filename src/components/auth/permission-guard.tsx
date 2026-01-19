@@ -110,14 +110,7 @@ export function RouteGuard({ children, route, fallback, redirectTo }: RouteGuard
     return <>{fallback}</>
   }
 
-  return (
-    <>
-      <AccessDenied />
-      <div className="mt-8 max-w-md mx-auto">
-        <PermissionDebugger requirements={ROUTE_PERMISSIONS[route]} />
-      </div>
-    </>
-  )
+  return <AccessDenied />
 }
 
 // HOC para proteger componentes
@@ -151,44 +144,6 @@ export function usePermissionGuard(requirements: PermissionRequirement) {
 
 // Componente para mostrar información de permisos (útil para debugging)
 export function PermissionDebugger({ requirements }: { requirements: PermissionRequirement }) {
-  const { user } = useAuth()
-  const { isAuthorized, getUserPermissions } = usePermissions()
-  const userPermissions = getUserPermissions()
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (process.env.NODE_ENV !== 'development' || !mounted) {
-    return null
-  }
-
-  return (
-    <div className="bg-gray-100 p-4 rounded-lg text-xs space-y-2">
-      <div>
-        <strong>Estado del Usuario:</strong>
-        <ul className="list-disc list-inside text-gray-600">
-          <li>ID: {user?.id || 'No autenticado'}</li>
-          <li>Email: {user?.email || 'No disponible'}</li>
-          <li>Rol: {user?.role || 'No definido'}</li>
-        </ul>
-      </div>
-      <div>
-        <strong>Permisos del usuario:</strong>
-        <ul className="list-disc list-inside">
-          {userPermissions.map(p => (
-            <li key={p.id}>{p.name} ({p.id})</li>
-          ))}
-        </ul>
-      </div>
-      <div>
-        <strong>Requisitos:</strong>
-        <pre>{JSON.stringify(requirements, null, 2)}</pre>
-      </div>
-      <div>
-        <strong>Autorizado:</strong> {isAuthorized(requirements) ? '✅' : '❌'}
-      </div>
-    </div>
-  )
+  // Componente deshabilitado - no mostrar información sensible
+  return null
 }

@@ -75,6 +75,9 @@ export async function uploadFile(
     const supabase = createClient()
     
     // Check if bucket exists first
+    // Note: We skip this check to avoid RLS issues listing buckets. 
+    // If the bucket doesn't exist, the upload will fail anyway.
+    /*
     const bucketExists = await checkBucketExists(bucketName)
     if (!bucketExists) {
       return {
@@ -82,6 +85,7 @@ export async function uploadFile(
         error: `Storage bucket '${bucketName}' not found. Please contact administrator to set up storage.`
       }
     }
+    */
     
     const { error: uploadError } = await supabase.storage
       .from(bucketName)

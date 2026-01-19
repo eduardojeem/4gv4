@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
+import { useAuth } from '@/contexts/auth-context'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   LayoutDashboard,
   Users,
@@ -68,6 +70,7 @@ export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { sidebarCollapsed: collapsed, toggleSidebar, userRole, setUserRole } = useDashboardLayout()
+  const { user } = useAuth()
 
   // Load user role from Supabase on mount
   useEffect(() => {
@@ -210,12 +213,15 @@ export const Sidebar = memo(function Sidebar() {
         {!collapsed && (
           <div className="p-4 border-t border-border">
             <div className="flex items-center space-x-3">
-              <div className="bg-muted rounded-full h-8 w-8 flex items-center justify-center">
-                <span className="text-sm font-medium text-muted-foreground">U</span>
-              </div>
+              <Avatar className="h-8 w-8 border border-border shadow-sm">
+                <AvatarImage src={user?.profile?.avatar_url || "/avatars/01.svg"} alt={user?.profile?.name || "Usuario"} />
+                <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">
+                  {user?.profile?.name ? user.profile.name.substring(0, 2).toUpperCase() : 'U'}
+                </AvatarFallback>
+              </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">
-                  Usuario
+                  {user?.profile?.name || 'Usuario'}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
                   {isDev ? 'todos (dev)' : userRole}

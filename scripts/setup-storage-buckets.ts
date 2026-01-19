@@ -7,6 +7,12 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { config } from '../src/lib/config'
+import dotenv from 'dotenv'
+import path from 'path'
+
+// Cargar variables de entorno
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+dotenv.config({ path: path.resolve(process.cwd(), '.env') })
 
 const REQUIRED_BUCKETS = [
   {
@@ -32,15 +38,15 @@ const REQUIRED_BUCKETS = [
 async function setupStorageBuckets() {
   console.log('🚀 Configurando buckets de Supabase Storage...\n')
 
-  if (!config.supabase.isConfigured) {
-    console.error('❌ Supabase no está configurado. Verifica las variables de entorno.')
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || config.supabase.url
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || config.supabase.anonKey
+
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('❌ Faltan credenciales de Supabase (URL o Service Key).')
     process.exit(1)
   }
 
-  const supabase = createClient(
-    config.supabase.url,
-    config.supabase.serviceKey || config.supabase.anonKey
-  )
+  const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
     // Verificar buckets existentes
@@ -154,8 +160,10 @@ async function setupStorageBuckets() {
   }
 }
 
+import { fileURLToPath } from 'url'
+
 // Ejecutar si es llamado directamente
-if (require.main === module) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   setupStorageBuckets()
 }
 

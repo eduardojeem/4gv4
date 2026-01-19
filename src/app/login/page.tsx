@@ -43,7 +43,7 @@ export default function LoginPage() {
     setError('')
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -60,6 +60,22 @@ export default function LoginPage() {
           setError(msg)
         }
       } else {
+        if (data?.user) {
+          try {
+            const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
+            await supabase.rpc('log_auth_event', {
+              p_user_id: data.user.id,
+              p_action: 'login',
+              p_success: true,
+              p_ip_address: undefined,
+              p_user_agent: userAgent,
+              p_details: { email }
+            })
+          } catch (logError) {
+            console.error('Error logging auth event from login page:', logError)
+          }
+        }
+
         try { localStorage.setItem('auth.rememberMe', rememberMe ? '1' : '0') } catch { }
         toast.success('Bienvenido de nuevo')
         router.push('/dashboard')

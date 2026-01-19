@@ -24,6 +24,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "4G celulares - Sistema de Gestión",
   description: "Sistema completo de gestión para reparación de celulares y punto de venta",
+  icons: {
+    icon: '/globe.svg',
+  },
 };
 
 export default function RootLayout({
