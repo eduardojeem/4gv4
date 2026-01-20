@@ -8,6 +8,8 @@ interface SessionInfo {
   deviceType: 'mobile' | 'tablet' | 'desktop'
   browser: string
   os: string
+  country?: string
+  city?: string
 }
 
 const detectDeviceType = (userAgent: string): 'mobile' | 'tablet' | 'desktop' => {
@@ -34,13 +36,42 @@ const detectOS = (userAgent: string): string => {
   return 'Unknown'
 }
 
-const getSessionInfo = (): SessionInfo => {
+const getGeolocation = async (): Promise<{ country?: string; city?: string }> => {
+  try {
+    // Use ipapi.co for free IP geolocation (no API key required)
+    const response = await fetch('https://ipapi.co/json/', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch geolocation')
+    }
+
+    const data = await response.json()
+    return {
+      country: data.country_name || undefined,
+      city: data.city || undefined
+    }
+  } catch (error) {
+    console.warn('Could not fetch geolocation:', error)
+    return {}
+  }
+}
+
+const getSessionInfo = async (): Promise<SessionInfo> => {
   const userAgent = navigator.userAgent
+  const location = await getGeolocation()
+
   return {
     userAgent,
     deviceType: detectDeviceType(userAgent),
     browser: detectBrowser(userAgent),
-    os: detectOS(userAgent)
+    os: detectOS(userAgent),
+    country: location.country,
+    city: location.city
   }
 }
 
@@ -50,28 +81,42 @@ export function useSessionTracking() {
   const registerSession = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+      if (!session) {
+        console.log('⚠️ No session found, skipping registration')
+        return
+      }
 
-      const sessionInfo = getSessionInfo()
+      console.log('📝 Registering session for user:', session.user.id)
+
+      const sessionInfo = await getSessionInfo()
+      console.log('🌍 Session info:', sessionInfo)
 
       // Registrar o actualizar la sesión en la base de datos
+      const sessionData = {
+        user_id: session.user.id,
+        session_id: session.access_token.substring(0, 50), // Usar parte del token como ID único
+        user_agent: sessionInfo.userAgent,
+        device_type: sessionInfo.deviceType,
+        browser: sessionInfo.browser,
+        os: sessionInfo.os,
+        country: sessionInfo.country,
+        city: sessionInfo.city,
+        is_active: true,
+        last_activity: new Date().toISOString()
+      }
+
+      console.log('💾 Attempting to save session:', sessionData)
+
       const { error } = await supabase
         .from('user_sessions')
-        .upsert({
-          user_id: session.user.id,
-          session_id: session.access_token.substring(0, 50), // Usar parte del token como ID único
-          user_agent: sessionInfo.userAgent,
-          device_type: sessionInfo.deviceType,
-          browser: sessionInfo.browser,
-          os: sessionInfo.os,
-          is_active: true,
-          last_activity: new Date().toISOString()
-        }, {
+        .upsert(sessionData, {
           onConflict: 'session_id'
         })
 
       if (error) {
-        console.error('Error registering session:', error)
+        console.error('❌ Error registering session:', error)
+      } else {
+        console.log('✅ Session registered successfully!')
       }
     } catch (error) {
       console.error('Error in registerSession:', error)
@@ -189,7 +234,7 @@ export function useSessionTracking() {
       if (!session) return
 
       const sessionId = session.access_token.substring(0, 50)
-      
+
       // Usar sendBeacon para enviar la petición de forma asíncrona
       navigator.sendBeacon(
         '/api/close-session',

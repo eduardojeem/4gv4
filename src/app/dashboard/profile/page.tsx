@@ -17,9 +17,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { useTheme } from '@/contexts/theme-context'
 import { RecentActivity } from '@/components/dashboard/recent-activity'
-import { 
-  Mail, Phone, User, LogOut, Palette, Shield, Bell, Building2, MapPin, 
-  Save, RefreshCw, Settings, Key, Eye, Globe, 
+import {
+  Mail, Phone, User, LogOut, Palette, Shield, Bell, Building2, MapPin,
+  Save, RefreshCw, Settings, Key, Eye, Globe,
   Smartphone, Monitor, Sun, Moon, Zap, X, Copy,
   Activity, Clock, Calendar, Award, TrendingUp,
   AlertCircle, CheckCircle, Briefcase, ChevronRight
@@ -36,11 +36,20 @@ import { ChangePasswordDialog } from '@/components/profile/change-password-dialo
 import { SecuritySection } from '@/components/profile/security-section'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
+import { formatDistanceToNow } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { logAndTranslateError } from '@/lib/error-translator'
+import { logger } from '@/lib/logger'
 
-// Validaciones con Zod (mismo esquema)
+// Validaciones con Zod (mejoradas con validación de dominio)
 const profileSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
-  email: z.string().email(),
+  email: z.string()
+    .email('Email inválido')
+    .refine((email) => {
+      const [, domain] = email.split('@')
+      return domain && domain.includes('.') && domain.split('.').every(part => part.length > 0)
+    }, 'El dominio del email no es válido'),
   phone: z.string().optional(),
   avatarUrl: z.string().optional(),
   department: z.string().optional(),
@@ -84,7 +93,7 @@ export default function UserProfilePage() {
   const [loading, setLoading] = useState(false)
   const [loadingUser, setLoadingUser] = useState(true)
   const [activeSection, setActiveSection] = useState('profile') // 'profile', 'preferences', 'security'
-  
+
   const [profile, setProfile] = useState<UserProfile>({
     name: '',
     email: '',
@@ -98,13 +107,13 @@ export default function UserProfilePage() {
     timezone: 'America/Asuncion',
     socialLinks: { twitter: '', linkedin: '', github: '' }
   })
-  
+
   const [initialProfile, setInitialProfile] = useState<UserProfile>(profile)
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const [isDirty, setIsDirty] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [role, setRole] = useState<string | null>(null)
-  
+
   const [prefs, setPrefs] = useState<ProfilePreferences>({
     notifications: true,
     compactMode: false,
@@ -118,7 +127,7 @@ export default function UserProfilePage() {
   const [initialPrefs, setInitialPrefs] = useState<ProfilePreferences>(prefs)
   const [isDirtyPrefs, setIsDirtyPrefs] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  
+
   const [stats, setStats] = useState<ProfileStats>({
     totalSales: 0,
     completedTasks: 0,
@@ -162,7 +171,7 @@ export default function UserProfilePage() {
             timezone: 'America/Asuncion',
             socialLinks: { twitter: '', linkedin: '', github: '' }
           }
-          
+
           setProfile(baseProfile)
           setInitialProfile(baseProfile)
 
@@ -172,7 +181,7 @@ export default function UserProfilePage() {
               .select('*')
               .eq('id', user.id)
               .maybeSingle()
-              
+
             if (profileRow) {
               const mergedProfile = {
                 ...baseProfile,
@@ -204,7 +213,7 @@ export default function UserProfilePage() {
               .eq('user_id', user.id)
               .maybeSingle()
             if (roleRow?.role) setRole(roleRow.role)
-          } catch {}
+          } catch { }
 
           if (config.supabase.isConfigured) {
             try {
@@ -320,8 +329,8 @@ export default function UserProfilePage() {
         }
       } catch (e) {
         console.error('Error loading user', e)
-      } finally { 
-        setLoadingUser(false) 
+      } finally {
+        setLoadingUser(false)
       }
     }
 
@@ -333,7 +342,7 @@ export default function UserProfilePage() {
           setPrefs({ ...prefs, ...parsed })
           setInitialPrefs({ ...prefs, ...parsed })
         }
-      } catch {}
+      } catch { }
     }
 
     loadUser()
@@ -413,11 +422,14 @@ export default function UserProfilePage() {
           })
         if (upsertError) throw upsertError
       }
+
+      logger.info('Profile updated successfully')
       toast.success('Perfil actualizado')
       setInitialProfile(profile)
       setIsDirty(false)
     } catch (error: any) {
-      toast.error(error.message || 'Error al actualizar')
+      const userMessage = logAndTranslateError(error, 'Profile Update')
+      toast.error(userMessage)
     } finally {
       setLoading(false)
     }
@@ -492,9 +504,9 @@ export default function UserProfilePage() {
                 </div>
               )}
               {(isDirty || isDirtyPrefs) && (
-                <Button 
-                  onClick={saveAll} 
-                  disabled={loading} 
+                <Button
+                  onClick={saveAll}
+                  disabled={loading}
                   className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 hover:scale-105"
                 >
                   {loading ? (
@@ -555,16 +567,16 @@ export default function UserProfilePage() {
                       onClick={() => setActiveSection(item.id)}
                       className={cn(
                         "w-full flex items-center justify-between px-4 py-3.5 text-sm font-semibold rounded-xl transition-all duration-300 group",
-                        activeSection === item.id 
-                          ? "bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white shadow-xl shadow-blue-500/30 scale-[1.02]" 
+                        activeSection === item.id
+                          ? "bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white shadow-xl shadow-blue-500/30 scale-[1.02]"
                           : "text-slate-600 dark:text-slate-400 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 dark:hover:from-blue-950/50 dark:hover:to-purple-950/50 hover:text-slate-900 dark:hover:text-white hover:scale-[1.01]"
                       )}
                     >
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           "p-2 rounded-lg transition-all duration-300",
-                          activeSection === item.id 
-                            ? "bg-white/20" 
+                          activeSection === item.id
+                            ? "bg-white/20"
                             : "bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30"
                         )}>
                           <item.icon className={cn(
@@ -582,7 +594,7 @@ export default function UserProfilePage() {
                 </nav>
               </CardContent>
             </Card>
-            
+
             {/* Botón de cerrar sesión con estilo moderno */}
             <Card className="border-none shadow-xl bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 backdrop-blur-xl hover:shadow-2xl transition-all duration-300">
               <CardContent className="p-3">
@@ -635,16 +647,18 @@ export default function UserProfilePage() {
                       </div>
                       <div className="grid gap-5 flex-1 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <Label className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                          <Label htmlFor="profile-name" className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
                             <div className="p-1 bg-blue-100 dark:bg-blue-900/30 rounded">
                               <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                             </div>
                             Nombre Completo
                           </Label>
-                          <Input 
-                            value={profile.name} 
+                          <Input
+                            id="profile-name"
+                            value={profile.name}
                             onChange={(e) => setProfile(p => ({ ...p, name: e.target.value }))}
-                            placeholder="Tu nombre" 
+                            placeholder="Tu nombre"
+                            aria-label="Nombre completo del usuario"
                             className="border-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm h-11"
                           />
                         </div>
@@ -655,24 +669,31 @@ export default function UserProfilePage() {
                             </div>
                             Cargo / Título
                           </Label>
-                          <Input 
-                            value={getRoleLabel(role)} 
+                          <Input
+                            value={getRoleLabel(role)}
                             readOnly
                             disabled
                             className="border-2 border-slate-200 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800/50 cursor-not-allowed h-11 font-medium text-slate-600 dark:text-slate-400"
                           />
                         </div>
                         <div className="space-y-2 sm:col-span-2">
-                          <Label className="text-sm font-bold text-slate-700 dark:text-slate-300">Biografía</Label>
-                          <Textarea 
-                            value={profile.bio} 
-                            onChange={(e) => setProfile(p => ({ ...p, bio: e.target.value }))}
-                            placeholder="Escribe algo sobre ti..." 
+                          <Label htmlFor="profile-bio" className="text-sm font-bold text-slate-700 dark:text-slate-300">Biografía</Label>
+                          <Textarea
+                            id="profile-bio"
+                            value={profile.bio}
+                            onChange={(e) => {
+                              const newBio = e.target.value.slice(0, 500)
+                              setProfile(p => ({ ...p, bio: newBio }))
+                            }}
+                            placeholder="Escribe algo sobre ti..."
                             rows={3}
+                            maxLength={500}
+                            aria-label="Biografía personal"
+                            aria-describedby="bio-char-count"
                             className="resize-none border-2 border-slate-200 dark:border-slate-700 focus:border-pink-500 dark:focus:border-pink-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"
                           />
-                          <p className="text-xs text-right text-slate-500 dark:text-slate-400 font-medium">
-                            {profile.bio?.length || 0}/500
+                          <p id="bio-char-count" className="text-xs text-right text-slate-500 dark:text-slate-400 font-medium" aria-live="polite">
+                            {profile.bio?.length || 0}/500 caracteres
                           </p>
                         </div>
                       </div>
@@ -695,29 +716,33 @@ export default function UserProfilePage() {
                   </CardHeader>
                   <CardContent className="grid gap-5 sm:grid-cols-2 pt-6 relative z-10">
                     <div className="space-y-2">
-                      <Label className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                      <Label htmlFor="profile-email" className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
                         <div className="p-1 bg-blue-100 dark:bg-blue-900/30 rounded">
                           <Mail className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                         </div>
                         Email
                       </Label>
-                      <Input 
-                        value={profile.email} 
-                        disabled 
-                        className="bg-slate-100/80 dark:bg-slate-800/80 border-2 border-slate-200 dark:border-slate-700 backdrop-blur-sm h-11" 
+                      <Input
+                        id="profile-email"
+                        value={profile.email}
+                        disabled
+                        aria-label="Email del usuario (no editable)"
+                        className="bg-slate-100/80 dark:bg-slate-800/80 border-2 border-slate-200 dark:border-slate-700 backdrop-blur-sm h-11"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                      <Label htmlFor="profile-phone" className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
                         <div className="p-1 bg-green-100 dark:bg-green-900/30 rounded">
                           <Phone className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                         </div>
                         Teléfono
                       </Label>
-                      <Input 
-                        value={profile.phone} 
+                      <Input
+                        id="profile-phone"
+                        value={profile.phone}
                         onChange={(e) => setProfile(p => ({ ...p, phone: e.target.value }))}
-                        placeholder="+595..." 
+                        placeholder="+595..."
+                        aria-label="Número de teléfono"
                         className="border-2 border-slate-200 dark:border-slate-700 focus:border-green-500 dark:focus:border-green-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm h-11"
                       />
                     </div>
@@ -728,10 +753,10 @@ export default function UserProfilePage() {
                         </div>
                         Ubicación
                       </Label>
-                      <Input 
-                        value={profile.location} 
+                      <Input
+                        value={profile.location}
                         onChange={(e) => setProfile(p => ({ ...p, location: e.target.value }))}
-                        placeholder="Ciudad, País" 
+                        placeholder="Ciudad, País"
                         className="border-2 border-slate-200 dark:border-slate-700 focus:border-red-500 dark:focus:border-red-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm h-11"
                       />
                     </div>
@@ -742,10 +767,10 @@ export default function UserProfilePage() {
                         </div>
                         Sitio Web
                       </Label>
-                      <Input 
-                        value={profile.website} 
+                      <Input
+                        value={profile.website}
                         onChange={(e) => setProfile(p => ({ ...p, website: e.target.value }))}
-                        placeholder="https://..." 
+                        placeholder="https://..."
                         className="border-2 border-slate-200 dark:border-slate-700 focus:border-purple-500 dark:focus:border-purple-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm h-11"
                       />
                     </div>
@@ -785,8 +810,8 @@ export default function UserProfilePage() {
                               onClick={() => setTheme(m.value as any)}
                               className={cn(
                                 "relative p-4 rounded-xl border-2 text-sm font-medium transition-all duration-200 overflow-hidden group",
-                                theme === m.value 
-                                  ? "border-primary shadow-lg shadow-primary/25 scale-105" 
+                                theme === m.value
+                                  ? "border-primary shadow-lg shadow-primary/25 scale-105"
                                   : "border-border hover:border-primary/50 hover:scale-102"
                               )}
                             >
@@ -853,9 +878,9 @@ export default function UserProfilePage() {
                           </div>
                           <Label className="cursor-pointer font-medium" htmlFor={item.key}>{item.label}</Label>
                         </div>
-                        <Switch 
+                        <Switch
                           id={item.key}
-                          checked={(prefs as any)[item.key]} 
+                          checked={(prefs as any)[item.key]}
                           onCheckedChange={(c) => setPrefs(p => ({ ...p, [item.key]: c }))}
                         />
                       </div>
@@ -909,35 +934,35 @@ export default function UserProfilePage() {
               <SecuritySection userId={userId} role={role} />
             )}
 
-          {activeSection === 'activity' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { label: 'Ventas', value: stats.totalSales, icon: TrendingUp, color: 'text-green-500' },
-                  { label: 'Tareas', value: stats.completedTasks, icon: CheckCircle, color: 'text-blue-500' },
-                  { label: 'Racha', value: `${stats.loginStreak} días`, icon: Zap, color: 'text-orange-500' },
-                  { label: 'Activo', value: stats.lastActivity, icon: Clock, color: 'text-purple-500' },
-                ].map((stat, i) => (
-                  <Card key={i}>
-                    <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2">
-                      <stat.icon className={cn("h-6 w-6", stat.color)} />
-                      <div className="text-xl font-bold">{stat.value}</div>
-                      <div className="text-xs text-muted-foreground">{stat.label}</div>
-                    </CardContent>
-                  </Card>
-                ))}
+            {activeSection === 'activity' && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Ventas', value: stats.totalSales, icon: TrendingUp, color: 'text-green-500' },
+                    { label: 'Tareas', value: stats.completedTasks, icon: CheckCircle, color: 'text-blue-500' },
+                    { label: 'Racha', value: `${stats.loginStreak} días`, icon: Zap, color: 'text-orange-500' },
+                    { label: 'Activo', value: stats.lastActivity, icon: Clock, color: 'text-purple-500' },
+                  ].map((stat, i) => (
+                    <Card key={i}>
+                      <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2">
+                        <stat.icon className={cn("h-6 w-6", stat.color)} />
+                        <div className="text-xl font-bold">{stat.value}</div>
+                        <div className="text-xs text-muted-foreground">{stat.label}</div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Historial Reciente</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <RecentActivity />
+                  </CardContent>
+                </Card>
               </div>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Historial Reciente</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RecentActivity />
-                </CardContent>
-              </Card>
-            </div>
-          )}
+            )}
           </div>
         </div>
       </div>

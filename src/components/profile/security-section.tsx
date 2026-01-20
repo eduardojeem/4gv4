@@ -8,13 +8,13 @@ import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { 
-  Shield, 
-  Key, 
-  Smartphone, 
-  Monitor, 
-  Clock, 
-  MapPin, 
+import {
+  Shield,
+  Key,
+  Smartphone,
+  Monitor,
+  Clock,
+  MapPin,
   AlertTriangle,
   CheckCircle2,
   LogOut,
@@ -25,6 +25,7 @@ import { ChangePasswordDialog } from './change-password-dialog'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { logger } from '@/lib/logger'
 
 interface Session {
   id: string
@@ -61,20 +62,28 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
   const loadSessions = async () => {
     if (!userId) return
-    
+
     try {
       setLoadingSessions(true)
-      
+
       // Obtener sesiones activas desde la base de datos
+      logger.session('Loading sessions for user')
       const { data, error } = await supabase.rpc('get_user_active_sessions', {
         p_user_id: userId
       })
 
-      if (error) throw error
+      if (error) {
+        logger.error('Error from RPC:', error)
+        throw error
+      }
+
+      logger.debug('Sessions loaded from database', { count: data?.length })
 
       // Obtener la sesión actual para marcarla
       const { data: { session: currentSession } } = await supabase.auth.getSession()
       const currentSessionId = currentSession?.access_token.substring(0, 50)
+
+      logger.session('Current session identified')
 
       const sessionsData: Session[] = (data || []).map((s: any) => ({
         id: s.id,
@@ -90,9 +99,10 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
         is_current: s.session_id === currentSessionId
       }))
 
+      logger.debug('Sessions mapped successfully')
       setSessions(sessionsData)
     } catch (error) {
-      console.error('Error loading sessions:', error)
+      logger.error('Error loading sessions:', error)
       setSessionsError('No se pudieron cargar las sesiones')
     } finally {
       setLoadingSessions(false)
@@ -101,7 +111,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
   const loadSecuritySettings = async () => {
     if (!userId) return
-    
+
     try {
       const { data, error } = await supabase
         .from('user_security_settings')
@@ -145,7 +155,14 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
   const handleLogoutSession = async (sessionId: string) => {
     try {
-      // Primero marcamos la sesión como cerrada en nuestra tabla
+      // Verificar si es la sesión actual (validación del lado del cliente)
+      const sessionToClose = sessions.find(s => s.session_id === sessionId)
+      if (sessionToClose?.is_current) {
+        toast.error('No puedes cerrar tu sesión actual. Usa "Cerrar sesión" en su lugar.')
+        return
+      }
+
+      // Llamar a la función RPC mejorada
       const { data, error } = await supabase.rpc('close_user_session', {
         p_session_id: sessionId,
         p_user_id: userId
@@ -153,16 +170,20 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
       if (error) throw error
 
-      if (data) {
-        toast.success('Sesión cerrada correctamente')
-        
-        // Si es posible, también invalidar el token en Supabase Auth
-        // Nota: Supabase Auth no permite invalidar tokens de otras sesiones directamente
-        // pero al marcar como cerrada en nuestra tabla, el usuario no podrá usarla
-        
+      // Manejar la respuesta JSON de la función mejorada
+      if (data?.success) {
+        toast.success(data.message || 'Sesión cerrada correctamente')
         loadSessions()
       } else {
-        toast.error('No se pudo cerrar la sesión')
+        // Manejar errores específicos del servidor
+        if (data?.error === 'CURRENT_SESSION') {
+          toast.error('No puedes cerrar tu sesión actual. Usa "Cerrar sesión" en su lugar.')
+        } else if (data?.error === 'SESSION_NOT_FOUND') {
+          toast.error('La sesión no existe o ya fue cerrada')
+          loadSessions() // Recargar para actualizar la lista
+        } else {
+          toast.error(data?.message || 'No se pudo cerrar la sesión')
+        }
       }
     } catch (error) {
       console.error('Error closing session:', error)
@@ -219,9 +240,9 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
 
       // Cerrar sesión global en Supabase Auth
       await supabase.auth.signOut({ scope: 'global' })
-      
+
       toast.success('Todas las sesiones cerradas. Redirigiendo...')
-      
+
       setTimeout(() => {
         window.location.href = '/login'
       }, 1500)
@@ -323,7 +344,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
               <AlertTriangle className="h-5 w-5 text-amber-600" />
               Alertas de Seguridad
             </h3>
-            
+
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                 <div>
@@ -415,7 +436,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
           {!loadingSessions && !sessionsError && sessions.length > 0 && (
             <>
               {/* Resumen de sesiones */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
                 <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 border border-blue-200 dark:border-blue-800">
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
@@ -424,20 +445,6 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                     <div>
                       <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{sessions.length}</p>
                       <p className="text-xs text-blue-600 dark:text-blue-400">Sesiones activas</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border border-green-200 dark:border-green-800">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
-                      <Smartphone className="h-5 w-5 text-green-600 dark:text-green-400" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                        {sessions.filter(s => s.device_type === 'mobile').length}
-                      </p>
-                      <p className="text-xs text-green-600 dark:text-green-400">Dispositivos móviles</p>
                     </div>
                   </div>
                 </div>
@@ -455,84 +462,124 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                     </div>
                   </div>
                 </div>
+
+                <div className="p-4 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                      <Smartphone className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                        {sessions.filter(s => s.device_type === 'mobile').length}
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400">Móviles</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 border border-orange-200 dark:border-orange-800">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-orange-100 dark:bg-orange-900/50 rounded-lg">
+                      <Smartphone className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
+                        {sessions.filter(s => s.device_type === 'tablet').length}
+                      </p>
+                      <p className="text-xs text-orange-600 dark:text-orange-400">Tablets</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-3">
-                {sessions.map((session) => {
-                  const DeviceIcon = getDeviceIcon(session.device_type)
-                  const deviceType = getDeviceType(session.device_type)
-                  const browser = session.browser
-                  const isCurrentSession = session.is_current
+                {sessions
+                  .sort((a, b) => {
+                    // Current session always first
+                    if (a.is_current) return -1
+                    if (b.is_current) return 1
+                    // Then sort by last activity
+                    return new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime()
+                  })
+                  .map((session) => {
+                    const DeviceIcon = getDeviceIcon(session.device_type)
+                    const deviceType = getDeviceType(session.device_type)
+                    const browser = session.browser
+                    const isCurrentSession = session.is_current
 
-                  return (
-                    <div
-                      key={session.id}
-                      className={cn(
-                        "p-4 rounded-xl border-2 transition-all duration-200",
-                        isCurrentSession
-                          ? "bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-500/50"
-                          : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className={cn(
-                            "p-2 rounded-lg",
-                            isCurrentSession
-                              ? "bg-green-100 dark:bg-green-900/50"
-                              : "bg-slate-200 dark:bg-slate-700"
-                          )}>
-                            <DeviceIcon className={cn(
-                              "h-5 w-5",
-                              isCurrentSession
-                                ? "text-green-600 dark:text-green-400"
-                                : "text-slate-600 dark:text-slate-400"
-                            )} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="font-semibold text-sm">
-                                {browser} • {deviceType}
-                              </p>
-                              {isCurrentSession && (
-                                <Badge className="bg-green-500 text-white text-xs">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Sesión actual
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="space-y-1 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1.5">
-                                <Monitor className="h-3 w-3" />
-                                <span>{session.os}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <MapPin className="h-3 w-3" />
-                                <span>{session.ip_address}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="h-3 w-3" />
-                                <span>Última actividad: {formatDate(session.last_activity)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        {!isCurrentSession && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleLogoutSession(session.session_id)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 gap-2 px-3"
-                            title="Cerrar esta sesión"
-                          >
-                            <LogOut className="h-4 w-4" />
-                            <span className="text-xs font-medium">Cerrar</span>
-                          </Button>
+                    return (
+                      <div
+                        key={session.id}
+                        className={cn(
+                          "p-4 rounded-xl border-2 transition-all duration-200 hover:shadow-md",
+                          isCurrentSession
+                            ? "bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-500/50 shadow-sm"
+                            : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
                         )}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3 flex-1">
+                            <div className={cn(
+                              "p-2 rounded-lg",
+                              isCurrentSession
+                                ? "bg-green-100 dark:bg-green-900/50"
+                                : "bg-slate-200 dark:bg-slate-700"
+                            )}>
+                              <DeviceIcon className={cn(
+                                "h-5 w-5",
+                                isCurrentSession
+                                  ? "text-green-600 dark:text-green-400"
+                                  : "text-slate-600 dark:text-slate-400"
+                              )} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <p className="font-semibold text-sm">
+                                  {browser} • {deviceType}
+                                </p>
+                                {isCurrentSession && (
+                                  <Badge className="bg-green-500 text-white text-xs">
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Sesión actual
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="space-y-1 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1.5">
+                                  <Monitor className="h-3 w-3" />
+                                  <span>{session.os}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <MapPin className="h-3 w-3" />
+                                  <span>
+                                    {session.country && session.city
+                                      ? `${session.city}, ${session.country}`
+                                      : session.country || session.city || session.ip_address}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Clock className="h-3 w-3" />
+                                  <span>Última actividad: {formatDate(session.last_activity)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          {!isCurrentSession && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleLogoutSession(session.session_id, session.is_current)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 gap-2 px-3 shrink-0"
+                              title="Cerrar esta sesión"
+                            >
+                              <LogOut className="h-4 w-4" />
+                              <span className="text-xs font-medium">Cerrar</span>
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
               </div>
 
               {sessions.length > 1 && (
@@ -546,12 +593,12 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                           Múltiples sesiones detectadas
                         </p>
                         <p className="text-sm text-amber-700 dark:text-amber-300">
-                          Tienes {sessions.length} sesiones activas en diferentes dispositivos. 
-                          Si no reconoces alguna, ciérrala inmediatamente por seguridad.
+                          Tienes {sessions.length} sesiones activas en diferentes dispositivos.
+                          Si no reconoces alguna de estas ubicaciones o dispositivos, ciérrala inmediatamente por seguridad.
                         </p>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <Button
                         variant="outline"
@@ -565,7 +612,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                           <div className="text-xs opacity-75">Mantener solo esta sesión</div>
                         </div>
                       </Button>
-                      
+
                       <Button
                         variant="destructive"
                         size="lg"

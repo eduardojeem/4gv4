@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,7 +14,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Key, Loader2, Eye, EyeOff, Check, X } from 'lucide-react'
+import { Key, Loader2, Eye, EyeOff, Check, X, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { z } from 'zod'
 
@@ -26,6 +26,9 @@ const passwordSchema = z.object({
   path: ["confirmPassword"],
 })
 
+const RATE_LIMIT_KEY = 'last_password_change'
+const COOLDOWN_MS = 60000 // 1 minuto
+
 export function ChangePasswordDialog() {
   const [open, setOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -35,12 +38,52 @@ export function ChangePasswordDialog() {
     confirmPassword: ''
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [cooldownRemaining, setCooldownRemaining] = useState(0)
   const supabase = createClient()
+
+  // Check cooldown on mount and when dialog opens
+  useEffect(() => {
+    if (open) {
+      checkCooldown()
+    }
+  }, [open])
+
+  // Update countdown timer
+  useEffect(() => {
+    if (cooldownRemaining > 0) {
+      const timer = setInterval(() => {
+        setCooldownRemaining(prev => Math.max(0, prev - 1000))
+      }, 1000)
+      return () => clearInterval(timer)
+    }
+  }, [cooldownRemaining])
+
+  const checkCooldown = () => {
+    try {
+      const lastChange = localStorage.getItem(RATE_LIMIT_KEY)
+      if (lastChange) {
+        const elapsed = Date.now() - parseInt(lastChange)
+        const remaining = COOLDOWN_MS - elapsed
+        if (remaining > 0) {
+          setCooldownRemaining(remaining)
+        }
+      }
+    } catch (error) {
+      // Ignore localStorage errors
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrors({})
-    
+
+    // Check rate limit
+    if (cooldownRemaining > 0) {
+      const seconds = Math.ceil(cooldownRemaining / 1000)
+      toast.error(`Debes esperar ${seconds} segundos antes de cambiar la contraseña nuevamente`)
+      return
+    }
+
     try {
       const result = passwordSchema.safeParse(formData)
       if (!result.success) {
@@ -59,9 +102,17 @@ export function ChangePasswordDialog() {
 
       if (error) throw error
 
+      // Set cooldown
+      try {
+        localStorage.setItem(RATE_LIMIT_KEY, Date.now().toString())
+      } catch (error) {
+        // Ignore localStorage errors
+      }
+
       toast.success('Contraseña actualizada correctamente')
       setOpen(false)
       setFormData({ password: '', confirmPassword: '' })
+      setCooldownRemaining(COOLDOWN_MS)
     } catch (error: any) {
       toast.error(error.message || 'Error al actualizar contraseña')
     } finally {
@@ -86,12 +137,21 @@ export function ChangePasswordDialog() {
     return 'bg-green-500'
   }
 
+  const isOnCooldown = cooldownRemaining > 0
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="w-full justify-start gap-2">
+        <Button variant="outline" className="w-full justify-start gap-2" disabled={isOnCooldown}>
           <Key className="h-4 w-4" />
-          Cambiar contraseña
+          {isOnCooldown ? (
+            <span className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" />
+              Espera {Math.ceil(cooldownRemaining / 1000)}s
+            </span>
+          ) : (
+            'Cambiar contraseña'
+          )}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
@@ -129,8 +189,8 @@ export function ChangePasswordDialog() {
             {formData.password && (
               <div className="space-y-1">
                 <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-300 ${getStrengthColor(strength)}`} 
+                  <div
+                    className={`h-full transition-all duration-300 ${getStrengthColor(strength)}`}
                     style={{ width: `${strength}%` }}
                   />
                 </div>
