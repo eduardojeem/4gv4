@@ -6,7 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { CartItem } from '@/hooks/usePOS'
 import { formatCurrency } from '@/lib/currency'
-import { formatInvoiceHTML, formatReceiptText, InvoiceData } from '@/lib/invoice-generator'
+import { 
+    formatInvoiceHTML, 
+    formatReceiptText, 
+    formatReceiptForPrinter,
+    formatThermalReceipt,
+    formatReceiptWithQR,
+    formatReceiptLargeText,
+    formatThermalReceiptXL,
+    InvoiceData 
+} from '@/lib/invoice-generator'
 
 interface ReceiptViewerProps {
     saleNumber: string
@@ -206,62 +215,250 @@ export function ReceiptViewer({
                 </div>
 
                 {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-3">
-                    <Button
-                        onClick={handlePrint}
-                        variant="outline"
-                        className="w-full"
-                    >
-                        <Printer className="h-4 w-4 mr-2" />
-                        Imprimir
-                    </Button>
+                <div className="space-y-4">
+                    {/* Sección: Impresión Estándar */}
+                    <div>
+                        <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Impresión Estándar</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Button
+                                onClick={handlePrint}
+                                variant="outline"
+                                className="w-full"
+                            >
+                                <Printer className="h-4 w-4 mr-2" />
+                                HTML
+                            </Button>
 
-                    <Button
-                        onClick={handleDownload}
-                        variant="outline"
-                        className="w-full"
-                    >
-                        <Download className="h-4 w-4 mr-2" />
-                        Descargar PDF
-                    </Button>
+                            <Button
+                                onClick={() => {
+                                    const invoiceData: InvoiceData = {
+                                        invoiceNumber: saleNumber,
+                                        date: new Date().toISOString(),
+                                        sellerName: 'Mi Empresa',
+                                        sellerAddress: 'Dirección de la empresa',
+                                        sellerTaxId: '80012345-6',
+                                        sellerPhone: '123-456-7890',
+                                        sellerEmail: 'info@miempresa.com',
+                                        customerName: customerName || 'Cliente General',
+                                        items: items.map(item => ({
+                                            description: item.name,
+                                            quantity: item.quantity,
+                                            unitPrice: item.price,
+                                            discount: item.discount,
+                                            subtotal: item.subtotal
+                                        })),
+                                        subtotal,
+                                        discount,
+                                        tax,
+                                        total,
+                                        paymentMethod,
+                                        amountPaid,
+                                        change
+                                    }
 
-                    <Button
-                        onClick={handleEmail}
-                        variant="outline"
-                        className="w-full"
-                    >
-                        <Mail className="h-4 w-4 mr-2" />
-                        Enviar Email
-                    </Button>
+                                    const thermalReceipt = formatReceiptForPrinter(invoiceData, '48mm')
+                                    const printWindow = window.open('', '_blank')
+                                    if (printWindow) {
+                                        printWindow.document.write(`<pre style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">${thermalReceipt}</pre>`)
+                                        printWindow.document.close()
+                                        printWindow.print()
+                                    }
+                                }}
+                                variant="outline"
+                                className="w-full bg-blue-50 hover:bg-blue-100"
+                            >
+                                <Printer className="h-4 w-4 mr-2" />
+                                48mm
+                            </Button>
+                        </div>
+                    </div>
 
-                    <Button
-                        onClick={() => navigator.share?.({
-                            title: 'Recibo', text: formatReceiptText({
-                                invoiceNumber: saleNumber,
-                                date: new Date().toISOString(),
-                                sellerName: 'Mi Empresa',
-                                items: items.map(i => ({
-                                    description: i.name,
-                                    quantity: i.quantity,
-                                    unitPrice: i.price,
-                                    discount: i.discount,
-                                    subtotal: i.subtotal
-                                })),
-                                subtotal,
-                                discount,
-                                tax,
-                                total,
-                                paymentMethod,
-                                amountPaid,
-                                change
-                            })
-                        })}
-                        variant="outline"
-                        className="w-full"
-                    >
-                        <Share2 className="h-4 w-4 mr-2" />
-                        Compartir
-                    </Button>
+                    {/* Sección: Texto Grande */}
+                    <div>
+                        <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Texto Grande (Mayor Visibilidad)</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Button
+                                onClick={() => {
+                                    const invoiceData: InvoiceData = {
+                                        invoiceNumber: saleNumber,
+                                        date: new Date().toISOString(),
+                                        sellerName: 'Mi Empresa',
+                                        sellerAddress: 'Dirección de la empresa',
+                                        sellerTaxId: '80012345-6',
+                                        sellerPhone: '123-456-7890',
+                                        sellerEmail: 'info@miempresa.com',
+                                        customerName: customerName || 'Cliente General',
+                                        items: items.map(item => ({
+                                            description: item.name,
+                                            quantity: item.quantity,
+                                            unitPrice: item.price,
+                                            discount: item.discount,
+                                            subtotal: item.subtotal
+                                        })),
+                                        subtotal,
+                                        discount,
+                                        tax,
+                                        total,
+                                        paymentMethod,
+                                        amountPaid,
+                                        change
+                                    }
+
+                                    const largeTextReceipt = formatReceiptLargeText(invoiceData)
+                                    const printWindow = window.open('', '_blank')
+                                    if (printWindow) {
+                                        printWindow.document.write(`<pre style="font-family: monospace; font-size: 14px; font-weight: 600; white-space: pre-wrap; line-height: 1.4;">${largeTextReceipt}</pre>`)
+                                        printWindow.document.close()
+                                        printWindow.print()
+                                    }
+                                }}
+                                variant="outline"
+                                className="w-full bg-purple-50 hover:bg-purple-100 border-purple-200"
+                            >
+                                <Printer className="h-4 w-4 mr-2" />
+                                Texto XL
+                            </Button>
+
+                            <Button
+                                onClick={() => {
+                                    const invoiceData: InvoiceData = {
+                                        invoiceNumber: saleNumber,
+                                        date: new Date().toISOString(),
+                                        sellerName: 'Mi Empresa',
+                                        sellerAddress: 'Dirección de la empresa',
+                                        sellerTaxId: '80012345-6',
+                                        sellerPhone: '123-456-7890',
+                                        sellerEmail: 'info@miempresa.com',
+                                        customerName: customerName || 'Cliente General',
+                                        items: items.map(item => ({
+                                            description: item.name,
+                                            quantity: item.quantity,
+                                            unitPrice: item.price,
+                                            discount: item.discount,
+                                            subtotal: item.subtotal
+                                        })),
+                                        subtotal,
+                                        discount,
+                                        tax,
+                                        total,
+                                        paymentMethod,
+                                        amountPaid,
+                                        change
+                                    }
+
+                                    const thermalXL = formatThermalReceiptXL(invoiceData)
+                                    const printWindow = window.open('', '_blank')
+                                    if (printWindow) {
+                                        printWindow.document.write(`<pre style="font-family: monospace; font-size: 14px; font-weight: 600; white-space: pre-wrap; line-height: 1.4;">${thermalXL}</pre>`)
+                                        printWindow.document.close()
+                                        printWindow.print()
+                                    }
+                                }}
+                                variant="outline"
+                                className="w-full bg-orange-50 hover:bg-orange-100 border-orange-200"
+                            >
+                                <Printer className="h-4 w-4 mr-2" />
+                                Térmico XL
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Sección: Opciones Especiales */}
+                    <div>
+                        <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Opciones Especiales</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Button
+                                onClick={() => {
+                                    const invoiceData: InvoiceData = {
+                                        invoiceNumber: saleNumber,
+                                        date: new Date().toISOString(),
+                                        sellerName: 'Mi Empresa',
+                                        sellerAddress: 'Dirección de la empresa',
+                                        sellerTaxId: '80012345-6',
+                                        sellerPhone: '123-456-7890',
+                                        sellerEmail: 'info@miempresa.com',
+                                        customerName: customerName || 'Cliente General',
+                                        items: items.map(item => ({
+                                            description: item.name,
+                                            quantity: item.quantity,
+                                            unitPrice: item.price,
+                                            discount: item.discount,
+                                            subtotal: item.subtotal
+                                        })),
+                                        subtotal,
+                                        discount,
+                                        tax,
+                                        total,
+                                        paymentMethod,
+                                        amountPaid,
+                                        change
+                                    }
+
+                                    const receiptWithQR = formatReceiptWithQR(invoiceData)
+                                    const printWindow = window.open('', '_blank')
+                                    if (printWindow) {
+                                        printWindow.document.write(`<pre style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">${receiptWithQR}</pre>`)
+                                        printWindow.document.close()
+                                        printWindow.print()
+                                    }
+                                }}
+                                variant="outline"
+                                className="w-full bg-green-50 hover:bg-green-100 border-green-200"
+                            >
+                                <Printer className="h-4 w-4 mr-2" />
+                                + QR
+                            </Button>
+
+                            <Button
+                                onClick={handleDownload}
+                                variant="outline"
+                                className="w-full"
+                            >
+                                <Download className="h-4 w-4 mr-2" />
+                                PDF
+                            </Button>
+
+                            <Button
+                                onClick={handleEmail}
+                                variant="outline"
+                                className="w-full"
+                            >
+                                <Mail className="h-4 w-4 mr-2" />
+                                Email
+                            </Button>
+
+                            <Button
+                                onClick={() => navigator.share?.({
+                                    title: 'Recibo', text: formatReceiptForPrinter({
+                                        invoiceNumber: saleNumber,
+                                        date: new Date().toISOString(),
+                                        sellerName: 'Mi Empresa',
+                                        sellerAddress: 'Dirección de la empresa',
+                                        sellerTaxId: '80012345-6',
+                                        items: items.map(i => ({
+                                            description: i.name,
+                                            quantity: i.quantity,
+                                            unitPrice: i.price,
+                                            discount: i.discount,
+                                            subtotal: i.subtotal
+                                        })),
+                                        subtotal,
+                                        discount,
+                                        tax,
+                                        total,
+                                        paymentMethod,
+                                        amountPaid,
+                                        change
+                                    }, '48mm')
+                                })}
+                                variant="outline"
+                                className="w-full"
+                            >
+                                <Share2 className="h-4 w-4 mr-2" />
+                                Compartir
+                            </Button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* New Sale Button */}
