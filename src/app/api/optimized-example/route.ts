@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { 
   checkRateLimit, 
   recordAPIMetric
-} from '@/middleware/api-optimization'
+} from '@/lib/middleware/api-optimization'
 import { withOptimization } from '@/lib/api/optimization'
 
 const supabase = createClient(
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Invalidar caches relacionados
-    const { invalidateCacheByTags } = await import('@/middleware/api-optimization')
+    const { invalidateCacheByTags } = await import('@/lib/middleware/api-optimization')
     invalidateCacheByTags(['products', 'inventory'])
 
     const response = NextResponse.json({
@@ -179,7 +179,7 @@ export async function PUT(request: NextRequest) {
     cacheManager.delete(`product:${id}`)
     
     // Invalidar caches por tags
-    const { invalidateCacheByTags } = await import('@/middleware/api-optimization')
+    const { invalidateCacheByTags } = await import('@/lib/middleware/api-optimization')
     invalidateCacheByTags(['products', 'inventory'])
 
     const response = NextResponse.json({

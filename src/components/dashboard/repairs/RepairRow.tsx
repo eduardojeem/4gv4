@@ -17,14 +17,16 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
-import { statusConfig, priorityConfig } from '@/config/repair-constants'
+import { statusConfig, priorityConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { WarrantyBadge } from './WarrantyBadge'
+import { printRepairReceipt, RepairPrintPayload } from '@/lib/repair-receipt'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
 
 interface RepairRowProps {
   repair: Repair
@@ -38,6 +40,7 @@ export const RepairRow = memo<RepairRowProps>(
   function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete }) {
     const StatusIcon = statusConfig[repair.status].icon
     const priority = priorityConfig[repair.priority]
+    const { settings } = useSharedSettings()
     
     // Safely handle date formatting with validation
     const timeAgo = (() => {
@@ -54,6 +57,41 @@ export const RepairRow = memo<RepairRowProps>(
         return 'Fecha no disponible'
       }
     })()
+
+    const getPrintPayload = (): RepairPrintPayload => {
+      return {
+        ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase(),
+        date: new Date(repair.createdAt),
+        priority: repair.priority,
+        urgency: repair.urgency,
+        customer: {
+          name: repair.customer.name,
+          customerCode: repair.customer.customerCode,
+          phone: repair.customer.phone,
+          email: repair.customer.email,
+          address: (repair.customer as any).address,
+          city: (repair.customer as any).city,
+          country: (repair.customer as any).country,
+          document: (repair.customer as any).document,
+        },
+        devices: [{
+          typeLabel: deviceTypeConfig[repair.deviceType]?.label || repair.deviceType,
+          brand: repair.brand,
+          model: repair.model,
+          issue: repair.issue,
+          description: repair.description,
+          technician: repair.technician?.name || 'Sin asignar',
+          estimatedCost: repair.estimatedCost,
+          ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()
+        }],
+        company: {
+          name: settings.companyName,
+          phone: settings.companyPhone,
+          address: settings.companyAddress,
+          email: settings.companyEmail,
+        }
+      }
+    }
 
     return (
       <TableRow
@@ -195,6 +233,24 @@ export const RepairRow = memo<RepairRowProps>(
               <DropdownMenuItem onClick={() => onEdit(repair)} className="dark:hover:bg-muted/50">
                 <Edit className="mr-2 h-4 w-4" />
                 Editar reparación
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="dark:bg-muted/50" />
+              <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
+                Comprobantes
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => printRepairReceipt('customer', getPrintPayload())}
+                className="dark:hover:bg-muted/50"
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Cliente
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => printRepairReceipt('technician', getPrintPayload())}
+                className="dark:hover:bg-muted/50"
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Ficha técnica
               </DropdownMenuItem>
               <DropdownMenuSeparator className="dark:bg-muted/50" />
               <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">

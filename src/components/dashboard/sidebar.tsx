@@ -36,6 +36,8 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor', 'tecnico'] },
       { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, roles: ['admin', 'vendedor'] },
+      { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, roles: ['admin', 'vendedor'] },
+      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor'] },
     ],
   },
   {

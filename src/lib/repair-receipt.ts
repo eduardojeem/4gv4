@@ -166,20 +166,11 @@ export const printRepairReceipt = (type: RepairReceiptType, payload: RepairPrint
   printWindow.document.write(html)
   printWindow.document.close()
 
-  // Esperar un momento para asegurar que el contenido se renderizó
-  // Usamos setTimeout en lugar de onload porque onload a veces falla con document.write
-  setTimeout(() => {
-    if (printWindow && !printWindow.closed) {
+  if (printWindow && !printWindow.closed) {
+    try {
       printWindow.focus()
-      try {
-        printWindow.print()
-      } catch (error) {
-        console.error('Error al intentar imprimir:', error)
-      }
-      // Cerrar después de que el diálogo de impresión se cierre (print es bloqueante en la mayoría de navegadores)
-      printWindow.close()
-    }
-  }, 500)
+    } catch {}
+  }
 }
 
 
@@ -194,17 +185,34 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
   const dateObj = payload.date || new Date()
   const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
   const time = dateObj.toLocaleTimeString(config.locale || 'es-PY')
+  
+  const getPaperPreference = (): '80mm' | '58mm' | 'A4' => {
+    try {
+      if (typeof window !== 'undefined') {
+        const v = window.localStorage.getItem('repairReceiptPaper')
+        if (v === '58mm') return '58mm'
+        if (v === 'A4') return 'A4'
+      }
+    } catch {}
+    return '80mm'
+  }
+  const paperPref = getPaperPreference()
+  const isA4 = paperPref === 'A4'
+  const pageSizeValue = isA4 ? 'A4' : `${paperPref} auto`
+  const bodyWidthValue = isA4 ? 'auto' : (paperPref === '58mm' ? '46mm' : '70mm')
+  const baseFontSize = isA4 ? '14px' : (paperPref === '58mm' ? '12px' : '13px')
+  const basePadding = isA4 ? '10mm' : '3mm'
 
   // Estilos modernos unificados para ambos tipos de comprobante
   const modernStyles = `
     @media print {
       @page { 
-        size: 80mm auto; 
-        margin: 2mm; 
+        size: ${pageSizeValue}; 
+        margin: ${isA4 ? '12mm' : '0'}; 
       }
       body { 
         margin: 0; 
-        width: 76mm; 
+        width: ${bodyWidthValue}; 
       }
     }
     
@@ -214,233 +222,266 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
     
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #1a1a1a;
+      color: #111827;
       background: #fff;
-      line-height: 1.3;
-      padding: 4mm;
-      font-size: 12px;
-      max-width: 300px;
+      line-height: 1.4;
+      padding: ${basePadding};
+      font-size: ${baseFontSize};
+      max-width: ${isA4 ? '800px' : '290px'};
       margin: 0 auto;
     }
     
     .header {
       text-align: center;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 2px solid #e5e7eb;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #d1d5db;
     }
     
     .company-name {
-      font-size: 16px;
-      font-weight: 700;
-      color: #111827;
+      font-size: 19px;
+      font-weight: 800;
+      color: #0f172a;
       margin-bottom: 2px;
     }
     
     .company-info {
-      font-size: 9px;
-      color: #6b7280;
-      line-height: 1.2;
+      font-size: 11px;
+      color: #1f2937;
+      line-height: 1.3;
     }
     
     .date-time {
-      font-size: 10px;
-      color: #6b7280;
+      font-size: 12px;
+      color: #1f2937;
     }
     
     .ticket-badge {
-      background: #1f2937;
-      color: white;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-weight: 700;
-      font-size: 14px;
-      margin: 8px 0;
+      background: #ffffff;
+      color: #111827;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #111827;
+      font-weight: 800;
+      font-size: 17px;
+      margin: 10px 0;
       display: inline-block;
+      letter-spacing: 0.2px;
     }
     
     .title {
-      font-size: 14px;
-      font-weight: 600;
-      color: #374151;
-      margin: 8px 0;
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 10px 0;
     }
     
     .section-card {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 6px;
-      padding: 8px;
-      margin: 8px 0;
+      background: #ffffff;
+      border: 1px solid #111827;
+      border-radius: 8px;
+      padding: 10px;
+      margin: 10px 0;
+      box-shadow: none;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     
     .section-title {
-      font-size: 11px;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 8px;
       display: flex;
       align-items: center;
       gap: 4px;
+      border-bottom: 1px solid #111827;
+      padding-bottom: 6px;
     }
     
     .info-grid {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 5px;
     }
     
     .info-row {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      font-size: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      padding: 2px 0;
     }
     
     .info-label {
-      color: #6b7280;
-      font-weight: 500;
-      min-width: 50px;
+      color: #1f2937;
+      font-weight: 600;
+      min-width: 60px;
     }
     
     .info-value {
       color: #111827;
-      font-weight: 600;
+      font-weight: 700;
       text-align: right;
-      flex: 1;
+      flex: 1 1 60%;
       margin-left: 8px;
+      line-height: 1.35;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     
     .device-card {
-      border: 1px solid #e5e7eb;
+      border: 1px solid #111827;
       border-radius: 8px;
-      padding: 10px;
-      margin: 8px 0;
+      padding: 12px;
+      margin: 10px 0;
       background: #ffffff;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     
     .device-title {
       display: flex;
       align-items: center;
       gap: 6px;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
     
     .device-icon {
-      font-size: 14px;
+      font-size: 16px;
     }
     
     .device-name {
-      font-weight: 600;
-      font-size: 13px;
+      font-weight: 700;
+      font-size: 14px;
       color: #111827;
     }
     
     .device-type {
-      font-size: 10px;
-      color: #6b7280;
-      margin-bottom: 8px;
+      font-size: 11px;
+      color: #4b5563;
+      margin-bottom: 10px;
     }
     
     .problem-section {
-      margin: 8px 0;
+      margin: 10px 0;
     }
     
     .problem-label {
-      font-size: 10px;
-      font-weight: 600;
-      color: #dc2626;
-      margin-bottom: 2px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #1f2937;
+      margin-bottom: 4px;
     }
     
     .problem-text {
-      font-size: 11px;
-      color: #374151;
+      font-size: 13px;
+      color: #1f2937;
       line-height: 1.4;
-      padding: 4px 0;
+      padding: 6px 0;
+      white-space: pre-wrap;
     }
     
     .notes-section {
-      margin: 6px 0;
-      padding-top: 6px;
+      margin: 8px 0;
+      padding-top: 8px;
       border-top: 1px dashed #d1d5db;
     }
     
     .notes-label {
-      font-size: 10px;
-      font-weight: 600;
-      color: #059669;
-      margin-bottom: 2px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #1f2937;
+      margin-bottom: 3px;
     }
     
     .notes-text {
-      font-size: 10px;
-      color: #4b5563;
+      font-size: 12px;
+      color: #1f2937;
       line-height: 1.4;
+      white-space: pre-wrap;
     }
     
     .tech-info {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-top: 8px;
-      padding-top: 6px;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 8px;
       border-top: 1px dashed #d1d5db;
-      font-size: 10px;
+      font-size: 12px;
     }
     
     .tech-item {
-      color: #7c3aed;
-      font-weight: 500;
+      color: #1f2937;
+      font-weight: 600;
     }
     
     .cost-item {
-      color: #059669;
-      font-weight: 600;
+      color: #1f2937;
+      font-weight: 700;
     }
     
     .warranty-box {
-      background: #fef3c7;
-      border: 1px solid #f59e0b;
-      border-radius: 6px;
-      padding: 8px;
-      margin: 10px 0;
+      background: #ffffff;
+      border: 1.5px solid #1f2937;
+      border-radius: 8px;
+      padding: 10px;
+      margin: 12px 0;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     
     .warranty-title {
-      font-size: 10px;
-      font-weight: 600;
-      color: #92400e;
-      margin-bottom: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 6px;
     }
     
     .warranty-text {
-      font-size: 9px;
-      color: #78350f;
-      line-height: 1.3;
+      font-size: 11px;
+      color: #1f2937;
+      line-height: 1.45;
+    }
+    
+    .legal-text {
+      font-size: 11px;
+      color: #1f2937;
+      line-height: 1.5;
+      margin-top: 8px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     
     .footer {
       text-align: center;
-      margin-top: 12px;
-      padding-top: 8px;
-      border-top: 1px solid #e5e7eb;
-      font-size: 9px;
-      color: #9ca3af;
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid #111827;
+      font-size: 11px;
+      color: #1f2937;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     
     .qr-placeholder {
-      width: 40px;
-      height: 40px;
-      background: #f3f4f6;
-      border: 1px dashed #d1d5db;
-      border-radius: 4px;
+      width: 80%;
+      height: 48px;
+      background: #f9fafb;
+      border: 1px dashed #111827;
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 8px;
-      color: #9ca3af;
-      margin: 8px auto;
+      font-size: 11px;
+      color: #111827;
+      margin: 10px auto 0;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
   `
 
@@ -466,8 +507,8 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
         </div>` : ''}
         
         <div class="tech-info">
-          ${d.technician ? `<div class="tech-item">👨‍🔧 ${d.technician}</div>` : ''}
-          ${typeof d.estimatedCost === 'number' ? `<div class="cost-item">💰 ${formatCurrency(d.estimatedCost)}</div>` : ''}
+          ${d.technician ? `<div class="tech-item" style="flex:1 1 48%;">👨‍🔧 ${d.technician}</div>` : ''}
+          ${typeof d.estimatedCost === 'number' ? `<div class="cost-item" style="flex:1 1 48%; text-align:right;">💰 ${formatCurrency(d.estimatedCost)}</div>` : ''}
         </div>
       </div>
     `).join('')
@@ -476,12 +517,12 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
     const modernStyles = `
       @media print {
         @page { 
-          size: 80mm auto; 
-          margin: 2mm; 
+          size: ${pageSizeValue}; 
+          margin: ${isA4 ? '12mm' : '3mm'}; 
         }
         body { 
           margin: 0; 
-          width: 76mm; 
+          width: ${bodyWidthValue}; 
         }
       }
       
@@ -491,148 +532,156 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
       
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        color: #1a1a1a;
+        color: #111827;
         background: #fff;
-        line-height: 1.3;
-        padding: 4mm;
-        font-size: 12px;
-        max-width: 300px;
+        line-height: 1.4;
+        padding: ${basePadding};
+        font-size: ${baseFontSize};
+        max-width: ${isA4 ? '800px' : '290px'};
         margin: 0 auto;
       }
       
       .header {
         text-align: center;
-        margin-bottom: 12px;
-        padding-bottom: 8px;
-        border-bottom: 2px solid #e5e7eb;
+        margin-bottom: 14px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #d1d5db;
       }
       
       .company-name {
-        font-size: 16px;
-        font-weight: 700;
-        color: #111827;
+        font-size: 19px;
+        font-weight: 800;
+        color: #0f172a;
         margin-bottom: 2px;
       }
       
       .date-time {
-        font-size: 10px;
-        color: #6b7280;
+        font-size: 12px;
+        color: #1f2937;
       }
       
       .ticket-badge {
-        background: #1f2937;
-        color: white;
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-weight: 700;
-        font-size: 14px;
-        margin: 8px 0;
+        background: #ffffff;
+        color: #111827;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #111827;
+        font-weight: 800;
+        font-size: 17px;
+        margin: 10px 0;
         display: inline-block;
+        letter-spacing: 0.2px;
       }
       
       .title {
-        font-size: 14px;
-        font-weight: 600;
-        color: #374151;
-        margin: 8px 0;
+        font-size: 16px;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 10px 0;
       }
       
       .customer-card {
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 6px;
-        padding: 8px;
-        margin: 8px 0;
+        background: #ffffff;
+        border: 1px solid #111827;
+        border-radius: 8px;
+        padding: 10px;
+        margin: 10px 0;
+        box-shadow: none;
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
       
       .customer-name {
-        font-weight: 600;
-        font-size: 13px;
+        font-weight: 700;
+        font-size: 14px;
         color: #111827;
         margin-bottom: 2px;
       }
       
       .customer-phone {
-        font-size: 11px;
-        color: #6b7280;
+        font-size: 12px;
+        color: #1f2937;
       }
       
       .priority-badge {
         display: inline-block;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 10px;
-        font-weight: 500;
-        background: #dbeafe;
-        color: #1e40af;
-        margin: 4px 0;
+        padding: 3px 7px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        background: #ffffff;
+        color: #1f2937;
+        border: 1px solid #1f2937;
+        margin: 6px 0;
       }
       
       .device-card {
-        border: 1px solid #e5e7eb;
+        border: 1px solid #111827;
         border-radius: 8px;
-        padding: 10px;
-        margin: 8px 0;
+        padding: 12px;
+        margin: 10px 0;
         background: #ffffff;
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
       
       .device-title {
         display: flex;
         align-items: center;
         gap: 6px;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
       }
       
       .device-icon {
-        font-size: 14px;
+        font-size: 16px;
       }
       
       .device-name {
-        font-weight: 600;
-        font-size: 13px;
+        font-weight: 700;
+        font-size: 14px;
         color: #111827;
       }
       
       .device-type {
-        font-size: 10px;
-        color: #6b7280;
-        margin-bottom: 8px;
+        font-size: 11px;
+        color: #4b5563;
+        margin-bottom: 10px;
       }
       
       .problem-section {
-        margin: 8px 0;
+        margin: 10px 0;
       }
       
       .problem-label {
-        font-size: 10px;
-        font-weight: 600;
-        color: #dc2626;
-        margin-bottom: 2px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 4px;
       }
       
       .problem-text {
-        font-size: 11px;
-        color: #374151;
+        font-size: 13px;
+        color: #1f2937;
         line-height: 1.4;
-        padding: 4px 0;
+        padding: 6px 0;
       }
       
       .notes-section {
-        margin: 6px 0;
-        padding-top: 6px;
+        margin: 8px 0;
+        padding-top: 8px;
         border-top: 1px dashed #d1d5db;
       }
       
       .notes-label {
-        font-size: 10px;
-        font-weight: 600;
-        color: #059669;
-        margin-bottom: 2px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 3px;
       }
       
       .notes-text {
-        font-size: 10px;
-        color: #4b5563;
+        font-size: 12px;
+        color: #1f2937;
         line-height: 1.4;
       }
       
@@ -640,43 +689,47 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-top: 8px;
-        padding-top: 6px;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+        padding-top: 8px;
         border-top: 1px dashed #d1d5db;
-        font-size: 10px;
+        font-size: 12px;
       }
       
       .tech-item {
-        color: #7c3aed;
-        font-weight: 500;
+        color: #1f2937;
+        font-weight: 600;
       }
       
       .cost-item {
-        color: #059669;
-        font-weight: 600;
+        color: #1f2937;
+        font-weight: 700;
       }
       
       .footer {
         text-align: center;
-        margin-top: 12px;
-        padding-top: 8px;
-        border-top: 1px solid #e5e7eb;
-        font-size: 9px;
-        color: #9ca3af;
+        margin-top: 14px;
+        padding-top: 10px;
+        border-top: 1px solid #111827;
+        font-size: 11px;
+        color: #1f2937;
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
       
       .qr-placeholder {
-        width: 40px;
-        height: 40px;
-        background: #f3f4f6;
-        border: 1px dashed #d1d5db;
-        border-radius: 4px;
+        width: 80%;
+        height: 48px;
+        background: #f9fafb;
+        border: 1px dashed #111827;
+        border-radius: 6px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 8px;
-        color: #9ca3af;
-        margin: 8px auto;
+        font-size: 11px;
+        color: #111827;
+        margin: 10px auto 0;
       }
     `
 
@@ -690,13 +743,21 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
         <style>${modernStyles}</style>
       </head>
       <body>
+        <script>
+          window.addEventListener('load', function() {
+            setTimeout(function() { window.print(); }, 300);
+          });
+          window.addEventListener('afterprint', function() {
+            window.close();
+          });
+        </script>
         <div class="header">
           <div class="company-name">${company.name}</div>
           <div class="date-time">${date} • ${time}</div>
         </div>
         
         <div style="text-align: center;">
-          <span class="ticket-badge">${ticketNumber}</span>
+          <span class="ticket-badge">Ticket (${ticketNumber})</span>
         </div>
         
         <div class="title">📋 FICHA TÉCNICA</div>
@@ -715,7 +776,13 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
         </div>
 
         <div class="qr-placeholder">
-          QR
+          <img 
+            alt="QR Ticket" 
+            width="120" 
+            height="120" 
+            style="display:block;"
+            src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(`TICKET:${ticketNumber}|CLIENTE:${payload.customer.name}`)}&size=120x120&margin=0" 
+          />
         </div>
 
         <div class="footer">
@@ -764,17 +831,25 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
       <style>
         ${modernStyles}
         .legal-text {
-            font-size: 8px;
-            color: #9ca3af;
+            font-size: 9px;
+            color: #6b7280;
             text-align: justify;
-            margin-top: 10px;
-            line-height: 1.2;
-            padding-top: 8px;
+            margin-top: 12px;
+            line-height: 1.35;
+            padding-top: 10px;
             border-top: 1px solid #e5e7eb;
         }
       </style>
     </head>
     <body>
+      <script>
+        window.addEventListener('load', function() {
+          setTimeout(function() { window.print(); }, 300);
+        });
+        window.addEventListener('afterprint', function() {
+          window.close();
+        });
+      </script>
       <div class="header">
         ${company.logo ? `<img src="${company.logo}" style="max-height: 50px; margin-bottom: 8px;" alt="Logo" />` : ''}
         <div class="company-name">${company.name}</div>
@@ -786,9 +861,9 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
         <div class="date-time" style="margin-top: 4px;">${date} • ${time}</div>
       </div>
       
-      <div style="text-align: center;">
-        <span class="ticket-badge">Ticket: ${ticketNumber}</span>
-      </div>
+        <div style="text-align: center;">
+          <span class="ticket-badge">Ticket (${ticketNumber})</span>
+        </div>
       
       <div class="title" style="text-align: center;">🧾 ORDEN DE SERVICIO</div>
       
@@ -797,7 +872,7 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
         <div class="info-grid">
           <div class="info-row">
             <span class="info-label">Cliente:</span>
-            <span class="info-value" style="font-size: 11px;">${payload.customer.name}</span>
+            <span class="info-value" style="font-size: 12px;">${payload.customer.name}</span>
           </div>
           ${payload.customer.document ? `
           <div class="info-row">
@@ -877,7 +952,7 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
       </div>
 
       <div class="qr-placeholder">
-        <div style="font-size: 10px; font-weight: bold; color: #374151;">Firma Cliente</div>
+        <div style="font-size: 12px; font-weight: bold; color: #111827;">Firma Cliente</div>
       </div>
 
       <div class="footer">

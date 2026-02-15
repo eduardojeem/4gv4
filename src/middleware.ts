@@ -37,10 +37,18 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Verificar si el usuario está autenticado
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Verificar si el usuario está autenticado de forma segura
+  let user = null
+  try {
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser()
+    user = authUser
+  } catch (error) {
+    // Si falla la conexión con Supabase (ej. fetch failed), asumimos que no hay usuario
+    // Esto evita que el middleware crashee completamente en entornos de desarrollo inestables
+    console.error('Middleware Auth Error:', error)
+  }
 
   // Rutas protegidas que requieren autenticación
   const protectedRoutes = ['/dashboard']

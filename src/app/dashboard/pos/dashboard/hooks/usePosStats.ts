@@ -60,33 +60,21 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             const from = startOfDay(dateRange.from).toISOString()
             const to = endOfDay(dateRange.to || dateRange.from).toISOString()
 
-            // Fetch sales
-            const { data: salesData, error: salesError } = await supabase
+            // 1. Fetch Sales Summary (No items, fast)
+            const salesPromise = supabase
                 .from('sales')
                 .select(`
-          id,
-          created_at,
-          total:total_amount,
-          payment_method,
-          customer:customers(name),
-          sale_items(
-            quantity,
-            subtotal,
-            product:products(name)
-          )
-        `)
+                    id,
+                    created_at,
+                    total:total_amount,
+                    payment_method
+                `)
                 .gte('created_at', from)
                 .lte('created_at', to)
                 .order('created_at', { ascending: false })
 
-            if (salesError) throw salesError
-
-            // Calculate KPIs - Basic sales data first
-            const totalSales = salesData?.reduce((acc, sale) => acc + (sale.total || 0), 0) || 0
-            const totalTransactions = salesData?.length || 0
-            
-            // Fetch credit sales (separately, as they might not be in sales table or need specific details)
-            const { data: creditData, error: creditError } = await supabase
+            // 2. Fetch Credits (Fast)
+            const creditsPromise = supabase
                 .from('customer_credits')
                 .select(`
                     id,
@@ -96,6 +84,62 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 `)
                 .gte('created_at', from)
                 .lte('created_at', to)
+
+            // 3. Fetch Recent Sales (Limit 10, with details)
+            const recentPromise = supabase
+                .from('sales')
+                .select(`
+                    id,
+                    created_at,
+                    total:total_amount,
+                    payment_method,
+                    customer:customers(name),
+                    sale_items(
+                        quantity,
+                        subtotal,
+                        product:products(name)
+                    )
+                `)
+                .gte('created_at', from)
+                .lte('created_at', to)
+                .order('created_at', { ascending: false })
+                .limit(10)
+
+            // 4. Fetch Items for Top Products (Flat list, optimized)
+            // We use sale_items joined with sales to filter by date
+            const itemsPromise = supabase
+                .from('sale_items')
+                .select(`
+                    quantity,
+                    subtotal,
+                    product:products(name),
+                    sale:sales!inner(created_at)
+                `)
+                .gte('sale.created_at', from)
+                .lte('sale.created_at', to)
+
+            // Execute in parallel
+            const [
+                { data: salesData, error: salesError },
+                { data: creditData, error: creditError },
+                { data: recentData, error: recentError },
+                { data: itemsData, error: itemsError }
+            ] = await Promise.all([
+                salesPromise,
+                creditsPromise,
+                recentPromise,
+                itemsPromise
+            ])
+
+            if (salesError) throw salesError
+            if (recentError) console.error('Error fetching recent:', recentError)
+            if (itemsError) console.error('Error fetching items:', itemsError)
+            
+            // --- Processing ---
+
+            // Calculate KPIs - Basic sales data first
+            const totalSales = salesData?.reduce((acc, sale) => acc + (sale.total || 0), 0) || 0
+            const totalTransactions = salesData?.length || 0
             
             if (creditError) console.error('Error fetching credits:', creditError)
 
@@ -106,20 +150,11 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             const creditCount = credits.length
             const creditAvgTicket = creditCount > 0 ? creditTotalAmount / creditCount : 0
             
-            // Note: pendingAmount usually refers to outstanding balance, which might be across ALL time,
-            // but here we might just want to show "how much credit was issued and is still pending" from this period?
-            // Or maybe just total issued.
-            // Let's assume "pendingAmount" means credit issued in this period that is still active/defaulted.
             const creditPendingAmount = credits
                 .filter(c => c.status === 'active' || c.status === 'defaulted')
                 .reduce((sum, c) => sum + (c.principal || 0), 0)
 
             // Merge Credit Sales into Total Sales if they are NOT in sales table
-            // Assumption: createCreditSale does NOT create a sales record currently.
-            // We should add them to totals for accuracy.
-            
-            // However, to avoid double counting if they ARE in sales table (with payment_method='credit'),
-             // we should check if we have sales with payment_method='credit'.
              const hasCreditInSales = salesData?.some(s => s.payment_method === 'credit')
   
              let finalTotalSales = totalSales
@@ -133,19 +168,17 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             // Calculate KPIs
             const averageTicket = finalTotalTransactions > 0 ? finalTotalSales / finalTotalTransactions : 0
 
-            // Process Top Products
+            // Process Top Products from Flat Items List
             const productMap = new Map<string, { name: string; sales: number; revenue: number }>()
 
-            salesData?.forEach((sale: any) => {
-                sale.sale_items?.forEach((item: any) => {
-                    const name = item.product?.name || 'Producto eliminado'
-                    const current = productMap.get(name) || { name, sales: 0, revenue: 0 }
+            itemsData?.forEach((item: any) => {
+                const name = item.product?.name || 'Producto eliminado'
+                const current = productMap.get(name) || { name, sales: 0, revenue: 0 }
 
-                    productMap.set(name, {
-                        name,
-                        sales: current.sales + (item.quantity || 0),
-                        revenue: current.revenue + (item.subtotal || 0)
-                    })
+                productMap.set(name, {
+                    name,
+                    sales: current.sales + (item.quantity || 0),
+                    revenue: current.revenue + (item.subtotal || 0)
                 })
             })
 
@@ -235,7 +268,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             }))
 
             // Process Recent Sales
-            const recentSales = (salesData || []).slice(0, 10).map((sale: any) => ({
+            const recentSales = (recentData || []).map((sale: any) => ({
                 ...sale,
                 items_count: sale.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0,
                 customer_name: sale.customer?.name || 'Cliente Casual'
