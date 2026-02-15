@@ -6,6 +6,7 @@ import { useDebounce } from "./use-debounce"
 
 export interface Customer {
   id: string  // UUID from Supabase
+  profile_id?: string // Linked user profile ID
   customerCode: string
   name: string
   email: string
@@ -171,7 +172,7 @@ export function useCustomerState() {
           error: "Error al cargar clientes",
           loading: false
         }))
-        toast.error("Error al cargar clientes: " + error.message)
+        toast.error("Error al cargar clientes: " + errorMessage)
       }
     }
 

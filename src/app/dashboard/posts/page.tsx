@@ -151,7 +151,7 @@ export default function PostsPage() {
         setPosts(mappedPosts)
       }
     } catch (error) {
-      console.error('Error fetching posts:', error)
+      logger.error('Error fetching posts', { error })
       toast({
         title: "Error",
         description: "No se pudieron cargar los posts.",
@@ -326,7 +326,7 @@ export default function PostsPage() {
       setIsCreatePostOpen(false)
 
     } catch (error) {
-      console.error('Error creating post:', error)
+      logger.error('Error creating post', { error })
       toast({
         title: "Error",
         description: "No se pudo crear el post. Asegúrate de estar autenticado.",
@@ -354,7 +354,7 @@ export default function PostsPage() {
       
       setPosts(prev => prev.filter(p => p.id !== id))
     } catch (error) {
-      console.error('Error deleting post:', error)
+      logger.error('Error deleting post', { error })
       toast({
         title: "Error",
         description: "No se pudo eliminar el post.",

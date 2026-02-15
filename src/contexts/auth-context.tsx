@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useRef, ReactNod
 import { createClient as createSupabaseClient } from '../lib/supabase/client'
 import { User as SupabaseUser, Session } from '@supabase/supabase-js'
 import { UserRole, Permission, hasPermission, canManageUser, getRoleLevel } from '../lib/auth/roles-permissions'
+import { normalizeRole } from '../lib/auth/role-utils'
 import { useToast } from '../components/ui/use-toast'
 
 // Tipos para el contexto de autenticación
@@ -41,10 +42,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // Helper: validar y castear cadenas a UserRole
 const VALID_ROLES: UserRole[] = ['admin', 'vendedor', 'tecnico', 'cliente']
 const toUserRole = (value: any): UserRole => {
-  if (typeof value === 'string' && VALID_ROLES.includes(value as UserRole)) {
-    return value as UserRole
-  }
-  return 'cliente'
+  const n = normalizeRole(typeof value === 'string' ? value : undefined)
+  return (n as UserRole) || 'cliente'
 }
 
 // Hook para usar el contexto de autenticación
@@ -381,38 +380,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isSuperAdmin = user?.role === 'admin' // En este sistema, admin es el rol más alto
   const isManager = user?.role === 'admin' || user?.role === 'vendedor'
 
-  // TEMPORARY: Auto-promote current user to admin for development
+  // Auto-promoción a admin deshabilitada por defecto; solo habilitar en desarrollo con flag explícito
   const attemptedPromotion = useRef(false)
-
   useEffect(() => {
+    const autoPromoteEnabled = process.env.NEXT_PUBLIC_AUTO_PROMOTE_ADMIN === 'true'
+    const isProd = process.env.NODE_ENV === 'production'
+    if (!autoPromoteEnabled || isProd) return
+
     const promoteSelf = async () => {
       if (user && user.role !== 'admin' && !attemptedPromotion.current) {
         attemptedPromotion.current = true
-        console.log('🔧 Attempting to promote user to admin...')
-
-        // Usar función RPC que tiene SECURITY DEFINER para bypasear RLS
+        console.log('🔧 Attempting to promote user to admin (dev flag enabled)...')
         const { data, error } = await supabase.rpc('promote_current_user_to_admin')
-
         if (!error && data) {
           console.log('✅ User promoted to admin successfully')
-          toast({
-            title: "Admin Access Granted",
-            description: "You have been temporarily promoted to admin."
-          })
-          
-          // Esperar un momento para que se actualice el JWT
           setTimeout(() => {
             refreshUser()
           }, 500)
         } else {
           console.error('❌ Failed to promote user:', error)
-          // No mostrar error al usuario, es solo para desarrollo
         }
       }
     }
 
     promoteSelf()
-  }, [user, refreshUser, supabase, toast])
+  }, [user, refreshUser, supabase])
 
   // Efecto para manejar cambios de autenticación
   useEffect(() => {

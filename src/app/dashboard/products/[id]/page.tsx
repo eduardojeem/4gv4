@@ -98,7 +98,7 @@ export default function ProductDetailPage() {
         if (error) throw error
         setProduct(data as unknown as Product)
       } catch (e) {
-        console.error('Error cargando producto:', e)
+        logger.error('Error loading product', { error: e })
         toast({
           title: "Error",
           description: "No se pudo cargar la información del producto.",
@@ -195,7 +195,7 @@ export default function ProductDetailPage() {
         }))
         setStockMovements(mapped)
       } catch (e) {
-        console.log('Error cargando movimientos:', e)
+        logger.debug('Error loading movements', { error: e })
       }
     }
     fetchMovements()
@@ -232,7 +232,7 @@ export default function ProductDetailPage() {
         }))
         setPriceHistory(mapped)
       } catch (e) {
-        console.log('Error cargando historial de precios:', e)
+        logger.debug('Error loading price history', { error: e })
       }
     }
     fetchPriceHistory()

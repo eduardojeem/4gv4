@@ -107,14 +107,16 @@ export function useSessionTracking() {
 
       console.log('💾 Attempting to save session:', sessionData)
 
-      const { error } = await supabase
+      const { data: upsertData, error } = await supabase
         .from('user_sessions')
         .upsert(sessionData, {
           onConflict: 'session_id'
         })
 
       if (error) {
-        console.error('❌ Error registering session:', error)
+        const msg = (error as any)?.message || (error as any)?.hint || (error as any)?.details || JSON.stringify(error) || 'Unknown error'
+        console.warn('❌ Error registering session:', msg)
+        console.warn('Full error object:', error)
       } else {
         console.log('✅ Session registered successfully!')
       }

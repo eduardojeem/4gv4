@@ -32,10 +32,13 @@ import { UserAvatarUpload } from './user-avatar-upload'
 import { UserActivityTimeline } from './user-activity-timeline'
 import { UsersTable } from './users-table'
 import { UsersFilters } from './users-filters'
+import { UserDetailDialog } from './user-detail-dialog'
 import { useDebounce } from '@/hooks/use-debounce'
+import { toast } from 'sonner'
 
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { EditUserForm } from './EditUserForm'
 
 export function UserManagement() {
   const router = useRouter()
@@ -104,39 +107,7 @@ export function UserManagement() {
     permissions: [] as string[]
   })
 
-  // Permission groups
-  const PERMISSION_GROUPS = [
-    {
-      id: 'sales',
-      label: 'Ventas y Caja',
-      permissions: [
-        { id: 'pos_access', label: 'Acceso a POS' },
-        { id: 'process_sale', label: 'Procesar Ventas' },
-        { id: 'view_sales', label: 'Ver Historial de Ventas' },
-        { id: 'apply_discount', label: 'Aplicar Descuentos' },
-        { id: 'cash_close', label: 'Realizar Cierre de Caja' },
-      ]
-    },
-    {
-      id: 'inventory',
-      label: 'Inventario y Productos',
-      permissions: [
-        { id: 'view_inventory', label: 'Ver Inventario' },
-        { id: 'manage_products', label: 'Crear/Editar Productos' },
-        { id: 'adjust_stock', label: 'Ajustar Stock' },
-        { id: 'manage_categories', label: 'Gestionar Categorías' },
-      ]
-    },
-    {
-      id: 'admin',
-      label: 'Administración',
-      permissions: [
-        { id: 'manage_users', label: 'Gestionar Usuarios' },
-        { id: 'view_reports', label: 'Ver Reportes Financieros' },
-        { id: 'system_settings', label: 'Configuración del Sistema' },
-      ]
-    }
-  ]
+  // Permission groups are imported
 
   const handlePermissionChange = (permissionId: string, checked: boolean) => {
     setFormData(prev => {
@@ -202,7 +173,14 @@ export function UserManagement() {
       if (result.success) {
         setIsCreateDialogOpen(false)
         setFormData({
-          name: '', email: '', phone: '', role: 'cliente', department: '', status: 'active', notes: ''
+          name: '',
+          email: '',
+          phone: '',
+          role: 'cliente',
+          department: '',
+          status: 'active',
+          notes: '',
+          permissions: []
         })
         refreshUsers()
       }
@@ -220,6 +198,10 @@ export function UserManagement() {
         setIsEditDialogOpen(false)
         setSelectedUser(null)
         refreshUsers()
+      } else {
+        if (result.error) {
+          toast.error(result.error)
+        }
       }
     } finally {
       setIsSubmitting(false)
@@ -415,15 +397,14 @@ export function UserManagement() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col p-0">
-          <DialogHeader className="p-6 pb-2">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle>Editar Usuario</DialogTitle>
           </DialogHeader>
           
-          <ScrollArea className="flex-1 px-6">
-            <div className="grid gap-6 py-4">
-              {/* Avatar Section */}
-              {selectedUser && (
+          <div className="flex-1 overflow-auto px-6">
+            {selectedUser && (
+              <div className="grid gap-6 py-4">
                 <div className="flex justify-center">
                   <UserAvatarUpload
                     userName={selectedUser.name}
@@ -431,129 +412,29 @@ export function UserManagement() {
                     onUpload={handleAvatarUpload}
                   />
                 </div>
-              )}
-
-              {/* Personal Information */}
-              <div className="space-y-4">
-                  <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Información Personal</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Nombre Completo</Label>
-                      <Input
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Teléfono</Label>
-                      <Input
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      />
-                    </div>
-                  </div>
+                <EditUserForm
+                  user={selectedUser}
+                  isSubmitting={isSubmitting}
+                  onSubmit={async (values) => {
+                    setIsSubmitting(true)
+                    try {
+                      const result = await updateUser(selectedUser.id, values)
+                      if (result.success) {
+                        setIsEditDialogOpen(false)
+                        setSelectedUser(null)
+                        refreshUsers()
+                      } else if (result.error) {
+                        toast.error(result.error)
+                      }
+                    } finally {
+                      setIsSubmitting(false)
+                    }
+                  }}
+                  onCancel={() => setIsEditDialogOpen(false)}
+                />
               </div>
-
-              {/* Access Control */}
-              <div className="space-y-4">
-                  <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Control de Acceso</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Rol Principal</Label>
-                      <Select
-                        value={formData.role}
-                        onValueChange={(v: any) => setFormData({ ...formData, role: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Administrador</SelectItem>
-                          <SelectItem value="supervisor">Supervisor</SelectItem>
-                          <SelectItem value="vendedor">Vendedor</SelectItem>
-                          <SelectItem value="tecnico">Técnico</SelectItem>
-                          <SelectItem value="cliente">Cliente</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">Define el nivel base de acceso.</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Estado</Label>
-                      <Select
-                        value={formData.status}
-                        onValueChange={(v: any) => setFormData({ ...formData, status: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="active">Activo</SelectItem>
-                          <SelectItem value="inactive">Inactivo</SelectItem>
-                          <SelectItem value="suspended">Suspendido</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                      <Label>Departamento</Label>
-                      <Input
-                        value={formData.department}
-                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      />
-                  </div>
-              </div>
-
-              {/* Permissions */}
-              <div className="space-y-4 pt-2 border-t">
-                  <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">Permisos Específicos</h3>
-                      <span className="text-xs text-muted-foreground">
-                          {formData.permissions?.length || 0} activos
-                      </span>
-                  </div>
-                  
-                  <div className="grid gap-4">
-                      {PERMISSION_GROUPS.map(group => (
-                          <div key={group.id} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border">
-                              <h4 className="font-medium text-sm mb-3 text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                  {group.id === 'sales' && <Activity className="h-4 w-4 text-blue-500" />}
-                                  {group.id === 'inventory' && <RefreshCw className="h-4 w-4 text-green-500" />}
-                                  {group.id === 'admin' && <ShieldAlert className="h-4 w-4 text-purple-500" />}
-                                  {group.label}
-                              </h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                  {group.permissions.map(perm => (
-                                      <div key={perm.id} className="flex items-start space-x-2">
-                                          <Checkbox 
-                                              id={`perm-${perm.id}`} 
-                                              checked={isPermissionActive(perm.id)}
-                                              onCheckedChange={(checked) => handlePermissionChange(perm.id, checked as boolean)}
-                                          />
-                                          <div className="grid gap-1.5 leading-none">
-                                              <label
-                                                  htmlFor={`perm-${perm.id}`}
-                                                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                                              >
-                                                  {perm.label}
-                                              </label>
-                                          </div>
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-            </div>
-          </ScrollArea>
-
-          <DialogFooter className="p-6 pt-2">
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleUpdateSubmit} disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Guardar Cambios
-            </Button>
-          </DialogFooter>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -576,6 +457,13 @@ export function UserManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* View Detail Dialog */}
+      <UserDetailDialog
+        user={selectedUser}
+        open={isViewDialogOpen}
+        onOpenChange={setIsViewDialogOpen}
+      />
     </div>
   )
 }

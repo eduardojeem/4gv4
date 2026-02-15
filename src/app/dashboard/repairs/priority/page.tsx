@@ -39,7 +39,7 @@ export default function RepairsPriorityPage() {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Error fetching repairs:', error);
+        logger.error('Error fetching repairs', { error })
         setLoading(false);
         return;
       }

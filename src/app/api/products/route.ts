@@ -1,300 +1,260 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ProductWithVariants, ProductSearchWithVariants } from '@/types/product-variants'
+import { withAuth } from '@/lib/api/withAuth'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+import { logger } from '@/lib/logger'
+import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
 
-// Mock data - En producción esto vendría de la base de datos
-const mockProducts: ProductWithVariants[] = [
-  {
-    id: 'prod-1',
-    name: 'Camiseta Básica',
-    description: 'Camiseta de algodón básica disponible en varios colores y tallas',
-    category_id: 'cat-1',
-    brand: 'BasicWear',
-    has_variants: true,
-    variant_attributes: ['attr-1', 'attr-2'],
-    variants: [
-      {
-        id: 'var-1',
-        product_id: 'prod-1',
-        sku: 'CAM-ROJO-S',
-        name: 'Camiseta Básica - Rojo S',
-        attributes: [
-          { attribute_id: 'attr-1', attribute_name: 'Color', option_id: 'opt-1', value: 'Rojo', color_hex: '#FF0000' },
-          { attribute_id: 'attr-2', attribute_name: 'Talla', option_id: 'opt-5', value: 'S' }
-        ],
-        price: 25.00,
-        wholesale_price: 18.00,
-        cost_price: 12.00,
-        stock: 15,
-        min_stock: 5,
-        active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ],
-    images: ['/products/camiseta-basica.jpg'],
-    tags: ['ropa', 'casual', 'algodón'],
-    active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }
-]
-
-// GET /api/products - Obtener productos con filtros y búsqueda
-export async function GET(request: NextRequest) {
+// GET /api/products - Get products with variants
+export const GET = withAuth(async (request, { user }) => {
   try {
     const { searchParams } = new URL(request.url)
     
-    const searchQuery: ProductSearchWithVariants = {
-      query: searchParams.get('query') || undefined,
-      category_id: searchParams.get('category_id') || undefined,
-      brand: searchParams.get('brand') || undefined,
-      price_min: searchParams.get('price_min') ? parseFloat(searchParams.get('price_min')!) : undefined,
-      price_max: searchParams.get('price_max') ? parseFloat(searchParams.get('price_max')!) : undefined,
-      in_stock: searchParams.get('in_stock') === 'true',
-      sort_by: (searchParams.get('sort_by') as any) || 'name',
-      sort_order: (searchParams.get('sort_order') as any) || 'asc',
-      limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50,
-      offset: searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0
-    }
-
-    // Filtrar productos según los parámetros
-    let filteredProducts = [...mockProducts]
-
-    // Filtro por query
-    if (searchQuery.query) {
-      const query = searchQuery.query.toLowerCase()
-      filteredProducts = filteredProducts.filter(product => 
-        product.name.toLowerCase().includes(query) ||
-        product.description?.toLowerCase().includes(query) ||
-        product.brand?.toLowerCase().includes(query) ||
-        product.variants.some(variant => 
-          variant.name.toLowerCase().includes(query) ||
-          variant.sku.toLowerCase().includes(query)
-        )
+    const query = searchParams.get('query')
+    const categoryId = searchParams.get('category_id')
+    const brand = searchParams.get('brand')
+    const inStock = searchParams.get('in_stock') === 'true'
+    const page = parseInt(searchParams.get('page') || '1')
+    const perPage = parseInt(searchParams.get('per_page') || '50')
+    
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    // Build query
+    let queryBuilder = supabase
+      .from('products')
+      .select('*, category:categories(id, name)', { count: 'exact' })
+    
+    // Apply filters
+    if (query) {
+      queryBuilder = queryBuilder.or(
+        `name.ilike.%${query}%,sku.ilike.%${query}%,description.ilike.%${query}%`
       )
     }
-
-    // Filtro por categoría
-    if (searchQuery.category_id) {
-      filteredProducts = filteredProducts.filter(product => 
-        product.category_id === searchQuery.category_id
-      )
+    
+    if (categoryId) {
+      queryBuilder = queryBuilder.eq('category_id', categoryId)
     }
-
-    // Filtro por marca
-    if (searchQuery.brand) {
-      filteredProducts = filteredProducts.filter(product => 
-        product.brand === searchQuery.brand
-      )
+    
+    if (brand) {
+      queryBuilder = queryBuilder.eq('brand', brand)
     }
-
-    // Filtro por rango de precios
-    if (searchQuery.price_min !== undefined || searchQuery.price_max !== undefined) {
-      filteredProducts = filteredProducts.filter(product => 
-        product.variants.some(variant => {
-          const price = variant.price
-          return (searchQuery.price_min === undefined || price >= searchQuery.price_min) &&
-                 (searchQuery.price_max === undefined || price <= searchQuery.price_max)
-        })
-      )
+    
+    if (inStock) {
+      queryBuilder = queryBuilder.gt('stock_quantity', 0)
     }
-
-    // Filtro por stock
-    if (searchQuery.in_stock) {
-      filteredProducts = filteredProducts.filter(product => 
-        product.variants.some(variant => variant.stock > 0)
-      )
+    
+    // Apply pagination
+    const from = (page - 1) * perPage
+    const to = from + perPage - 1
+    
+    const { data: products, error, count } = await queryBuilder
+      .range(from, to)
+      .order('name', { ascending: true })
+    
+    if (error) {
+      logger.error('Failed to fetch products', { error: error.message, code: error.code })
+      throw error
     }
+    
+    return NextResponse.json({
+      success: true,
+      data: {
+        products: products || [],
+        total: count || 0,
+        page,
+        per_page: perPage
+      }
+    })
+  } catch (error) {
+    logger.error('Products API error', { error })
+    return NextResponse.json(
+      { success: false, error: 'Failed to fetch products' },
+      { status: 500 }
+    )
+  }
+})
 
-    // Ordenamiento
-    if (searchQuery.sort_by) {
-      filteredProducts.sort((a, b) => {
-        let aValue: any, bValue: any
-        
-        switch (searchQuery.sort_by) {
-          case 'name':
-            aValue = a.name
-            bValue = b.name
-            break
-          case 'price':
-            aValue = Math.min(...a.variants.map(v => v.price))
-            bValue = Math.min(...b.variants.map(v => v.price))
-            break
-          case 'stock':
-            aValue = a.variants.reduce((sum, v) => sum + v.stock, 0)
-            bValue = b.variants.reduce((sum, v) => sum + v.stock, 0)
-            break
-          case 'created_at':
-            aValue = new Date(a.created_at).getTime()
-            bValue = new Date(b.created_at).getTime()
-            break
-          default:
-            return 0
-        }
-
-        if (searchQuery.sort_order === 'desc') {
-          return bValue > aValue ? 1 : -1
-        }
-        return aValue > bValue ? 1 : -1
+// POST /api/products - Create new product
+export const POST = withAuth(async (request, { user }) => {
+  try {
+    const body = await request.json()
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    // Validate input with Zod
+    const validationResult = productSchema.safeParse(body)
+    
+    if (!validationResult.success) {
+      const errors = validationResult.error.issues.map(err => ({
+        field: err.path.join('.'),
+        message: err.message
+      }))
+      
+      return NextResponse.json({
+        success: false,
+        error: 'Validation failed',
+        details: errors
+      }, { status: 400 })
+    }
+    
+    const validated = validationResult.data
+    
+    const { data: product, error } = await supabase
+      .from('products')
+      .insert({
+        name: validated.name,
+        sku: validated.sku,
+        description: validated.description,
+        category_id: validated.category_id,
+        supplier_id: validated.supplier_id,
+        brand: validated.brand,
+        stock_quantity: validated.stock_quantity,
+        min_stock: validated.min_stock,
+        purchase_price: validated.purchase_price,
+        sale_price: validated.sale_price,
+        is_active: validated.is_active,
+        barcode: validated.barcode,
+        unit_measure: validated.unit_measure
       })
-    }
-
-    // Paginación
-    const total = filteredProducts.length
-    const paginatedProducts = filteredProducts.slice(
-      searchQuery.offset || 0, 
-      (searchQuery.offset || 0) + (searchQuery.limit || 50)
-    )
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        products: paginatedProducts,
-        pagination: {
-          total,
-          limit: searchQuery.limit || 50,
-          offset: searchQuery.offset || 0,
-          pages: Math.ceil(total / (searchQuery.limit || 50))
-        }
-      }
-    })
-
-  } catch (error) {
-    console.error('Error fetching products:', error)
-    return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
-      { status: 500 }
-    )
-  }
-}
-
-// POST /api/products - Crear nuevo producto
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
+      .select()
+      .single()
     
-    // Validación básica
-    if (!body.name) {
-      return NextResponse.json(
-        { success: false, error: 'El nombre del producto es requerido' },
-        { status: 400 }
-      )
+    if (error) {
+      logger.error('Failed to create product', { error: error.message, code: error.code })
+      
+      // Handle unique constraint violations
+      if (error.code === '23505') {
+        return NextResponse.json(
+          { success: false, error: 'Product with this SKU already exists' },
+          { status: 409 }
+        )
+      }
+      
+      throw error
     }
-
-    const newProduct: ProductWithVariants = {
-      id: `prod-${Date.now()}`,
-      name: body.name,
-      description: body.description,
-      category_id: body.category_id,
-      brand: body.brand,
-      has_variants: body.has_variants || false,
-      variant_attributes: body.variant_attributes || [],
-      base_price: body.base_price,
-      base_wholesale_price: body.base_wholesale_price,
-      base_cost_price: body.base_cost_price,
-      base_stock: body.base_stock,
-      base_min_stock: body.base_min_stock,
-      variants: body.variants || [],
-      images: body.images || [],
-      tags: body.tags || [],
-      active: body.active !== undefined ? body.active : true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-
-    // En producción, aquí se guardaría en la base de datos
-    mockProducts.push(newProduct)
-
+    
+    logger.info('Product created', { productId: product.id, userId: user.id })
+    
     return NextResponse.json({
       success: true,
-      data: newProduct
+      data: product
     }, { status: 201 })
-
   } catch (error) {
-    console.error('Error creating product:', error)
+    logger.error('Product creation error', { error })
     return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
+      { success: false, error: 'Failed to create product' },
       { status: 500 }
     )
   }
-}
+})
 
-// PUT /api/products - Actualizar múltiples productos
-export async function PUT(request: NextRequest) {
+// PUT /api/products - Update product
+export const PUT = withAuth(async (request, { user }) => {
   try {
     const body = await request.json()
-    const { products } = body
-
-    if (!Array.isArray(products)) {
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    if (!body.id) {
       return NextResponse.json(
-        { success: false, error: 'Se esperaba un array de productos' },
+        { success: false, error: 'Product ID is required' },
         { status: 400 }
       )
     }
-
-    const updatedProducts = []
-
-    for (const productUpdate of products) {
-      const index = mockProducts.findIndex(p => p.id === productUpdate.id)
-      if (index !== -1) {
-        mockProducts[index] = {
-          ...mockProducts[index],
-          ...productUpdate,
-          updated_at: new Date().toISOString()
-        }
-        updatedProducts.push(mockProducts[index])
-      }
+    
+    // Validate input with Zod
+    const validationResult = productUpdateSchema.safeParse(body)
+    
+    if (!validationResult.success) {
+      const errors = validationResult.error.issues.map(err => ({
+        field: err.path.join('.'),
+        message: err.message
+      }))
+      
+      return NextResponse.json({
+        success: false,
+        error: 'Validation failed',
+        details: errors
+      }, { status: 400 })
     }
-
+    
+    const validated = validationResult.data
+    
+    const { data: product, error } = await supabase
+      .from('products')
+      .update({
+        name: validated.name,
+        description: validated.description,
+        category_id: validated.category_id,
+        supplier_id: validated.supplier_id,
+        brand: validated.brand,
+        stock_quantity: validated.stock_quantity,
+        min_stock: validated.min_stock,
+        purchase_price: validated.purchase_price,
+        sale_price: validated.sale_price,
+        is_active: validated.is_active,
+        barcode: validated.barcode,
+        unit_measure: validated.unit_measure
+      })
+      .eq('id', validated.id)
+      .select()
+      .single()
+    
+    if (error) {
+      logger.error('Failed to update product', { error: error.message, productId: validated.id })
+      throw error
+    }
+    
+    logger.info('Product updated', { productId: product.id, userId: user.id })
+    
     return NextResponse.json({
       success: true,
-      data: updatedProducts
+      data: product
     })
-
   } catch (error) {
-    console.error('Error updating products:', error)
+    logger.error('Product update error', { error })
     return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
+      { success: false, error: 'Failed to update product' },
       { status: 500 }
     )
   }
-}
+})
 
-// DELETE /api/products - Eliminar múltiples productos
-export async function DELETE(request: NextRequest) {
+// DELETE /api/products - Delete products (single or bulk)
+export const DELETE = withAuth(async (request, { user }) => {
   try {
     const { searchParams } = new URL(request.url)
-    const ids = searchParams.get('ids')?.split(',') || []
-
-    if (ids.length === 0) {
+    const idsParam = searchParams.get('ids')
+    
+    if (!idsParam) {
       return NextResponse.json(
-        { success: false, error: 'No se proporcionaron IDs para eliminar' },
+        { success: false, error: 'Product IDs are required' },
         { status: 400 }
       )
     }
-
-    const deletedCount = mockProducts.length
-    // En producción, aquí se eliminarían de la base de datos
-    ids.forEach(id => {
-      const index = mockProducts.findIndex(p => p.id === id)
-      if (index !== -1) {
-        mockProducts.splice(index, 1)
-      }
-    })
-
+    
+    const ids = idsParam.split(',')
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .in('id', ids)
+    
+    if (error) {
+      logger.error('Failed to delete products', { error: error.message, ids })
+      throw error
+    }
+    
+    logger.info('Products deleted', { count: ids.length, userId: user.id })
+    
     return NextResponse.json({
       success: true,
-      data: {
-        deleted_count: deletedCount - mockProducts.length,
-        deleted_ids: ids
-      }
+      message: `Successfully deleted ${ids.length} product(s)`
     })
-
   } catch (error) {
-    console.error('Error deleting products:', error)
+    logger.error('Product deletion error', { error })
     return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
+      { success: false, error: 'Failed to delete products' },
       { status: 500 }
     )
   }
-}
+})

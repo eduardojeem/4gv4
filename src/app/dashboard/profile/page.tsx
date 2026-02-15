@@ -203,7 +203,7 @@ export default function UserProfilePage() {
               setInitialProfile(mergedProfile)
             }
           } catch (e) {
-            console.error('Error loading profile row', e)
+            logger.error('Error loading profile', { error: e })
           }
 
           try {
@@ -323,12 +323,12 @@ export default function UserProfilePage() {
                 lastActivity: lastActivityLabel
               })
             } catch (error) {
-              console.error('Error loading profile stats', error)
+              logger.error('Error loading profile stats', { error })
             }
           }
         }
       } catch (e) {
-        console.error('Error loading user', e)
+        logger.error('Error loading user', { error: e })
       } finally {
         setLoadingUser(false)
       }

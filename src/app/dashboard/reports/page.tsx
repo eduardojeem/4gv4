@@ -376,7 +376,7 @@ export default function ReportsPage() {
         
       } catch (error) {
         const msg = error instanceof Error ? error.message : typeof error === 'string' ? error : JSON.stringify(error)
-        console.error('Error fetching reports data:', msg)
+        logger.error('Error fetching reports data', { error: msg })
         setErrorMsg(msg)
       } finally {
         setLoading(false)

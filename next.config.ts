@@ -63,10 +63,17 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
+          pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: 'example.com',
+          hostname: 'example.com',
+          pathname: '/**',
+        },
+        {
+          protocol: 'https',
+          hostname: 'static.mobilesentrix.com',
+          pathname: '/**',
       },
     ],
   },

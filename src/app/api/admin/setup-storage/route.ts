@@ -1,41 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { setupStorageBuckets } from '../../../../../scripts/setup-storage-buckets'
+import { withSuperAdminAuth } from '@/lib/api/withAdminAuth'
+import { logger } from '@/lib/logger'
 
-export async function POST(request: NextRequest) {
+async function handler(request: NextRequest, context: { user: { id: string; email?: string; role: string } }) {
   try {
-    // Verificar que el usuario sea super admin
-    const supabase = createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-    }
+    logger.info('Storage setup initiated', { userId: context.user.id })
 
-    // Verificar rol de super admin
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .single()
-
-    if (roleData?.role !== 'super_admin') {
-      return NextResponse.json({ error: 'Permisos insuficientes' }, { status: 403 })
-    }
+    // Importar dinámicamente para evitar errores si el script no existe
+    const { setupStorageBuckets } = await import('../../../../../scripts/setup-storage-buckets')
 
     // Configurar buckets de storage
     await setupStorageBuckets()
+
+    // Registrar en audit_log
+    const { createClient } = await import('@/lib/supabase/server')
+    const supabase = await createClient()
+    
+    await supabase.from('audit_log').insert({
+      user_id: context.user.id,
+      action: 'setup_storage',
+      resource: 'storage',
+      resource_id: 'buckets',
+      new_values: { success: true }
+    }).catch(err => {
+      logger.error('Failed to log storage setup', { error: err })
+    })
+
+    logger.info('Storage setup completed', { userId: context.user.id })
 
     return NextResponse.json({ 
       success: true, 
       message: 'Storage configurado correctamente' 
     })
 
-  } catch (error) {
-    console.error('Error configurando storage:', error)
+  } catch (error: any) {
+    logger.error('Error configurando storage', { error: error.message })
     return NextResponse.json(
-      { error: 'Error interno del servidor' }, 
+      { error: 'Error interno del servidor', details: error.message }, 
       { status: 500 }
     )
   }
 }
+
+export const POST = withSuperAdminAuth(handler)

@@ -843,10 +843,16 @@ export function CustomerDashboard() {
                           handleBackToList()
                           // Refresh the customer list
                           await refreshCustomers()
-                          toast.success('Cliente actualizado')
+                          toast.success('Cliente actualizado correctamente')
+                        } else {
+                          // Mostrar error específico al usuario
+                          const errorMsg = (result as any).error || 'Error al actualizar cliente'
+                          toast.error(errorMsg)
+                          console.error('Update failed:', errorMsg)
                         }
                       } catch (error) {
                         console.error('Error updating customer:', error)
+                        toast.error('Error inesperado al actualizar cliente')
                       }
                     }}
                     onCancel={handleBackToList}

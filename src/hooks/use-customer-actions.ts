@@ -157,61 +157,28 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
     return withRetry(
       async () => {
         try {
-          // Prepare update data with enhanced cleaning
-          const { id: _, customerCode, registration_date, last_visit, last_activity, ...rawUpdateData } = customerData
+          // Eliminar campos de solo lectura que no deben actualizarse
+          const { id: _, customerCode, registration_date, last_visit, last_activity, ...updateData } = customerData
 
-          // Enhanced data cleaning to handle [REDACTED] and other edge cases
-          const cleanUpdateData = Object.entries(rawUpdateData).reduce((acc, [key, value]) => {
-            if (typeof value === 'string') {
-              const trimmed = value.trim()
-              if (!trimmed ||
-                  trimmed.includes('[REDACTED]') ||
-                  trimmed === 'undefined' ||
-                  trimmed === 'null' ||
-                  trimmed === 'N/A' ||
-                  trimmed === '--') {
-                return acc
-              }
-              acc[key] = trimmed
-              return acc
-            }
+          console.log('Update data before service:', updateData) // Debug log
 
-            if (Array.isArray(value)) {
-              const filtered = value.filter(item => item && typeof item === 'string' && item.trim() && !item.includes('[REDACTED]'))
-              if (filtered.length > 0) acc[key] = filtered
-              return acc
-            }
-
-            if (typeof value === 'number') {
-              if (!isNaN(value)) acc[key] = value
-              return acc
-            }
-
-            if (value !== undefined && value !== null) {
-              acc[key] = value
-            }
-            return acc
-          }, {} as Record<string, any>)
-
-          console.log('Cleaned update data:', cleanUpdateData) // Debug log
-
-          const response = await customerService.updateCustomer(id, cleanUpdateData as any)
+          // Dejar que el servicio maneje toda la limpieza y validación
+          const response = await customerService.updateCustomer(id, updateData as any)
 
           if (!response.success) {
             throw new AppError(
               ErrorCode.DATABASE_ERROR,
               response.error || "Error al actualizar cliente",
-              { customerId: id, updateData: cleanUpdateData }
+              { customerId: id }
             )
           }
 
           logger.info('Customer updated successfully', {
             customerId: id,
-            updatedFields: Object.keys(cleanUpdateData)
+            updatedFields: Object.keys(updateData)
           })
 
-          toast.success("Cliente actualizado exitosamente")
-          return { success: true, customer: response.data }
+          return { success: true, data: response.data }
         } catch (error: any) {
           const errorDetails = error instanceof Error ? {
             message: error.message,
@@ -228,8 +195,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
           )
 
           logger.error('Customer update failed', appError)
-          toast.error(appError.message)
-          return { success: false, error: appError }
+          return { success: false, error: appError.message }
         }
       },
       {

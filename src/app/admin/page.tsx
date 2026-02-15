@@ -10,7 +10,7 @@ import { GlobalSearch } from '@/components/ui/global-search'
 import { SalesChart } from '@/components/dashboard/sales-chart'
 import { RepairsChart } from '@/components/dashboard/repairs-chart'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { LayoutDashboard, Users, Package, Shield, Search, Move } from 'lucide-react'
+import { LayoutDashboard, Users, Package, Shield, Search, Move, Globe } from 'lucide-react'
 
 type QuickLink = {
   title: string
@@ -24,6 +24,7 @@ export default function AdminHome() {
   const defaultLinks: QuickLink[] = useMemo(() => ([
     { title: 'Dashboard Completo', description: 'Vista completa del panel', icon: LayoutDashboard, href: '/admin', color: 'text-blue-500' },
     { title: 'Usuarios', description: 'Gestión de usuarios y permisos', icon: Users, href: '/admin/users', color: 'text-green-500' },
+    { title: 'Sitio Web', description: 'Configuración del sitio público', icon: Globe, href: '/admin/website', color: 'text-cyan-500' },
     { title: 'Inventario', description: 'Control de productos y stock', icon: Package, href: '/admin/inventory', color: 'text-purple-500' },
     { title: 'Seguridad', description: 'Logs de auditoría y seguridad', icon: Shield, href: '/admin/security', color: 'text-red-500' },
   ]), [])

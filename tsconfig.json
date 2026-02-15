@@ -13,7 +13,6 @@
     "noEmit": true,
     "strict": false,
     "skipLibCheck": true,
-    "noCheck": true,
     "baseUrl": ".",
     "paths": {
       "@/*": [
@@ -50,6 +49,7 @@
     "**/*.stories.tsx",
     "scripts",
     "src/app/dashboard/pos/page.original.tsx",
-    "src/app/dashboard/reports/page.original.tsx"
+    "src/app/dashboard/reports/page.original.tsx",
+    "src/components/admin/system/system-configuration.backup.tsx"
   ]
 }

@@ -28,6 +28,8 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState('')
   const [focusedField, setFocusedField] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [unconfirmed, setUnconfirmed] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
 
   const router = useRouter()
   const supabase = createClient()
@@ -49,10 +51,12 @@ export default function LoginPage() {
       })
 
       if (error) {
-        console.error('Login error:', error.message, error)
         const msg = error.message || (typeof error === 'string' ? error : 'Error al iniciar sesión')
 
-        if (msg.includes('Invalid login credentials')) {
+        if (/email not confirmed/i.test(msg)) {
+          setUnconfirmed(true)
+          setError('Tu correo no está confirmado. Reenvía el email de verificación para acceder.')
+        } else if (msg.includes('Invalid login credentials')) {
           setError('Credenciales incorrectas. Por favor verifica tu correo y contraseña.')
         } else if (/Failed to fetch|Network|fetch/i.test(msg)) {
           setError('No se pudo conectar con el servidor. Verifica tu conexión a internet.')
@@ -86,6 +90,38 @@ export default function LoginPage() {
       setError('Ocurrió un error inesperado. Intenta de nuevo.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResendConfirmation = async () => {
+    const targetEmail = email.trim()
+    if (!targetEmail) {
+      toast.error('Ingresa tu correo para reenviar la confirmación')
+      return
+    }
+    const emailValid = /.+@.+\..+/.test(targetEmail)
+    if (!emailValid) {
+      toast.error('Correo inválido')
+      return
+    }
+    try {
+      setResendLoading(true)
+      const origin = typeof window !== 'undefined' ? window.location.origin : undefined
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: targetEmail,
+        options: origin ? { emailRedirectTo: `${origin}/auth/callback?next=/dashboard` } : undefined
+      })
+      if (error) {
+        toast.error(error.message)
+      } else {
+        toast.success('Te enviamos nuevamente el correo de confirmación')
+        setUnconfirmed(false)
+      }
+    } catch (e) {
+      toast.error('No se pudo reenviar el correo de confirmación')
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -580,6 +616,26 @@ export default function LoginPage() {
                   )}
                 </AnimatePresence>
 
+                {unconfirmed && (
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      onClick={handleResendConfirmation}
+                      className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500"
+                      disabled={loading || resendLoading}
+                    >
+                      {resendLoading ? (
+                        <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Enviando...</span>
+                      ) : (
+                        'Reenviar confirmación'
+                      )}
+                    </Button>
+                    <span className="text-xs text-slate-400">
+                      Revisa bandeja de entrada y correo no deseado.
+                    </span>
+                  </div>
+                )}
+
                 {/* Submit Button */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -636,7 +692,7 @@ export default function LoginPage() {
                     href="/register" 
                     className="text-cyan-400 hover:text-cyan-300 font-semibold hover:underline transition-colors inline-flex items-center gap-1 group"
                   >
-                    Solicitar acceso
+                    Crear una cuenta
                     <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
                   </Link>
                 </p>

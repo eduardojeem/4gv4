@@ -31,6 +31,7 @@ type InstallmentProgress = {
 type CustomerWithCredit = Customer & {
   credit_summary?: CreditSummary
   credit_installments_progress?: InstallmentProgress[]
+  authorized_persons?: any[]
 }
 
 export function useCustomerData(customerId: number | string | null) {
@@ -54,8 +55,16 @@ export function useCustomerData(customerId: number | string | null) {
         if (installments.success) {
           result.credit_installments_progress = (installments.data as InstallmentProgress[]) || []
         }
+        
+        // Cargar personas autorizadas si hay profile_id
+        if (result.profile_id) {
+          const authPersons = await customerService.getCustomerAuthorizedPersons(result.profile_id)
+          if (authPersons.success) {
+            result.authorized_persons = authPersons.data || []
+          }
+        }
       } catch {
-        // Ignorar errores de crédito para no bloquear la carga del cliente
+        // Ignorar errores de crédito y autorizados para no bloquear la carga del cliente
       }
       return result
     },

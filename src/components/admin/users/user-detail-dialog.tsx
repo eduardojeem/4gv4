@@ -47,12 +47,6 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
   const [permissions, setPermissions] = useState<UserPermissions | null>(null)
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false)
 
-  useEffect(() => {
-    if (user && open) {
-      loadPermissions()
-    }
-  }, [user, open])
-
   const loadPermissions = async () => {
     if (!user) return
     
@@ -72,6 +66,13 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
       setIsLoadingPermissions(false)
     }
   }
+
+  useEffect(() => {
+    if (user && open) {
+      loadPermissions()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, open])
 
   if (!user) return null
 
@@ -104,7 +105,7 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh]">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <div className="flex items-center gap-4">
             <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg">
@@ -132,7 +133,7 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue="info" className="mt-4">
+        <Tabs defaultValue="info" className="mt-4 flex flex-col flex-1 overflow-hidden">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="info">
               <User className="h-4 w-4 mr-2" />
@@ -148,8 +149,8 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
             </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="h-[500px] mt-4">
-            <TabsContent value="info" className="space-y-6">
+          <TabsContent value="info" className="flex-1 overflow-auto mt-4">
+            <div className="space-y-6 pr-4">
               {/* Información de Contacto */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
@@ -249,17 +250,19 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
                   </div>
                 </>
               )}
-            </TabsContent>
+            </div>
+          </TabsContent>
 
-            <TabsContent value="activity">
-              <UserActivityTimeline 
-                logs={undefined}
-                className="h-[450px]"
-                limit={50}
-              />
-            </TabsContent>
+          <TabsContent value="activity" className="flex-1 overflow-auto mt-4">
+            <UserActivityTimeline 
+              logs={undefined}
+              className="pr-4"
+              limit={50}
+            />
+          </TabsContent>
 
-            <TabsContent value="permissions" className="space-y-4">
+          <TabsContent value="permissions" className="flex-1 overflow-auto mt-4">
+            <div className="pr-4">
               {isLoadingPermissions ? (
                 <div className="flex items-center justify-center h-64">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -298,8 +301,8 @@ export function UserDetailDialog({ user, open, onOpenChange }: UserDetailDialogP
                   <p>No se pudieron cargar los permisos</p>
                 </div>
               )}
-            </TabsContent>
-          </ScrollArea>
+            </div>
+          </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>

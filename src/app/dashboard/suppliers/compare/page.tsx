@@ -81,8 +81,7 @@ export default function PriceComparisonPage() {
 
                 setProducts(mappedProducts)
             } catch (error: any) {
-                console.error('Error fetching products:', error)
-                console.error('Error details:', error.message, error.details, error.hint)
+                logger.error('Error fetching products for comparison', { error, details: error.message })
             } finally {
                 setLoading(false)
             }

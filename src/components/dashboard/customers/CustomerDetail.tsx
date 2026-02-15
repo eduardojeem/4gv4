@@ -30,11 +30,13 @@ import {
   Calendar,
   Clock,
   Activity,
+  AlertCircle,
   MapPin,
   Tag,
   Plus,
   MessageSquare,
   Shield,
+  ShieldCheck,
   TrendingUp,
   CheckCircle,
   Building,
@@ -42,7 +44,9 @@ import {
   Edit
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
-import { useCustomerData, useCustomerPurchases } from '@/hooks/useCustomerData'
+import { useCustomerData, useCustomerPurchases, prefetchCustomerPurchases } from '@/hooks/useCustomerData'
+import { useAuthorizedPersons, prefetchAuthorizedPersons } from '@/hooks/useAuthorizedPersons'
+import { createClient } from '@/lib/supabase/client'
 import { CustomerDetailHeader } from './CustomerDetailHeader'
 import { CustomerDetailMetrics } from './CustomerDetailMetrics'
 
@@ -159,6 +163,32 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
 
   // Use fresh data if available, otherwise fallback to prop
   const currentCustomer = freshData ? { ...customer, ...freshData } : customer
+  const [resolvedProfileId, setResolvedProfileId] = useState<string | null>((currentCustomer as any).profile_id ?? null)
+  const resolvedEmail = (freshData?.email ?? (customer as any).email) as string | undefined
+
+  React.useEffect(() => {
+    const fetchProfileId = async () => {
+      if (activeTab !== 'authorized') return
+      if (resolvedProfileId) return
+      if (!resolvedEmail) return
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', resolvedEmail)
+          .limit(1)
+          .maybeSingle()
+        if (data?.id) setResolvedProfileId(data.id as string)
+      } catch {}
+    }
+    fetchProfileId()
+  }, [activeTab, resolvedProfileId, resolvedEmail])
+
+  const { data: authorizedPersons, isLoading: authorizedLoading } = useAuthorizedPersons(
+    resolvedProfileId,
+    activeTab === 'authorized'
+  )
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'No disponible'
@@ -210,6 +240,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
             <TabsTrigger
               value="history"
               className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
+              onMouseEnter={() => prefetchCustomerPurchases(currentCustomer.id)}
             >
               <History className="h-4 w-4 mr-2" />
               Historial
@@ -220,6 +251,17 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
             >
               <CreditCard className="h-4 w-4 mr-2" />
               Créditos y Pagos
+            </TabsTrigger>
+            <TabsTrigger
+              value="authorized"
+              className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
+              onMouseEnter={() => {
+                const pid = resolvedProfileId || (currentCustomer as any).profile_id
+                if (pid) prefetchAuthorizedPersons(pid as string)
+              }}
+            >
+              <ShieldCheck className="h-4 w-4 mr-2" />
+              Autorizados
             </TabsTrigger>
             <TabsTrigger
               value="notes"
@@ -497,6 +539,83 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
           </Card>
         </TabsContent>
 
+        {/* Tab Content: Authorized Persons */}
+        <TabsContent value="authorized">
+          <Card className="border-0 shadow-lg">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-t-lg">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-blue-600" />
+                Personas Autorizadas para Retiro
+                <Badge variant="secondary" className="ml-2">{authorizedLoading ? '...' : (authorizedPersons?.length || 0)}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              {(authorizedPersons as any)?.error && (
+                <div className="mb-4 p-3 border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-md text-sm">
+                  Error al cargar autorizados.
+                </div>
+              )}
+              {authorizedLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="animate-pulse flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : authorizedPersons && authorizedPersons.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {authorizedPersons.map((person: any) => (
+                    <div key={person.id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 group hover:shadow-md transition-all">
+                      <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
+                        <User className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-gray-900 dark:text-white truncate">{person.full_name}</p>
+                        <div className="flex flex-col gap-0.5 mt-0.5">
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <FileText className="h-3 w-3" />
+                            CI: {person.document_number}
+                          </p>
+                          {person.relationship && (
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">{person.relationship}</p>
+                          )}
+                          {person.phone && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <PhoneCall className="h-3 w-3" />
+                              {person.phone}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="mx-auto w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                    <Shield className="h-8 w-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">Sin autorizados</h3>
+                  <p className="text-gray-500">Este cliente aún no ha designado personas autorizadas para el retiro.</p>
+                </div>
+              )}
+              
+              <div className="mt-8 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 rounded-xl flex gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+                <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">
+                  <strong>Verificación importante:</strong> Al momento del retiro por parte de un tercero, es obligatorio solicitar el documento de identidad original y verificar que coincida con los datos aquí registrados.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Tab Content: Notes */}
         <TabsContent value="notes">
           <Card>
@@ -522,5 +641,3 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
     </div>
   )
 }
-
-

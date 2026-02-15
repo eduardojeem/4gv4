@@ -33,14 +33,27 @@ export function RepairsChart() {
     try {
       const supabase = createClient()
       
+      // Verificar autenticación
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !user) {
+        console.warn('User not authenticated for repairs chart')
+        setData([])
+        return
+      }
+      
       // Obtener conteos por estado
       const { data: repairs, error } = await supabase
         .from('repairs')
         .select('status')
 
-      if (error) throw error
+      if (error) {
+        console.error('Error fetching repairs:', error)
+        setData([])
+        return
+      }
 
-      if (repairs) {
+      if (repairs && repairs.length > 0) {
         const counts = repairs.reduce((acc, curr) => {
           const status = curr.status as keyof typeof COLORS
           acc[status] = (acc[status] || 0) + 1
@@ -57,9 +70,12 @@ export function RepairsChart() {
           .sort((a, b) => b.value - a.value)
 
         setData(formattedData)
+      } else {
+        setData([])
       }
     } catch (error) {
       console.error('Error fetching repairs stats:', error)
+      setData([])
     } finally {
       setIsLoading(false)
     }

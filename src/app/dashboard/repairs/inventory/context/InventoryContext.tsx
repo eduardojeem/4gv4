@@ -9,6 +9,7 @@
  */
 
 "use client"
+import { logger } from '@/lib/logger'
 
 import { createContext, useContext, useCallback, useMemo, ReactNode, useState } from 'react'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
@@ -165,7 +166,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
         throw new Error(result.error)
       }
     } catch (error) {
-      console.error('Error creating service:', error)
+      logger.error('Error creating service', { error })
       toast.error(error instanceof Error ? error.message : "Error al crear servicio")
       throw error
     }
@@ -182,7 +183,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
         throw new Error(result.error)
       }
     } catch (error) {
-      console.error('Error updating service:', error)
+      logger.error('Error updating service', { error })
       toast.error("Error al actualizar servicio")
       throw error
     }
@@ -199,7 +200,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
         throw new Error(result.error)
       }
     } catch (error) {
-      console.error('Error updating product:', error)
+      logger.error('Error updating product', { error })
       toast.error("Error al actualizar producto")
       throw error
     }
@@ -216,7 +217,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
         throw new Error(result.error)
       }
     } catch (error) {
-      console.error('Error deleting item:', error)
+      logger.error('Error deleting item', { error })
       toast.error("Error al eliminar")
       throw error
     }
@@ -238,7 +239,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
         throw new Error(result.error)
       }
     } catch (error) {
-      console.error('Error updating stock:', error)
+      logger.error('Error updating stock', { error })
       toast.error("Error al actualizar stock")
       throw error
     }

@@ -425,7 +425,7 @@ export function useProducts() {
       ] = await Promise.all([
         supabase.from('products').select('*'),
         supabase.from('categories').select('id').eq('is_active', true),
-        supabase.from('suppliers').select('id').eq('is_active', true),
+        supabase.from('suppliers').select('id').eq('status', 'active'),
         supabase.from('product_movements').select('id').gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
         supabase.from('product_alerts').select('id').eq('is_resolved', false)
       ])

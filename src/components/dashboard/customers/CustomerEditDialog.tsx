@@ -18,6 +18,7 @@ import { CustomerEditFormV2 } from './CustomerEditFormV2'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerActions } from '@/hooks/use-customer-actions'
 import { toast } from 'sonner'
+import { mutate as globalMutate } from 'swr'
 
 // Simple VisuallyHidden component for accessibility
 const VisuallyHidden = ({ children }: { children: React.ReactNode }) => (
@@ -40,6 +41,7 @@ export function CustomerEditDialog({
   onSuccess
 }: CustomerEditDialogProps) {
   const { updateCustomer } = useCustomerActions()
+  const [saveError, setSaveError] = React.useState<string | null>(null)
 
   const handleSave = async (formData: any) => {
     if (!customer) return
@@ -71,15 +73,28 @@ export function CustomerEditDialog({
       const result = await updateCustomer(customer.id, updateData)
       
       if (result.success) {
+        const updated = (result as any).data || (result as any).customer || customer
+        // Actualizar caché de SWR para la ficha del cliente
+        await globalMutate(['customer', String(customer.id)], updated, false)
+        // Opcional: actualizar listas y filtros si existen
+        await globalMutate((key: any) => Array.isArray(key) && key[0] === 'customers', undefined, true)
+
         toast.success('Cliente actualizado correctamente')
-        onSuccess?.(result.data)
+        setSaveError(null)
+        onSuccess?.(updated as any)
         onClose()
       } else {
-        toast.error(result.error || 'Error al actualizar cliente')
+        const msg = typeof (result as any).error === 'string'
+          ? (result as any).error
+          : ((result as any).error?.message || 'Error al actualizar cliente')
+        setSaveError(msg)
+        toast.error(msg)
       }
     } catch (error) {
       console.error('Error updating customer:', error)
-      toast.error('Error inesperado al actualizar cliente')
+      const msg = (error as any)?.message || 'Error inesperado al actualizar cliente'
+      setSaveError(msg)
+      toast.error(msg)
     }
   }
 
@@ -96,6 +111,11 @@ export function CustomerEditDialog({
           </DialogHeader>
         </VisuallyHidden>
         <div className="w-full h-full">
+          {saveError && (
+            <div className="mx-6 mt-4 p-3 border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-md text-sm">
+              {saveError}
+            </div>
+          )}
           <CustomerEditFormV2
             customer={customer}
             onSave={handleSave}

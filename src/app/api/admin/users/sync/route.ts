@@ -1,8 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { withAdminAuth } from '@/lib/api/withAdminAuth'
+import { logger } from '@/lib/logger'
 
-export async function POST() {
+async function handler(request: Request, context: { user: { id: string; email?: string; role: string } }) {
     try {
+        logger.info('Starting user sync', { syncedBy: context.user.id })
+
         // Crear cliente de administración con Service Role
         const supabaseAdmin = createClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -68,6 +72,28 @@ export async function POST() {
             }
         }
 
+        // Registrar sincronización en audit_log
+        await supabaseAdmin.from('audit_log').insert({
+            user_id: context.user.id,
+            action: 'user_sync',
+            resource: 'users',
+            resource_id: 'bulk',
+            new_values: {
+                total: results.total,
+                updated: results.updated,
+                errors: results.errors.length
+            }
+        }).catch(err => {
+            logger.error('Failed to log user sync', { error: err })
+        })
+
+        logger.info('User sync completed', {
+            syncedBy: context.user.id,
+            total: results.total,
+            updated: results.updated,
+            errors: results.errors.length
+        })
+
         return NextResponse.json({
             success: true,
             message: `Sincronización completada. ${results.updated}/${results.total} usuarios procesados.`,
@@ -75,10 +101,12 @@ export async function POST() {
         })
 
     } catch (error: any) {
-        console.error('Sync error:', error)
+        logger.error('Sync error', { error: error.message })
         return NextResponse.json(
             { success: false, error: error.message },
             { status: 500 }
         )
     }
 }
+
+export const POST = withAdminAuth(handler)

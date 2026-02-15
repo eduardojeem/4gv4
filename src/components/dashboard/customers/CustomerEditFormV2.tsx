@@ -77,6 +77,16 @@ interface CustomerEditFormV2Props {
   isLoading?: boolean
 }
 
+const SEGMENT_OPTIONS = ['vip', 'premium', 'regular', 'new', 'high_value', 'low_value', 'business', 'wholesale'] as const
+const CONTACT_OPTIONS = ['email', 'phone', 'whatsapp', 'sms'] as const
+const TYPE_OPTIONS = ['regular', 'premium', 'empresa'] as const
+const STATUS_OPTIONS = ['active', 'inactive', 'suspended', 'pending'] as const
+
+const safeSegment = (v: string | undefined) => (SEGMENT_OPTIONS as readonly string[]).includes(v || '') ? (v as typeof SEGMENT_OPTIONS[number]) : 'regular'
+const safeContact = (v: string | undefined) => (CONTACT_OPTIONS as readonly string[]).includes(v || '') ? (v as typeof CONTACT_OPTIONS[number]) : 'email'
+const safeType = (v: string | undefined) => (TYPE_OPTIONS as readonly string[]).includes(v || '') ? (v as typeof TYPE_OPTIONS[number]) : 'regular'
+const safeStatus = (v: string | undefined) => (STATUS_OPTIONS as readonly string[]).includes(v || '') ? (v as typeof STATUS_OPTIONS[number]) : 'active'
+
 export function CustomerEditFormV2({ 
   customer, 
   onSave, 
@@ -100,20 +110,20 @@ export function CustomerEditFormV2({
       company: customer.company || '',
       position: customer.position || '',
       ruc: customer.ruc || '',
-      customer_type: customer.customer_type || 'regular',
-      segment: customer.segment || 'regular',
-      status: customer.status || 'active',
+      customer_type: safeType(customer.customer_type),
+      segment: safeSegment(customer.segment),
+      status: safeStatus(customer.status),
       credit_limit: customer.credit_limit || 0,
       discount_percentage: customer.discount_percentage || 0,
       payment_terms: customer.payment_terms || '',
-      preferred_contact: customer.preferred_contact || 'email',
+      preferred_contact: safeContact(customer.preferred_contact),
       tags: customer.tags || [],
       notes: customer.notes || '',
       birthday: customer.birthday || '',
     }
   })
 
-  const { watch, setValue, getValues } = form
+  const { watch, setValue, getValues, reset } = form
   const watchedValues = watch()
 
   useEffect(() => {
@@ -121,7 +131,7 @@ export function CustomerEditFormV2({
     ;(async () => {
       const res = await customerService.getCustomer(customer.id)
       if (mounted && res.success && res.data) {
-        form.reset({
+        reset({
           name: res.data.name || '',
           email: res.data.email || '',
           phone: res.data.phone || '',
@@ -131,13 +141,13 @@ export function CustomerEditFormV2({
           company: (res.data as any).company || '',
           position: (res.data as any).position || '',
           ruc: (res.data as any).ruc || '',
-          customer_type: res.data.customer_type || 'regular',
-          segment: res.data.segment || 'regular',
-          status: (res.data.status as any) || 'active',
+          customer_type: safeType(res.data.customer_type as any),
+          segment: safeSegment(res.data.segment as any),
+          status: safeStatus(res.data.status as any),
           credit_limit: res.data.credit_limit || 0,
           discount_percentage: res.data.discount_percentage || 0,
           payment_terms: res.data.payment_terms || '',
-          preferred_contact: res.data.preferred_contact || 'email',
+          preferred_contact: safeContact(res.data.preferred_contact as any),
           tags: res.data.tags || [],
           notes: (res.data as any).notes || '',
           birthday: (res.data as any).birthday || '',
@@ -145,7 +155,7 @@ export function CustomerEditFormV2({
       }
     })()
     return () => { mounted = false }
-  }, [customer.id])
+  }, [customer.id, reset])
 
   // Detectar cambios
   useEffect(() => {
@@ -158,29 +168,26 @@ export function CustomerEditFormV2({
   const handleSave = async (data: CustomerEditFormData) => {
     setIsSaving(true)
     try {
-      // Limpiar y preparar los datos antes de enviar
-      const cleanedData = {
+      // Enviar los datos tal cual - el servicio se encarga de la limpieza
+      // Solo hacemos trim básico de strings para evitar espacios innecesarios
+      const preparedData = {
         ...data,
-        // Limpiar campos de teléfono - si están vacíos o son placeholders, enviar undefined
-        phone: data.phone && data.phone.trim() && !data.phone.includes('[REDACTED]') ? data.phone.trim() : undefined,
-        whatsapp: data.whatsapp && data.whatsapp.trim() && !data.whatsapp.includes('[REDACTED]') ? data.whatsapp.trim() : undefined,
-        // Limpiar otros campos opcionales
-        email: data.email && data.email.trim() ? data.email.trim() : undefined,
-        address: data.address && data.address.trim() ? data.address.trim() : undefined,
-        city: data.city && data.city.trim() ? data.city.trim() : undefined,
-        company: data.company && data.company.trim() ? data.company.trim() : undefined,
-        position: data.position && data.position.trim() ? data.position.trim() : undefined,
-        ruc: data.ruc && data.ruc.trim() ? data.ruc.trim() : undefined,
-        payment_terms: data.payment_terms && data.payment_terms.trim() ? data.payment_terms.trim() : undefined,
-        notes: data.notes && data.notes.trim() ? data.notes.trim() : undefined,
-        birthday: data.birthday && data.birthday.trim() ? data.birthday.trim() : undefined,
-        // Asegurar que los arrays no estén vacíos
-        tags: data.tags && data.tags.length > 0 ? data.tags : undefined,
+        name: data.name?.trim(),
+        email: data.email?.trim() || undefined,
+        phone: data.phone?.trim() || undefined,
+        whatsapp: data.whatsapp?.trim() || undefined,
+        address: data.address?.trim() || undefined,
+        city: data.city?.trim() || undefined,
+        company: data.company?.trim() || undefined,
+        position: data.position?.trim() || undefined,
+        ruc: data.ruc?.trim() || undefined,
+        payment_terms: data.payment_terms?.trim() || undefined,
+        notes: data.notes?.trim() || undefined,
+        birthday: data.birthday?.trim() || undefined,
       }
 
-      await onSave(cleanedData)
+      await onSave(preparedData)
       setHasChanges(false)
-      toast.success('Cliente actualizado correctamente')
     } catch (error) {
       console.error('Error saving customer:', error)
       toast.error('Error al actualizar cliente')

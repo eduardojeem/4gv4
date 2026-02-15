@@ -1,279 +1,334 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/withAuth'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+import { logger } from '@/lib/logger'
+import { saleSchema, saleUpdateSchema } from '@/lib/validation/schemas'
 
-// Tipos para ventas
-interface SaleItem {
-  id: string
-  product_id: string
-  variant_id?: string
-  sku: string
-  name: string
-  quantity: number
-  unit_price: number
-  discount_amount: number
-  total_price: number
-  attributes?: Array<{
-    attribute_name: string
-    value: string
-    color_hex?: string
-  }>
-  // Soporte para variantes
-  variant_attributes?: Array<{
-    attribute_name: string
-    value_name: string
-  }>
-  // Soporte para promociones
-  applied_promotions?: Array<{
-    promotion_id: string
-    promotion_name: string
-    discount_amount: number
-    discount_type: 'percentage' | 'fixed'
-  }>
-}
-
-interface Sale {
-  id: string
-  sale_number: string
-  customer_id?: string
-  customer_name?: string
-  items: SaleItem[]
-  subtotal: number
-  discount_amount: number
-  tax_amount: number
-  total_amount: number
-  payment_method: string
-  payment_status: 'pending' | 'completed' | 'refunded'
-  notes?: string
-  cashier_id: string
-  cashier_name: string
-  register_id: string
-  created_at: string
-  updated_at: string
-  // Soporte para promociones
-  applied_promotions?: Array<{
-    promotion_id: string
-    promotion_name: string
-    total_discount: number
-    items_affected: string[] // IDs de items afectados
-  }>
-  promotion_discount_total?: number
-}
-
-// Mock data para desarrollo
-const mockSales: Sale[] = [
-  {
-    id: 'sale-1',
-    sale_number: 'SALE-001',
-    customer_id: 'customer-1',
-    customer_name: 'Juan Pérez',
-    items: [
-      {
-        id: 'item-1',
-        product_id: 'product-1',
-        name: 'Smartphone Samsung Galaxy A54',
-        sku: 'SAM-A54-128-BLK',
-        quantity: 1,
-        unit_price: 2500000,
-        total_price: 2250000,
-        discount_amount: 250000,
-        variant_id: 'variant-1',
-        variant_attributes: [
-          { attribute_name: 'Color', value_name: 'Negro' },
-          { attribute_name: 'Almacenamiento', value_name: '128GB' }
-        ],
-        applied_promotions: [
-          {
-            promotion_id: 'promo-1',
-            promotion_name: 'Descuento de Bienvenida',
-            discount_amount: 250000,
-            discount_type: 'percentage'
-          }
-        ]
-      },
-      {
-        id: 'item-2',
-        product_id: 'product-2',
-        name: 'Auriculares Bluetooth Sony',
-        sku: 'SONY-WH1000-WHT',
-        quantity: 2,
-        unit_price: 850000,
-        total_price: 1700000,
-        discount_amount: 0,
-        variant_id: 'variant-2',
-        variant_attributes: [
-          { attribute_name: 'Color', value_name: 'Blanco' }
-        ]
-      }
-    ],
-    subtotal: 4200000,
-    tax_amount: 798000,
-    discount_amount: 420000,
-    total_amount: 4578000,
-    payment_method: 'card',
-    payment_status: 'completed',
-    cashier_id: 'cashier-1',
-    cashier_name: 'María García',
-    register_id: 'register-1',
-    notes: 'Cliente frecuente',
-    created_at: '2024-01-15T10:30:00Z',
-    updated_at: '2024-01-15T10:30:00Z',
-    applied_promotions: [
-      {
-        promotion_id: 'promo-1',
-        promotion_name: 'Descuento de Bienvenida',
-        total_discount: 250000,
-        items_affected: ['item-1']
-      }
-    ],
-    promotion_discount_total: 250000
-  }
-]
-
-// GET /api/sales - Obtener todas las ventas con filtros
-export async function GET(request: NextRequest) {
+// GET /api/sales - Get sales with filters
+export const GET = withAuth(async (request, { user }) => {
   try {
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
+    
     const startDate = searchParams.get('start_date')
     const endDate = searchParams.get('end_date')
     const customerId = searchParams.get('customer_id')
-    const paymentStatus = searchParams.get('payment_status')
-    const paymentMethod = searchParams.get('payment_method')
-    const cashierId = searchParams.get('cashier_id')
-    const registerId = searchParams.get('register_id')
-
-    let filteredSales = [...mockSales]
-
-    // Filtrar por fechas
+    const status = searchParams.get('status')
+    const page = parseInt(searchParams.get('page') || '1')
+    const perPage = parseInt(searchParams.get('per_page') || '50')
+    
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    // Build query with relations
+    let queryBuilder = supabase
+      .from('sales')
+      .select(`
+        *,
+        customer:customers(id, first_name, last_name, phone),
+        sale_items(
+          *,
+          product:products(id, name, sku)
+        )
+      `, { count: 'exact' })
+    
+    // Apply filters
     if (startDate) {
-      filteredSales = filteredSales.filter(sale => 
-        new Date(sale.created_at) >= new Date(startDate)
-      )
+      queryBuilder = queryBuilder.gte('created_at', startDate)
     }
+    
     if (endDate) {
-      filteredSales = filteredSales.filter(sale => 
-        new Date(sale.created_at) <= new Date(endDate)
-      )
+      queryBuilder = queryBuilder.lte('created_at', endDate)
     }
-
-    // Filtrar por cliente
+    
     if (customerId) {
-      filteredSales = filteredSales.filter(sale => sale.customer_id === customerId)
+      queryBuilder = queryBuilder.eq('customer_id', customerId)
     }
-
-    // Filtrar por estado de pago
-    if (paymentStatus) {
-      filteredSales = filteredSales.filter(sale => sale.payment_status === paymentStatus)
+    
+    if (status) {
+      queryBuilder = queryBuilder.eq('status', status)
     }
-
-    // Filtrar por método de pago
-    if (paymentMethod) {
-      filteredSales = filteredSales.filter(sale => sale.payment_method === paymentMethod)
+    
+    // Apply pagination
+    const from = (page - 1) * perPage
+    const to = from + perPage - 1
+    
+    const { data: sales, error, count } = await queryBuilder
+      .range(from, to)
+      .order('created_at', { ascending: false })
+    
+    if (error) {
+      logger.error('Failed to fetch sales', { error: error.message, code: error.code })
+      throw error
     }
-
-    // Filtrar por cajero
-    if (cashierId) {
-      filteredSales = filteredSales.filter(sale => sale.cashier_id === cashierId)
-    }
-
-    // Filtrar por caja registradora
-    if (registerId) {
-      filteredSales = filteredSales.filter(sale => sale.register_id === registerId)
-    }
-
-    // Ordenar por fecha (más recientes primero)
-    filteredSales.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-
-    // Paginación
-    const startIndex = (page - 1) * limit
-    const endIndex = startIndex + limit
-    const paginatedSales = filteredSales.slice(startIndex, endIndex)
-
-    // Calcular estadísticas
-    const totalSales = filteredSales.length
-    const totalAmount = filteredSales.reduce((sum, sale) => sum + sale.total_amount, 0)
-    const averageAmount = totalSales > 0 ? totalAmount / totalSales : 0
-
+    
     return NextResponse.json({
       success: true,
-      data: paginatedSales,
-      pagination: {
+      data: {
+        sales: sales || [],
+        total: count || 0,
         page,
-        limit,
-        total: totalSales,
-        pages: Math.ceil(totalSales / limit)
-      },
-      statistics: {
-        total_sales: totalSales,
-        total_amount: totalAmount,
-        average_amount: averageAmount
+        per_page: perPage
       }
     })
-
   } catch (error) {
-    console.error('Error fetching sales:', error)
+    logger.error('Sales API error', { error })
     return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
+      { success: false, error: 'Failed to fetch sales' },
       { status: 500 }
     )
   }
-}
+})
 
-// POST /api/sales - Crear nueva venta
-export async function POST(request: NextRequest) {
+// POST /api/sales - Create new sale with items
+export const POST = withAuth(async (request, { user }) => {
   try {
     const body = await request.json()
+    const supabase = createRouteHandlerClient({ cookies })
     
-    // Validaciones básicas
-    if (!body.items || !Array.isArray(body.items) || body.items.length === 0) {
+    // Validate input with Zod
+    const validationResult = saleSchema.safeParse(body)
+    
+    if (!validationResult.success) {
+      const errors = validationResult.error.issues.map(err => ({
+        field: err.path.join('.'),
+        message: err.message
+      }))
+      
+      return NextResponse.json({
+        success: false,
+        error: 'Validation failed',
+        details: errors
+      }, { status: 400 })
+    }
+    
+    const validated = validationResult.data
+
+    // Auto-detect customer_id for logged-in customers if not provided
+    let finalCustomerId = validated.customer_id
+
+    if (!finalCustomerId) {
+      const { data: customerData } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('profile_id', user.id)
+        .single()
+      
+      if (customerData) {
+        finalCustomerId = customerData.id
+      }
+    }
+    
+    // Start transaction-like operation
+    // 1. Insert sale
+    const { data: sale, error: saleError } = await supabase
+      .from('sales')
+      .insert({
+        user_id: user.id,
+        customer_id: finalCustomerId || null,
+        total: validated.total_amount,
+        tax: validated.tax_amount || 0,
+        discount: validated.discount_amount || 0,
+        payment_method: validated.payment_method,
+        status: validated.status || 'completada'
+      })
+      .select()
+      .single()
+    
+    if (saleError) {
+      logger.error('Failed to create sale', { error: saleError.message, userId: user.id })
+      throw saleError
+    }
+    
+    // 2. Insert sale items
+    const saleItems = validated.items.map((item) => ({
+      sale_id: sale.id,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      total: item.total || (item.quantity * item.unit_price)
+    }))
+    
+    const { error: itemsError } = await supabase
+      .from('sale_items')
+      .insert(saleItems)
+    
+    if (itemsError) {
+      logger.error('Failed to create sale items, rolling back sale', {
+        error: itemsError.message,
+        saleId: sale.id
+      })
+      
+      // Rollback: delete the sale
+      await supabase.from('sales').delete().eq('id', sale.id)
+      
       return NextResponse.json(
-        { success: false, error: 'La venta debe tener al menos un item' },
-        { status: 400 }
+        { success: false, error: 'Failed to create sale items' },
+        { status: 500 }
       )
     }
-
-    if (!body.cashier_id || !body.register_id) {
-      return NextResponse.json(
-        { success: false, error: 'Faltan campos requeridos: cashier_id, register_id' },
-        { status: 400 }
-      )
+    
+    // 3. Update product stock (decrease)
+    for (const item of validated.items) {
+      const { data: product, error: productError } = await supabase
+        .from('products')
+        .select('stock_quantity')
+        .eq('id', item.product_id)
+        .single()
+      
+      if (!productError && product) {
+        const newStock = (product.stock_quantity || 0) - item.quantity
+        
+        await supabase
+          .from('products')
+          .update({ stock_quantity: Math.max(0, newStock) })
+          .eq('id', item.product_id)
+      }
     }
-
-    // Generar número de venta
-    const saleNumber = `VTA-${String(mockSales.length + 1).padStart(3, '0')}`
-
-    const newSale: Sale = {
-      id: `sale-${Date.now()}`,
-      sale_number: saleNumber,
-      customer_id: body.customer_id,
-      customer_name: body.customer_name,
-      items: body.items,
-      subtotal: body.subtotal || 0,
-      discount_amount: body.discount_amount || 0,
-      tax_amount: body.tax_amount || 0,
-      total_amount: body.total_amount || 0,
-      payment_method: body.payment_method || 'cash',
-      payment_status: body.payment_status || 'completed',
-      notes: body.notes,
-      cashier_id: body.cashier_id,
-      cashier_name: body.cashier_name || 'Cajero',
-      register_id: body.register_id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-
-    mockSales.push(newSale)
-
+    
+    logger.info('Sale created successfully', {
+      saleId: sale.id,
+      itemCount: saleItems.length,
+      total: validated.total_amount,
+      userId: user.id
+    })
+    
+    // Fetch complete sale with relations for response
+    const { data: completeSale } = await supabase
+      .from('sales')
+      .select(`
+        *,
+        customer:customers(id, first_name, last_name),
+        sale_items(*, product:products(id, name, sku))
+      `)
+      .eq('id', sale.id)
+      .single()
+    
     return NextResponse.json({
       success: true,
-      data: newSale
+      data: completeSale || sale
     }, { status: 201 })
-
   } catch (error) {
-    console.error('Error creating sale:', error)
+    logger.error('Sale creation error', { error })
     return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
+      { success: false, error: 'Failed to create sale' },
       { status: 500 }
     )
   }
-}
+})
+
+// PUT /api/sales - Update sale status
+export const PUT = withAuth(async (request, { user }) => {
+  try {
+    const body = await request.json()
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    if (!body.id) {
+      return NextResponse.json(
+        { success: false, error: 'Sale ID is required' },
+        { status: 400 }
+      )
+    }
+    
+    // Validate input with Zod
+    const validationResult = saleUpdateSchema.safeParse(body)
+    
+    if (!validationResult.success) {
+      const errors = validationResult.error.issues.map(err => ({
+        field: err.path.join('.'),
+        message: err.message
+      }))
+      
+      return NextResponse.json({
+        success: false,
+        error: 'Validation failed',
+        details: errors
+      }, { status: 400 })
+    }
+    
+    const validated = validationResult.data
+    
+    // Only allow updating status for now (to prevent complex scenarios)
+    const updates: any = {}
+    if (validated.status) updates.status = validated.status
+    
+    const { data: sale, error } = await supabase
+      .from('sales')
+      .update(updates)
+      .eq('id', validated.id)
+      .select()
+      .single()
+    
+    if (error) {
+      logger.error('Failed to update sale', { error: error.message, saleId: validated.id })
+      throw error
+    }
+    
+    logger.info('Sale updated', { saleId: sale.id, userId: user.id })
+    
+    return NextResponse.json({
+      success: true,
+      data: sale
+    })
+  } catch (error) {
+    logger.error('Sale update error', { error })
+    return NextResponse.json(
+      { success: false, error: 'Failed to update sale' },
+      { status: 500 }
+    )
+  }
+})
+
+// DELETE /api/sales - Delete sale (admin only)
+export const DELETE = withAuth(async (request, { user }) => {
+  try {
+    const { searchParams } = new URL(request.url)
+    const saleId = searchParams.get('id')
+    
+    if (!saleId) {
+      return NextResponse.json(
+        { success: false, error: 'Sale ID is required' },
+        { status: 400 }
+      )
+    }
+    
+    const supabase = createRouteHandlerClient({ cookies })
+    
+    // Check if user is admin
+    if (user.role !== 'admin' && user.role !== 'super_admin') {
+      return NextResponse.json(
+        { success: false, error: 'Only admins can delete sales' },
+        { status: 403 }
+      )
+    }
+    
+    // Delete sale items first (cascade might handle this, but being explicit)
+    await supabase
+      .from('sale_items')
+      .delete()
+      .eq('sale_id', saleId)
+    
+    // Delete sale
+    const { error } = await supabase
+      .from('sales')
+      .delete()
+      .eq('id', saleId)
+    
+    if (error) {
+      logger.error('Failed to delete sale', { error: error.message, saleId })
+      throw error
+    }
+    
+    logger.info('Sale deleted', { saleId, userId: user.id })
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Sale deleted successfully'
+    })
+  } catch (error) {
+    logger.error('Sale deletion error', { error })
+    return NextResponse.json(
+      { success: false, error: 'Failed to delete sale' },
+      { status: 500 }
+    )
+  }
+})

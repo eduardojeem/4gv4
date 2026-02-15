@@ -7,6 +7,7 @@ import {
     FileText,
     BarChart3,
     Database,
+    Globe,
     type LucideIcon
 } from 'lucide-react'
 
@@ -91,6 +92,14 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/users',
                 description: 'Gestión de usuarios y roles',
                 permissions: ['users.read']
+            },
+            {
+                key: 'website',
+                label: 'Sitio Web',
+                icon: Globe,
+                href: '/admin/website',
+                description: 'Configuración del sitio web público',
+                permissions: ['settings.read']
             },
             {
                 key: 'database-monitoring',

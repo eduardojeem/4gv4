@@ -73,7 +73,7 @@ export default function ProductDetailPageModern() {
       const publicUrl = getPublicUrl('product-images', url)
       return publicUrl || '/placeholder-product.jpg'
     } catch (error) {
-      console.warn('Error resolving product image URL:', error)
+      logger.warn('Error resolving product image URL', { error })
       return '/placeholder-product.jpg'
     }
   }
@@ -158,7 +158,7 @@ export default function ProductDetailPageModern() {
         }))
         setStockMovements(mapped)
       } catch (e) {
-        console.log('Error cargando movimientos:', e)
+        logger.debug('Error loading movements', { error: e })
       }
     }
     fetchMovements()
@@ -196,7 +196,7 @@ export default function ProductDetailPageModern() {
         }))
         setPriceHistory(mapped)
       } catch (e) {
-        console.log('Error cargando historial de precios:', e)
+        logger.debug('Error loading price history', { error: e })
       }
     }
     fetchPriceHistory()

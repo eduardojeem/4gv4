@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 export interface SupabaseUser extends User {
     avatar_url?: string
     updated_at?: string
-    permissions?: string[]
 }
 
 interface UseUsersOptions {
@@ -37,6 +36,44 @@ export function useUsersSupabase({
     const [error, setError] = useState<string | null>(null)
 
     const supabase = createClient()
+
+    const mapProfileToUser = (profile: any): SupabaseUser => ({
+        id: profile.id,
+        name: profile.full_name || profile.email?.split('@')[0] || 'Usuario',
+        email: profile.email || '',
+        role: profile.role || 'cliente',
+        status: profile.status || 'active',
+        department: profile.department || '',
+        phone: profile.phone || '',
+        avatar_url: profile.avatar_url,
+        permissions: profile.permissions || [],
+        lastLogin: profile.updated_at || new Date().toISOString(),
+        createdAt: profile.created_at || new Date().toISOString(),
+        loginAttempts: 0,
+        lastActivity: profile.updated_at || new Date().toISOString(),
+        notes: ''
+    })
+
+    const serializeError = (err: unknown) => {
+        if (err && typeof err === 'object') {
+            const e = err as any
+            return {
+                message: e?.message,
+                name: e?.name,
+                code: e?.code,
+                details: e?.details,
+                hint: e?.hint,
+                status: e?.status,
+                stack: e?.stack
+            }
+        }
+        return { message: String(err) }
+    }
+
+    const errorMessage = (err: unknown) => {
+        const e = serializeError(err)
+        return e.message || 'Error desconocido'
+    }
 
     const fetchStats = useCallback(async () => {
         try {
@@ -104,30 +141,14 @@ export function useUsersSupabase({
 
             setTotalCount(count || 0)
 
-            // Mapear a la estructura de User
-            const mappedUsers: SupabaseUser[] = profiles.map(profile => ({
-                id: profile.id,
-                name: profile.full_name || profile.email?.split('@')[0] || 'Usuario',
-                email: profile.email || '',
-                role: profile.role || 'cliente',
-                status: profile.status || 'active',
-                department: profile.department || '',
-                phone: profile.phone || '',
-                avatar_url: profile.avatar_url,
-                permissions: profile.permissions || [], // Se cargarían según el rol
-                lastLogin: profile.updated_at || new Date().toISOString(), // Aproximación
-                createdAt: profile.created_at || new Date().toISOString(),
-                loginAttempts: 0,
-                lastActivity: profile.updated_at || new Date().toISOString(),
-                notes: ''
-            }))
+            const mappedUsers: SupabaseUser[] = profiles.map(mapProfileToUser)
 
             setUsers(mappedUsers)
         } catch (err: unknown) {
-            console.error('Error fetching users:', err)
-            const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-            setError(errorMessage)
-            toast.error('Error al cargar usuarios')
+            console.error('Error fetching users:', serializeError(err))
+            const msg = errorMessage(err)
+            setError(msg)
+            toast.error(msg)
         } finally {
             setIsLoading(false)
         }
@@ -171,7 +192,7 @@ export function useUsersSupabase({
 
     const updateUser = async (userId: string, userData: Partial<SupabaseUser>) => {
         try {
-            const { error } = await supabase
+            const { data: updated, error } = await supabase
                 .from('profiles')
                 .update({
                     full_name: userData.name,
@@ -183,17 +204,23 @@ export function useUsersSupabase({
                     permissions: userData.permissions
                 })
                 .eq('id', userId)
+                .select('*')
+                .single()
 
-            if (error) throw error
+            if (error) throw new Error(error.message)
 
             toast.success('Usuario actualizado correctamente')
-            fetchUsers() // Refresh list to show updates
+            if (updated) {
+                const mapped = mapProfileToUser(updated)
+                setUsers(prev => prev.map(u => (u.id === userId ? mapped : u)))
+            } else {
+                fetchUsers()
+            }
             return { success: true }
         } catch (err: unknown) {
-            console.error('Error updating user:', err)
-            toast.error('Error al actualizar usuario')
-            const errorMessage = err instanceof Error ? err.message : 'Error al actualizar usuario'
-            return { success: false, error: errorMessage }
+            console.error('Error updating user:', serializeError(err))
+            const msg = errorMessage(err)
+            return { success: false, error: msg }
         }
     }
 
@@ -210,10 +237,10 @@ export function useUsersSupabase({
             fetchUsers()
             return { success: true }
         } catch (err: unknown) {
-            console.error('Error deleting user:', err)
-            toast.error('Error al eliminar usuario')
-            const errorMessage = err instanceof Error ? err.message : 'Error al eliminar usuario'
-            return { success: false, error: errorMessage }
+            console.error('Error deleting user:', serializeError(err))
+            const msg = errorMessage(err)
+            toast.error(msg)
+            return { success: false, error: msg }
         }
     }
 
@@ -236,10 +263,10 @@ export function useUsersSupabase({
 
             return { success: true, url: publicUrl }
         } catch (err: unknown) {
-            console.error('Error uploading avatar:', err)
-            toast.error('Error al subir imagen')
-            const errorMessage = err instanceof Error ? err.message : 'Error al subir imagen'
-            return { success: false, error: errorMessage }
+            console.error('Error uploading avatar:', serializeError(err))
+            const msg = errorMessage(err)
+            toast.error(msg)
+            return { success: false, error: msg }
         }
     }
 
@@ -255,10 +282,10 @@ export function useUsersSupabase({
             await fetchUsers()
             return { success: true }
         } catch (err: unknown) {
-            console.error('Error syncing users:', err)
-            toast.error('Error al sincronizar usuarios')
-            const errorMessage = err instanceof Error ? err.message : 'Error al sincronizar usuarios'
-            return { success: false, error: errorMessage }
+            console.error('Error syncing users:', serializeError(err))
+            const msg = errorMessage(err)
+            toast.error(msg)
+            return { success: false, error: msg }
         } finally {
             setIsLoading(false)
         }

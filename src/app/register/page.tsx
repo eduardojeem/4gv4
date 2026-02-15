@@ -82,6 +82,7 @@ export default function RegisterPage() {
         options: {
           data: {
             full_name: formData.fullName,
+            role: 'cliente'
           }
         }
       })
@@ -95,9 +96,8 @@ export default function RegisterPage() {
       if (authData.user) {
         toast.success('¡Cuenta creada exitosamente! Bienvenido.')
         
-        // Redirigir al dashboard
         setTimeout(() => {
-          router.push('/dashboard')
+          router.push('/inicio')
           router.refresh()
         }, 1000)
       }

@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger'
 
 import { useState, useMemo } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -73,7 +74,7 @@ export default function TechnicianProfilePage() {
             setIsEditing(false)
         } catch (error) {
             toast.error('Error al actualizar perfil')
-            console.error(error)
+            logger.error('Error loading technician profile', { error })
         } finally {
             setIsLoading(false)
         }

@@ -42,7 +42,7 @@ export default function SupplierDetailPage() {
                     .select('*', { count: 'exact', head: true })
                     .eq('supplier_id', params.id)
                 
-                if (countError) console.warn('Error fetching products count:', countError)
+                if (countError) logger.warn('Error fetching products count', { error: countError })
 
                 // Map to UISupplier
                 const s = supplierData
@@ -70,7 +70,7 @@ export default function SupplierDetailPage() {
 
                 setSupplier(mappedSupplier)
             } catch (error) {
-                console.error('Error fetching supplier:', error)
+                logger.error('Error fetching supplier', { error })
             } finally {
                 setLoading(false)
             }

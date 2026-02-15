@@ -91,7 +91,6 @@ const CartItemRow = memo<{
       {/* Thumbnail */}
       <div className="h-14 w-14 rounded-md bg-muted/40 border border-border/40 overflow-hidden flex items-center justify-center">
         {item.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
         ) : (
           <ShoppingCart className="h-5 w-5 text-muted-foreground" />

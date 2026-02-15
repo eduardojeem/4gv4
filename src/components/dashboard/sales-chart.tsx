@@ -30,7 +30,7 @@ export function SalesChart() {
 
         const { data: sales, error } = await supabase
           .from('sales')
-          .select('total, created_at')
+          .select('total_amount, created_at')
           .gte('created_at', sevenDaysAgo.toISOString())
           .order('created_at', { ascending: true })
 
@@ -52,7 +52,7 @@ export function SalesChart() {
         sales?.forEach((sale: any) => {
           const date = new Date(sale.created_at)
           const dayName = dayNames[date.getDay()]
-          salesByDay[dayName] = (salesByDay[dayName] || 0) + (sale.total || 0)
+          salesByDay[dayName] = (salesByDay[dayName] || 0) + (Number(sale.total_amount) || 0)
         })
 
         // Convertir a formato para el gráfico
@@ -64,7 +64,16 @@ export function SalesChart() {
         setData(chartData)
       } catch (error) {
         console.error('Error fetching sales data:', error)
-        setData([])
+        // Usar datos de ejemplo si falla la carga
+        setData([
+          { name: 'Lun', ventas: 0 },
+          { name: 'Mar', ventas: 0 },
+          { name: 'Mié', ventas: 0 },
+          { name: 'Jue', ventas: 0 },
+          { name: 'Vie', ventas: 0 },
+          { name: 'Sáb', ventas: 0 },
+          { name: 'Dom', ventas: 0 },
+        ])
       } finally {
         setLoading(false)
       }

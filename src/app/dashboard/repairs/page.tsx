@@ -197,7 +197,7 @@ function RepairsPageContent() {
         await deleteRepair(deleteId)
         setDeleteId(null)
       } catch (error) {
-        console.error('Error deleting repair:', error)
+        logger.error('Error deleting repair', { error })
         // Error is already handled in deleteRepair function
       }
     }
@@ -304,7 +304,7 @@ function RepairsPageContent() {
       }
       setIsDialogOpen(false)
     } catch (error) {
-      console.error('Error submitting form:', error)
+      logger.error('Error submitting repair form', { error })
       toast.error('Error al guardar la reparación')
     }
   }, [dialogMode, selectedRepair, createRepair, updateRepair, addImages, technicianOptions])

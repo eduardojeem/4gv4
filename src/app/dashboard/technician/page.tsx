@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger'
 
 import { useState, useMemo, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -155,7 +156,7 @@ export default function TechnicianPanel() {
       }
       setIsDialogOpen(false)
     } catch (error) {
-      console.error('Error submitting form:', error)
+      logger.error('Error submitting technician form', { error })
       toast.error('Error al actualizar la reparación')
     }
   }

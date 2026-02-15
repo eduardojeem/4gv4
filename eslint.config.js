@@ -6,7 +6,11 @@ import reactHooks from 'eslint-plugin-react-hooks'
 
 export default [
   {
-    ignores: ['src/types/supabase.ts']
+    ignores: [
+      'src/types/supabase.ts',
+      'src/components/admin/system/system-configuration.backup.tsx',
+      '**/*.backup.tsx'
+    ]
   },
   {
     files: ['**/*.{ts,tsx}'],

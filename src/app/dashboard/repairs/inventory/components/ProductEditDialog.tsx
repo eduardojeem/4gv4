@@ -171,7 +171,7 @@ export function ProductEditDialog({
       onSuccess?.()
       onOpenChange(false)
     } catch (error) {
-      console.error('Error updating product:', error)
+      logger.error('Error updating product', { error })
       // El error ya se muestra en el contexto
     } finally {
       setIsSubmitting(false)

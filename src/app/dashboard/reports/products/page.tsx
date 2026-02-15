@@ -195,7 +195,7 @@ export default function ProductReportsPage() {
 
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
-        console.error('Error loading product reports:', msg)
+        logger.error('Error loading product reports', { error: msg })
         setErrorMsg(msg)
       } finally {
         setLoading(false)

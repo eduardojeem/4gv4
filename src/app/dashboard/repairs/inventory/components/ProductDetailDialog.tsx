@@ -100,7 +100,7 @@ export function ProductDetailDialog({
       setAdjustmentReason('')
       loadMovements()
     } catch (error) {
-      console.error('Error adjusting stock:', error)
+      logger.error('Error adjusting stock', { error })
     } finally {
       setIsAdjusting(false)
     }

@@ -22,6 +22,16 @@ export interface CreateCustomerRequest {
   credit_limit?: number
   payment_terms?: string
   tags?: string[]
+  whatsapp?: string
+  social_media?: string
+  company?: string
+  position?: string
+  referral_source?: string
+  assigned_salesperson?: string
+  birthday?: string
+  discount_percentage?: number
+  preferred_contact?: string
+  [key: string]: any
 }
 
 export interface UpdateCustomerRequest extends Partial<CreateCustomerRequest> {
@@ -52,6 +62,7 @@ class CustomerService {
   private mapSupabaseToCustomer(data: Record<string, unknown>): Customer {
     return {
       ...data,
+      profile_id: data.profile_id as string,
       customerCode: (data.customer_code as string) || `CLI-${(data.id as string)?.slice(0, 6)}`,
       customer_type: (data.customer_type as 'premium' | 'regular' | 'empresa') || 'regular',
       status: (data.status as 'active' | 'inactive' | 'suspended') || 'active',
@@ -149,7 +160,7 @@ class CustomerService {
       const validation = validateCustomerData(createCustomerSchema, customerData)
       
       if (!validation.success) {
-        const errors = getValidationErrors(validation.errors)
+        const errors = getValidationErrors((validation as any).errors)
         const errorMessage = Object.values(errors).join(', ')
         return {
           success: false,
@@ -261,7 +272,7 @@ class CustomerService {
       const validation = validateCustomerData(updateCustomerSchema, cleanedData)
       
       if (!validation.success) {
-        const errors = getValidationErrors(validation.errors)
+        const errors = getValidationErrors((validation as any).errors)
         const errorMessage = Object.values(errors).join(', ')
         console.error('Validation errors:', errors) // Debug log
         return {
@@ -272,12 +283,12 @@ class CustomerService {
 
       const validatedData = validation.data
 
-      // Filtrar campos undefined para no enviarlos a la base de datos
+      // Filtrar solo campos undefined (permitir strings vacíos para limpiar campos)
       const dbData = Object.fromEntries(
         Object.entries({
           ...validatedData,
           updated_at: new Date().toISOString()
-        }).filter(([_, value]) => value !== undefined && value !== '')
+        }).filter(([_, value]) => value !== undefined)
       )
 
       console.log('Data to be sent to DB:', dbData) // Debug log
@@ -330,6 +341,13 @@ class CustomerService {
         }
       }
 
+      // Sincronizar perfil si existe y se actualizaron campos relevantes
+      try {
+        await this.syncProfileFromCustomer(refreshed, cleanedData)
+      } catch (e) {
+        console.warn('Perfil no sincronizado:', e)
+      }
+
       return {
         success: true,
         data: this.mapSupabaseToCustomer(refreshed)
@@ -349,8 +367,8 @@ class CustomerService {
   private cleanCustomerData(data: Partial<CreateCustomerRequest>): Partial<CreateCustomerRequest> {
     const cleaned: Partial<CreateCustomerRequest> = {}
 
-    // Lista de valores que deben ser filtrados
-    const invalidValues = ['[REDACTED]', 'undefined', 'null', 'N/A', '--', '']
+    // Lista de valores que deben ser filtrados (solo valores exactos, no parciales)
+    const invalidValues = ['[REDACTED]', 'undefined', 'null', 'N/A', '--']
 
     // Limpiar strings - convertir cadenas inválidas a undefined
     const stringFields = ['name', 'email', 'phone', 'whatsapp', 'address', 'city', 'company', 'position', 'ruc', 'payment_terms', 'notes', 'birthday']
@@ -359,8 +377,9 @@ class CustomerService {
       const value = data[field as keyof CreateCustomerRequest] as string
       if (value !== undefined) {
         const trimmed = value.trim()
-        // Filtrar valores que son placeholders, cadenas vacías o valores inválidos
-        if (trimmed && !invalidValues.some(invalid => trimmed.includes(invalid))) {
+        // Solo filtrar si el valor COMPLETO es inválido, no si lo contiene
+        // Permitir strings vacíos para poder limpiar campos
+        if (!invalidValues.includes(trimmed)) {
           cleaned[field as keyof CreateCustomerRequest] = trimmed as any
         }
       }
@@ -383,6 +402,9 @@ class CustomerService {
     if (data.segment && !invalidValues.includes(data.segment)) {
       cleaned.segment = data.segment
     }
+    if (data.status && !invalidValues.includes(data.status as string)) {
+      cleaned.status = data.status
+    }
     if (data.preferred_contact && !invalidValues.includes(data.preferred_contact)) {
       cleaned.preferred_contact = data.preferred_contact
     }
@@ -393,7 +415,7 @@ class CustomerService {
         tag && 
         typeof tag === 'string' && 
         tag.trim() && 
-        !invalidValues.some(invalid => tag.includes(invalid))
+        !invalidValues.includes(tag.trim())
       )
       if (validTags.length > 0) {
         cleaned.tags = validTags
@@ -404,6 +426,21 @@ class CustomerService {
     console.log('Cleaned data:', cleaned) // Debug log
 
     return cleaned
+  }
+
+  private async syncProfileFromCustomer(customerRow: any, updatedFields: Partial<CreateCustomerRequest>) {
+    const profileId = customerRow?.profile_id as string | undefined
+    if (!profileId) return
+    const profileUpdate: Record<string, any> = {}
+    if (updatedFields.name) profileUpdate.full_name = updatedFields.name
+    if (updatedFields.email) profileUpdate.email = updatedFields.email
+    if (updatedFields.phone) profileUpdate.phone = updatedFields.phone
+    if (Object.keys(profileUpdate).length === 0) return
+    const { error } = await this.supabase
+      .from('profiles')
+      .update({ ...profileUpdate, updated_at: new Date().toISOString() })
+      .eq('id', profileId)
+    if (error) throw error
   }
 
   async deleteCustomer(id: string | number): Promise<{ success: boolean; error?: string }> {
@@ -860,6 +897,26 @@ class CustomerService {
         success: false,
         error: error.message || 'Error al procesar el archivo CSV'
       }
+    }
+  }
+
+  // Obtener personas autorizadas vinculadas al perfil del cliente
+  async getCustomerAuthorizedPersons(profileId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const { data, error } = await this.supabase
+        .from('authorized_persons')
+        .select('*')
+        .eq('profile_id', profileId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      return { success: true, data: data || [] }
+    } catch (error: unknown) {
+      console.error('Error fetching authorized persons:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      return { success: false, error: errorMessage || 'Error al obtener autorizados' }
     }
   }
 }

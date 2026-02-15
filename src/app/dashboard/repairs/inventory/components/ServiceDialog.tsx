@@ -75,7 +75,7 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
 
       onOpenChange(false)
     } catch (error) {
-      console.error('Error saving service:', error)
+      logger.error('Error saving service', { error })
     } finally {
       setIsSubmitting(false)
     }
