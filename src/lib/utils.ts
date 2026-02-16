@@ -39,3 +39,22 @@ export function formatDuration(milliseconds: number): string {
     return `${seconds}s`
   }
 }
+
+/**
+ * Formatea un precio en guaraníes paraguayos
+ */
+export function formatPrice(price: number): string {
+  return new Intl.NumberFormat('es-PY', {
+    style: 'currency',
+    currency: 'PYG',
+    minimumFractionDigits: 0
+  }).format(price)
+}
+
+/**
+ * Limpia una URL de imagen removiendo caracteres inválidos
+ */
+export function cleanImageUrl(url: string | null | undefined): string | null {
+  if (!url || typeof url !== 'string') return null
+  return url.replace(/\)+$/, '').trim()
+}

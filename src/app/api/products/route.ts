@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/withAuth'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
 
@@ -17,7 +16,7 @@ export const GET = withAuth(async (request, { user }) => {
     const page = parseInt(searchParams.get('page') || '1')
     const perPage = parseInt(searchParams.get('per_page') || '50')
     
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
     // Build query
     let queryBuilder = supabase
@@ -78,7 +77,7 @@ export const GET = withAuth(async (request, { user }) => {
 export const POST = withAuth(async (request, { user }) => {
   try {
     const body = await request.json()
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
     // Validate input with Zod
     const validationResult = productSchema.safeParse(body)
@@ -151,7 +150,7 @@ export const POST = withAuth(async (request, { user }) => {
 export const PUT = withAuth(async (request, { user }) => {
   try {
     const body = await request.json()
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
     if (!body.id) {
       return NextResponse.json(
@@ -232,7 +231,7 @@ export const DELETE = withAuth(async (request, { user }) => {
     }
     
     const ids = idsParam.split(',')
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
     const { error } = await supabase
       .from('products')

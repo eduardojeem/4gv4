@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 export interface AuthContext {
@@ -29,7 +28,7 @@ export type AuthenticatedHandler = (
 export function withAuth(handler: AuthenticatedHandler) {
   return async (request: NextRequest) => {
     try {
-      const supabase = createRouteHandlerClient({ cookies })
+      const supabase = await createClient()
       
       const { data: { user }, error } = await supabase.auth.getUser()
       

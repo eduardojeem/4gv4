@@ -5,6 +5,7 @@ import { Package, Wrench, Menu, X, Phone, MessageCircle, User, Shield } from 'lu
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +33,69 @@ export function PublicHeader() {
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { user, signOut } = useAuth()
+  const { settings } = useWebsiteSettings()
   const router = useRouter()
+
+  const companyInfo = settings?.company_info
+  const envSupportPhone = (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP || process.env.NEXT_PUBLIC_COMPANY_PHONE || '').toString()
+  const envSupportEmail = (process.env.NEXT_PUBLIC_COMPANY_EMAIL || '').toString()
+  const phoneDisplay = companyInfo?.phone || envSupportPhone
+  const phoneClean = phoneDisplay?.replace(/\D/g, '')
+  const emailDisplay = companyInfo?.email || envSupportEmail
+  const brandColor = companyInfo?.brandColor || 'blue'
+  const headerStyle = companyInfo?.headerStyle || 'glass'
+  const showTopBar = companyInfo?.showTopBar !== false
+
+  const headerClasses = useMemo(() => {
+    const base = "sticky top-0 z-50 w-full border-b transition-all duration-300 "
+    
+    switch (headerStyle) {
+      case 'solid':
+        return base + "bg-background border-border"
+      case 'accent':
+        const accentMap: Record<string, string> = {
+          blue: "bg-blue-600 border-blue-700 text-white",
+          green: "bg-green-600 border-green-700 text-white",
+          purple: "bg-purple-600 border-purple-700 text-white",
+          orange: "bg-orange-600 border-orange-700 text-white",
+          red: "bg-red-600 border-red-700 text-white",
+          indigo: "bg-indigo-600 border-indigo-700 text-white",
+          teal: "bg-teal-600 border-teal-700 text-white",
+          rose: "bg-rose-600 border-rose-700 text-white",
+          amber: "bg-amber-600 border-amber-700 text-white",
+          emerald: "bg-emerald-600 border-emerald-700 text-white",
+          cyan: "bg-cyan-600 border-cyan-700 text-white",
+          sky: "bg-sky-600 border-sky-700 text-white"
+        }
+        return base + (accentMap[brandColor] || accentMap.blue)
+      case 'dark':
+        return base + "bg-zinc-950 border-zinc-800 text-white"
+      case 'glass':
+      default:
+        return base + "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+    }
+  }, [headerStyle, brandColor])
+
+  const brandIconClasses = useMemo(() => {
+    if (headerStyle === 'accent' || headerStyle === 'dark') {
+      return "bg-white/10 text-white"
+    }
+    const colorMap: Record<string, string> = {
+      blue: "bg-blue-600 text-white",
+      green: "bg-green-600 text-white",
+      purple: "bg-purple-600 text-white",
+      orange: "bg-orange-600 text-white",
+      red: "bg-red-600 text-white",
+      indigo: "bg-indigo-600 text-white",
+      teal: "bg-teal-600 text-white",
+      rose: "bg-rose-600 text-white",
+      amber: "bg-amber-600 text-white",
+      emerald: "bg-emerald-600 text-white",
+      cyan: "bg-cyan-600 text-white",
+      sky: "bg-sky-600 text-white"
+    }
+    return (colorMap[brandColor] || colorMap.blue)
+  }, [brandColor, headerStyle])
 
   const userInitials = useMemo(() => {
     if (!user?.profile?.name) return 'U'
@@ -60,34 +123,41 @@ export function PublicHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className={headerClasses}>
       <div className="container">
         {/* Top bar with contact info */}
-        <div className="hidden border-b py-2 text-sm md:block">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6 text-muted-foreground">
-              <a href="tel:+595123456789" className="flex items-center gap-1 hover:text-foreground transition-colors">
-                <Phone className="h-3.5 w-3.5" />
-                <span>(123) 456-7890</span>
-              </a>
-              <span>Lun - Vie: 8:00 - 18:00 | Sáb: 9:00 - 13:00</span>
-            </div>
-            <div className="text-muted-foreground">
-              ¿Necesitas ayuda? Escribinos por WhatsApp
+        {showTopBar && (
+          <div className={`hidden border-b py-2 text-sm md:block ${headerStyle === 'accent' || headerStyle === 'dark' ? 'border-white/10 opacity-90' : ''}`}>
+            <div className="flex items-center justify-between">
+              <div className={`flex items-center gap-6 ${headerStyle === 'accent' || headerStyle === 'dark' ? 'text-white/80' : 'text-muted-foreground'}`}>
+                <a href={phoneClean ? `tel:${phoneClean}` : undefined} className="flex items-center gap-1 hover:text-foreground transition-colors" aria-label="Llamar al local">
+                  <Phone className="h-3.5 w-3.5" />
+                  <span>{phoneDisplay || '(sin teléfono)'}</span>
+                </a>
+                <span>
+                  {companyInfo?.hours?.weekdays || 'Lun - Vie: 8:00 - 18:00'}
+                  {companyInfo?.hours?.saturday ? ` | Sáb: ${companyInfo.hours.saturday}` : ''}
+                </span>
+              </div>
+              <div className={headerStyle === 'accent' || headerStyle === 'dark' ? 'text-white/80' : 'text-muted-foreground'}>
+                ¿Necesitas ayuda? Escribinos por WhatsApp
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Main header */}
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/inicio" className="flex items-center space-x-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <div className={`flex h-10 w-10 items-center justify-center rounded-lg shadow-sm ${brandIconClasses}`}>
               <Wrench className="h-6 w-6" />
             </div>
             <div className="hidden sm:block">
-              <span className="block text-lg font-bold leading-tight">4G Celulares</span>
-              <span className="block text-xs text-muted-foreground">Reparación y Service</span>
+              <span className="block text-lg font-bold leading-tight">{companyInfo?.name || '4G Celulares'}</span>
+              <span className={`block text-xs ${headerStyle === 'accent' || headerStyle === 'dark' ? 'text-white/70' : 'text-muted-foreground'}`}>
+                Reparación y Service
+              </span>
             </div>
           </Link>
 
@@ -95,20 +165,32 @@ export function PublicHeader() {
           <nav className="hidden md:flex md:gap-1">
             <Link
               href="/inicio"
-              className="rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                headerStyle === 'accent' || headerStyle === 'dark' 
+                  ? 'hover:bg-white/10 text-white' 
+                  : 'hover:bg-accent hover:text-accent-foreground'
+              }`}
             >
               Inicio
             </Link>
             <Link
               href="/productos"
-              className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                headerStyle === 'accent' || headerStyle === 'dark' 
+                  ? 'hover:bg-white/10 text-white' 
+                  : 'hover:bg-accent hover:text-accent-foreground'
+              }`}
             >
               <Package className="h-4 w-4" />
               Productos
             </Link>
             <Link
               href="/mis-reparaciones"
-              className="flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+              className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                headerStyle === 'accent' || headerStyle === 'dark' 
+                  ? 'hover:bg-white/10 text-white' 
+                  : 'hover:bg-accent hover:text-accent-foreground'
+              }`}
             >
               <Wrench className="h-4 w-4" />
               Rastrear Reparación
@@ -117,13 +199,13 @@ export function PublicHeader() {
 
           {/* CTA Buttons */}
           <div className="hidden items-center gap-2 md:flex">
-            <Button asChild variant="outline" size="sm" className="hidden lg:flex">
-              <a href="https://wa.me/595123456789" target="_blank" rel="noopener noreferrer">
+            <Button asChild variant={headerStyle === 'accent' || headerStyle === 'dark' ? 'secondary' : 'outline'} size="sm" className="hidden lg:flex">
+              <a href={phoneClean ? `https://wa.me/${phoneClean}` : (emailDisplay ? `mailto:${emailDisplay}` : '/inicio#contacto')} target={phoneClean ? "_blank" : undefined} rel={phoneClean ? "noopener noreferrer" : undefined} aria-label="Escribir por WhatsApp o Email">
                 <MessageCircle className="mr-2 h-4 w-4" />
                 Escribinos
               </a>
             </Button>
-            <Button asChild variant="outline" size="sm" className="hidden xl:flex">
+            <Button asChild variant={headerStyle === 'accent' || headerStyle === 'dark' ? 'secondary' : 'outline'} size="sm" className="hidden xl:flex">
               <Link href="/mis-reparaciones">Rastrear reparación</Link>
             </Button>
 

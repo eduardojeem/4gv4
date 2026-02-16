@@ -275,52 +275,52 @@ export function ServicesManager() {
 
       {/* Modal de Edición */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-0 border-none shadow-2xl">
-          <DialogHeader className="p-8 pb-0">
-            <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+        <DialogContent className="w-[95vw] md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl md:rounded-3xl p-0 border-none shadow-2xl">
+          <DialogHeader className="p-6 md:p-8 pb-0">
+            <DialogTitle className="text-xl md:text-2xl font-bold flex items-center gap-3">
               {editingIndex !== null ? (
                 <>
-                  <div className="p-2 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30">
+                  <div className="p-2 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30 shrink-0">
                     <Edit3 className="h-5 w-5" />
                   </div>
                   Editar Servicio
                 </>
               ) : (
                 <>
-                  <div className="p-2 rounded-lg bg-green-50 text-green-600 dark:bg-green-900/30">
+                  <div className="p-2 rounded-lg bg-green-50 text-green-600 dark:bg-green-900/30 shrink-0">
                     <Plus className="h-5 w-5" />
                   </div>
                   Nuevo Servicio
                 </>
               )}
             </DialogTitle>
-            <DialogDescription className="text-gray-500 mt-1">
+            <DialogDescription className="text-gray-500 mt-1 text-sm md:text-base">
               Completa los detalles para que tus clientes sepan exactamente qué ofreces.
             </DialogDescription>
           </DialogHeader>
 
           {editingService && (
-            <div className="p-8 space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="p-6 md:p-8 space-y-6 md:space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                 {/* Columna Izquierda: Identidad */}
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-gray-400">Título del Servicio</Label>
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Título del Servicio</Label>
                     <Input
                       value={editingService.title}
                       onChange={(e) => setEditingService({ ...editingService, title: e.target.value })}
                       placeholder="Ej: Cambio de Pantalla"
-                      className="h-12 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white transition-all text-base"
+                      className="h-11 md:h-12 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white transition-all text-sm md:text-base"
                     />
                   </div>
                   
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-gray-400">Descripción</Label>
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Descripción</Label>
                     <Textarea
                       value={editingService.description}
                       onChange={(e) => setEditingService({ ...editingService, description: e.target.value })}
                       placeholder="Escribe una breve descripción..."
-                      className="min-h-[140px] rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white transition-all resize-none text-sm leading-relaxed"
+                      className="min-h-[120px] md:min-h-[140px] rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white transition-all resize-none text-xs md:text-sm leading-relaxed"
                     />
                   </div>
                 </div>
@@ -328,18 +328,19 @@ export function ServicesManager() {
                 {/* Columna Derecha: Estilo y Beneficios */}
                 <div className="space-y-6">
                   <div className="space-y-3">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-gray-400">Personalización Visual</Label>
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Personalización Visual</Label>
                     <div className="bg-gray-50/50 dark:bg-gray-900/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-4">
                       <div>
                         <span className="text-[10px] text-gray-400 mb-2 block">Icono Representativo</span>
-                        <div className="grid grid-cols-6 gap-1.5">
+                        <div className="grid grid-cols-6 gap-1.5 md:gap-2">
                           {ICON_OPTIONS.map(opt => {
                             const OIcon = opt.icon
                             return (
                               <button
                                 key={opt.value}
+                                type="button"
                                 onClick={() => setEditingService({ ...editingService, icon: opt.value as any })}
-                                className={`p-2.5 rounded-xl border transition-all ${editingService.icon === opt.value ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-400 border-gray-100 hover:border-blue-200 hover:text-blue-500'}`}
+                                className={`p-2 md:p-2.5 rounded-xl border transition-all ${editingService.icon === opt.value ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-100 dark:border-gray-700 hover:border-blue-200 hover:text-blue-500'}`}
                                 title={opt.label}
                               >
                                 <OIcon className="h-4 w-4 mx-auto" />
@@ -350,12 +351,13 @@ export function ServicesManager() {
                       </div>
                       <div>
                         <span className="text-[10px] text-gray-400 mb-2 block">Color de Marca</span>
-                        <div className="grid grid-cols-7 gap-1.5">
+                        <div className="grid grid-cols-7 gap-1.5 md:gap-2">
                           {COLOR_OPTIONS.map(opt => (
                             <button
                               key={opt.value}
+                              type="button"
                               onClick={() => setEditingService({ ...editingService, color: opt.value as any })}
-                              className={`h-7 rounded-lg border-2 transition-all ${opt.class} ${editingService.color === opt.value ? 'ring-2 ring-blue-500 ring-offset-2' : 'opacity-40 hover:opacity-100'}`}
+                              className={`h-6 md:h-7 rounded-lg border-2 transition-all ${opt.class} ${editingService.color === opt.value ? 'ring-2 ring-blue-500 ring-offset-2' : 'opacity-40 hover:opacity-100'}`}
                               title={opt.label}
                             />
                           ))}
@@ -365,11 +367,12 @@ export function ServicesManager() {
                   </div>
 
                   <div className="space-y-3">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-gray-400 flex justify-between items-center">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex justify-between items-center">
                       Puntos Clave / Beneficios
                       <button 
+                        type="button"
                         onClick={() => setEditingService({ ...editingService, benefits: [...editingService.benefits, ''] })}
-                        className="text-blue-600 hover:text-blue-700 text-xs font-bold flex items-center gap-1"
+                        className="text-blue-600 hover:text-blue-700 text-[10px] font-bold flex items-center gap-1"
                       >
                         <Plus className="h-3 w-3" /> Añadir
                       </button>
@@ -384,13 +387,14 @@ export function ServicesManager() {
                               newBenefits[bi] = e.target.value
                               setEditingService({ ...editingService, benefits: newBenefits })
                             }}
-                            className="h-10 rounded-xl bg-gray-50/50 border-gray-100 text-xs"
+                            className="h-9 md:h-10 rounded-xl bg-gray-50/50 border-gray-100 text-[11px] md:text-xs"
                             placeholder="Ej: Instalación en 1 hora"
                           />
                           <Button
+                            type="button"
                             variant="ghost"
                             size="icon"
-                            className="h-10 w-10 text-gray-300 hover:text-red-500 flex-shrink-0"
+                            className="h-9 w-9 md:h-10 md:w-10 text-gray-300 hover:text-red-500 flex-shrink-0"
                             onClick={() => {
                               const newBenefits = editingService.benefits.filter((_, i) => i !== bi)
                               setEditingService({ ...editingService, benefits: newBenefits })
@@ -405,12 +409,19 @@ export function ServicesManager() {
                 </div>
               </div>
 
-              <DialogFooter className="pt-8 border-t border-gray-50 gap-3">
-                <Button variant="ghost" onClick={() => setIsDialogOpen(false)} className="rounded-xl h-12 px-8 text-gray-500 font-bold">
+              <DialogFooter className="pt-6 md:pt-8 border-t border-gray-50 dark:border-gray-800 gap-3">
+                <Button 
+                  variant="ghost" 
+                  onClick={() => setIsDialogOpen(false)} 
+                  className="w-full md:w-auto rounded-xl h-11 md:h-12 px-8 text-gray-500 font-bold"
+                >
                   Cancelar
                 </Button>
-                <Button onClick={handleApplyChanges} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-12 px-10 font-bold shadow-lg shadow-blue-100">
-                  {editingIndex !== null ? 'Actualizar Servicio' : 'Añadir Servicio'}
+                <Button 
+                  onClick={handleApplyChanges} 
+                  className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-11 md:h-12 px-10 font-bold shadow-lg shadow-blue-100"
+                >
+                  {editingIndex !== null ? 'Actualizar' : 'Añadir'}
                 </Button>
               </DialogFooter>
             </div>
@@ -418,17 +429,21 @@ export function ServicesManager() {
         </DialogContent>
       </Dialog>
 
-      <div className="sticky bottom-6 flex justify-end">
+      <div className="fixed bottom-6 right-6 md:sticky md:bottom-6 md:flex md:justify-end z-50">
         <Button 
           onClick={handleSaveAll} 
           disabled={isSaving || !hasChanges}
           size="lg"
-          className="shadow-2xl px-12 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 h-16 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 disabled:grayscale"
+          className="shadow-2xl px-8 md:px-12 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 h-14 md:h-16 rounded-full md:rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 disabled:grayscale"
         >
           {isSaving ? (
-            <><Loader2 className="mr-3 h-6 w-6 animate-spin" /> Guardando...</>
+            <><Loader2 className="mr-3 h-5 w-5 md:h-6 md:w-6 animate-spin" /> <span className="hidden md:inline">Guardando...</span></>
           ) : (
-            <><Save className="mr-3 h-6 w-6" /> Guardar Todo ({hasChanges ? '¡Pendiente!' : 'Al día'})</>
+            <>
+              <Save className="mr-3 h-5 w-5 md:h-6 md:w-6" /> 
+              <span className="hidden md:inline">Guardar Todo ({hasChanges ? '¡Pendiente!' : 'Al día'})</span>
+              <span className="md:hidden">Guardar</span>
+            </>
           )}
         </Button>
       </div>

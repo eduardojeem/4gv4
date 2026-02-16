@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/withAuth'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { saleSchema, saleUpdateSchema } from '@/lib/validation/schemas'
 
@@ -17,7 +16,7 @@ export const GET = withAuth(async (request, { user }) => {
     const page = parseInt(searchParams.get('page') || '1')
     const perPage = parseInt(searchParams.get('per_page') || '50')
     
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
     // Build query with relations
     let queryBuilder = supabase
@@ -83,7 +82,7 @@ export const GET = withAuth(async (request, { user }) => {
 export const POST = withAuth(async (request, { user }) => {
   try {
     const body = await request.json()
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
     // Validate input with Zod
     const validationResult = saleSchema.safeParse(body)
@@ -220,7 +219,7 @@ export const POST = withAuth(async (request, { user }) => {
 export const PUT = withAuth(async (request, { user }) => {
   try {
     const body = await request.json()
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
     if (!body.id) {
       return NextResponse.json(
@@ -291,7 +290,7 @@ export const DELETE = withAuth(async (request, { user }) => {
       )
     }
     
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = await createClient()
     
     // Check if user is admin
     if (user.role !== 'admin' && user.role !== 'super_admin') {

@@ -7,6 +7,10 @@ import { z } from 'zod'
 
 // Esquema para información de la empresa
 export const CompanyInfoSchema = z.object({
+  name: z.string()
+    .min(2, 'Nombre debe tener al menos 2 caracteres')
+    .max(100, 'Nombre no puede exceder 100 caracteres')
+    .optional(),
   phone: z.string()
     .min(9, 'Teléfono debe tener al menos 9 dígitos')
     .max(20, 'Teléfono no puede exceder 20 caracteres')
@@ -21,7 +25,16 @@ export const CompanyInfoSchema = z.object({
     weekdays: z.string().max(50, 'Horario no puede exceder 50 caracteres'),
     saturday: z.string().max(50, 'Horario no puede exceder 50 caracteres'),
     sunday: z.string().max(50, 'Horario no puede exceder 50 caracteres'),
-  })
+  }),
+  logoUrl: z.string()
+    .url('URL de logo inválida')
+    .max(300, 'URL muy larga')
+    .optional(),
+  brandColor: z.enum(['blue','green','purple','orange','red','indigo','teal','rose','amber','emerald','cyan','sky'])
+    .optional(),
+  headerStyle: z.enum(['glass', 'solid', 'accent', 'dark']).optional(),
+  headerColor: z.string().max(50).optional(),
+  showTopBar: z.boolean().optional()
 })
 
 // Esquema para contenido del hero
@@ -62,8 +75,29 @@ export const ServiceSchema = z.object({
   description: z.string()
     .min(10, 'Descripción debe tener al menos 10 caracteres')
     .max(500, 'Descripción no puede exceder 500 caracteres'),
-  icon: z.enum(['wrench', 'shield', 'package'], { error: 'Icono inválido' }),
-  color: z.enum(['blue', 'green', 'purple'], { error: 'Color inválido' }),
+  icon: z.enum([
+    'smartphone',
+    'monitor',
+    'battery',
+    'cpu',
+    'zap',
+    'wrench',
+    'shield',
+    'package',
+    'headset',
+    'laptop',
+    'clock',
+    'sparkles'
+  ] as const, { error: 'Icono inválido' }),
+  color: z.enum([
+    'blue',
+    'green',
+    'purple',
+    'orange',
+    'red',
+    'indigo',
+    'teal'
+  ] as const, { error: 'Color inválido' }),
   benefits: z.array(
     z.string()
       .min(1, 'Beneficio no puede estar vacío')

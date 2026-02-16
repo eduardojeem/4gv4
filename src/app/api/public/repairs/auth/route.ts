@@ -14,20 +14,6 @@ import { verifyRecaptcha } from '@/lib/recaptcha'
  * Rate limited: 10 attempts per 15 minutes per IP
  */
 export async function POST(request: NextRequest) {
-  try {
-    const clientIp = getClientIp(request)
-    console.log('[Auth API DEBUG] Received request from:', clientIp)
-    
-    return NextResponse.json({ 
-      success: true, 
-      message: 'API is reachable',
-      ip: clientIp 
-    })
-  } catch (error) {
-    return NextResponse.json({ success: false, error: 'DEBUG_CRASH' }, { status: 500 })
-  }
-}
-async function ORIGINAL_POST_HIDDEN(request: NextRequest) {
   const clientIp = getClientIp(request)
   const userAgent = request.headers.get('user-agent') || 'unknown'
   
@@ -283,7 +269,7 @@ async function ORIGINAL_POST_HIDDEN(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       maxAge: tokenExpiresIn,
-      path: '/mis-reparaciones'
+      path: '/'
     })
     
     return nextResponse

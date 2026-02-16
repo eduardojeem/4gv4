@@ -118,14 +118,14 @@ export function MaintenanceModeToggle() {
 
       {/* Card principal */}
       <Card className="border-none shadow-lg hover:shadow-xl transition-shadow duration-300">
-        <CardHeader className={`bg-gradient-to-r ${
+        <CardHeader className={`bg-gradient-to-r p-4 md:p-6 ${
           maintenanceMode.enabled 
             ? 'from-orange-50 to-red-50 dark:from-orange-950/20 dark:to-red-950/20'
             : 'from-green-50 to-teal-50 dark:from-green-950/20 dark:to-teal-950/20'
         }`}>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+              <div className={`flex h-10 w-10 items-center justify-center rounded-lg shrink-0 ${
                 maintenanceMode.enabled
                   ? 'bg-orange-100 text-orange-600 dark:bg-orange-900 dark:text-orange-400'
                   : 'bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400'
@@ -133,8 +133,8 @@ export function MaintenanceModeToggle() {
                 <Power className="h-5 w-5" />
               </div>
               <div>
-                <CardTitle>Modo Mantenimiento</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-lg md:text-xl">Modo Mantenimiento</CardTitle>
+                <CardDescription className="text-xs md:text-sm">
                   {maintenanceMode.enabled 
                     ? 'El sitio está en mantenimiento' 
                     : 'El sitio está disponible públicamente'}
@@ -143,7 +143,7 @@ export function MaintenanceModeToggle() {
             </div>
 
             {/* Toggle principal */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 self-end sm:self-auto">
               <Label 
                 htmlFor="maintenance-toggle" 
                 className={`text-sm font-medium ${
@@ -162,7 +162,7 @@ export function MaintenanceModeToggle() {
           </div>
         </CardHeader>
 
-        <CardContent className="pt-6 space-y-4">
+        <CardContent className="p-4 md:p-6 space-y-4">
           {/* Título */}
           <div className="space-y-2">
             <Label htmlFor="title" className="text-sm font-medium">
@@ -175,11 +175,8 @@ export function MaintenanceModeToggle() {
               placeholder="Sitio en Mantenimiento"
               maxLength={100}
               disabled={!maintenanceMode.enabled}
-              className="border-gray-200 focus:border-orange-500 focus:ring-orange-500"
+              className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 h-11"
             />
-            <p className="text-xs text-muted-foreground">
-              Título principal que verán los visitantes
-            </p>
           </div>
 
           {/* Mensaje */}
@@ -195,11 +192,8 @@ export function MaintenanceModeToggle() {
               rows={4}
               maxLength={500}
               disabled={!maintenanceMode.enabled}
-              className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 resize-none"
+              className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 resize-none text-sm"
             />
-            <p className="text-xs text-muted-foreground">
-              Mensaje explicativo sobre el mantenimiento
-            </p>
           </div>
 
           {/* Tiempo estimado */}
@@ -214,11 +208,8 @@ export function MaintenanceModeToggle() {
               placeholder="Estaremos de vuelta en 2 horas"
               maxLength={100}
               disabled={!maintenanceMode.enabled}
-              className="border-gray-200 focus:border-orange-500 focus:ring-orange-500"
+              className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 h-11"
             />
-            <p className="text-xs text-muted-foreground">
-              Información sobre cuándo estará disponible nuevamente
-            </p>
           </div>
 
           {/* Información adicional */}
@@ -242,13 +233,13 @@ export function MaintenanceModeToggle() {
         </CardContent>
       </Card>
 
-      {/* Botón de guardar */}
-      <div className="sticky bottom-6 flex justify-end">
+      {/* Botón de guardar flotante */}
+      <div className="fixed bottom-6 right-6 md:sticky md:bottom-6 md:flex md:justify-end z-50">
         <Button 
           onClick={handleSave} 
           disabled={isSaving || !hasChanges}
           size="lg"
-          className={`shadow-lg transition-all duration-300 ${
+          className={`shadow-2xl transition-all duration-300 rounded-full md:rounded-xl px-8 md:px-6 h-14 md:h-12 ${
             maintenanceMode.enabled
               ? 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700'
               : 'bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700'
@@ -257,12 +248,13 @@ export function MaintenanceModeToggle() {
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Guardando...
+              <span className="hidden md:inline">Guardando...</span>
             </>
           ) : (
             <>
               <Save className="mr-2 h-5 w-5" />
-              Guardar Configuración
+              <span className="hidden md:inline">Guardar Configuración</span>
+              <span className="md:hidden">Guardar</span>
             </>
           )}
         </Button>

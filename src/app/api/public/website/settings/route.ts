@@ -34,6 +34,19 @@ export async function GET() {
       }
     }
 
+    // Asegurar defaults de company_info si faltan (para inicialización)
+    if (!settingsObj.company_info) {
+      settingsObj.company_info = {
+        name: '',
+        phone: '',
+        email: '',
+        address: '',
+        hours: { weekdays: '', saturday: '', sunday: '' },
+        logoUrl: '',
+        brandColor: 'blue'
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: settingsObj

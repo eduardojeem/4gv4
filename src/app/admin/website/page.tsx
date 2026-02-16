@@ -14,27 +14,27 @@ export default function WebsiteAdminPage() {
   return (
     <div className="space-y-6">
       {/* Header Premium */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 p-8 text-white shadow-2xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 p-6 md:p-8 text-white shadow-2xl">
         <div className="absolute inset-0 bg-grid-white/10 bg-[size:20px_20px]" />
         
         <div className="relative z-10">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="space-y-2">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm shrink-0">
                   <Settings className="h-6 w-6" />
                 </div>
                 <div>
-                  <h1 className="text-3xl font-bold tracking-tight">Configuración del Sitio Web</h1>
-                  <p className="text-blue-100">Administra el contenido que se muestra en el portal público</p>
+                  <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Configuración del Sitio Web</h1>
+                  <p className="text-blue-100 text-sm md:text-base">Administra el contenido que se muestra en el portal público</p>
                 </div>
               </div>
             </div>
             
-            <Link href="/inicio" target="_blank">
+            <Link href="/inicio" target="_blank" className="w-full md:w-auto">
               <Button 
                 variant="secondary" 
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
+                className="w-full md:w-auto bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
               >
                 <Eye className="mr-2 h-4 w-4" />
                 Vista Previa
@@ -46,43 +46,45 @@ export default function WebsiteAdminPage() {
 
       {/* Tabs Premium */}
       <Tabs defaultValue="company" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-md border">
-          <TabsTrigger 
-            value="company" 
-            className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white transition-all"
-          >
-            <Building2 className="mr-2 h-4 w-4" />
-            Empresa
-          </TabsTrigger>
-          <TabsTrigger 
-            value="hero"
-            className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-pink-600 data-[state=active]:text-white transition-all"
-          >
-            <Sparkles className="mr-2 h-4 w-4" />
-            Hero & Stats
-          </TabsTrigger>
-          <TabsTrigger 
-            value="services"
-            className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-600 data-[state=active]:to-teal-600 data-[state=active]:text-white transition-all"
-          >
-            <Briefcase className="mr-2 h-4 w-4" />
-            Servicios
-          </TabsTrigger>
-          <TabsTrigger 
-            value="testimonials"
-            className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-600 data-[state=active]:to-red-600 data-[state=active]:text-white transition-all"
-          >
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Testimonios
-          </TabsTrigger>
-          <TabsTrigger 
-            value="maintenance"
-            className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-600 data-[state=active]:to-orange-600 data-[state=active]:text-white transition-all"
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            Mantenimiento
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto pb-2 -mb-2 scrollbar-hide">
+          <TabsList className="flex w-max md:grid md:w-full md:grid-cols-5 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-md border min-w-full">
+            <TabsTrigger 
+              value="company" 
+              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white transition-all px-4 md:px-2"
+            >
+              <Building2 className="mr-2 h-4 w-4" />
+              Empresa
+            </TabsTrigger>
+            <TabsTrigger 
+              value="hero"
+              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-pink-600 data-[state=active]:text-white transition-all px-4 md:px-2"
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Hero & Stats
+            </TabsTrigger>
+            <TabsTrigger 
+              value="services"
+              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-600 data-[state=active]:to-teal-600 data-[state=active]:text-white transition-all px-4 md:px-2"
+            >
+              <Briefcase className="mr-2 h-4 w-4" />
+              Servicios
+            </TabsTrigger>
+            <TabsTrigger 
+              value="testimonials"
+              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-600 data-[state=active]:to-red-600 data-[state=active]:text-white transition-all px-4 md:px-2"
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Testimonios
+            </TabsTrigger>
+            <TabsTrigger 
+              value="maintenance"
+              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-600 data-[state=active]:to-orange-600 data-[state=active]:text-white transition-all px-4 md:px-2"
+            >
+              <Settings className="mr-2 h-4 w-4" />
+              Mantenimiento
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="company" className="space-y-4">
           <CompanyInfoForm />

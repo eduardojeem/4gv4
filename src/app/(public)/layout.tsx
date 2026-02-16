@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { PublicFooter } from '@/components/public/PublicFooter'
 import { RecaptchaProvider } from '@/components/public/RecaptchaProvider'
+import { MaintenanceGuard } from '@/components/public/MaintenanceGuard'
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'),
@@ -24,11 +25,13 @@ export default function PublicLayout({
 }) {
   return (
     <RecaptchaProvider>
-      <div className="flex min-h-screen flex-col">
-        <PublicHeader />
-        <main className="flex-1">{children}</main>
-        <PublicFooter />
-      </div>
+      <MaintenanceGuard>
+        <div className="flex min-h-screen flex-col">
+          <PublicHeader />
+          <main className="flex-1">{children}</main>
+          <PublicFooter />
+        </div>
+      </MaintenanceGuard>
     </RecaptchaProvider>
   )
 }

@@ -29,9 +29,47 @@ export function useRepairs() {
             attempts++
             try {
               const supabase = createSupabaseClient()
+              // Optimized: Select only necessary fields
               const response = await supabase
                 .from('repairs')
-                .select(`*, customer:customers(id, name, phone, email), technician:profiles(id, full_name)`)
+                .select(`
+                  id,
+                  ticket_number,
+                  device_brand,
+                  device_model,
+                  device_type,
+                  problem_description,
+                  diagnosis,
+                  solution,
+                  status,
+                  priority,
+                  urgency,
+                  estimated_cost,
+                  final_cost,
+                  labor_cost,
+                  access_type,
+                  access_password,
+                  location,
+                  warranty_months,
+                  warranty_type,
+                  warranty_notes,
+                  warranty_expires_at,
+                  picked_up_at,
+                  created_at,
+                  estimated_completion,
+                  completed_at,
+                  updated_at,
+                  progress,
+                  customer_rating,
+                  notify_customer,
+                  notify_technician,
+                  notify_manager,
+                  customer:customers(id, customer_code, name, first_name, last_name, phone, email),
+                  technician:profiles(id, full_name, email)
+                `)
+                .order('created_at', { ascending: false })
+                .limit(200)
+                
               const { data, error } = response
               if (error) {
                 const msg = (error as any)?.message || String(error)
