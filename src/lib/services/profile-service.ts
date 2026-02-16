@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { supabase } from '@/lib/supabase/client'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
+
+// Create a client instance for use in this service
+const supabase = createSupabaseClient()
 
 export interface Profile {
   id: string
