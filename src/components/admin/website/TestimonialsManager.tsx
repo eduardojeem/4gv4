@@ -151,39 +151,40 @@ export function TestimonialsManager() {
       <div className="grid gap-4 md:grid-cols-2">
         {testimonials.map((testimonial, index) => (
           <Card key={testimonial.id} className="border-none shadow-lg hover:shadow-xl transition-all duration-300 group">
-            <CardHeader className="bg-gradient-to-r from-orange-50/50 to-red-50/50 dark:from-orange-950/10 dark:to-red-950/10 pb-3">
+            <CardHeader className="bg-gradient-to-r from-orange-50/50 to-red-50/50 dark:from-orange-950/10 dark:to-red-950/10 p-4 pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <GripVertical className="h-4 w-4 text-gray-400" />
+                  <GripVertical className="h-4 w-4 text-gray-400 shrink-0" />
                   <span className="text-sm font-medium text-gray-500">Testimonio #{index + 1}</span>
                 </div>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => handleDelete(testimonial.id)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 h-8 w-8 p-0 md:h-9 md:w-auto md:px-3"
                 >
                   <Trash2 className="h-4 w-4" />
+                  <span className="hidden md:inline ml-2">Eliminar</span>
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="pt-4 space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+            <CardContent className="p-4 md:p-6 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor={`name-${testimonial.id}`}>Nombre del Cliente</Label>
+                  <Label htmlFor={`name-${testimonial.id}`} className="text-sm font-medium">Nombre del Cliente</Label>
                   <Input
                     id={`name-${testimonial.id}`}
                     value={testimonial.name}
                     onChange={(e) => handleUpdate(testimonial.id, 'name', e.target.value)}
                     placeholder="Nombre Apellido"
                     maxLength={100}
-                    className="border-gray-200 focus:border-orange-500 focus:ring-orange-500"
+                    className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 h-10"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor={`rating-${testimonial.id}`}>Calificación</Label>
-                  <div className="flex items-center gap-2">
+                  <Label htmlFor={`rating-${testimonial.id}`} className="text-sm font-medium">Calificación</Label>
+                  <div className="flex items-center gap-3">
                     <Input
                       id={`rating-${testimonial.id}`}
                       type="number"
@@ -191,7 +192,7 @@ export function TestimonialsManager() {
                       max="5"
                       value={testimonial.rating}
                       onChange={(e) => handleUpdate(testimonial.id, 'rating', parseInt(e.target.value))}
-                      className="w-20 border-gray-200 focus:border-orange-500 focus:ring-orange-500"
+                      className="w-16 border-gray-200 focus:border-orange-500 focus:ring-orange-500 h-10"
                     />
                     <div className="flex gap-0.5">
                       {[...Array(5)].map((_, i) => (
@@ -210,7 +211,7 @@ export function TestimonialsManager() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor={`comment-${testimonial.id}`}>Comentario</Label>
+                <Label htmlFor={`comment-${testimonial.id}`} className="text-sm font-medium">Comentario</Label>
                 <Textarea
                   id={`comment-${testimonial.id}`}
                   value={testimonial.comment}
@@ -218,7 +219,7 @@ export function TestimonialsManager() {
                   placeholder="Escribe el testimonio del cliente..."
                   rows={3}
                   maxLength={500}
-                  className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 resize-none"
+                  className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 resize-none text-sm"
                 />
               </div>
             </CardContent>
@@ -239,22 +240,24 @@ export function TestimonialsManager() {
         </div>
       )}
 
-      <div className="sticky bottom-6 flex justify-end">
+      {/* Botón de guardar flotante */}
+      <div className="fixed bottom-6 right-6 md:sticky md:bottom-6 md:flex md:justify-end z-50">
         <Button 
           onClick={handleSave} 
           disabled={isSaving || !hasChanges}
           size="lg"
-          className="shadow-lg bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 transition-all duration-300"
+          className="shadow-2xl bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 transition-all duration-300 rounded-full md:rounded-xl px-8 md:px-6 h-14 md:h-12"
         >
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Guardando...
+              <span className="hidden md:inline">Guardando...</span>
             </>
           ) : (
             <>
               <Save className="mr-2 h-5 w-5" />
-              Guardar Todos los Cambios
+              <span className="hidden md:inline">Guardar Cambios</span>
+              <span className="md:hidden">Guardar</span>
             </>
           )}
         </Button>

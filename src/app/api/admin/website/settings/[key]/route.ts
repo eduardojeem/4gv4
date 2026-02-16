@@ -42,10 +42,10 @@ function checkRateLimit(userId: string): { allowed: boolean; remaining: number }
  */
 async function handler(
   request: NextRequest,
-  context: { params: { key: string }; user: { id: string; email?: string; role: string } }
+  context: { params: Promise<{ key: string }>; user: { id: string; email?: string; role: string } }
 ) {
   try {
-    const { key } = context.params
+    const { key } = await context.params
 
     // Validar key
     if (!VALID_KEYS.includes(key as WebsiteSettingKey)) {
@@ -137,7 +137,13 @@ async function handler(
         key,
         userId: context.user.id
       })
-      throw error
+      const msg = typeof error.message === 'string' ? error.message : 'Update failed'
+      const isRls = /row-level security|RLS/i.test(msg)
+      const status = isRls ? 403 : 500
+      return NextResponse.json(
+        { success: false, error: isRls ? 'Forbidden by RLS' : 'Failed to update setting', details: process.env.NODE_ENV === 'development' ? msg : undefined },
+        { status }
+      )
     }
 
     // Registrar actualización en audit_log
@@ -181,7 +187,7 @@ async function handler(
 
 export async function PUT(
   request: NextRequest,
-  context: { params: { key: string } }
+  context: { params: Promise<{ key: string }> }
 ) {
   return withAdminAuth((req, authContext) => 
     handler(req, { params: context.params, user: authContext.user })

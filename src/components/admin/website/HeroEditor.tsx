@@ -88,21 +88,21 @@ export function HeroEditor() {
     <div className="space-y-6">
       {/* Hero Content */}
       <Card className="border-none shadow-lg hover:shadow-xl transition-shadow duration-300">
-        <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20">
+        <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 p-4 md:p-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-400">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-400 shrink-0">
               <Sparkles className="h-5 w-5" />
             </div>
             <div>
-              <CardTitle>Contenido del Hero</CardTitle>
-              <CardDescription>Textos principales de la sección hero</CardDescription>
+              <CardTitle className="text-lg md:text-xl">Contenido del Hero</CardTitle>
+              <CardDescription className="text-xs md:text-sm">Textos principales de la sección hero</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-6">
           <form onSubmit={handleSaveContent} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="badge">Badge Superior</Label>
+              <Label htmlFor="badge" className="text-sm font-medium">Badge Superior</Label>
               <Input
                 id="badge"
                 value={heroContent.badge}
@@ -112,12 +112,12 @@ export function HeroEditor() {
                 }}
                 placeholder="✨ Más de 10 años de experiencia"
                 maxLength={100}
-                className="border-gray-200 focus:border-purple-500 focus:ring-purple-500"
+                className="border-gray-200 focus:border-purple-500 focus:ring-purple-500 h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="title">Título Principal</Label>
+              <Label htmlFor="title" className="text-sm font-medium">Título Principal</Label>
               <Input
                 id="title"
                 value={heroContent.title}
@@ -127,12 +127,12 @@ export function HeroEditor() {
                 }}
                 placeholder="Reparación de celulares rápida y confiable"
                 maxLength={150}
-                className="border-gray-200 focus:border-purple-500 focus:ring-purple-500"
+                className="border-gray-200 focus:border-purple-500 focus:ring-purple-500 h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="subtitle">Subtítulo</Label>
+              <Label htmlFor="subtitle" className="text-sm font-medium">Subtítulo</Label>
               <Textarea
                 id="subtitle"
                 value={heroContent.subtitle}
@@ -143,14 +143,14 @@ export function HeroEditor() {
                 placeholder="Diagnóstico gratuito • Garantía de 6 meses • Técnicos certificados"
                 rows={2}
                 maxLength={300}
-                className="border-gray-200 focus:border-purple-500 focus:ring-purple-500"
+                className="border-gray-200 focus:border-purple-500 focus:ring-purple-500 text-sm"
               />
             </div>
 
             <Button 
               type="submit" 
               disabled={isSaving || !hasChanges}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+              className="w-full md:w-auto bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-11 px-8"
             >
               {isSaving ? (
                 <>
@@ -170,22 +170,22 @@ export function HeroEditor() {
 
       {/* Estadísticas */}
       <Card className="border-none shadow-lg hover:shadow-xl transition-shadow duration-300">
-        <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20">
+        <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 p-4 md:p-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-900 dark:text-orange-400">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-900 dark:text-orange-400 shrink-0">
               <TrendingUp className="h-5 w-5" />
             </div>
             <div>
-              <CardTitle>Estadísticas</CardTitle>
-              <CardDescription>Números mostrados en la sección hero</CardDescription>
+              <CardTitle className="text-lg md:text-xl">Estadísticas</CardTitle>
+              <CardDescription className="text-xs md:text-sm">Números mostrados en la sección hero</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-6">
-          <form onSubmit={handleSaveStats} className="space-y-4">
+          <form onSubmit={handleSaveStats} className="space-y-6">
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
-                <Label htmlFor="repairs">Reparaciones</Label>
+                <Label htmlFor="repairs" className="text-sm font-medium">Reparaciones</Label>
                 <Input
                   id="repairs"
                   value={heroStats.repairs}
@@ -195,12 +195,12 @@ export function HeroEditor() {
                   }}
                   placeholder="10K+"
                   maxLength={20}
-                  className="border-gray-200 focus:border-orange-500 focus:ring-orange-500"
+                  className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 h-11"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="satisfaction">Satisfacción</Label>
+                <Label htmlFor="satisfaction" className="text-sm font-medium">Satisfacción</Label>
                 <Input
                   id="satisfaction"
                   value={heroStats.satisfaction}
@@ -210,12 +210,12 @@ export function HeroEditor() {
                   }}
                   placeholder="98%"
                   maxLength={20}
-                  className="border-gray-200 focus:border-orange-500 focus:ring-orange-500"
+                  className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 h-11"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="avgTime">Tiempo Promedio</Label>
+                <Label htmlFor="avgTime" className="text-sm font-medium">Tiempo Promedio</Label>
                 <Input
                   id="avgTime"
                   value={heroStats.avgTime}
@@ -225,7 +225,7 @@ export function HeroEditor() {
                   }}
                   placeholder="24-48h"
                   maxLength={20}
-                  className="border-gray-200 focus:border-orange-500 focus:ring-orange-500"
+                  className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 h-11"
                 />
               </div>
             </div>
@@ -233,7 +233,7 @@ export function HeroEditor() {
             <Button 
               type="submit" 
               disabled={isSaving || !hasChanges}
-              className="bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700"
+              className="w-full md:w-auto bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 h-11 px-8"
             >
               {isSaving ? (
                 <>

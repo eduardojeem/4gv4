@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { use, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import useSWR from 'swr'
 import { 
   ArrowLeft, 
   Package, 
@@ -22,6 +23,26 @@ import { Badge } from '@/components/ui/badge'
 import { PublicRepair } from '@/types/public'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+
+// SWR fetcher
+const fetcher = async (url: string) => {
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: { 'Accept': 'application/json' }
+  })
+
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    throw new Error('Invalid response format')
+  }
+
+  const data = await response.json()
+  if (!data.success) {
+    throw new Error(data.error || 'Error al cargar datos')
+  }
+
+  return data.data
+}
 
 // Configuration for status visual representation
 const STATUS_CONFIG: Record<string, { 
@@ -118,63 +139,39 @@ function WrenchIcon(props: any) {
   )
 }
 
-export default function RepairDetailPage({ params }: { params: { ticketId: string } }) {
+export default function RepairDetailPage({ params }: { params: Promise<{ ticketId: string }> }) {
   const router = useRouter()
-  const [repair, setRepair] = useState<PublicRepair | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { ticketId } = use(params)
   
-  const fetchRepairDetails = useCallback(async (id: string) => {
-    try {
-      const response = await fetch(`/api/public/repairs/${id}`, {
-        credentials: 'include',
-        headers: { 'Accept': 'application/json' }
-      })
-
-      const contentType = response.headers.get('content-type') || ''
-      if (!contentType.includes('application/json')) {
-        try {
-          const text = await response.text()
-          console.error('Detail non-JSON response', {
-            status: response.status,
-            contentType,
-            bodyPreview: text.slice(0, 300)
-          })
-        } catch {}
-        toast.error('Error al cargar reparación (respuesta no válida)')
+  // Use SWR for data fetching with caching
+  const { data: repair, error, isLoading } = useSWR<PublicRepair>(
+    `/api/public/repairs/${ticketId}`,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      dedupingInterval: 60000, // 1 minute
+      refreshInterval: 120000, // Revalidate every 2 minutes
+      onError: (err) => {
+        console.error('Error fetching repair:', err)
+        toast.error(err.message || 'Error al cargar los datos')
         router.push('/mis-reparaciones')
-        return
       }
-      const data = await response.json()
-
-      if (!data.success) {
-        toast.error(data.error || 'Error al cargar reparación')
-        router.push('/mis-reparaciones')
-        return
-      }
-
-      setRepair(data.data)
-    } catch (error) {
-      console.error('Error fetching repair:', error)
-      toast.error('Error al cargar los datos')
-    } finally {
-      setLoading(false)
     }
-  }, [router])
+  )
 
-  useEffect(() => {
-    fetchRepairDetails(params.ticketId)
-  }, [params.ticketId, fetchRepairDetails])
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-PY', {
+  // Memoize formatters to avoid recreating on each render
+  const formatPrice = useMemo(() => {
+    const formatter = new Intl.NumberFormat('es-PY', {
       style: 'currency',
       currency: 'PYG',
       minimumFractionDigits: 0
-    }).format(price)
-  }
+    })
+    return (price: number) => formatter.format(price)
+  }, [])
 
-  const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('es-PY', {
+  const formatDate = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat('es-PY', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -182,7 +179,8 @@ export default function RepairDetailPage({ params }: { params: { ticketId: strin
       hour: '2-digit',
       minute: '2-digit'
     })
-  }
+    return (date: string) => formatter.format(new Date(date))
+  }, [])
 
   const handleWhatsAppClick = () => {
     if (!repair) return
@@ -191,7 +189,7 @@ export default function RepairDetailPage({ params }: { params: { ticketId: strin
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="container flex min-h-[calc(100vh-200px)] items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -199,7 +197,7 @@ export default function RepairDetailPage({ params }: { params: { ticketId: strin
     )
   }
 
-  if (!repair) return null
+  if (error || !repair) return null
 
   const statusConfig = STATUS_CONFIG[repair.status] || STATUS_CONFIG.recibido
   const StatusIcon = statusConfig.icon

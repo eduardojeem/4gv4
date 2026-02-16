@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 export interface AdminAuthContext {
@@ -33,7 +32,7 @@ export type AdminAuthenticatedHandler = (
 export function withAdminAuth(handler: AdminAuthenticatedHandler) {
   return async (request: NextRequest) => {
     try {
-      const supabase = createRouteHandlerClient({ cookies })
+      const supabase = await createClient()
       
       // Verificar autenticación
       const { data: { user }, error: authError } = await supabase.auth.getUser()

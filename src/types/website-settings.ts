@@ -1,4 +1,5 @@
 export interface CompanyInfo {
+  name?: string
   phone: string
   email: string
   address: string
@@ -7,6 +8,11 @@ export interface CompanyInfo {
     saturday: string
     sunday: string
   }
+  logoUrl?: string
+  brandColor?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo' | 'teal' | 'rose' | 'amber' | 'emerald' | 'cyan' | 'sky'
+  headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
+  headerColor?: string
+  showTopBar?: boolean
 }
 
 export interface HeroStats {
