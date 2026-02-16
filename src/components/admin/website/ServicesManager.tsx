@@ -190,7 +190,7 @@ export function ServicesManager() {
 
           return (
             <Card key={service.id} className="group overflow-hidden border-none shadow-sm hover:shadow-xl transition-all duration-300 bg-white dark:bg-gray-800 rounded-2xl">
-              <CardHeader className={`bg-gradient-to-br ${gradient} p-5 relative overflow-hidden`}>
+              <CardHeader className={`bg-linear-to-br ${gradient} p-5 relative overflow-hidden`}>
                 {/* Fondo decorativo sutil */}
                 <div className="absolute -right-4 -top-4 opacity-5 pointer-events-none">
                   <IconComp className="h-24 w-24" />
@@ -237,7 +237,7 @@ export function ServicesManager() {
               </CardHeader>
 
               <CardContent className="p-5 space-y-5">
-                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 min-h-[4.5rem]">
+                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 min-h-18">
                   {service.description || 'Sin descripción configurada para este servicio.'}
                 </p>
 
@@ -249,7 +249,7 @@ export function ServicesManager() {
                   <div className="space-y-1.5">
                     {service.benefits.slice(0, 3).map((b, bi) => (
                       <div key={bi} className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <Check className="h-3 w-3 text-green-500 flex-shrink-0" />
+                        <Check className="h-3 w-3 text-green-500 shrink-0" />
                         <span className="truncate">{b || 'Punto clave...'}</span>
                       </div>
                     ))}
@@ -377,7 +377,7 @@ export function ServicesManager() {
                         <Plus className="h-3 w-3" /> Añadir
                       </button>
                     </Label>
-                    <div className="space-y-2 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
                       {editingService.benefits.map((b, bi) => (
                         <div key={bi} className="flex gap-2 group">
                           <Input
@@ -394,7 +394,7 @@ export function ServicesManager() {
                             type="button"
                             variant="ghost"
                             size="icon"
-                            className="h-9 w-9 md:h-10 md:w-10 text-gray-300 hover:text-red-500 flex-shrink-0"
+                            className="h-9 w-9 md:h-10 md:w-10 text-gray-300 hover:text-red-500 shrink-0"
                             onClick={() => {
                               const newBenefits = editingService.benefits.filter((_, i) => i !== bi)
                               setEditingService({ ...editingService, benefits: newBenefits })
@@ -434,7 +434,7 @@ export function ServicesManager() {
           onClick={handleSaveAll} 
           disabled={isSaving || !hasChanges}
           size="lg"
-          className="shadow-2xl px-8 md:px-12 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 h-14 md:h-16 rounded-full md:rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 disabled:grayscale"
+          className="shadow-2xl px-8 md:px-12 bg-linear-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 h-14 md:h-16 rounded-full md:rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 disabled:grayscale"
         >
           {isSaving ? (
             <><Loader2 className="mr-3 h-5 w-5 md:h-6 md:w-6 animate-spin" /> <span className="hidden md:inline">Guardando...</span></>
