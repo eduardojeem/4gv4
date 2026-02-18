@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, SlidersHorizontal, Loader2, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, SlidersHorizontal, Loader2, X, ChevronLeft, ChevronRight, LayoutGrid, List } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ProductCard } from '@/components/public/ProductCard'
@@ -27,7 +27,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import useSWR from 'swr'
 
-// Fetch all brands and price range from a lightweight endpoint
 function useProductMeta() {
   const fetcher = async (url: string) => {
     const res = await fetch(url)
@@ -79,7 +78,6 @@ export default function ProductsPage() {
   const { categories } = usePublicCategories()
   const { brands, priceRange } = useProductMeta()
 
-  // Debounce search
   useEffect(() => {
     setIsSearching(true)
     const id = setTimeout(() => {
@@ -93,7 +91,6 @@ export default function ProductsPage() {
     setHydrated(true)
   }, [])
 
-  // Reset page on filter/search change
   useEffect(() => {
     setPage(1)
   }, [searchQuery, sortBy, filters])
@@ -103,7 +100,7 @@ export default function ProductsPage() {
     sortBy,
     filters,
     page,
-    perPage: 12,
+    perPage: 16,
   })
 
   const showLoading = !hydrated || isLoading
@@ -120,32 +117,55 @@ export default function ProductsPage() {
     setSearchQuery('')
   }
 
+  const clearAll = () => {
+    clearSearch()
+    setFilters({
+      category_id: '',
+      brand: '',
+      min_price: 0,
+      max_price: 999999,
+      in_stock: false,
+    })
+  }
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [page])
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero section */}
-      <div className="border-b border-border/50 bg-muted/30">
-        <div className="container py-8 lg:py-12">
+      {/* Breadcrumb + title bar */}
+      <div className="border-b border-border/40 bg-muted/20">
+        <div className="container py-6">
           <Breadcrumbs items={[{ label: 'Productos' }]} />
-          <h1 className="text-3xl font-bold tracking-tight text-foreground lg:text-4xl text-balance">
-            Catalogo de Productos
-          </h1>
-          <p className="mt-2 text-muted-foreground max-w-lg">
-            Accesorios, repuestos y dispositivos para celulares
-          </p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground lg:text-3xl text-balance">
+                Nuestros Productos
+              </h1>
+              {!showLoading && (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {total} {total === 1 ? 'producto encontrado' : 'productos encontrados'}
+                  {searchQuery && (
+                    <>
+                      {' para '}
+                      <span className="font-medium text-foreground">
+                        &quot;{searchQuery}&quot;
+                      </span>
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
 
-          {/* Search bar */}
-          <div className="mt-6 flex gap-3 max-w-xl">
-            <div className="relative flex-1">
+            {/* Search bar */}
+            <div className="relative w-full max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nombre, marca o SKU..."
+                placeholder="Buscar productos..."
                 value={searchRaw}
                 onChange={(e) => setSearchRaw(e.target.value)}
-                className="pl-10 pr-10 h-11 rounded-xl bg-background"
+                className="pl-10 pr-10 h-10 rounded-lg bg-background"
                 aria-label="Buscar productos"
               />
               {searchRaw && !isSearching && (
@@ -170,9 +190,9 @@ export default function ProductsPage() {
       {/* Main content */}
       <div className="container py-6 lg:py-8">
         <div className="flex gap-8">
-          {/* Sidebar - Desktop */}
-          <aside className="hidden lg:block w-60 shrink-0">
-            <div className="sticky top-6">
+          {/* Sidebar filters - Desktop */}
+          <aside className="hidden lg:block w-56 shrink-0">
+            <div className="sticky top-24">
               <ProductFilters
                 filters={filters}
                 setFilters={setFilters}
@@ -185,9 +205,9 @@ export default function ProductsPage() {
 
           {/* Products area */}
           <div className="flex-1 min-w-0">
-            {/* Toolbar */}
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <div className="flex items-center gap-3">
+            {/* Toolbar row */}
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div className="flex items-center gap-2">
                 {/* Mobile filter trigger */}
                 <Sheet open={showFilters} onOpenChange={setShowFilters}>
                   <SheetTrigger asChild>
@@ -211,9 +231,7 @@ export default function ProductsPage() {
                   <SheetContent side="left" className="w-[300px] overflow-y-auto">
                     <SheetHeader>
                       <SheetTitle>Filtros</SheetTitle>
-                      <SheetDescription>
-                        Refina tu busqueda
-                      </SheetDescription>
+                      <SheetDescription>Refina tu busqueda</SheetDescription>
                     </SheetHeader>
                     <div className="mt-6">
                       <ProductFilters
@@ -227,24 +245,39 @@ export default function ProductsPage() {
                   </SheetContent>
                 </Sheet>
 
-                {!showLoading && (
-                  <p className="text-sm text-muted-foreground">
-                    <span className="font-medium text-foreground">{total}</span>{' '}
-                    {total === 1 ? 'producto' : 'productos'}
-                    {searchQuery && (
-                      <>
-                        {' '}para{' '}
-                        <span className="font-medium text-foreground">
-                          &quot;{searchQuery}&quot;
-                        </span>
-                      </>
+                {/* Active filters chips */}
+                {activeFiltersCount > 0 && (
+                  <div className="hidden sm:flex items-center gap-1.5">
+                    {filters.category_id && (
+                      <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
+                        {categories.find((c) => c.id === filters.category_id)?.name}
+                        <X
+                          className="h-3 w-3 cursor-pointer"
+                          onClick={() => setFilters({ ...filters, category_id: '' })}
+                        />
+                      </Badge>
                     )}
-                  </p>
+                    {filters.brand && (
+                      <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
+                        {filters.brand}
+                        <X
+                          className="h-3 w-3 cursor-pointer"
+                          onClick={() => setFilters({ ...filters, brand: '' })}
+                        />
+                      </Badge>
+                    )}
+                    <button
+                      onClick={clearAll}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
                 )}
               </div>
 
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-[160px] h-9 rounded-lg text-sm">
+                <SelectTrigger className="w-[150px] h-9 rounded-lg text-sm">
                   <SelectValue placeholder="Ordenar" />
                 </SelectTrigger>
                 <SelectContent>
@@ -256,18 +289,28 @@ export default function ProductsPage() {
               </Select>
             </div>
 
-            {/* Grid */}
+            {/* Product grid */}
             {showLoading ? (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="aspect-[3/4] animate-pulse rounded-2xl bg-muted"
-                  />
+              <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="animate-pulse rounded-xl border border-border/40 bg-card">
+                    <div className="flex justify-end px-4 pt-3">
+                      <div className="h-3 w-16 rounded bg-muted" />
+                    </div>
+                    <div className="mx-auto my-4 h-36 w-36 rounded-lg bg-muted" />
+                    <div className="border-t border-border/40 mx-4" />
+                    <div className="p-4 space-y-2">
+                      <div className="h-3 w-20 rounded bg-muted" />
+                      <div className="h-4 w-full rounded bg-muted" />
+                      <div className="h-4 w-2/3 rounded bg-muted" />
+                      <div className="h-6 w-28 rounded bg-muted mt-3" />
+                      <div className="h-3 w-16 rounded bg-muted" />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : products.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="flex flex-col items-center justify-center py-24 text-center">
                 <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
                   <Search className="h-7 w-7 text-muted-foreground" />
                 </div>
@@ -277,30 +320,21 @@ export default function ProductsPage() {
                 <p className="mt-1 text-sm text-muted-foreground max-w-sm">
                   {searchQuery
                     ? `Sin resultados para "${searchQuery}". Intenta con otros terminos.`
-                    : 'No hay productos que coincidan con los filtros.'}
+                    : 'No hay productos que coincidan con los filtros seleccionados.'}
                 </p>
                 {(searchQuery || activeFiltersCount > 0) && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="mt-4 rounded-lg"
-                    onClick={() => {
-                      clearSearch()
-                      setFilters({
-                        category_id: '',
-                        brand: '',
-                        min_price: 0,
-                        max_price: 999999,
-                        in_stock: false,
-                      })
-                    }}
+                    onClick={clearAll}
                   >
                     Limpiar busqueda y filtros
                   </Button>
                 )}
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
                 {products.map((product, index) => (
                   <ProductCard
                     key={product.id}
@@ -313,7 +347,7 @@ export default function ProductsPage() {
 
             {/* Pagination */}
             {totalPages > 1 && !showLoading && (
-              <div className="flex items-center justify-center gap-2 pt-10">
+              <nav className="flex items-center justify-center gap-1 pt-10" aria-label="Paginacion">
                 <Button
                   variant="outline"
                   size="icon"
@@ -364,7 +398,7 @@ export default function ProductsPage() {
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
-              </div>
+              </nav>
             )}
           </div>
         </div>
