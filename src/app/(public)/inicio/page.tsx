@@ -75,7 +75,7 @@ export default function HomePage() {
     cyan: { hero: 'from-cyan-600 via-sky-600 to-blue-700', text200: 'text-cyan-100', text300: 'text-cyan-200', cta: 'from-cyan-600 to-sky-700' },
     sky: { hero: 'from-sky-500 via-blue-500 to-indigo-600', text200: 'text-sky-100', text300: 'text-sky-200', cta: 'from-sky-500 to-blue-700' }
   }
-  const brand = brandMap[brandColor]
+  const brand = brandMap[brandColor] ?? brandMap.blue
 
   return (
     <div className="flex flex-col">
