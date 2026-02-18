@@ -30,15 +30,22 @@ export async function POST() {
       .eq('id', user.id)
       .maybeSingle()
 
-    // 3. Determinar el rol (prioridad: user_roles > profiles > metadata > default cliente)
+    // 3. Determinar el rol (prioridad: user_roles > profiles > default cliente)
+    // SEGURIDAD: No se usa user_metadata.role porque es controlable por el usuario
+    // y permitiria escalacion de privilegios (ej: setearse admin al registrarse)
     let targetRole = 'cliente'
+    const privilegedRoles = ['admin', 'super_admin']
 
     if (currentRole?.role) {
       targetRole = currentRole.role
     } else if (currentProfile?.role) {
-      targetRole = currentProfile.role
-    } else if (user.user_metadata?.role) {
-      targetRole = user.user_metadata.role as string
+      // Si el perfil tiene un rol privilegiado pero user_roles no tiene nada,
+      // no copiar el rol privilegiado -- forzar cliente
+      if (privilegedRoles.includes(currentProfile.role)) {
+        targetRole = 'cliente'
+      } else {
+        targetRole = currentProfile.role
+      }
     }
 
     // 4. Sincronizar user_roles
