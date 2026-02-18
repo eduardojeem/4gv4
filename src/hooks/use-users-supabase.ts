@@ -209,6 +209,35 @@ export function useUsersSupabase({
 
             if (error) throw new Error(error.message)
 
+            if (userData.permissions) {
+                const { data: current, error: curErr } = await supabase
+                    .from('user_permissions')
+                    .select('permission')
+                    .eq('user_id', userId)
+                    .eq('is_active', true)
+                if (curErr) throw new Error(curErr.message)
+
+                const currentSet = new Set((current || []).map(r => r.permission as string))
+                const nextSet = new Set(userData.permissions as string[])
+
+                const toInsert = Array.from(nextSet).filter(p => !currentSet.has(p))
+                const toDelete = Array.from(currentSet).filter(p => !nextSet.has(p))
+
+                if (toInsert.length) {
+                    const rows = toInsert.map(p => ({ user_id: userId, permission: p, is_active: true }))
+                    const { error: insErr } = await supabase.from('user_permissions').insert(rows)
+                    if (insErr) throw new Error(insErr.message)
+                }
+                if (toDelete.length) {
+                    const { error: delErr } = await supabase
+                        .from('user_permissions')
+                        .delete()
+                        .eq('user_id', userId)
+                        .in('permission', toDelete)
+                    if (delErr) throw new Error(delErr.message)
+                }
+            }
+
             toast.success('Usuario actualizado correctamente')
             if (updated) {
                 const mapped = mapProfileToUser(updated)

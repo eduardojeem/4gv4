@@ -16,7 +16,7 @@ import {
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
-interface SocialLink {
+export interface SocialLink {
   platform: 'twitter' | 'linkedin' | 'github' | 'website' | 'instagram'
   url: string
   isVerified?: boolean

@@ -24,6 +24,12 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": false,
+    "types": [
+      "node",
+      "react",
+      "react-dom",
+      "vitest/globals"
+    ],
     "plugins": [
       {
         "name": "next"

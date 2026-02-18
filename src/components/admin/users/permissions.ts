@@ -1,33 +1,26 @@
-export const PERMISSION_GROUPS = [
-  {
-    id: 'sales',
-    label: 'Ventas y Caja',
-    permissions: [
-      { id: 'pos_access', label: 'Acceso a POS' },
-      { id: 'process_sale', label: 'Procesar Ventas' },
-      { id: 'view_sales', label: 'Ver Historial de Ventas' },
-      { id: 'apply_discount', label: 'Aplicar Descuentos' },
-      { id: 'cash_close', label: 'Realizar Cierre de Caja' },
-    ],
-  },
-  {
-    id: 'inventory',
-    label: 'Inventario y Productos',
-    permissions: [
-      { id: 'view_inventory', label: 'Ver Inventario' },
-      { id: 'manage_products', label: 'Crear/Editar Productos' },
-      { id: 'adjust_stock', label: 'Ajustar Stock' },
-      { id: 'manage_categories', label: 'Gestionar Categorías' },
-    ],
-  },
-  {
-    id: 'admin',
-    label: 'Administración',
-    permissions: [
-      { id: 'manage_users', label: 'Gestionar Usuarios' },
-      { id: 'view_reports', label: 'Ver Reportes Financieros' },
-      { id: 'system_settings', label: 'Configuración del Sistema' },
-    ],
-  },
-]
+import { PERMISSIONS as ALL } from '@/lib/auth/roles-permissions'
 
+const LABELS: Record<string,string> = {
+  products: 'Productos',
+  inventory: 'Inventario',
+  reports: 'Reportes',
+  users: 'Usuarios',
+  settings: 'Configuración',
+  promotions: 'Promociones',
+  customers: 'Clientes'
+}
+
+const grouped: Record<string, { id: string; label: string; permissions: { id: string; label: string }[] }> = {}
+
+Object.values(ALL).forEach(p => {
+  if (!grouped[p.resource]) {
+    grouped[p.resource] = {
+      id: p.resource,
+      label: LABELS[p.resource] || p.resource,
+      permissions: []
+    }
+  }
+  grouped[p.resource].permissions.push({ id: p.id, label: p.name })
+})
+
+export const PERMISSION_GROUPS = Object.values(grouped)

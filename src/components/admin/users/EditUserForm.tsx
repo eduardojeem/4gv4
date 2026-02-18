@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 import type { SupabaseUser } from '@/hooks/use-users-supabase'
 import { PERMISSION_GROUPS } from './permissions'
+import { ROLE_PERMISSIONS } from '@/lib/auth/roles-permissions'
 
 const schema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
@@ -57,6 +58,17 @@ export function EditUserForm({
     })
     await onSubmit(payload as FormValues)
   })
+
+  const role = form.watch('role')
+  const roleEffective = useMemo(() => {
+    const rp = ROLE_PERMISSIONS[role as any]
+    return rp ? rp.permissions.map(p => p.id) : []
+  }, [role])
+
+  const effectiveSet = useMemo(() => {
+    const specific = form.watch('permissions')
+    return Array.from(new Set([...roleEffective, ...specific]))
+  }, [roleEffective, form])
 
   return (
     <Form {...form}>
@@ -170,6 +182,14 @@ export function EditUserForm({
               {form.watch('permissions').length} activos
             </span>
           </div>
+
+          <div className="text-xs text-muted-foreground">Permisos por rol: {roleEffective.length}</div>
+          <div className="flex flex-wrap gap-2">
+            {roleEffective.slice(0, 12).map(id => (
+              <span key={id} className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs">{id}</span>
+            ))}
+          </div>
+          <div className="text-xs text-muted-foreground">Permisos efectivos: {effectiveSet.length}</div>
 
           <div className="grid gap-4">
             {PERMISSION_GROUPS.map((group) => (

@@ -30,6 +30,7 @@ import {
 import { UserStatsCards } from './user-stats-cards'
 import { UserAvatarUpload } from './user-avatar-upload'
 import { UserActivityTimeline } from './user-activity-timeline'
+import { createClient } from '@/lib/supabase/client'
 import { UsersTable } from './users-table'
 import { UsersFilters } from './users-filters'
 import { UserDetailDialog } from './user-detail-dialog'
@@ -290,8 +291,20 @@ export function UserManagement() {
                 pageSize={pageSize}
                 totalCount={totalCount}
                 onPageChange={setPage}
-                onEdit={(user) => {
-                  setSelectedUser(user)
+                onEdit={async (user) => {
+                  const supabase = createClient()
+                  let specificPerms: string[] = []
+                  try {
+                    const { data, error } = await supabase
+                      .from('user_permissions')
+                      .select('permission')
+                      .eq('user_id', user.id)
+                      .eq('is_active', true)
+                    if (!error && data) specificPerms = data.map(d => d.permission as string)
+                  } catch {}
+
+                  const merged = { ...user, permissions: specificPerms.length ? specificPerms : (user.permissions || []) }
+                  setSelectedUser(merged)
                   setFormData({
                     name: user.name,
                     email: user.email,
@@ -300,7 +313,7 @@ export function UserManagement() {
                     department: user.department || '',
                     status: user.status,
                     notes: user.notes || '',
-                    permissions: user.permissions || []
+                    permissions: merged.permissions || []
                   })
                   setIsEditDialogOpen(true)
                 }}

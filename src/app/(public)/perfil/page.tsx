@@ -62,7 +62,7 @@ export default function CustomerProfilePage() {
   const [initialProfile, setInitialProfile] = useState<ProfileData | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  const [stats, setStats] = useState({ totalRepairs: 0, activeRepairs: 0, totalSpent: 0, completedRepairs: 0 })
+  const [stats, setStats] = useState({ totalRepairs: 0, activeRepairs: 0, completedRepairs: 0 })
   const [recentRepairs, setRecentRepairs] = useState<any[]>([])
 
   const isDirty = useMemo(() => {
@@ -76,7 +76,7 @@ export default function CustomerProfilePage() {
       const { data: customer } = await supabase
         .from('customers').select('id').eq('profile_id', user.id).maybeSingle()
       if (!customer) {
-        setStats({ totalRepairs: 0, activeRepairs: 0, completedRepairs: 0, totalSpent: 0 })
+        setStats({ totalRepairs: 0, activeRepairs: 0, completedRepairs: 0 })
         return
       }
       const { data: repairs } = await supabase
@@ -86,7 +86,6 @@ export default function CustomerProfilePage() {
         totalRepairs: repairs?.length || 0,
         activeRepairs: repairs?.filter(r => activeStatuses.includes(r.status)).length || 0,
         completedRepairs: repairs?.filter(r => r.status === 'entregado').length || 0,
-        totalSpent: repairs?.reduce((sum, r) => sum + (Number(r.paid_amount) || Number(r.final_cost) || 0), 0) || 0,
       })
       const { data: history } = await supabase
         .from('repairs')
@@ -225,12 +224,11 @@ export default function CustomerProfilePage() {
 
       <div className="container mt-6">
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mb-6">
           {[
             { label: 'Total', value: stats.totalRepairs, icon: Wrench, color: 'text-primary' },
             { label: 'En proceso', value: stats.activeRepairs, icon: TrendingUp, color: 'text-amber-600' },
             { label: 'Entregados', value: stats.completedRepairs, icon: Award, color: 'text-emerald-600' },
-            { label: 'Invertido', value: `Gs. ${stats.totalSpent.toLocaleString('es-PY')}`, icon: TrendingUp, color: 'text-primary' },
           ].map((stat) => (
             <Card key={stat.label} className="border shadow-sm">
               <CardContent className="flex items-center gap-3 p-4">

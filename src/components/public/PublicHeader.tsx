@@ -101,6 +101,7 @@ export function PublicHeader() {
     { href: '/inicio', label: 'Inicio', icon: null },
     { href: '/productos', label: 'Productos', icon: Package },
     { href: '/mis-reparaciones', label: 'Rastrear reparaciones', icon: Wrench },
+    { href: '/perfil', label: 'Perfil', icon: User },
   ]
 
   const isActive = (href: string) => pathname === href
@@ -269,9 +270,13 @@ export function PublicHeader() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button asChild size="sm" className="hidden rounded-lg px-5 md:inline-flex">
-              <Link href="/login">
-                <User className="mr-2 h-4 w-4" />
+            <Button 
+              asChild 
+              size="sm" 
+              className="hidden rounded-lg px-5 md:inline-flex bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
+            >
+              <Link href="/login" className="flex items-center gap-2">
+                <User className="h-4 w-4" />
                 Mi cuenta
               </Link>
             </Button>
@@ -360,9 +365,13 @@ export function PublicHeader() {
                 </Button>
               </>
             ) : (
-              <Button asChild variant="outline" size="sm" className="w-full rounded-lg">
-                <Link href="/login">
-                  <User className="mr-2 h-4 w-4" />
+              <Button 
+                asChild 
+                size="sm" 
+                className="w-full rounded-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
+              >
+                <Link href="/login" className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
                   Mi cuenta
                 </Link>
               </Button>

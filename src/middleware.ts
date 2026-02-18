@@ -62,8 +62,6 @@ export async function middleware(request: NextRequest) {
       const rawRole = (roleRow?.role as string | undefined)
         // Fallback a profiles solo si user_roles no tiene dato
         || await getProfileRole(supabase, user.id)
-        // Ultimo fallback: metadata del usuario
-        || (user.user_metadata?.role as string | undefined)
 
       normalizedRole = normalizeRole(rawRole)
     } catch {
