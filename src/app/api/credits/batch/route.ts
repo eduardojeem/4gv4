@@ -1,9 +1,13 @@
 
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { requireStaff } from '@/lib/auth/require-auth'
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
+
     const { customerIds } = await request.json()
 
     if (!Array.isArray(customerIds) || customerIds.length === 0) {

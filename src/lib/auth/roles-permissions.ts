@@ -281,7 +281,7 @@ export const SUPABASE_RLS_SETUP = `
 CREATE TABLE IF NOT EXISTS user_roles (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('super_admin', 'admin', 'manager', 'employee', 'viewer')),
+  role TEXT NOT NULL CHECK (role IN ('super_admin', 'admin', 'vendedor', 'tecnico', 'cliente')),
   assigned_by UUID REFERENCES auth.users(id),
   assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   expires_at TIMESTAMP WITH TIME ZONE,
@@ -348,30 +348,31 @@ BEGIN
   -- Obtener rol del usuario
   user_role := get_user_role(user_uuid);
   
-  -- Definir permisos por rol
+  -- Definir permisos por rol (roles alineados con la app)
   CASE user_role
     WHEN 'super_admin' THEN
       RETURN TRUE; -- Super admin tiene todos los permisos
     WHEN 'admin' THEN
       role_permissions := ARRAY[
         'products.manage', 'inventory.manage', 'reports.manage',
-        'users.read', 'users.create', 'users.update',
-        'settings.read', 'settings.update'
+        'users.read', 'users.create', 'users.update', 'users.manage',
+        'settings.read', 'settings.update', 'settings.manage',
+        'promotions.manage'
       ];
-    WHEN 'manager' THEN
+    WHEN 'vendedor' THEN
       role_permissions := ARRAY[
         'products.create', 'products.read', 'products.update',
         'inventory.read', 'inventory.update',
         'reports.read', 'reports.create',
-        'users.read', 'settings.read'
+        'promotions.read', 'promotions.create', 'promotions.update'
       ];
-    WHEN 'employee' THEN
+    WHEN 'tecnico' THEN
       role_permissions := ARRAY[
         'products.read', 'products.update',
         'inventory.read', 'inventory.update',
         'reports.read'
       ];
-    WHEN 'viewer' THEN
+    WHEN 'cliente' THEN
       role_permissions := ARRAY[
         'products.read', 'inventory.read', 'reports.read'
       ];

@@ -26,23 +26,26 @@ export function createAdminSupabase() {
 
 /**
  * Maps UI role to DB role for user_roles table.
- * UI roles: admin | vendedor | tecnico | cliente | super_admin
- * DB roles: super_admin | admin | manager | employee | viewer
+ * Now unified: DB roles match app roles directly.
+ * Valid roles: super_admin | admin | vendedor | tecnico | cliente
  */
 export function mapUiRoleToDbRole(role?: string) {
   if (!role) return undefined
-  const r = role.toLowerCase()
+  const r = role.toLowerCase().trim()
+  const validRoles = ['super_admin', 'admin', 'vendedor', 'tecnico', 'cliente']
+  if (validRoles.includes(r)) return r
+  // Legacy mappings for backwards compatibility
   switch (r) {
-    case 'super_admin':
-      return 'super_admin'
-    case 'admin':
-      return 'admin'
-    case 'vendedor':
-      return 'employee'
-    case 'tecnico':
-      return 'employee'
-    case 'cliente':
-      return 'viewer'
+    case 'employee':
+    case 'manager':
+      return 'vendedor'
+    case 'viewer':
+    case 'client_normal':
+    case 'mayorista':
+    case 'client_mayorista':
+      return 'cliente'
+    case 'technician':
+      return 'tecnico'
     default:
       return undefined
   }

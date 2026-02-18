@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ProductVariant } from '@/types/product-variants'
+import { requireAuth, requireStaff } from '@/lib/auth/require-auth'
 
 // Mock data - En producción esto vendría de la base de datos
 const mockVariants: ProductVariant[] = [
@@ -44,6 +45,8 @@ const mockVariants: ProductVariant[] = [
 // GET /api/variants - Obtener todas las variantes con filtros
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth()
+    if (!auth.authenticated) return auth.response
     const { searchParams } = new URL(request.url)
     const productId = searchParams.get('product_id')
     const sku = searchParams.get('sku')
@@ -102,9 +105,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/variants - Crear nueva variante
+// POST /api/variants - Crear nueva variante (staff only)
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const body = await request.json()
     
     // Validaciones básicas
@@ -156,9 +161,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/variants - Actualización masiva de variantes
+// PUT /api/variants - Actualización masiva de variantes (staff only)
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const body = await request.json()
     const { variants } = body
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { calculatePriorityScore, defaultPriorityConfig, sortRepairsByPriority } from "@/services/repair-priority";
 import { RepairOrder } from "@/types/repairs";
+import { requireStaff } from "@/lib/auth/require-auth";
 
 let CONFIG = defaultPriorityConfig;
 let REPAIRS: RepairOrder[] = [
@@ -9,12 +10,16 @@ let REPAIRS: RepairOrder[] = [
 ];
 
 export async function GET() {
+  const auth = await requireStaff();
+  if (!auth.authenticated) return auth.response;
   const queue = sortRepairsByPriority(REPAIRS, CONFIG).map((r) => ({ id: r.id, score: calculatePriorityScore(r, CONFIG), repair: r }));
   return NextResponse.json({ queue, config: CONFIG });
 }
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireStaff();
+    if (!auth.authenticated) return auth.response;
     const body = await req.json();
     if (body.config) CONFIG = body.config;
     if (body.repairs) REPAIRS = body.repairs;

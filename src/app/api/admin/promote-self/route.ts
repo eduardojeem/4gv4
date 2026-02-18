@@ -24,23 +24,26 @@ export async function POST() {
 
     const admin = createAdminSupabase()
 
-    // SEGURIDAD: Verificar si ya existen administradores
-    const { count: adminCount, error: countError } = await admin
+    // SEGURIDAD: Verificar si ya existen administradores (en ambas tablas)
+    const { count: adminCountRoles } = await admin
+      .from('user_roles')
+      .select('*', { count: 'exact', head: true })
+      .in('role', ['admin', 'super_admin'])
+      .eq('is_active', true)
+
+    const { count: adminCountProfiles } = await admin
       .from('profiles')
       .select('*', { count: 'exact', head: true })
       .in('role', ['admin', 'super_admin'])
 
-    if (countError) {
-      logger.error('Failed to count admins', { error: countError })
-      return NextResponse.json({ error: 'Failed to verify admin status' }, { status: 500 })
-    }
+    const totalAdmins = Math.max(adminCountRoles ?? 0, adminCountProfiles ?? 0)
 
     // Si ya existen admins, denegar siempre (solo permite primer admin)
-    if (adminCount && adminCount > 0) {
+    if (totalAdmins > 0) {
       logger.warn('Unauthorized self-promotion attempt', {
         userId: user.id,
         email: user.email,
-        existingAdmins: adminCount
+        existingAdmins: totalAdmins
       })
 
       // Registrar intento de escalación de privilegios

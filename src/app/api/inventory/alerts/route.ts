@@ -1,12 +1,17 @@
 import { NextRequest } from 'next/server'
 import { generateReorderAlerts, ProductStock } from '@/services/inventory-repair-sync'
+import { requireStaff } from '@/lib/auth/require-auth'
 
 export async function POST(req: NextRequest) {
   try {
+    // Allow API key auth for server-to-server calls, otherwise require staff session
     const apiKey = process.env.PRIORITIZATION_API_KEY
     const headerKey = req.headers.get('x-api-key')
-    if (apiKey && headerKey !== apiKey) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+    if (apiKey && headerKey === apiKey) {
+      // API key is valid, proceed
+    } else {
+      const auth = await requireStaff()
+      if (!auth.authenticated) return auth.response
     }
     const body = await req.json()
     const { products, threshold } = body as { products: ProductStock[]; threshold?: number }

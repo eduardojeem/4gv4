@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ProductVariant } from '@/types/product-variants'
+import { requireAuth, requireStaff } from '@/lib/auth/require-auth'
 
 // Mock data - En producción esto vendría de la base de datos
 const mockVariants: ProductVariant[] = [
@@ -29,6 +30,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuth()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     
     const variant = mockVariants.find(v => v.id === id)
@@ -54,12 +57,14 @@ export async function GET(
   }
 }
 
-// PUT /api/variants/[id] - Actualizar variante específica
+// PUT /api/variants/[id] - Actualizar variante específica (staff only)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     const body = await request.json()
     
@@ -107,12 +112,14 @@ export async function PUT(
   }
 }
 
-// DELETE /api/variants/[id] - Eliminar variante específica
+// DELETE /api/variants/[id] - Eliminar variante específica (staff only)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     
     const variantIndex = mockVariants.findIndex(v => v.id === id)
@@ -144,12 +151,14 @@ export async function DELETE(
   }
 }
 
-// PATCH /api/variants/[id]/stock - Actualizar solo el stock de una variante
+// PATCH /api/variants/[id]/stock - Actualizar solo el stock de una variante (staff only)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     const body = await request.json()
     

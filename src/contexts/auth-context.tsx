@@ -350,27 +350,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isSuperAdmin = user?.role === 'admin' // En este sistema, admin es el rol más alto
   const isManager = user?.role === 'admin' || user?.role === 'vendedor'
 
-  // Auto-promoción a admin deshabilitada por defecto; solo habilitar en desarrollo con flag explícito
-  const attemptedPromotion = useRef(false)
-  useEffect(() => {
-    const autoPromoteEnabled = process.env.NEXT_PUBLIC_AUTO_PROMOTE_ADMIN === 'true'
-    const isProd = process.env.NODE_ENV === 'production'
-    if (!autoPromoteEnabled || isProd) return
-
-    const promoteSelf = async () => {
-      if (user && user.role !== 'admin' && !attemptedPromotion.current) {
-        attemptedPromotion.current = true
-        const { data, error } = await supabase.rpc('promote_current_user_to_admin')
-        if (!error && data) {
-          setTimeout(() => {
-            refreshUser()
-          }, 500)
-        }
-      }
-    }
-
-    promoteSelf()
-  }, [user, refreshUser, supabase])
+  // Auto-promocion a admin completamente deshabilitada.
+  // Para promover un usuario a admin, usa la API /api/admin/set-role-by-email
+  // o directamente en la base de datos de Supabase.
 
   // Efecto para manejar cambios de autenticación
   useEffect(() => {

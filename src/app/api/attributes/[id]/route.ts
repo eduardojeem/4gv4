@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { VariantAttribute } from '@/types/product-variants'
+import { requireStaff } from '@/lib/auth/require-auth'
 
 // Mock data - En producción esto vendría de la base de datos
 const mockAttributes: VariantAttribute[] = [
@@ -48,12 +49,14 @@ export async function GET(
   }
 }
 
-// PUT /api/attributes/[id] - Actualizar atributo específico
+// PUT /api/attributes/[id] - Actualizar atributo específico (staff only)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     const body = await request.json()
     
@@ -103,12 +106,14 @@ export async function PUT(
   }
 }
 
-// DELETE /api/attributes/[id] - Eliminar atributo específico
+// DELETE /api/attributes/[id] - Eliminar atributo específico (staff only)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     
     const attributeIndex = mockAttributes.findIndex(attr => attr.id === id)
