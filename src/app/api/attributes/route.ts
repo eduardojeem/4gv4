@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { VariantAttribute } from '@/types/product-variants'
+import { requireAuth, requireStaff } from '@/lib/auth/require-auth'
 
 // Mock data - En producción esto vendría de la base de datos
 const mockAttributes: VariantAttribute[] = [
@@ -75,9 +76,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/attributes - Crear nuevo atributo
+// POST /api/attributes - Crear nuevo atributo (staff only)
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const body = await request.json()
     
     // Validaciones básicas
@@ -125,9 +128,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/attributes - Actualizar orden de atributos
+// PUT /api/attributes - Actualizar orden de atributos (staff only)
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const body = await request.json()
     const { attributes } = body
 

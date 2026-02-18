@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { correlateSymptoms, estimateDurations, recommendDiagnosis } from "@/lib/repair-predictive";
 import { RepairOrder } from "@/types/repairs";
+import { requireStaff } from "@/lib/auth/require-auth";
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireStaff();
+    if (!auth.authenticated) return auth.response;
     const body = await req.json();
     const repairs = body.repairs as RepairOrder[];
     const issueText = body.issueText as string;

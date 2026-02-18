@@ -31,7 +31,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AvatarUpload } from '@/components/profile/avatar-upload'
-import { StorageDiagnostics } from '@/components/admin/storage-diagnostics'
 import { ChangePasswordDialog } from '@/components/profile/change-password-dialog'
 import { SecuritySection } from '@/components/profile/security-section'
 import { z } from 'zod'

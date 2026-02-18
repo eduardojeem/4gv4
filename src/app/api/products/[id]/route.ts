@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ProductWithVariants } from '@/types/product-variants'
+import { requireStaff } from '@/lib/auth/require-auth'
 
 // Mock data - En producción esto vendría de la base de datos
 const mockProducts: ProductWithVariants[] = [
@@ -70,12 +71,14 @@ export async function GET(
   }
 }
 
-// PUT /api/products/[id] - Actualizar producto específico
+// PUT /api/products/[id] - Actualizar producto específico (staff only)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     const body = await request.json()
     
@@ -112,12 +115,14 @@ export async function PUT(
   }
 }
 
-// DELETE /api/products/[id] - Eliminar producto específico
+// DELETE /api/products/[id] - Eliminar producto específico (staff only)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     
     const productIndex = mockProducts.findIndex(p => p.id === id)

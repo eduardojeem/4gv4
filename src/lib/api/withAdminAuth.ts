@@ -49,51 +49,42 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
         )
       }
       
-      // Obtener rol del usuario
-      // 1. Intentar obtener rol de la tabla profiles
+      // Obtener rol del usuario - user_roles es la fuente de verdad (misma que middleware)
       let userRole: string | null = null
-      
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+
+      const { data: userRoleData, error: userRoleError } = await supabase
+        .from('user_roles')
         .select('role')
-        .eq('id', user.id)
+        .eq('user_id', user.id)
         .maybeSingle()
       
-      if (profileError) {
-        logger.error('Failed to fetch user profile', {
+      if (userRoleError) {
+        logger.error('Failed to fetch user_roles', {
           userId: user.id,
-          error: profileError.message
+          error: userRoleError.message
         })
       }
-
-      if (profile) {
-        userRole = profile.role
+      
+      if (userRoleData) {
+        userRole = userRoleData.role
       }
 
-      // 2. Si no se encuentra en profiles, intentar en user_roles
+      // Fallback a profiles solo si user_roles no tiene registro
       if (!userRole) {
-        const { data: userRoleData, error: userRoleError } = await supabase
-          .from('user_roles')
+        const { data: profile } = await supabase
+          .from('profiles')
           .select('role')
-          .eq('user_id', user.id)
+          .eq('id', user.id)
           .maybeSingle()
         
-        if (userRoleError) {
-          logger.error('Failed to fetch user_roles', {
-            userId: user.id,
-            error: userRoleError.message
-          })
-        }
-        
-        if (userRoleData) {
-          userRole = userRoleData.role
+        if (profile) {
+          userRole = profile.role
         }
       }
       
       if (!userRole) {
         logger.error('No role found for user', {
           userId: user.id,
-          profileError: profileError?.message,
         })
         
         return NextResponse.json(

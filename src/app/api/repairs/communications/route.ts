@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { CommunicationStore, sendMessage } from "@/services/communication-service";
 import { CommunicationChannel, RepairOrder } from "@/types/repairs";
+import { requireStaff } from "@/lib/auth/require-auth";
 
 const store = new CommunicationStore();
 
 export async function POST(req: Request) {
   try {
+    const auth = await requireStaff();
+    if (!auth.authenticated) return auth.response;
     const body = await req.json();
     const repair = body.repair as RepairOrder;
     const channel = body.channel as CommunicationChannel;

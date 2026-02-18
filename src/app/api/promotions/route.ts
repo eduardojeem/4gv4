@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { Promotion, PromotionType } from '@/types/promotion'
+import { requireStaff } from '@/lib/auth/require-auth'
 
 // Mock data para desarrollo
 const mockPromotions: Promotion[] = [
@@ -148,9 +149,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Crear nueva promoción
+// POST - Crear nueva promoción (staff only)
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const body = await request.json()
     
     // Validaciones básicas
@@ -215,9 +218,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT - Actualizar múltiples promociones (ej: cambiar prioridades)
+// PUT - Actualizar múltiples promociones (staff only)
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const body = await request.json()
     
     if (!Array.isArray(body.promotions)) {

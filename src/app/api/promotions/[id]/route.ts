@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { Promotion } from '@/types/promotion'
+import { requireStaff } from '@/lib/auth/require-auth'
 
 // Mock data - en producción esto vendría de la base de datos
 const mockPromotions: Promotion[] = [
@@ -68,12 +69,14 @@ export async function GET(
   }
 }
 
-// PUT - Actualizar promoción específica
+// PUT - Actualizar promoción específica (staff only)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     const body = await request.json()
 
@@ -132,12 +135,14 @@ export async function PUT(
   }
 }
 
-// DELETE - Eliminar promoción específica
+// DELETE - Eliminar promoción específica (staff only)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
 
     const index = mockPromotions.findIndex(p => p.id === id)
@@ -182,12 +187,14 @@ export async function DELETE(
   }
 }
 
-// PATCH - Operaciones específicas en la promoción
+// PATCH - Operaciones específicas en la promoción (staff only)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    if (!auth.authenticated) return auth.response
     const { id } = await params
     const body = await request.json()
 
