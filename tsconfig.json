@@ -11,7 +11,8 @@
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "noEmit": true,
-    "strict": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
@@ -47,9 +48,6 @@
     "**/*.spec.tsx",
     "**/*.stories.ts",
     "**/*.stories.tsx",
-    "scripts",
-    "src/app/dashboard/pos/page.original.tsx",
-    "src/app/dashboard/reports/page.original.tsx",
-    "src/components/admin/system/system-configuration.backup.tsx"
+    "scripts"
   ]
 }

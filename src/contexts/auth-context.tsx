@@ -75,36 +75,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       permissions: []
     }
 
-    const logSupabaseError = (label: string, err: any) => {
-      try {
-        console.error(label, err)
-        if (err instanceof Error) {
-          console.error(label + ' (native error):', { message: err.message, stack: err.stack, name: err.name })
-        } else {
-          console.error(label + ' (stringified):', typeof err === 'object' ? JSON.stringify(err, null, 2) : String(err))
-        }
-      } catch (_) {
-        console.error(label, err)
-      }
-      const code = err && typeof err === 'object' && 'code' in err ? (err as any).code : undefined
-      const message = err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err)
-      console.error(label + ' details:', { code, message })
-    }
-
     try {
-      // Verificar que tenemos un userId válido
       if (!userId || typeof userId !== 'string') {
-        console.warn('⚠️ Invalid userId provided to fetchUserProfile:', userId)
         return defaultProfile
       }
 
-      // Verificar que el cliente de Supabase está disponible
       if (!supabase) {
-        console.error('❌ Supabase client not available')
         return defaultProfile
       }
-
-      console.log('📡 Fetching profile from Supabase for user:', userId)
 
       // Usar maybeSingle para evitar error cuando no existe el registro
       const { data: profileData, error: profileError } = await supabase
@@ -113,19 +91,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('id', userId)
         .maybeSingle()
 
-      // Manejar error del cliente de Supabase (con logs robustos)
-      if (profileError) {
-        logSupabaseError('❌ Profile fetch error:', profileError)
+      if (profileError || !profileData) {
         return defaultProfile
       }
-
-      // Manejar caso de registro no encontrado
-      if (!profileData) {
-        console.warn('⚠️ Profile not found for user (no data):', userId)
-        return defaultProfile
-      }
-
-      console.log('✅ Profile fetched successfully for user:', userId)
 
       return {
         role: toUserRole(profileData.role),
@@ -136,13 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         permissions: []
       }
-    } catch (error) {
-      // Log del error pero no fallar la aplicación
-      console.error('💥 Error in fetchUserProfile (handled):', error)
-      console.error('💥 Error in fetchUserProfile details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        userId
-      })
+    } catch {
       return defaultProfile
     }
   }, [supabase])
@@ -390,15 +352,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const promoteSelf = async () => {
       if (user && user.role !== 'admin' && !attemptedPromotion.current) {
         attemptedPromotion.current = true
-        console.log('🔧 Attempting to promote user to admin (dev flag enabled)...')
         const { data, error } = await supabase.rpc('promote_current_user_to_admin')
         if (!error && data) {
-          console.log('✅ User promoted to admin successfully')
           setTimeout(() => {
             refreshUser()
           }, 500)
-        } else {
-          console.error('❌ Failed to promote user:', error)
         }
       }
     }
@@ -409,26 +367,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Efecto para manejar cambios de autenticación
   useEffect(() => {
     const getSession = async () => {
-      console.log('🚀 Initializing auth context, getting session...')
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        console.log('📋 Initial session:', { userId: session?.user?.id, email: session?.user?.email })
         setSession(session)
 
         if (session?.user) {
-          console.log('👤 Initial session has user, fetching profile...')
           try {
             const userProfile = await fetchUserProfile(session.user.id)
-            console.log('✅ Initial profile fetched, setting user')
             setUser({
               ...session.user,
               role: userProfile.role,
               permissions: userProfile.permissions,
               profile: userProfile.profile
             } as AuthUser)
-          } catch (error) {
-            console.error('💥 Error fetching initial profile (handled):', error instanceof Error ? error.message : 'Unknown error')
-            // Set user with default profile instead of null to prevent auth issues
+          } catch {
             setUser({
               ...session.user,
               role: 'cliente' as UserRole,
@@ -437,13 +389,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } as AuthUser)
           }
         } else {
-          console.log('👤 No initial session, setting user to null')
           setUser(null)
         }
-      } catch (error) {
-        console.error('💥 Error getting initial session:', error)
+      } catch {
+        // Silently handle session errors
       } finally {
-        console.log('✅ Auth initialization complete, setting loading to false')
         setLoading(false)
       }
     }
@@ -451,26 +401,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         try {
-          console.log('🔄 Auth state changed:', { event, hasSession: !!session, userId: session?.user?.id })
-
           setSession(session)
 
           if (session?.user) {
-            console.log('👤 User authenticated, fetching profile...')
             try {
               const userProfile = await fetchUserProfile(session.user.id)
-              console.log('✅ Profile fetched in auth change, setting user')
               setUser({
                 ...session.user,
                 role: userProfile.role,
                 permissions: userProfile.permissions,
                 profile: userProfile.profile
               } as AuthUser)
-            } catch (error) {
-              console.error('💥 Error fetching profile in auth change (handled):', error instanceof Error ? error.message : 'Unknown error')
-              // Set user with default profile instead of null
+            } catch {
               setUser({
                 ...session.user,
                 role: 'cliente' as UserRole,
@@ -479,12 +423,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               } as AuthUser)
             }
           } else {
-            console.log('👤 No user in session, setting user to null')
             setUser(null)
           }
-        } catch (error) {
-          console.error('💥 Error in auth state change handler (handled):', error instanceof Error ? error.message : 'Unknown error')
-          // Ensure we don't leave the app in a broken state
+        } catch {
           if (session?.user) {
             setUser({
               ...session.user,

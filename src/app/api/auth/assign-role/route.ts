@@ -1,50 +1,47 @@
 import { NextResponse } from 'next/server'
-import { createClient as createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { requireAdmin } from '@/lib/auth/require-auth'
 import { UserRole } from '@/lib/auth/roles-permissions'
 
 const VALID_ROLES: UserRole[] = ['admin', 'vendedor', 'tecnico', 'cliente']
 
 export async function POST(request: Request) {
   try {
-    const { role } = await request.json()
+    // Solo un admin puede asignar roles
+    const auth = await requireAdmin()
+    if (!auth.authenticated) return auth.response
 
-    // Validar que el rol es válido
+    const { role, user_id } = await request.json()
+
     if (!role || !VALID_ROLES.includes(role)) {
       return NextResponse.json(
-        { error: 'Rol inválido. Debe ser uno de: ' + VALID_ROLES.join(', ') },
+        { error: 'Rol invalido. Debe ser uno de: ' + VALID_ROLES.join(', ') },
         { status: 400 }
       )
     }
 
-    // Obtener usuario autenticado
-    const supabase = await createServerSupabase()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
+    if (!user_id || typeof user_id !== 'string') {
       return NextResponse.json(
-        { error: 'No autenticado' },
-        { status: 401 }
+        { error: 'Se requiere user_id del usuario objetivo' },
+        { status: 400 }
       )
     }
 
-    // Usar cliente admin para actualizar roles
     const admin = createAdminSupabase()
 
     // Actualizar en la tabla user_roles
     const { error: roleError } = await admin
       .from('user_roles')
       .upsert({
-        user_id: user.id,
-        role: role,
+        user_id,
+        role,
         is_active: true,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
 
     if (roleError) {
-      console.error('Error updating user_roles:', roleError)
       return NextResponse.json(
-        { error: 'Error al actualizar rol en user_roles: ' + roleError.message },
+        { error: 'Error al actualizar rol: ' + roleError.message },
         { status: 500 }
       )
     }
@@ -52,42 +49,38 @@ export async function POST(request: Request) {
     // Actualizar en la tabla profiles
     const { error: profileError } = await admin
       .from('profiles')
-      .upsert({
-        id: user.id,
-        role: role,
-        full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Usuario',
-        updated_at: new Date().toISOString()
+      .update({
+        role,
+        updated_at: new Date().toISOString(),
       })
+      .eq('id', user_id)
 
     if (profileError) {
-      console.error('Error updating profiles:', profileError)
-      // No fallar si profiles falla, user_roles es más importante
+      // No fallar si profiles falla, user_roles es mas importante
     }
 
     // Registrar en audit log
     try {
       await admin.from('audit_log').insert({
-        user_id: user.id,
-        action: 'assign_role_self',
+        user_id: auth.user.id,
+        action: 'assign_role',
         resource: 'auth',
-        resource_id: user.id,
-        new_values: { role: role },
-        created_at: new Date().toISOString()
+        resource_id: user_id,
+        new_values: { role, assigned_by: auth.user.id },
+        created_at: new Date().toISOString(),
       })
-    } catch (auditError) {
-      console.error('Error logging audit:', auditError)
+    } catch {
       // No fallar si audit falla
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       message: `Rol ${role} asignado correctamente`,
-      role: role
+      role,
     })
-
   } catch (error) {
-    console.error('Error in assign-role API:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+    const errorMessage =
+      error instanceof Error ? error.message : 'Error desconocido'
     return NextResponse.json(
       { error: 'Error interno del servidor: ' + errorMessage },
       { status: 500 }
