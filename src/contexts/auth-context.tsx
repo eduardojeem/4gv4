@@ -84,23 +84,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return defaultProfile
       }
 
-      // Usar maybeSingle para evitar error cuando no existe el registro
-      const { data: profileData, error: profileError } = await supabase
+      // 1. Obtener rol de user_roles (fuente de verdad, misma que el middleware)
+      const { data: roleRow } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      // 2. Obtener perfil para datos de display
+      const { data: profileData } = await supabase
         .from('profiles')
         .select('full_name, role, avatar_url, phone, email')
         .eq('id', userId)
         .maybeSingle()
 
-      if (profileError || !profileData) {
-        return defaultProfile
-      }
+      // Prioridad de rol: user_roles > profiles > metadata > 'cliente'
+      const resolvedRole = toUserRole(
+        roleRow?.role ?? profileData?.role ?? undefined
+      )
 
       return {
-        role: toUserRole(profileData.role),
+        role: resolvedRole,
         profile: {
-          name: profileData.full_name || '',
-          avatar_url: profileData.avatar_url || '',
-          phone: profileData.phone || ''
+          name: profileData?.full_name || '',
+          avatar_url: profileData?.avatar_url || '',
+          phone: profileData?.phone || ''
         },
         permissions: []
       }
