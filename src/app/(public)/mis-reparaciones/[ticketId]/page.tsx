@@ -3,277 +3,261 @@
 import { use, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
-import { 
-  ArrowLeft, 
-  Package, 
-  User, 
-  Calendar, 
-  DollarSign, 
-  Shield, 
+import {
+  ArrowLeft,
+  Package,
+  User,
+  Calendar,
+  Shield,
   Loader2,
   CheckCircle2,
   Clock,
   AlertCircle,
   MessageCircle,
-  Copy
+  Copy,
+  Wrench,
+  CircleDot,
+  Phone,
+  Banknote,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PublicRepair } from '@/types/public'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-// SWR fetcher
+/* ------------------------------------------------------------------ */
+/*  Fetcher                                                            */
+/* ------------------------------------------------------------------ */
 const fetcher = async (url: string) => {
-  const response = await fetch(url, {
-    credentials: 'include',
-    headers: { 'Accept': 'application/json' }
-  })
-
-  const contentType = response.headers.get('content-type') || ''
-  if (!contentType.includes('application/json')) {
-    throw new Error('Invalid response format')
-  }
-
-  const data = await response.json()
-  if (!data.success) {
-    throw new Error(data.error || 'Error al cargar datos')
-  }
-
+  const res = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } })
+  const ct = res.headers.get('content-type') || ''
+  if (!ct.includes('application/json')) throw new Error('Invalid response format')
+  const data = await res.json()
+  if (!data.success) throw new Error(data.error || 'Error al cargar datos')
   return data.data
 }
 
-// Configuration for status visual representation
-const STATUS_CONFIG: Record<string, { 
-  label: string; 
-  color: string; 
-  bg: string;
-  icon: any;
-  description: string;
-  stepIndex: number;
+/* ------------------------------------------------------------------ */
+/*  Status config                                                      */
+/* ------------------------------------------------------------------ */
+type StatusKey = 'recibido' | 'diagnostico' | 'reparacion' | 'pausado' | 'listo' | 'entregado' | 'cancelado'
+
+const STATUS_CONFIG: Record<StatusKey, {
+  label: string
+  color: string
+  bgCard: string
+  bgDot: string
+  Icon: React.FC<React.SVGProps<SVGSVGElement> & { className?: string }>
+  description: string
+  stepIndex: number
 }> = {
-  recibido: { 
-    label: 'Recibido', 
-    color: 'text-blue-600', 
-    bg: 'bg-blue-50 dark:bg-blue-950/30',
-    icon: Package,
+  recibido: {
+    label: 'Recibido',
+    color: 'text-blue-600',
+    bgCard: 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-900',
+    bgDot: 'bg-blue-500',
+    Icon: Package,
     description: 'Tu dispositivo ha sido recibido en nuestro taller.',
-    stepIndex: 0
+    stepIndex: 0,
   },
-  diagnostico: { 
-    label: 'En Diagnóstico', 
-    color: 'text-purple-600', 
-    bg: 'bg-purple-50 dark:bg-purple-950/30',
-    icon:  Clock,
+  diagnostico: {
+    label: 'En Diagnostico',
+    color: 'text-violet-600',
+    bgCard: 'bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-900',
+    bgDot: 'bg-violet-500',
+    Icon: Clock,
     description: 'Estamos evaluando el problema de tu equipo.',
-    stepIndex: 1
+    stepIndex: 1,
   },
-  reparacion: { 
-    label: 'En Reparación', 
-    color: 'text-orange-600', 
-    bg: 'bg-orange-50 dark:bg-orange-950/30',
-    icon: WrenchIcon,
-    description: 'Nuestros técnicos están trabajando en tu dispositivo.',
-    stepIndex: 2
+  reparacion: {
+    label: 'En Reparacion',
+    color: 'text-amber-600',
+    bgCard: 'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-900',
+    bgDot: 'bg-amber-500',
+    Icon: Wrench,
+    description: 'Nuestros tecnicos estan trabajando en tu dispositivo.',
+    stepIndex: 2,
   },
-  pausado: { 
-    label: 'Pausado', 
-    color: 'text-yellow-600', 
-    bg: 'bg-yellow-50 dark:bg-yellow-950/30',
-    icon: AlertCircle,
-    description: 'La reparación está pausada. Posiblemente esperamos repuestos o tu aprobación.',
-    stepIndex: 2 // Keeps in repair phase visually but marked distinctively
+  pausado: {
+    label: 'Pausado',
+    color: 'text-yellow-600',
+    bgCard: 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-900',
+    bgDot: 'bg-yellow-500',
+    Icon: AlertCircle,
+    description: 'La reparacion esta pausada. Posiblemente esperamos repuestos o tu aprobacion.',
+    stepIndex: 2,
   },
-  listo: { 
-    label: 'Listo para Retirar', 
-    color: 'text-green-600', 
-    bg: 'bg-green-50 dark:bg-green-950/30',
-    icon: CheckCircle2,
-    description: '¡Tu equipo está listo! Puedes pasar a retirarlo.',
-    stepIndex: 3
+  listo: {
+    label: 'Listo para Retirar',
+    color: 'text-green-600',
+    bgCard: 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-900',
+    bgDot: 'bg-green-500',
+    Icon: CheckCircle2,
+    description: 'Tu equipo esta listo! Puedes pasar a retirarlo.',
+    stepIndex: 3,
   },
-  entregado: { 
-    label: 'Entregado', 
-    color: 'text-gray-600', 
-    bg: 'bg-gray-50 dark:bg-gray-950/30',
-    icon: Package,
-    description: 'Reparación finalizada y entregada.',
-    stepIndex: 4
+  entregado: {
+    label: 'Entregado',
+    color: 'text-gray-600',
+    bgCard: 'bg-gray-50 border-gray-200 dark:bg-gray-950/30 dark:border-gray-900',
+    bgDot: 'bg-gray-500',
+    Icon: Package,
+    description: 'Reparacion finalizada y entregada.',
+    stepIndex: 4,
   },
-  cancelado: { 
-    label: 'Cancelado', 
-    color: 'text-red-600', 
-    bg: 'bg-red-50 dark:bg-red-950/30',
-    icon: AlertCircle,
-    description: 'La reparación ha sido cancelada.',
-    stepIndex: -1
-  }
+  cancelado: {
+    label: 'Cancelado',
+    color: 'text-red-600',
+    bgCard: 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900',
+    bgDot: 'bg-red-500',
+    Icon: AlertCircle,
+    description: 'La reparacion ha sido cancelada.',
+    stepIndex: -1,
+  },
 }
 
-// Timeline steps definition
 const TIMELINE_STEPS = [
   { id: 'recibido', label: 'Recibido' },
-  { id: 'diagnostico', label: 'Diagnóstico' },
-  { id: 'reparacion', label: 'Reparación' },
+  { id: 'diagnostico', label: 'Diagnostico' },
+  { id: 'reparacion', label: 'Reparacion' },
   { id: 'listo', label: 'Listo' },
-  { id: 'entregado', label: 'Entregado' }
+  { id: 'entregado', label: 'Entregado' },
 ]
 
-function WrenchIcon(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  )
-}
-
+/* ------------------------------------------------------------------ */
+/*  Page                                                               */
+/* ------------------------------------------------------------------ */
 export default function RepairDetailPage({ params }: { params: Promise<{ ticketId: string }> }) {
   const router = useRouter()
   const { ticketId } = use(params)
-  
-  // Use SWR for data fetching with caching
+
   const { data: repair, error, isLoading } = useSWR<PublicRepair>(
     `/api/public/repairs/${ticketId}`,
     fetcher,
     {
       revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      dedupingInterval: 60000, // 1 minute
-      refreshInterval: 120000, // Revalidate every 2 minutes
-      onError: (err) => {
-        console.error('Error fetching repair:', err)
-        toast.error(err.message || 'Error al cargar los datos')
+      dedupingInterval: 60000,
+      refreshInterval: 120000,
+      onError: () => {
+        toast.error('No se pudo cargar la reparacion')
         router.push('/mis-reparaciones')
-      }
-    }
+      },
+    },
   )
 
-  // Memoize formatters to avoid recreating on each render
   const formatPrice = useMemo(() => {
-    const formatter = new Intl.NumberFormat('es-PY', {
-      style: 'currency',
-      currency: 'PYG',
-      minimumFractionDigits: 0
-    })
-    return (price: number) => formatter.format(price)
+    const fmt = new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', minimumFractionDigits: 0 })
+    return (n: number) => fmt.format(n)
   }, [])
 
   const formatDate = useMemo(() => {
-    const formatter = new Intl.DateTimeFormat('es-PY', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    const fmt = new Intl.DateTimeFormat('es-PY', {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     })
-    return (date: string) => formatter.format(new Date(date))
+    return (d: string) => fmt.format(new Date(d))
   }, [])
 
-  const handleWhatsAppClick = () => {
+  const handleWhatsApp = () => {
     if (!repair) return
-    const message = `Hola, quisiera consultar sobre mi reparación con ticket *${repair.ticketNumber}* (${repair.brand} ${repair.model})`
+    const msg = `Hola, consulta sobre mi reparacion ticket *${repair.ticketNumber}* (${repair.brand} ${repair.model})`
     const phone = process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP || '595981234567'
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
+  /* Loading -------------------------------------------------------- */
   if (isLoading) {
     return (
-      <div className="container flex min-h-[calc(100vh-200px)] items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Cargando reparacion...</p>
+        </div>
       </div>
     )
   }
 
   if (error || !repair) return null
 
-  const statusConfig = STATUS_CONFIG[repair.status] || STATUS_CONFIG.recibido
-  const StatusIcon = statusConfig.icon
-  const currentStepIndex = statusConfig.stepIndex
+  const cfg = STATUS_CONFIG[(repair.status as StatusKey)] || STATUS_CONFIG.recibido
+  const StatusIcon = cfg.Icon
+  const currentStep = cfg.stepIndex
 
   return (
-    <div className="container max-w-5xl py-8 space-y-8">
-      {/* Navigation */}
-      <Button variant="ghost" onClick={() => router.push('/mis-reparaciones')} className="pl-0 hover:pl-2 transition-all">
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Volver a buscar
-      </Button>
+    <div className="container max-w-5xl py-8 md:py-12">
+      {/* Back */}
+      <button
+        onClick={() => router.push('/mis-reparaciones')}
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Volver
+      </button>
 
-      {/* Hero Status Section */}
-      <div className={cn("rounded-3xl p-8 text-center sm:text-left sm:flex sm:items-center sm:justify-between shadow-sm border", statusConfig.bg)}>
-        <div className="space-y-4">
-          <div className="flex items-center justify-center sm:justify-start gap-3">
-            <div className={cn("p-3 rounded-full bg-white/80 shadow-sm", statusConfig.color)}>
-              <StatusIcon className="h-8 w-8" />
+      {/* ---- Status banner ---- */}
+      <div className={cn('rounded-2xl border p-6 md:p-8', cfg.bgCard)}>
+        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-4">
+            <div className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/80 shadow-sm', cfg.color)}>
+              <StatusIcon className="h-7 w-7" />
             </div>
             <div>
-              <p className="text-sm font-medium opacity-80 uppercase tracking-wider">Estado Actual</p>
-              <h1 className={cn("text-3xl font-bold", statusConfig.color)}>{statusConfig.label}</h1>
+              <p className="text-xs font-semibold uppercase tracking-widest opacity-60">Estado actual</p>
+              <h1 className={cn('text-2xl font-bold md:text-3xl', cfg.color)}>{cfg.label}</h1>
+              <p className="mt-1 max-w-md text-sm opacity-80">{cfg.description}</p>
             </div>
           </div>
-          <p className="text-lg opacity-90 max-w-xl">
-            {statusConfig.description}
-          </p>
-        </div>
-        
-        <div className="mt-6 sm:mt-0 flex flex-col gap-3 min-w-[200px]">
-          <div className="text-center sm:text-right">
-            <p className="text-sm opacity-70">Ticket #</p>
-            <p className="text-2xl font-mono font-bold">{repair.ticketNumber}</p>
+
+          <div className="flex flex-col items-start gap-3 md:items-end">
+            <div className="md:text-right">
+              <p className="text-xs font-medium uppercase tracking-wider opacity-50">Ticket</p>
+              <p className="font-mono text-xl font-bold">{repair.ticketNumber}</p>
+            </div>
+            <div className="rounded-xl bg-white/60 px-4 py-2.5 text-center shadow-sm dark:bg-black/10 md:text-right">
+              <p className="text-[10px] font-bold uppercase opacity-50">
+                {repair.finalCost ? 'Total final' : 'Presupuesto estimado'}
+              </p>
+              <p className={cn('text-lg font-bold', repair.finalCost ? 'text-green-700' : cfg.color)}>
+                {formatPrice(repair.finalCost || repair.estimatedCost)}
+              </p>
+            </div>
           </div>
-              <div className="bg-white/50 rounded-lg p-3 text-center sm:text-right">
-                <p className="text-xs uppercase font-bold opacity-70">
-                  {repair.finalCost ? 'Total Final' : 'Presupuesto Estimado'}
-                </p>
-                <p className={cn("text-xl font-bold", repair.finalCost ? "text-green-700" : "text-blue-700")}>
-                  {formatPrice(repair.finalCost || repair.estimatedCost)}
-                </p>
-              </div>
         </div>
       </div>
 
-      {/* Progress Timeline (Stepper) */}
+      {/* ---- Stepper ---- */}
       {repair.status !== 'cancelado' && (
-        <div className="py-4 overflow-x-auto">
-          <div className="flex justify-between min-w-[600px] relative px-4">
-             {/* Progress Bar Background */}
-            <div className="absolute top-1/2 left-0 w-full h-1 bg-muted -z-10 -translate-y-1/2" />
-            
-            {/* Active Progress Bar */}
-            <div 
-              className="absolute top-1/2 left-0 h-1 bg-primary -z-10 -translate-y-1/2 transition-all duration-500"
-              style={{ width: `${Math.max(0, Math.min(100, (currentStepIndex / (TIMELINE_STEPS.length - 1)) * 100))}%` }}
+        <div className="mt-8 overflow-x-auto pb-2">
+          <div className="relative mx-auto flex min-w-[500px] max-w-2xl justify-between">
+            {/* Track */}
+            <div className="absolute left-0 right-0 top-4 h-0.5 bg-border" />
+            <div
+              className="absolute left-0 top-4 h-0.5 bg-primary transition-all duration-500"
+              style={{ width: `${Math.max(0, Math.min(100, (currentStep / (TIMELINE_STEPS.length - 1)) * 100))}%` }}
             />
 
-            {TIMELINE_STEPS.map((step, index) => {
-              const isActive = index <= currentStepIndex
-              const isCurrent = index === currentStepIndex
-              
+            {TIMELINE_STEPS.map((step, i) => {
+              const active = i <= currentStep
+              const current = i === currentStep
               return (
-                <div key={step.id} className="flex flex-col items-center gap-2 bg-background px-2 z-10">
-                  <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors",
-                    isActive ? "bg-primary border-primary text-primary-foreground" : "bg-muted border-muted-foreground/30 text-muted-foreground",
-                    isCurrent && "ring-4 ring-primary/20"
-                  )}>
-                    {isActive ? <CheckCircle2 className="h-4 w-4" /> : <span className="text-xs">{index + 1}</span>}
+                <div key={step.id} className="relative z-10 flex flex-col items-center gap-1.5">
+                  <div
+                    className={cn(
+                      'flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-all',
+                      active
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-card text-muted-foreground',
+                      current && 'ring-4 ring-primary/20',
+                    )}
+                  >
+                    {active ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
                   </div>
-                  <span className={cn(
-                    "text-xs font-medium uppercase tracking-wide",
-                    isActive ? "text-primary" : "text-muted-foreground"
-                  )}>
+                  <span
+                    className={cn(
+                      'text-[11px] font-semibold uppercase tracking-wide',
+                      active ? 'text-primary' : 'text-muted-foreground',
+                    )}
+                  >
                     {step.label}
                   </span>
                 </div>
@@ -283,184 +267,179 @@ export default function RepairDetailPage({ params }: { params: Promise<{ ticketI
         </div>
       )}
 
-      <div className="grid gap-8 md:grid-cols-3">
-        {/* Main Details */}
-        <div className="md:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5 text-primary" />
-                Detalles del Dispositivo
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid sm:grid-cols-2 gap-6">
-               <div>
-                 <p className="text-sm text-muted-foreground mb-1">Equipo</p>
-                 <p className="font-semibold text-lg">{repair.device}</p>
-                 <p className="text-muted-foreground">{repair.brand} {repair.model}</p>
-               </div>
-               <div>
-                 <p className="text-sm text-muted-foreground mb-1">Problema Reportado</p>
-                 <div className="bg-muted/50 p-3 rounded-lg text-sm">
-                   {repair.issue}
-                 </div>
-               </div>
-            </CardContent>
-          </Card>
+      {/* ---- Body grid ---- */}
+      <div className="mt-10 grid gap-8 lg:grid-cols-3">
+        {/* Left col (2/3) */}
+        <div className="space-y-6 lg:col-span-2">
+          {/* Device info */}
+          <section className="rounded-2xl border border-border bg-card p-6">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+              <Package className="h-5 w-5 text-primary" />
+              Detalles del Dispositivo
+            </h2>
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Equipo</p>
+                <p className="mt-1 text-lg font-semibold text-foreground">{repair.device}</p>
+                <p className="text-sm text-muted-foreground">{repair.brand} {repair.model}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Problema Reportado</p>
+                <p className="mt-1 rounded-lg bg-muted/50 p-3 text-sm text-foreground">{repair.issue}</p>
+              </div>
+            </div>
+          </section>
 
-          {/* Status History */}
+          {/* Timeline */}
           {repair.statusHistory && repair.statusHistory.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-primary" />
-                  Historial de Actividad
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="relative border-l-2 border-muted pl-6 space-y-8 py-2">
-                  {repair.statusHistory.map((entry, index) => {
-                    const entryConfig = STATUS_CONFIG[entry.status] || STATUS_CONFIG.recibido
-                    return (
-                      <div key={index} className="relative">
-                        <span className={cn(
-                          "absolute -left-[31px] top-1 h-4 w-4 rounded-full border-2 border-background",
-                          index === 0 ? "bg-primary" : "bg-muted-foreground"
-                        )} />
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
-                          <p className="font-semibold text-sm">{entryConfig.label}</p>
-                          <span className="text-xs text-muted-foreground tabular-nums">
-                            {formatDate(entry.created_at)}
-                          </span>
-                        </div>
-                        {entry.note && (
-                          <p className="text-sm text-muted-foreground mt-1 bg-muted/30 p-2 rounded">
-                            {entry.note}
-                          </p>
+            <section className="rounded-2xl border border-border bg-card p-6">
+              <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+                <Clock className="h-5 w-5 text-primary" />
+                Historial de Actividad
+              </h2>
+              <div className="relative mt-5 space-y-6 border-l-2 border-border pl-6">
+                {repair.statusHistory.map((entry, i) => {
+                  const entryCfg = STATUS_CONFIG[entry.status as StatusKey] || STATUS_CONFIG.recibido
+                  return (
+                    <div key={i} className="relative">
+                      <span
+                        className={cn(
+                          'absolute -left-[25px] top-1 h-3 w-3 rounded-full ring-2 ring-card',
+                          i === 0 ? entryCfg.bgDot : 'bg-muted-foreground/40',
                         )}
+                      />
+                      <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between">
+                        <p className="text-sm font-semibold text-foreground">{entryCfg.label}</p>
+                        <time className="text-xs tabular-nums text-muted-foreground">
+                          {formatDate(entry.created_at)}
+                        </time>
                       </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+                      {entry.note && (
+                        <p className="mt-1.5 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                          {entry.note}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
           )}
         </div>
 
-        {/* Sidebar */}
+        {/* Right sidebar (1/3) */}
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-primary" />
-                Fechas
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Ingreso</span>
-                <span className="text-sm">{formatDate(repair.createdAt)}</span>
+          {/* Quick Actions */}
+          <section className="rounded-2xl border border-border bg-card p-5">
+            <Button
+              onClick={handleWhatsApp}
+              className="h-12 w-full gap-2 bg-green-600 text-base font-semibold text-white shadow-md hover:bg-green-700 active:scale-[0.98]"
+            >
+              <MessageCircle className="h-5 w-5" />
+              Consultar por WhatsApp
+            </Button>
+            <Button
+              variant="outline"
+              className="mt-3 w-full gap-2"
+              onClick={() => {
+                navigator.clipboard.writeText(repair.ticketNumber)
+                toast.success('Ticket copiado')
+              }}
+            >
+              <Copy className="h-4 w-4" />
+              Copiar ticket
+            </Button>
+            <p className="mt-3 text-center text-xs text-muted-foreground">
+              Dudas? Escribinos citando tu ticket.
+            </p>
+          </section>
+
+          {/* Dates */}
+          <section className="rounded-2xl border border-border bg-card p-5">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Calendar className="h-4 w-4 text-primary" />
+              Fechas
+            </h3>
+            <dl className="mt-4 space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <dt className="text-muted-foreground">Ingreso</dt>
+                <dd className="font-medium tabular-nums">{formatDate(repair.createdAt)}</dd>
               </div>
               {repair.estimatedCompletion && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Estimado</span>
-                  <span className="text-sm">{formatDate(repair.estimatedCompletion)}</span>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Estimado</dt>
+                  <dd className="font-medium tabular-nums">{formatDate(repair.estimatedCompletion)}</dd>
                 </div>
               )}
               {repair.status === 'entregado' && repair.completedAt && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Entregado</span>
-                  <span className="text-sm">{formatDate(repair.completedAt)}</span>
+                <div className="flex items-center justify-between">
+                  <dt className="text-muted-foreground">Entregado</dt>
+                  <dd className="font-medium tabular-nums">{formatDate(repair.completedAt)}</dd>
                 </div>
               )}
-            </CardContent>
-          </Card>
-          {/* Quick Actions */}
-          <Card className="bg-primary/5 border-primary/20">
-            <CardContent className="pt-6">
-              <Button 
-                onClick={handleWhatsAppClick} 
-                className="w-full bg-green-600 hover:bg-green-700 text-white gap-2 h-12 text-base shadow-md transition-transform active:scale-95"
-              >
-                <MessageCircle className="h-5 w-5" />
-                Consultar por WhatsApp
-              </Button>
-              <Button 
-                onClick={() => navigator.clipboard.writeText(repair.ticketNumber)}
-                variant="outline"
-                className="w-full mt-3 gap-2"
-              >
-                <Copy className="h-4 w-4" />
-                Copiar número de ticket
-              </Button>
-              <p className="text-xs text-center mt-3 text-muted-foreground">
-                ¿Tienes dudas? Escríbenos directamente citando tu ticket.
-              </p>
-            </CardContent>
-          </Card>
+            </dl>
+          </section>
 
           {/* Financials */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <DollarSign className="h-4 w-4" />
-                Resumen Financiero
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between items-center py-2 border-b">
-                <div className="flex flex-col">
-                  <span className="text-sm text-muted-foreground">Costo Estimado</span>
+          <section className="rounded-2xl border border-border bg-card p-5">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Banknote className="h-4 w-4 text-primary" />
+              Resumen Financiero
+            </h3>
+            <dl className="mt-4 space-y-3 text-sm">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div>
+                  <dt className="text-muted-foreground">Presupuesto</dt>
                   {!repair.finalCost && (
-                    <Badge variant="outline" className="w-fit text-[10px] h-4 px-1 py-0 mt-0.5 border-blue-200 text-blue-700 bg-blue-50/50">
-                      En evaluación
+                    <Badge variant="outline" className="mt-0.5 h-4 border-blue-200 bg-blue-50/50 px-1 text-[10px] text-blue-700">
+                      En evaluacion
                     </Badge>
                   )}
                 </div>
-                <span className="font-medium">{formatPrice(repair.estimatedCost)}</span>
+                <dd className="font-medium">{formatPrice(repair.estimatedCost)}</dd>
               </div>
-              
+
               {repair.finalCost ? (
-                <div className="flex justify-between items-center py-2 border-b bg-green-50/30 -mx-2 px-2 rounded-md">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-green-900">Costo Final</span>
-                    <Badge className="w-fit text-[10px] h-4 px-1 py-0 mt-0.5 bg-green-600">Confirmado</Badge>
+                <div className="flex items-center justify-between rounded-lg bg-green-50 p-3 dark:bg-green-950/30">
+                  <div>
+                    <dt className="text-sm font-semibold text-green-800 dark:text-green-300">Costo Final</dt>
+                    <Badge className="mt-0.5 h-4 bg-green-600 px-1 text-[10px]">Confirmado</Badge>
                   </div>
-                  <span className="font-bold text-lg text-green-700">{formatPrice(repair.finalCost)}</span>
+                  <dd className="text-lg font-bold text-green-700 dark:text-green-400">{formatPrice(repair.finalCost)}</dd>
                 </div>
               ) : (
-                <p className="text-[11px] text-muted-foreground italic px-1">
-                  * El costo final se confirmará una vez finalizado el diagnóstico técnico.
+                <p className="text-[11px] italic text-muted-foreground">
+                  * El costo final se confirma tras el diagnostico.
                 </p>
               )}
+            </dl>
 
-              {repair.warrantyMonths && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg flex items-start gap-3 mt-4">
-                  <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Garantía Incluida</p>
-                    <p className="text-xs text-blue-700 dark:text-blue-300">
-                      {repair.warrantyMonths} meses de garantía sobre la reparación realizada.
-                    </p>
-                  </div>
+            {repair.warrantyMonths && (
+              <div className="mt-4 flex items-start gap-3 rounded-xl bg-primary/5 p-3">
+                <Shield className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Garantia Incluida</p>
+                  <p className="text-xs text-muted-foreground">
+                    {repair.warrantyMonths} meses sobre la reparacion realizada.
+                  </p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </section>
 
           {/* Technician */}
           {repair.technician && (
-            <Card>
-              <CardContent className="pt-6 flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+            <section className="rounded-2xl border border-border bg-card p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
                   <User className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Técnico Asignado</p>
-                  <p className="font-medium">{repair.technician.name}</p>
+                  <p className="text-xs text-muted-foreground">Tecnico Asignado</p>
+                  <p className="text-sm font-semibold text-foreground">{repair.technician.name}</p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </section>
           )}
         </div>
       </div>
