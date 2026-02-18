@@ -35,11 +35,8 @@ export async function POST() {
       return NextResponse.json({ error: 'Failed to verify admin status' }, { status: 500 })
     }
 
-    // Si ya existen admins y no estamos en modo dev, denegar
-    const isDevelopment = process.env.NODE_ENV === 'development'
-    const allowSelfPromotion = process.env.ALLOW_SELF_PROMOTION === 'true'
-    
-    if (adminCount && adminCount > 0 && !isDevelopment && !allowSelfPromotion) {
+    // Si ya existen admins, denegar siempre (solo permite primer admin)
+    if (adminCount && adminCount > 0) {
       logger.warn('Unauthorized self-promotion attempt', {
         userId: user.id,
         email: user.email,
@@ -68,12 +65,10 @@ export async function POST() {
       )
     }
 
-    // Permitir promoción (primer admin o modo dev)
-    logger.info('Self-promotion to admin', {
+    // Permitir promocion (primer admin del sistema)
+    logger.info('Self-promotion to admin - first admin setup', {
       userId: user.id,
-      email: user.email,
-      isFirstAdmin: adminCount === 0,
-      isDevelopment
+      isFirstAdmin: true,
     })
 
     const { error: profileError } = await admin
@@ -113,16 +108,13 @@ export async function POST() {
       new_values: { 
         role_ui: 'admin', 
         role_db: 'admin',
-        is_first_admin: adminCount === 0,
-        is_development: isDevelopment
+        is_first_admin: true
       }
     })
 
     return NextResponse.json({ 
       success: true,
-      message: adminCount === 0 
-        ? 'Successfully promoted to admin (first administrator)' 
-        : 'Successfully promoted to admin (development mode)'
+      message: 'Successfully promoted to admin (first administrator)',
     })
   } catch (err: unknown) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error'

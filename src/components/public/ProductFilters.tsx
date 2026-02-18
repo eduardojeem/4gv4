@@ -6,7 +6,7 @@ import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { Badge } from '@/components/ui/badge'
-import { X, SlidersHorizontal } from 'lucide-react'
+import { X } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import {
   Accordion,
@@ -14,7 +14,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
-import { Checkbox } from '@/components/ui/checkbox'
 
 interface Category {
   id: string
@@ -24,29 +23,29 @@ interface Category {
 interface ProductFiltersProps {
   filters: {
     category_id: string
+    brand: string
     min_price: number
     max_price: number
     in_stock: boolean
   }
-  setFilters: (filters: any) => void
-  totalProducts?: number
+  setFilters: (filters: ProductFiltersProps['filters']) => void
   priceRange?: { min: number; max: number }
   categories?: Category[]
   brands?: string[]
 }
 
-export function ProductFilters({ 
-  filters, 
-  setFilters, 
-  totalProducts = 0,
+export function ProductFilters({
+  filters,
+  setFilters,
   priceRange = { min: 0, max: 1000000 },
   categories = [],
-  brands = []
+  brands = [],
 }: ProductFiltersProps) {
-  const [localPriceRange, setLocalPriceRange] = useState([filters.min_price, filters.max_price])
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([])
+  const [localPriceRange, setLocalPriceRange] = useState([
+    filters.min_price,
+    filters.max_price,
+  ])
 
-  // Sincronizar precio local con filtros
   useEffect(() => {
     setLocalPriceRange([filters.min_price, filters.max_price])
   }, [filters.min_price, filters.max_price])
@@ -56,83 +55,133 @@ export function ProductFilters({
   }
 
   const handlePriceCommit = (values: number[]) => {
-    setFilters({ ...filters, min_price: values[0], max_price: values[1] })
+    setFilters({ ...filters, min_price: values[0]!, max_price: values[1]! })
   }
 
   const handleCategoryChange = (categoryId: string) => {
-    setFilters({ 
-      ...filters, 
-      category_id: filters.category_id === categoryId ? '' : categoryId 
+    setFilters({
+      ...filters,
+      category_id: filters.category_id === categoryId ? '' : categoryId,
     })
   }
 
-  const handleBrandToggle = (brand: string) => {
-    const newBrands = selectedBrands.includes(brand)
-      ? selectedBrands.filter(b => b !== brand)
-      : [...selectedBrands, brand]
-    setSelectedBrands(newBrands)
-    // Aquí podrías agregar la lógica para filtrar por marca en el backend
+  const handleBrandChange = (brandName: string) => {
+    setFilters({
+      ...filters,
+      brand: filters.brand === brandName ? '' : brandName,
+    })
   }
 
   const clearFilters = () => {
     setFilters({
       category_id: '',
-      min_price: priceRange.min,
-      max_price: priceRange.max,
-      in_stock: false
+      brand: '',
+      min_price: 0,
+      max_price: 999999,
+      in_stock: false,
     })
-    setSelectedBrands([])
-    setLocalPriceRange([priceRange.min, priceRange.max])
+    setLocalPriceRange([0, 999999])
   }
 
   const activeFiltersCount = [
     filters.category_id !== '',
+    filters.brand !== '',
     filters.in_stock,
-    filters.min_price !== priceRange.min || filters.max_price !== priceRange.max,
-    selectedBrands.length > 0
+    filters.min_price > 0 || filters.max_price < 999999,
   ].filter(Boolean).length
 
   return (
-    <div className="space-y-4 rounded-xl border bg-card p-6 shadow-sm">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <SlidersHorizontal className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold text-lg">Filtros</h3>
-          {activeFiltersCount > 0 && (
-            <Badge variant="secondary">{activeFiltersCount}</Badge>
-          )}
-        </div>
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Filtros
+        </h3>
         {activeFiltersCount > 0 && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={clearFilters}
-            className="h-8 text-xs"
+            className="h-7 text-xs text-muted-foreground hover:text-foreground"
           >
-            <X className="h-3 w-3 mr-1" />
-            Limpiar
+            Limpiar todo
           </Button>
         )}
       </div>
 
-      {/* Results Count */}
-      {totalProducts > 0 && (
-        <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-          Mostrando <span className="font-semibold text-foreground">{totalProducts}</span> productos
+      {/* Active filter chips */}
+      {activeFiltersCount > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {filters.category_id && (
+            <Badge
+              variant="secondary"
+              className="gap-1 text-xs font-normal rounded-full"
+            >
+              {categories.find((c) => c.id === filters.category_id)?.name}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() => setFilters({ ...filters, category_id: '' })}
+              />
+            </Badge>
+          )}
+          {filters.brand && (
+            <Badge
+              variant="secondary"
+              className="gap-1 text-xs font-normal rounded-full"
+            >
+              {filters.brand}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() => setFilters({ ...filters, brand: '' })}
+              />
+            </Badge>
+          )}
+          {filters.in_stock && (
+            <Badge
+              variant="secondary"
+              className="gap-1 text-xs font-normal rounded-full"
+            >
+              En stock
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() => setFilters({ ...filters, in_stock: false })}
+              />
+            </Badge>
+          )}
+          {(filters.min_price > 0 || filters.max_price < 999999) && (
+            <Badge
+              variant="secondary"
+              className="gap-1 text-xs font-normal rounded-full"
+            >
+              {formatPrice(filters.min_price)} - {formatPrice(filters.max_price)}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() =>
+                  setFilters({ ...filters, min_price: 0, max_price: 999999 })
+                }
+              />
+            </Badge>
+          )}
         </div>
       )}
 
-      <Accordion type="multiple" defaultValue={['stock', 'category', 'price']} className="w-full">
-        {/* Stock Filter */}
-        <AccordionItem value="stock" className="border-b">
-          <AccordionTrigger className="hover:no-underline py-3">
-            <span className="font-medium">Disponibilidad</span>
+      <Accordion
+        type="multiple"
+        defaultValue={['stock', 'category', 'price', 'brand']}
+        className="w-full"
+      >
+        {/* Disponibilidad */}
+        <AccordionItem value="stock" className="border-b border-border/50">
+          <AccordionTrigger className="hover:no-underline py-3 text-sm font-medium">
+            Disponibilidad
           </AccordionTrigger>
           <AccordionContent className="pb-4">
-            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
-              <Label htmlFor="in-stock" className="cursor-pointer flex-1">
-                Solo productos en stock
+            <div className="flex items-center justify-between rounded-lg p-2 hover:bg-muted/50 transition-colors">
+              <Label
+                htmlFor="in-stock"
+                className="cursor-pointer text-sm text-muted-foreground"
+              >
+                Solo en stock
               </Label>
               <Switch
                 id="in-stock"
@@ -145,157 +194,82 @@ export function ProductFilters({
           </AccordionContent>
         </AccordionItem>
 
-        {/* Category Filter */}
+        {/* Categorias */}
         {categories.length > 0 && (
-          <AccordionItem value="category" className="border-b">
-            <AccordionTrigger className="hover:no-underline py-3">
-              <span className="font-medium">Categorías</span>
+          <AccordionItem value="category" className="border-b border-border/50">
+            <AccordionTrigger className="hover:no-underline py-3 text-sm font-medium">
+              Categorias
             </AccordionTrigger>
             <AccordionContent className="pb-4">
-              <div className="space-y-2">
+              <div className="space-y-0.5">
                 {categories.map((category) => (
-                  <div
+                  <button
                     key={category.id}
-                    className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${
+                    className={`w-full flex items-center rounded-lg px-2 py-2 text-sm transition-colors text-left ${
                       filters.category_id === category.id
-                        ? 'bg-primary/10 border border-primary/20'
-                        : 'hover:bg-muted/50'
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     }`}
                     onClick={() => handleCategoryChange(category.id)}
                   >
-                    <Checkbox
-                      id={`category-${category.id}`}
-                      checked={filters.category_id === category.id}
-                      onCheckedChange={() => handleCategoryChange(category.id)}
-                      className="mr-3"
-                    />
-                    <Label
-                      htmlFor={`category-${category.id}`}
-                      className="cursor-pointer flex-1 font-normal"
-                    >
-                      {category.name}
-                    </Label>
-                  </div>
+                    {category.name}
+                  </button>
                 ))}
               </div>
             </AccordionContent>
           </AccordionItem>
         )}
 
-        {/* Price Range Filter */}
-        <AccordionItem value="price" className="border-b">
-          <AccordionTrigger className="hover:no-underline py-3">
-            <span className="font-medium">Rango de precio</span>
+        {/* Precio */}
+        <AccordionItem value="price" className="border-b border-border/50">
+          <AccordionTrigger className="hover:no-underline py-3 text-sm font-medium">
+            Precio
           </AccordionTrigger>
           <AccordionContent className="pb-4">
-            <div className="space-y-4 px-2">
+            <div className="space-y-4 px-1">
               <Slider
                 min={priceRange.min}
                 max={priceRange.max}
-                step={1000}
+                step={5000}
                 value={localPriceRange}
                 onValueChange={handlePriceChange}
                 onValueCommit={handlePriceCommit}
                 className="w-full"
               />
-              <div className="flex items-center justify-between text-sm">
-                <div className="text-muted-foreground">
-                  Desde: <span className="font-semibold text-foreground">{formatPrice(localPriceRange[0])}</span>
-                </div>
-                <div className="text-muted-foreground">
-                  Hasta: <span className="font-semibold text-foreground">{formatPrice(localPriceRange[1])}</span>
-                </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{formatPrice(localPriceRange[0]!)}</span>
+                <span>{formatPrice(localPriceRange[1]!)}</span>
               </div>
             </div>
           </AccordionContent>
         </AccordionItem>
 
-        {/* Brand Filter */}
+        {/* Marcas */}
         {brands.length > 0 && (
           <AccordionItem value="brand" className="border-0">
-            <AccordionTrigger className="hover:no-underline py-3">
-              <span className="font-medium">Marcas</span>
+            <AccordionTrigger className="hover:no-underline py-3 text-sm font-medium">
+              Marcas
             </AccordionTrigger>
             <AccordionContent className="pb-4">
-              <div className="space-y-2 max-h-48 overflow-y-auto">
+              <div className="space-y-0.5 max-h-48 overflow-y-auto">
                 {brands.map((brand) => (
-                  <div
+                  <button
                     key={brand}
-                    className={`flex items-center p-3 rounded-lg cursor-pointer transition-colors ${
-                      selectedBrands.includes(brand)
-                        ? 'bg-primary/10 border border-primary/20'
-                        : 'hover:bg-muted/50'
+                    className={`w-full flex items-center rounded-lg px-2 py-2 text-sm transition-colors text-left ${
+                      filters.brand === brand
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     }`}
-                    onClick={() => handleBrandToggle(brand)}
+                    onClick={() => handleBrandChange(brand)}
                   >
-                    <Checkbox
-                      id={`brand-${brand}`}
-                      checked={selectedBrands.includes(brand)}
-                      onCheckedChange={() => handleBrandToggle(brand)}
-                      className="mr-3"
-                    />
-                    <Label
-                      htmlFor={`brand-${brand}`}
-                      className="cursor-pointer flex-1 font-normal"
-                    >
-                      {brand}
-                    </Label>
-                  </div>
+                    {brand}
+                  </button>
                 ))}
               </div>
             </AccordionContent>
           </AccordionItem>
         )}
       </Accordion>
-
-      {/* Active Filters */}
-      {activeFiltersCount > 0 && (
-        <div className="pt-4 border-t space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Filtros activos:</p>
-          <div className="flex flex-wrap gap-2">
-            {filters.category_id && (
-              <Badge variant="secondary" className="gap-1">
-                {categories.find(c => c.id === filters.category_id)?.name}
-                <X 
-                  className="h-3 w-3 cursor-pointer" 
-                  onClick={() => setFilters({ ...filters, category_id: '' })}
-                />
-              </Badge>
-            )}
-            {filters.in_stock && (
-              <Badge variant="secondary" className="gap-1">
-                En stock
-                <X 
-                  className="h-3 w-3 cursor-pointer" 
-                  onClick={() => setFilters({ ...filters, in_stock: false })}
-                />
-              </Badge>
-            )}
-            {(filters.min_price !== priceRange.min || filters.max_price !== priceRange.max) && (
-              <Badge variant="secondary" className="gap-1">
-                {formatPrice(filters.min_price)} - {formatPrice(filters.max_price)}
-                <X 
-                  className="h-3 w-3 cursor-pointer" 
-                  onClick={() => setFilters({ 
-                    ...filters, 
-                    min_price: priceRange.min, 
-                    max_price: priceRange.max 
-                  })}
-                />
-              </Badge>
-            )}
-            {selectedBrands.map(brand => (
-              <Badge key={brand} variant="secondary" className="gap-1">
-                {brand}
-                <X 
-                  className="h-3 w-3 cursor-pointer" 
-                  onClick={() => handleBrandToggle(brand)}
-                />
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

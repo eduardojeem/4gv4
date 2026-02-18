@@ -10,32 +10,37 @@ import { logger } from '@/lib/logger'
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     const productId = decodeURIComponent(id)
-    
+
     const supabase = await createClient()
-    const { data: authUser } = await supabase.auth.getUser()
+
+    // Only check wholesale status if user has a session
     let isWholesale = false
-    if (authUser?.user) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', authUser.user.id)
+        .eq('id', session.user.id)
         .maybeSingle()
-      const role = profile?.role || authUser.user.user_metadata?.role
+      const role = profile?.role || session.user.user_metadata?.role
       isWholesale = role === 'mayorista' || role === 'client_mayorista'
     }
-    
+
+    // No supplier in public query
+    const selectFields = 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+
     const { data: product, error } = await supabase
       .from('products')
-      .select('id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), supplier:suppliers(id, name)')
+      .select(selectFields)
       .eq('id', productId)
-      .eq('is_active', true)  // Only return active products
+      .eq('is_active', true)
       .maybeSingle()
-    
+
     if (error) {
       logger.error('Failed to fetch public product', { error: error.message, productId })
       throw error
@@ -46,7 +51,7 @@ export async function GET(
     if (!finalProduct) {
       const { data: bySku, error: skuErr } = await supabase
         .from('products')
-        .select('id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), supplier:suppliers(id, name)')
+        .select(selectFields)
         .eq('sku', productId)
         .eq('is_active', true)
         .maybeSingle()
@@ -57,14 +62,13 @@ export async function GET(
     }
 
     if (!finalProduct) {
-      logger.warn('Public product not found', { productId })
       return NextResponse.json(
         { success: false, error: 'Product not found' },
         { status: 404 }
       )
     }
-    
-    // Transform to PublicProduct type (filtering sensitive data)
+
+    // Transform to PublicProduct type
     const category = Array.isArray(finalProduct.category) ? finalProduct.category[0] : finalProduct.category
     const publicProduct: PublicProduct = {
       id: finalProduct.id,
@@ -72,23 +76,22 @@ export async function GET(
       sku: finalProduct.sku,
       description: finalProduct.description,
       brand: finalProduct.brand,
-      category: category ? {
-        id: category.id,
-        name: category.name
-      } : undefined,
-      sale_price: isWholesale && finalProduct.wholesale_price != null ? finalProduct.wholesale_price : finalProduct.sale_price,
-      stock_quantity: finalProduct.stock_quantity,
+      category: category ? { id: category.id, name: category.name } : undefined,
+      sale_price: finalProduct.sale_price,
+      wholesale_price: isWholesale ? finalProduct.wholesale_price : null,
+      // Only expose stock status, not exact quantity
+      stock_quantity: finalProduct.stock_quantity > 0 ? finalProduct.stock_quantity : 0,
       is_active: finalProduct.is_active,
       featured: finalProduct.featured || false,
       image: finalProduct.image_url || (Array.isArray(finalProduct.images) && finalProduct.images.length > 0 ? finalProduct.images[0] : null),
       images: finalProduct.images,
       unit_measure: finalProduct.unit_measure,
-      barcode: finalProduct.barcode
+      barcode: finalProduct.barcode,
     }
-    
+
     return NextResponse.json({
       success: true,
-      data: publicProduct
+      data: publicProduct,
     })
   } catch (error) {
     logger.error('Public product detail API error', { error })

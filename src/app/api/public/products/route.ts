@@ -3,6 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 
+// Sanitize search input to prevent PostgREST injection
+function sanitizeSearch(input: string): string {
+  // Remove PostgREST special characters: . , ( ) : ! < > = & | %
+  return input.replace(/[.,()!<>=&|%:*\\]/g, '').trim().slice(0, 100)
+}
+
 /**
  * GET /api/public/products
  * Public endpoint - No authentication required
@@ -11,63 +17,68 @@ import { logger } from '@/lib/logger'
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    
+
     // Parse query parameters
-    const query = searchParams.get('query') || ''
+    const rawQuery = searchParams.get('query') || ''
+    const query = sanitizeSearch(rawQuery)
     const categoryId = searchParams.get('category_id')
+    const brand = searchParams.get('brand')
     const minPrice = parseFloat(searchParams.get('min_price') || '0')
     const maxPrice = parseFloat(searchParams.get('max_price') || '999999')
     const inStock = searchParams.get('in_stock') === 'true'
     const page = parseInt(searchParams.get('page') || '1')
-    const perPage = Math.min(parseInt(searchParams.get('per_page') || '20'), 50) // Max 50
+    const perPage = Math.min(parseInt(searchParams.get('per_page') || '20'), 50)
     const sort = searchParams.get('sort') || 'name'
-    
+
     const supabase = await createClient()
-    const { data: authUser } = await supabase.auth.getUser()
+
+    // Only check wholesale status if user has a session (skip 2 queries for anonymous)
     let isWholesale = false
-    if (authUser?.user) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', authUser.user.id)
+        .eq('id', session.user.id)
         .maybeSingle()
-      const role = profile?.role || authUser.user.user_metadata?.role
+      const role = profile?.role || session.user.user_metadata?.role
       isWholesale = role === 'mayorista' || role === 'client_mayorista'
     }
-    
-    // Build query - only active products
+
+    // Build query - only active products, never select wholesale_price for non-wholesale
+    const selectFields = isWholesale
+      ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+
     let queryBuilder = supabase
       .from('products')
-      .select('id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)', { count: 'exact' })
+      .select(selectFields, { count: 'exact' })
       .eq('is_active', true)
-    
-    // Apply filters
+
+    // Apply search filter with sanitized input
     if (query) {
       queryBuilder = queryBuilder.or(
         `name.ilike.%${query}%,sku.ilike.%${query}%,description.ilike.%${query}%,brand.ilike.%${query}%`
       )
     }
-    
+
     if (categoryId) {
       queryBuilder = queryBuilder.eq('category_id', categoryId)
     }
-    
-    if (minPrice > 0 || maxPrice < 999999) {
-      if (isWholesale) {
-        queryBuilder = queryBuilder
-          .gte('wholesale_price', minPrice)
-          .lte('wholesale_price', maxPrice)
-      } else {
-        queryBuilder = queryBuilder
-          .gte('sale_price', minPrice)
-          .lte('sale_price', maxPrice)
-      }
+
+    if (brand) {
+      queryBuilder = queryBuilder.eq('brand', brand)
     }
-    
+
+    if (minPrice > 0 || maxPrice < 999999) {
+      const priceCol = isWholesale ? 'wholesale_price' : 'sale_price'
+      queryBuilder = queryBuilder.gte(priceCol, minPrice).lte(priceCol, maxPrice)
+    }
+
     if (inStock) {
       queryBuilder = queryBuilder.gt('stock_quantity', 0)
     }
-    
+
     // Apply sorting
     switch (sort) {
       case 'price_asc':
@@ -82,43 +93,42 @@ export async function GET(request: NextRequest) {
       default:
         queryBuilder = queryBuilder.order('name', { ascending: true })
     }
-    
+
     // Apply pagination
     const from = (page - 1) * perPage
     const to = from + perPage - 1
-    
+
     const { data: products, error, count } = await queryBuilder.range(from, to)
-    
+
     if (error) {
       logger.error('Failed to fetch public products', { error: error.message })
       throw error
     }
-    
-    // Transform to PublicProduct type (filtering sensitive data)
-    const publicProducts: PublicProduct[] = (products || []).map(p => {
+
+    // Transform to PublicProduct type - hide sensitive data
+    const publicProducts: PublicProduct[] = (products || []).map((p: Record<string, unknown>) => {
       const category = Array.isArray(p.category) ? p.category[0] : p.category
+      const cat = category as { id: string; name: string } | null
       return {
-        id: p.id,
-        name: p.name,
-        sku: p.sku,
-        description: p.description,
-        brand: p.brand,
-        category: category ? {
-          id: category.id,
-          name: category.name
-        } : undefined,
-        sale_price: p.sale_price,
-        wholesale_price: p.wholesale_price,
-        stock_quantity: p.stock_quantity,
-        is_active: p.is_active,
-        featured: p.featured || false,
-        image: p.image_url || (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
-        images: p.images,
-        unit_measure: p.unit_measure,
-        barcode: p.barcode
+        id: p.id as string,
+        name: p.name as string,
+        sku: p.sku as string,
+        description: p.description as string | null,
+        brand: p.brand as string | null,
+        category: cat ? { id: cat.id, name: cat.name } : undefined,
+        sale_price: p.sale_price as number,
+        wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
+        // Only expose stock status, not exact quantity
+        stock_quantity: (p.stock_quantity as number) > 0 ? 1 : 0,
+        is_active: p.is_active as boolean,
+        featured: (p.featured as boolean) || false,
+        image: (p.image_url as string | null) || (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
+        images: p.images as string[] | null,
+        unit_measure: p.unit_measure as string,
+        barcode: p.barcode as string | null,
       }
     })
-    
+
     const response = NextResponse.json({
       success: true,
       data: {
@@ -126,10 +136,9 @@ export async function GET(request: NextRequest) {
         total: count || 0,
         page,
         per_page: perPage,
-        total_pages: Math.ceil((count || 0) / perPage)
-      }
+        total_pages: Math.ceil((count || 0) / perPage),
+      },
     })
-    // Cache control for public data (CDN / browser)
     response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=60')
     return response
   } catch (error) {

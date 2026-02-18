@@ -1,13 +1,22 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { ArrowLeft, Package, Loader2, MessageCircle, Mail, Phone, Share2, Heart, ShoppingCart } from 'lucide-react'
+import Link from 'next/link'
+import {
+  ArrowLeft,
+  Package,
+  Loader2,
+  MessageCircle,
+  Mail,
+  Phone,
+  Share2,
+  Check,
+  XCircle,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
 import { ProductCard } from '@/components/public/ProductCard'
 import { PublicProduct } from '@/types/public'
@@ -16,80 +25,81 @@ import { generateProductSchema } from '@/lib/seo'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { formatPrice, cleanImageUrl } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
+import useSWR from 'swr'
 
-export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
+const productFetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) return null
+  const body = await res.json()
+  return body.success ? (body.data as PublicProduct) : null
+}
+
+const relatedFetcher = async (url: string) => {
+  const res = await fetch(url)
+  if (!res.ok) return []
+  const body = await res.json()
+  return body.success ? (body.data.products as PublicProduct[]) : []
+}
+
+export default function ProductDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
   const router = useRouter()
   const { user } = useAuth()
-  const [product, setProduct] = useState<PublicProduct | null>(null)
-  const [relatedProducts, setRelatedProducts] = useState<PublicProduct[]>([])
-  const [loading, setLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState(0)
   const { id } = React.use(params)
   const productId = decodeURIComponent(id).trim()
   const { settings } = useWebsiteSettings()
-  
+
   const companyInfo = settings?.company_info
-  const envSupportPhone = (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP || process.env.NEXT_PUBLIC_COMPANY_PHONE || '').toString()
-  const envSupportEmail = (process.env.NEXT_PUBLIC_COMPANY_EMAIL || 'info@4gcelulares.com').toString()
+  const envSupportPhone = (
+    process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP ||
+    process.env.NEXT_PUBLIC_COMPANY_PHONE ||
+    ''
+  ).toString()
+  const envSupportEmail = (
+    process.env.NEXT_PUBLIC_COMPANY_EMAIL || 'info@4gcelulares.com'
+  ).toString()
   const phoneDisplay = companyInfo?.phone || envSupportPhone
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
   const emailDisplay = companyInfo?.email || envSupportEmail
 
-  // Determinar si el usuario es mayorista basado en metadata
-  const isWholesale = user?.user_metadata?.customer_type === 'mayorista' || 
-                      user?.user_metadata?.customer_type === 'client_mayorista'
+  const isWholesale =
+    user?.user_metadata?.customer_type === 'mayorista' ||
+    user?.user_metadata?.customer_type === 'client_mayorista'
 
-  const fetchProduct = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/public/products/${productId}`)
-      const data = await response.json()
+  // SWR for product data instead of useEffect+fetch
+  const { data: product, isLoading } = useSWR(
+    `/api/public/products/${productId}`,
+    productFetcher,
+    { revalidateOnFocus: false }
+  )
 
-      if (!data.success) {
-        toast.error('Producto no encontrado')
-        router.push('/productos')
-        return
-      }
+  // SWR for related products
+  const { data: allRelated } = useSWR(
+    product?.category?.id
+      ? `/api/public/products?category_id=${product.category.id}&per_page=4`
+      : null,
+    relatedFetcher,
+    { revalidateOnFocus: false }
+  )
 
-      setProduct(data.data)
-
-      // Fetch related products
-      if (data.data.category?.id) {
-        const relatedRes = await fetch(
-          `/api/public/products?category_id=${data.data.category.id}&per_page=4`
-        )
-        const relatedData = await relatedRes.json()
-        if (relatedData.success) {
-          // Filtrar el producto actual
-          const filtered = relatedData.data.products.filter(
-            (p: PublicProduct) => p.id !== data.data.id
-          )
-          setRelatedProducts(filtered.slice(0, 3))
-        }
-      }
-
-      // Update page title dynamically
-      if (data.data.name) {
-        document.title = `${data.data.name} | 4G Celulares`
-      }
-    } catch (error) {
-      console.error('Error fetching product:', error)
-      toast.error('Error al cargar el producto')
-    } finally {
-      setLoading(false)
-    }
-  }, [productId, router])
-
-  useEffect(() => {
-    fetchProduct()
-  }, [fetchProduct])
+  const relatedProducts = (allRelated ?? [])
+    .filter((p) => p.id !== product?.id)
+    .slice(0, 3)
 
   const handleContact = (method: 'whatsapp' | 'email' | 'phone') => {
     const message = `Hola, me interesa el producto: ${product?.name} (SKU: ${product?.sku})`
-    
+
     switch (method) {
       case 'whatsapp':
         if (phoneClean) {
-          window.open(`https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`, '_blank')
+          window.open(
+            `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`,
+            '_blank'
+          )
         } else if (emailDisplay) {
           window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${product?.sku}&body=${encodeURIComponent(message)}`
         }
@@ -111,48 +121,74 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         await navigator.share({
           title: product?.name,
           text: `Mira este producto: ${product?.name}`,
-          url: window.location.href
+          url: window.location.href,
         })
-      } catch (error) {
-        // User cancelled or error
+      } catch {
+        // User cancelled
       }
     } else {
-      // Fallback: copy to clipboard
       navigator.clipboard.writeText(window.location.href)
       toast.success('Enlace copiado al portapapeles')
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="container flex min-h-[calc(100vh-200px)] items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   if (!product) {
     return (
-      <div className="container py-12 text-center">
-        <p className="text-muted-foreground">Producto no encontrado</p>
+      <div className="container py-20 text-center">
+        <div className="mx-auto max-w-md">
+          <div className="h-16 w-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+            <Package className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <h2 className="text-lg font-semibold">Producto no encontrado</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Es posible que el producto haya sido removido o no este disponible.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-4 rounded-lg"
+            onClick={() => router.push('/productos')}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Volver al catalogo
+          </Button>
+        </div>
       </div>
     )
   }
 
   const isInStock = product.stock_quantity > 0
-  const displayPrice = isWholesale && product.wholesale_price 
-    ? product.wholesale_price 
-    : product.sale_price
-  const hasDiscount = isWholesale && product.wholesale_price && product.wholesale_price < product.sale_price
-  const discountPercent = hasDiscount 
-    ? Math.round(((product.sale_price - product.wholesale_price!) / product.sale_price) * 100)
+  const displayPrice =
+    isWholesale && product.wholesale_price
+      ? product.wholesale_price
+      : product.sale_price
+  const hasDiscount =
+    isWholesale &&
+    product.wholesale_price != null &&
+    product.wholesale_price < product.sale_price
+  const discountPercent = hasDiscount
+    ? Math.round(
+        ((product.sale_price - product.wholesale_price!) / product.sale_price) *
+          100
+      )
     : 0
 
-  const images = product.images && product.images.length > 0 
-    ? product.images.map(cleanImageUrl).filter((img): img is string => !!img)
-    : [cleanImageUrl(product.image)].filter((img): img is string => !!img)
+  const images =
+    product.images && product.images.length > 0
+      ? product.images
+          .map(cleanImageUrl)
+          .filter((img): img is string => !!img)
+      : [cleanImageUrl(product.image)].filter(
+          (img): img is string => !!img
+        )
 
-  // Generate product schema
   const productSchema = generateProductSchema({
     id: product.id,
     name: product.name,
@@ -161,42 +197,54 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     price: product.sale_price,
     sku: product.sku,
     inStock: isInStock,
-    brand: product.brand
+    brand: product.brand,
   })
 
   return (
     <>
-      {/* Schema.org JSON-LD for Product */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(productSchema) }}
       />
 
-      <div className="container py-8">
-        {/* Breadcrumbs */}
-        <Breadcrumbs 
-          items={[
-            { label: 'Productos', href: '/productos' },
-            ...(product.category ? [{ label: product.category.name, href: `/productos?category_id=${product.category.id}` }] : []),
-            { label: product.name }
-          ]} 
-        />
+      <div className="min-h-screen bg-background">
+        {/* Top bar */}
+        <div className="border-b border-border/50 bg-muted/30">
+          <div className="container py-4">
+            <Breadcrumbs
+              items={[
+                { label: 'Productos', href: '/productos' },
+                ...(product.category
+                  ? [
+                      {
+                        label: product.category.name,
+                        href: `/productos?category_id=${product.category.id}`,
+                      },
+                    ]
+                  : []),
+                { label: product.name },
+              ]}
+            />
+          </div>
+        </div>
 
-        {/* Back Button */}
-        <Button variant="ghost" onClick={() => router.back()} className="mb-6">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Volver al catálogo
-        </Button>
+        <div className="container py-8 lg:py-12">
+          {/* Back link */}
+          <Link
+            href="/productos"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
+          >
+            <ArrowLeft className="mr-1.5 h-4 w-4" />
+            Volver al catalogo
+          </Link>
 
-        <div className="grid gap-8 lg:grid-cols-2">
-          {/* Image Section */}
-          <div>
-            <div className="sticky top-8 space-y-4">
-              {/* Main Image */}
-              <div className="relative aspect-square overflow-hidden rounded-xl border bg-gradient-to-br from-muted to-muted/50 shadow-lg">
+          <div className="grid gap-10 lg:grid-cols-2">
+            {/* Images */}
+            <div className="space-y-3">
+              <div className="relative aspect-square overflow-hidden rounded-2xl border border-border bg-muted">
                 {images.length > 0 ? (
                   <Image
-                    src={images[selectedImage]}
+                    src={images[selectedImage]!}
                     alt={product.name}
                     fill
                     sizes="(max-width: 1024px) 100vw, 50vw"
@@ -205,133 +253,209 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center">
-                    <Package className="h-32 w-32 text-muted-foreground/40" />
+                    <Package className="h-24 w-24 text-muted-foreground/20" />
                   </div>
                 )}
 
-                {/* Badges on Image */}
-                <div className="absolute left-4 top-4 flex flex-col gap-2">
-                  {product.featured && (
-                    <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 border-0 shadow-lg">
-                      ⭐ Destacado
-                    </Badge>
-                  )}
-                  {hasDiscount && (
-                    <Badge className="bg-gradient-to-r from-green-600 to-emerald-600 border-0 shadow-lg">
-                      -{discountPercent}% OFF
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Share Button */}
+                {/* Share button */}
                 <Button
                   variant="secondary"
                   size="icon"
-                  className="absolute right-4 top-4 shadow-lg"
+                  className="absolute right-3 top-3 h-9 w-9 rounded-full shadow-md bg-background/80 backdrop-blur-sm border-0"
                   onClick={handleShare}
                   aria-label="Compartir producto"
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>
+
+                {/* Badges */}
+                <div className="absolute left-3 top-3 flex flex-col gap-1.5">
+                  {product.featured && (
+                    <Badge className="bg-foreground text-background border-0 text-xs shadow-sm">
+                      Destacado
+                    </Badge>
+                  )}
+                  {hasDiscount && (
+                    <Badge className="bg-primary text-primary-foreground border-0 text-xs shadow-sm">
+                      -{discountPercent}% OFF
+                    </Badge>
+                  )}
+                </div>
               </div>
 
-              {/* Image Gallery */}
+              {/* Thumbnails */}
               {images.length > 1 && (
-                <div className="grid grid-cols-4 gap-2">
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   {images.map((img, i) => (
                     <button
                       key={i}
                       onClick={() => setSelectedImage(i)}
-                      className={`relative aspect-square overflow-hidden rounded-lg border-2 transition-all ${
-                        selectedImage === i 
-                          ? 'border-primary ring-2 ring-primary/20' 
-                          : 'border-transparent hover:border-muted-foreground/20'
+                      className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border-2 transition-all ${
+                        selectedImage === i
+                          ? 'border-primary ring-1 ring-primary/20'
+                          : 'border-transparent hover:border-border'
                       }`}
                     >
-                      <Image 
-                        src={img} 
-                        alt={`${product.name} ${i + 1}`} 
-                        fill 
-                        className="object-cover" 
-                        sizes="100px"
+                      <Image
+                        src={img}
+                        alt={`${product.name} ${i + 1}`}
+                        fill
+                        className="object-cover"
+                        sizes="80px"
                       />
                     </button>
                   ))}
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Product Info */}
-          <div className="space-y-6">
-            {/* Header */}
-            <div>
-              {product.brand && (
-                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                  {product.brand}
-                </p>
-              )}
-              <h1 className="mt-2 text-4xl font-bold tracking-tight">{product.name}</h1>
-              
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Badge 
-                  variant={isInStock ? 'default' : 'destructive'}
-                  className="text-sm px-3 py-1"
-                >
-                  {isInStock ? `✓ ${product.stock_quantity} en stock` : '✗ Agotado'}
-                </Badge>
-                {product.category && (
-                  <Badge variant="outline" className="text-sm px-3 py-1">
-                    {product.category.name}
-                  </Badge>
+            {/* Product info */}
+            <div className="flex flex-col gap-6">
+              {/* Header */}
+              <div>
+                {product.brand && (
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {product.brand}
+                  </p>
                 )}
-                {isWholesale && product.wholesale_price && (
-                  <Badge className="bg-gradient-to-r from-purple-600 to-blue-600 text-sm px-3 py-1">
-                    💼 Precio Mayorista
+                <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground lg:text-3xl text-balance">
+                  {product.name}
+                </h1>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge
+                    variant={isInStock ? 'secondary' : 'destructive'}
+                    className="gap-1.5 text-xs rounded-full"
+                  >
+                    {isInStock ? (
+                      <>
+                        <Check className="h-3 w-3" /> En stock
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-3 w-3" /> Agotado
+                      </>
+                    )}
                   </Badge>
-                )}
+                  {product.category && (
+                    <Badge variant="outline" className="text-xs rounded-full">
+                      {product.category.name}
+                    </Badge>
+                  )}
+                  {isWholesale && product.wholesale_price && (
+                    <Badge className="bg-primary/10 text-primary border-primary/20 text-xs rounded-full">
+                      Precio Mayorista
+                    </Badge>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Price */}
-            <Card className="border-2">
-              <CardContent className="pt-6">
+              {/* Price */}
+              <div className="rounded-2xl border border-border p-5">
                 <div className="flex items-baseline gap-3">
-                  <p className="text-5xl font-bold text-primary">
+                  <p className="text-4xl font-bold text-foreground">
                     {formatPrice(displayPrice)}
                   </p>
                   {hasDiscount && (
-                    <p className="text-xl text-muted-foreground line-through">
+                    <p className="text-lg text-muted-foreground line-through">
                       {formatPrice(product.sale_price)}
                     </p>
                   )}
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Precio por {product.unit_measure} • SKU: <span className="font-mono">{product.sku}</span>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Precio por {product.unit_measure} &middot; SKU:{' '}
+                  <span className="font-mono">{product.sku}</span>
                 </p>
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* CTA Buttons */}
-            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
-              <CardContent className="pt-6 space-y-4">
-                <h3 className="font-semibold text-lg">¿Te interesa este producto?</h3>
-                <p className="text-sm text-muted-foreground">
-                  Contáctanos para consultar disponibilidad, realizar tu pedido o resolver dudas
+              {/* Description */}
+              {product.description && (
+                <div>
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    Descripcion
+                  </h2>
+                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+                    {product.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Details */}
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                  Detalles
+                </h2>
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground">SKU</dt>
+                    <dd className="font-mono font-medium text-foreground">
+                      {product.sku}
+                    </dd>
+                  </div>
+                  {product.barcode && (
+                    <div>
+                      <dt className="text-muted-foreground">Codigo de barras</dt>
+                      <dd className="font-mono font-medium text-foreground">
+                        {product.barcode}
+                      </dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt className="text-muted-foreground">Unidad</dt>
+                    <dd className="font-medium text-foreground">
+                      {product.unit_measure}
+                    </dd>
+                  </div>
+                  {product.brand && (
+                    <div>
+                      <dt className="text-muted-foreground">Marca</dt>
+                      <dd className="font-medium text-foreground">
+                        {product.brand}
+                      </dd>
+                    </div>
+                  )}
+                  {product.category && (
+                    <div>
+                      <dt className="text-muted-foreground">Categoria</dt>
+                      <dd className="font-medium text-foreground">
+                        {product.category.name}
+                      </dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt className="text-muted-foreground">Disponibilidad</dt>
+                    <dd className="font-medium">
+                      {isInStock ? (
+                        <span className="text-primary">En stock</span>
+                      ) : (
+                        <span className="text-destructive">Agotado</span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              {/* Contact CTA */}
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
+                <h3 className="font-semibold text-foreground">
+                  Te interesa este producto?
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Contactanos para disponibilidad, pedidos o consultas.
                 </p>
-                <div className="flex flex-col gap-2">
+                <div className="mt-4 flex flex-col gap-2">
                   <Button
                     size="lg"
-                    className="w-full gap-2 text-base"
+                    className="w-full gap-2 rounded-xl"
                     onClick={() => handleContact('whatsapp')}
                   >
-                    <MessageCircle className="h-5 w-5" />
+                    <MessageCircle className="h-4 w-4" />
                     Consultar por WhatsApp
                   </Button>
                   <div className="grid grid-cols-2 gap-2">
                     <Button
                       variant="outline"
-                      className="gap-2"
+                      className="gap-2 rounded-xl"
                       onClick={() => handleContact('email')}
                     >
                       <Mail className="h-4 w-4" />
@@ -339,7 +463,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                     </Button>
                     <Button
                       variant="outline"
-                      className="gap-2"
+                      className="gap-2 rounded-xl"
                       onClick={() => handleContact('phone')}
                     >
                       <Phone className="h-4 w-4" />
@@ -347,94 +471,34 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
                     </Button>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Product Details Tabs */}
-            <Tabs defaultValue="description" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="description">Descripción</TabsTrigger>
-                <TabsTrigger value="details">Detalles</TabsTrigger>
-              </TabsList>
-              <TabsContent value="description" className="mt-4">
-                <Card>
-                  <CardContent className="pt-6">
-                    {product.description ? (
-                      <p className="text-muted-foreground leading-relaxed whitespace-pre-line">
-                        {product.description}
-                      </p>
-                    ) : (
-                      <p className="text-muted-foreground italic">
-                        No hay descripción disponible para este producto.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              <TabsContent value="details" className="mt-4">
-                <Card>
-                  <CardContent className="pt-6">
-                    <dl className="grid gap-4">
-                      <div className="flex justify-between py-2 border-b">
-                        <dt className="font-medium text-muted-foreground">SKU</dt>
-                        <dd className="font-mono font-semibold">{product.sku}</dd>
-                      </div>
-                      {product.barcode && (
-                        <div className="flex justify-between py-2 border-b">
-                          <dt className="font-medium text-muted-foreground">Código de barras</dt>
-                          <dd className="font-mono font-semibold">{product.barcode}</dd>
-                        </div>
-                      )}
-                      <div className="flex justify-between py-2 border-b">
-                        <dt className="font-medium text-muted-foreground">Unidad de medida</dt>
-                        <dd className="font-semibold">{product.unit_measure}</dd>
-                      </div>
-                      {product.brand && (
-                        <div className="flex justify-between py-2 border-b">
-                          <dt className="font-medium text-muted-foreground">Marca</dt>
-                          <dd className="font-semibold">{product.brand}</dd>
-                        </div>
-                      )}
-                      {product.category && (
-                        <div className="flex justify-between py-2 border-b">
-                          <dt className="font-medium text-muted-foreground">Categoría</dt>
-                          <dd className="font-semibold">{product.category.name}</dd>
-                        </div>
-                      )}
-                      <div className="flex justify-between py-2">
-                        <dt className="font-medium text-muted-foreground">Disponibilidad</dt>
-                        <dd className="font-semibold">
-                          {isInStock ? (
-                            <span className="text-green-600">{product.stock_quantity} unidades</span>
-                          ) : (
-                            <span className="text-red-600">Agotado</span>
-                          )}
-                        </dd>
-                      </div>
-                    </dl>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
+              </div>
+            </div>
           </div>
+
+          {/* Related */}
+          {relatedProducts.length > 0 && (
+            <section className="mt-16 lg:mt-20">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold tracking-tight text-foreground">
+                  Productos relacionados
+                </h2>
+                {product.category && (
+                  <Link
+                    href={`/productos?category_id=${product.category.id}`}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Ver mas
+                  </Link>
+                )}
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {relatedProducts.map((rp) => (
+                  <ProductCard key={rp.id} product={rp} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
-
-        {/* Related Products */}
-        {relatedProducts.length > 0 && (
-          <div className="mt-16">
-            <div className="mb-8">
-              <h2 className="text-3xl font-bold tracking-tight">Productos relacionados</h2>
-              <p className="mt-2 text-muted-foreground">
-                Otros productos que podrían interesarte
-              </p>
-            </div>
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {relatedProducts.map((relatedProduct) => (
-                <ProductCard key={relatedProduct.id} product={relatedProduct} />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </>
   )
