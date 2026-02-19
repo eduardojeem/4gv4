@@ -34,11 +34,16 @@ export function PublicHeader() {
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const { user, signOut } = useAuth()
   const { settings } = useWebsiteSettings()
   const router = useRouter()
   const pathname = usePathname()
   const mobileMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const companyInfo = settings?.company_info
   const envSupportPhone = (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP || process.env.NEXT_PUBLIC_COMPANY_PHONE || '').toString()
@@ -190,7 +195,7 @@ export function PublicHeader() {
         {/* Right side: Theme toggle + CTA + User */}
         <div className="flex items-center gap-2">
           {/* Theme toggle - visible on all screens */}
-          <ThemeToggle />
+          {mounted && <ThemeToggle />}
 
           {/* Desktop CTA */}
           <Button

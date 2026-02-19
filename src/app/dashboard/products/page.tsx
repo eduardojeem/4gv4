@@ -415,28 +415,37 @@ export default function ProductsPage() {
             const transformedData = {
               ...data,
               dimensions: data.dimensions && typeof data.dimensions === 'object' 
-                ? data.dimensions as any
+                ? JSON.stringify(data.dimensions)
                 : data.dimensions
             }
             
             if (editingProduct) {
               // Convertir ProductFormData a formato compatible con Supabase
-              const transformedData: Database['public']['Tables']['products']['Update'] = {
+              const updateData: Database['public']['Tables']['products']['Update'] = {
                 ...data,
-                dimensions: data.dimensions as Json | null
+                dimensions: data.dimensions ? JSON.stringify(data.dimensions) : null
               }
-              const result = await updateProduct(editingProduct.id, transformedData)
+              const result = await updateProduct(editingProduct.id, updateData)
               if (result.success) {
                 toast.success('Producto actualizado')
               } else {
-                toast.error(result.error || 'Error al actualizar')
+                console.error('Error updating product:', result.error)
+                // Throw error to let the modal handle it
+                throw new Error(result.error || 'Error al actualizar')
               }
             } else {
-              const result = await createProduct(transformedData)
+              const insertData: Database['public']['Tables']['products']['Insert'] = {
+                ...data,
+                dimensions: data.dimensions ? JSON.stringify(data.dimensions) : null,
+                sku: data.sku // Ensure SKU is present
+              }
+              const result = await createProduct(insertData)
               if (result.success) {
                 toast.success('Producto creado')
               } else {
-                toast.error(result.error || 'Error al crear')
+                console.error('Error creating product:', result.error)
+                // Throw error to let the modal handle it
+                throw new Error(result.error || 'Error al crear')
               }
             }
             setEditingProduct(null)

@@ -78,6 +78,13 @@ export const ProductCard = React.memo(function ProductCard({
     ? Math.round(((product.wholesale_price - product.sale_price) / product.wholesale_price) * 100)
     : null
 
+  // Validate image URL
+  const isValidImage = product.image && (
+    product.image.startsWith('data:image') ||
+    product.image.startsWith('/') ||
+    (product.image.startsWith('http') && !product.image.includes('data:image'))
+  )
+
   return (
     <Card
       role="article"
@@ -96,10 +103,10 @@ export const ProductCard = React.memo(function ProductCard({
       <CardContent className="p-0">
         {/* Image Section with Gradient Overlay */}
         <div className="relative aspect-square bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100 dark:from-gray-800 dark:via-gray-700 dark:to-gray-800 overflow-hidden">
-          {product.image && !imageError ? (
+          {isValidImage && !imageError ? (
             <>
               <Image
-                src={product.image}
+                src={product.image!}
                 alt={product.name}
                 fill
                 className={cn(

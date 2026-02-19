@@ -72,9 +72,34 @@ const nextConfig: NextConfig = {
           pathname: '/**',
         },
         {
-          protocol: 'https',
-          hostname: 'static.mobilesentrix.com',
-          pathname: '/**',
+        protocol: 'https',
+        hostname: 'static.mobilesentrix.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'placehold.co',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'drive.google.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'doc.googleusercontent.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cswtugmwazxdktntndpy.supabase.co',
+        pathname: '/**',
       },
     ],
   },

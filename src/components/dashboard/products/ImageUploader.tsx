@@ -103,8 +103,10 @@ export function ImageUploader({
       for (const file of acceptedFiles) {
         const compressedFile = await compressImage(file)
         const url = await uploadImage(compressedFile)
-        uploadedUrls.push(url)
-        toast.success(`${file.name} subida exitosamente`)
+        if (url) {
+          uploadedUrls.push(url)
+          toast.success(`${file.name} subida exitosamente`)
+        }
       }
 
       onChange([...images, ...uploadedUrls])

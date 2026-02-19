@@ -814,7 +814,7 @@ export default function ProductDetailPage() {
                 // Convertir ProductFormData a formato compatible con Supabase
                 const supabaseData: Database['public']['Tables']['products']['Update'] = {
                   ...data,
-                  dimensions: data.dimensions as Json | null
+                  dimensions: data.dimensions ? JSON.stringify(data.dimensions) : null
                 }
                 await updateProduct(product.id, supabaseData)
                 setEditModalOpen(false)

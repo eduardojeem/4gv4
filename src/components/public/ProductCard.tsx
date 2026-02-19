@@ -1,11 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Package, ShoppingCart } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
 import { useAuth } from '@/contexts/auth-context'
-import { formatPrice, cleanImageUrl } from '@/lib/utils'
+import { formatPrice } from '@/lib/utils'
+import { resolveProductImageUrl } from '@/lib/images'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -14,6 +16,7 @@ interface ProductCardProps {
 
 export function ProductCard({ product, priority = false }: ProductCardProps) {
   const { user } = useAuth()
+  const [imageError, setImageError] = useState(false)
 
   const isWholesale =
     user?.user_metadata?.customer_type === 'mayorista' ||
@@ -25,7 +28,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
       : product.sale_price
 
   const isInStock = product.stock_quantity > 0
-  const imageSrc = cleanImageUrl(product.image)
+  const imageSrc = resolveProductImageUrl(product.image)
 
   const hasDiscount =
     isWholesale &&
@@ -53,7 +56,7 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
 
       {/* Product image */}
       <div className="relative mx-auto flex aspect-square w-full max-w-[200px] items-center justify-center p-4">
-        {imageSrc ? (
+        {imageSrc && !imageError ? (
           <Image
             src={imageSrc}
             alt={product.name}
@@ -61,9 +64,12 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
             sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
             className="object-contain p-2 transition-transform duration-300 group-hover:scale-105"
             priority={priority}
+            onError={() => setImageError(true)}
           />
         ) : (
-          <Package className="h-20 w-20 text-muted-foreground/20" />
+          <div className="flex h-full w-full items-center justify-center rounded-lg bg-muted/20">
+            <Package className="h-12 w-12 text-muted-foreground/30" />
+          </div>
         )}
 
         {!isInStock && (

@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { Product, Category, Supplier, ProductFormData } from '@/types/products'
+import type { Category as UICategory } from '@/lib/types/catalog'
 import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
@@ -36,6 +37,8 @@ import { SupplierModal } from './supplier-modal'
 import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
 import type { UISupplier } from '@/lib/types/supplier-ui'
+import { uploadFile } from '@/lib/supabase-storage'
+import { createClient } from '@/lib/supabase/client'
 
 interface ProductModalProps {
   product: Product | null
@@ -97,7 +100,15 @@ export function ProductModal({
   }, [suppliers])
 
   const handleSaveCategory = async (categoryData: any) => {
-    const result = await createCategory(categoryData)
+    // Transform UI category data to DB payload
+    const payload = {
+      name: categoryData.name,
+      description: categoryData.description,
+      parent_id: categoryData.parentId || null,
+      is_active: true
+    }
+    
+    const result = await createCategory(payload)
     if (result.success && result.data) {
        toast.success('Categoría creada')
        const newCategory = result.data as unknown as Category
@@ -108,6 +119,21 @@ export function ProductModal({
        toast.error(result.error || 'Error al crear categoría')
     }
   }
+
+  // Convert DB categories to UI categories for the modal
+  const uiCategories: UICategory[] = localCategories.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    description: cat.description || '',
+    subcategories: [],
+    color: '#3B82F6',
+    isActive: cat.is_active,
+    productCount: 0,
+    createdAt: cat.created_at,
+    updatedAt: cat.updated_at,
+    parentId: cat.parent_id || undefined,
+    icon: 'Tag'
+  }))
 
   const handleSaveSupplier = async (supplierData: Partial<UISupplier>) => {
     const result = await createSupplier(supplierData as any)
@@ -271,6 +297,32 @@ export function ProductModal({
     return '0'
   }
 
+
+  const handleUploadFiles = async (files: File[]): Promise<string[]> => {
+    const uploadedUrls: string[] = []
+    
+    for (const file of files) {
+      try {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`
+        const filePath = `products/${fileName}`
+        
+        const result = await uploadFile('product-images', filePath, file)
+        
+        if (result.success && result.url) {
+          uploadedUrls.push(result.url)
+        } else {
+          console.error('Upload error:', result.error)
+          toast.error(`Error al subir imagen: ${result.error || 'Error desconocido'}`)
+        }
+      } catch (error) {
+        console.error('Error uploading file:', error)
+        toast.error('Error al subir imagen')
+      }
+    }
+    
+    return uploadedUrls
+  }
 
   return (
     <>
@@ -910,6 +962,7 @@ export function ProductModal({
                       maxImages={5}
                       maxSize={5242880}
                       disabled={loading}
+                      onUploadFiles={handleUploadFiles}
                     />
                   </CardContent>
                 </Card>
@@ -960,7 +1013,7 @@ export function ProductModal({
       onClose={() => setIsCategoryModalOpen(false)}
       mode="add"
       onSave={handleSaveCategory}
-      existingCategories={localCategories}
+      existingCategories={uiCategories}
     />
 
     <SupplierModal

@@ -218,6 +218,12 @@ export function ProductTable({
               const statusConfig = stockStatusConfig[stockStatus]
               const StatusIcon = statusConfig.icon
               const stockPercentage = Math.min(100, (product.stock_quantity / (product.min_stock * 3)) * 100)
+              
+              const isValidImage = product.image && (
+                product.image.startsWith('data:image') ||
+                product.image.startsWith('/') ||
+                (product.image.startsWith('http') && !product.image.includes('data:image'))
+              )
 
               return (
                 <TableRow
@@ -246,9 +252,9 @@ export function ProductTable({
                       "relative rounded-lg overflow-hidden bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100 dark:from-gray-800 dark:via-gray-900 dark:to-gray-800 shadow-sm group-hover:shadow-md transition-shadow",
                       isCompact ? "w-8 h-8" : "w-14 h-14"
                     )}>
-                      {product.image ? (
+                      {isValidImage ? (
                         <Image
-                          src={product.image}
+                          src={product.image!}
                           alt={product.name}
                           fill
                           className="object-cover transition-transform duration-200 hover:scale-110"

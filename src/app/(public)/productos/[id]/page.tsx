@@ -23,7 +23,8 @@ import { PublicProduct } from '@/types/public'
 import { toast } from 'sonner'
 import { generateProductSchema } from '@/lib/seo'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { formatPrice, cleanImageUrl } from '@/lib/utils'
+import { formatPrice } from '@/lib/utils'
+import { resolveProductImageUrl } from '@/lib/images'
 import { useAuth } from '@/contexts/auth-context'
 import useSWR from 'swr'
 
@@ -49,6 +50,7 @@ export default function ProductDetailPage({
   const router = useRouter()
   const { user } = useAuth()
   const [selectedImage, setSelectedImage] = useState(0)
+  const [imageErrors, setImageErrors] = useState<Record<number, boolean>>({})
   const { id } = React.use(params)
   const productId = decodeURIComponent(id).trim()
   const { settings } = useWebsiteSettings()
@@ -182,18 +184,14 @@ export default function ProductDetailPage({
 
   const images =
     product.images && product.images.length > 0
-      ? product.images
-          .map(cleanImageUrl)
-          .filter((img): img is string => !!img)
-      : [cleanImageUrl(product.image)].filter(
-          (img): img is string => !!img
-        )
+      ? product.images.map((img) => resolveProductImageUrl(img))
+      : [resolveProductImageUrl(product.image)]
 
   const productSchema = generateProductSchema({
     id: product.id,
     name: product.name,
     description: product.description,
-    image: product.image,
+    image: resolveProductImageUrl(product.image),
     price: product.sale_price,
     sku: product.sku,
     inStock: isInStock,
@@ -242,7 +240,7 @@ export default function ProductDetailPage({
             {/* Images */}
             <div className="space-y-3">
               <div className="relative aspect-square overflow-hidden rounded-2xl border border-border bg-muted">
-                {images.length > 0 ? (
+                {images.length > 0 && !imageErrors[selectedImage] ? (
                   <Image
                     src={images[selectedImage]!}
                     alt={product.name}
@@ -250,9 +248,10 @@ export default function ProductDetailPage({
                     sizes="(max-width: 1024px) 100vw, 50vw"
                     className="object-cover"
                     priority
+                    onError={() => setImageErrors(prev => ({ ...prev, [selectedImage]: true }))}
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center">
+                  <div className="flex h-full items-center justify-center bg-muted/20">
                     <Package className="h-24 w-24 text-muted-foreground/20" />
                   </div>
                 )}
@@ -296,13 +295,20 @@ export default function ProductDetailPage({
                           : 'border-transparent hover:border-border'
                       }`}
                     >
-                      <Image
-                        src={img}
-                        alt={`${product.name} ${i + 1}`}
-                        fill
-                        className="object-cover"
-                        sizes="80px"
-                      />
+                      {!imageErrors[i] ? (
+                        <Image
+                          src={img}
+                          alt={`${product.name} ${i + 1}`}
+                          fill
+                          className="object-cover"
+                          sizes="80px"
+                          onError={() => setImageErrors(prev => ({ ...prev, [i]: true }))}
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-muted/20">
+                          <Package className="h-8 w-8 text-muted-foreground/30" />
+                        </div>
+                      )}
                     </button>
                   ))}
                 </div>
