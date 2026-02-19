@@ -30,32 +30,17 @@ import useSWR from 'swr'
 function useProductMeta() {
   const fetcher = async (url: string) => {
     const res = await fetch(url)
-    if (!res.ok) return { brands: [], priceRange: { min: 0, max: 5000000 } }
+    if (!res.ok) return { brands: [], priceRange: { min: 0, max: 99999999 } }
     const body = await res.json()
-    const products = body.data?.products ?? []
-    const brands = Array.from(
-      new Set(
-        products
-          .map((p: { brand?: string | null }) => p.brand)
-          .filter((b: string | null | undefined): b is string => !!b)
-      )
-    ).sort() as string[]
-    const prices = products.map((p: { sale_price: number }) => p.sale_price).filter((p: number) => p > 0)
-    return {
-      brands,
-      priceRange: {
-        min: prices.length > 0 ? Math.floor(Math.min(...prices) / 5000) * 5000 : 0,
-        max: prices.length > 0 ? Math.ceil(Math.max(...prices) / 5000) * 5000 : 5000000,
-      },
-    }
+    return body.data
   }
-  const { data } = useSWR('/api/public/products?per_page=50&sort=name', fetcher, {
+  const { data } = useSWR('/api/public/products/meta', fetcher, {
     revalidateOnFocus: false,
-    dedupingInterval: 60000,
+    dedupingInterval: 600000, // 10 minutes
   })
   return {
     brands: data?.brands ?? [],
-    priceRange: data?.priceRange ?? { min: 0, max: 5000000 },
+    priceRange: data?.priceRange ?? { min: 0, max: 50000000 },
   }
 }
 
@@ -68,7 +53,7 @@ export default function ProductsPage() {
     category_id: '',
     brand: '',
     min_price: 0,
-    max_price: 999999,
+    max_price: 50000000,
     in_stock: false,
   })
   const [page, setPage] = useState(1)
@@ -109,7 +94,7 @@ export default function ProductsPage() {
     filters.category_id !== '',
     filters.brand !== '',
     filters.in_stock,
-    filters.min_price > 0 || filters.max_price < 999999,
+    filters.min_price > 0 || filters.max_price < 50000000,
   ].filter(Boolean).length
 
   const clearSearch = () => {
@@ -123,7 +108,7 @@ export default function ProductsPage() {
       category_id: '',
       brand: '',
       min_price: 0,
-      max_price: 999999,
+      max_price: 50000000,
       in_stock: false,
     })
   }

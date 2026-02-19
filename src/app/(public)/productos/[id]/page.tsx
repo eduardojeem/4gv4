@@ -249,6 +249,7 @@ export default function ProductDetailPage({
                     className="object-cover"
                     priority
                     onError={() => setImageErrors(prev => ({ ...prev, [selectedImage]: true }))}
+                    unoptimized={images[selectedImage]!.startsWith('data:') || images[selectedImage]!.includes('drive.google.com')}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center bg-muted/20">
@@ -303,6 +304,7 @@ export default function ProductDetailPage({
                           className="object-cover"
                           sizes="80px"
                           onError={() => setImageErrors(prev => ({ ...prev, [i]: true }))}
+                          unoptimized={img.startsWith('data:') || img.includes('drive.google.com')}
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center bg-muted/20">

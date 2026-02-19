@@ -77,17 +77,17 @@ export function ProductFilters({
       category_id: '',
       brand: '',
       min_price: 0,
-      max_price: 999999,
+      max_price: 50000000,
       in_stock: false,
     })
-    setLocalPriceRange([0, 999999])
+    setLocalPriceRange([0, 50000000])
   }
 
   const activeFiltersCount = [
     filters.category_id !== '',
     filters.brand !== '',
     filters.in_stock,
-    filters.min_price > 0 || filters.max_price < 999999,
+    filters.min_price > 0 || filters.max_price < 50000000,
   ].filter(Boolean).length
 
   return (
@@ -157,7 +157,7 @@ export function ProductFilters({
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() =>
-                  setFilters({ ...filters, min_price: 0, max_price: 999999 })
+                  setFilters({ ...filters, min_price: 0, max_price: 50000000 })
                 }
               />
             </Badge>

@@ -30,6 +30,11 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
   const isInStock = product.stock_quantity > 0
   const imageSrc = resolveProductImageUrl(product.image)
 
+  // Debug: Log image info in development
+  if (process.env.NODE_ENV === 'development' && !imageError) {
+    console.log('Product:', product.name, 'Image:', product.image, 'Resolved:', imageSrc)
+  }
+
   const hasDiscount =
     isWholesale &&
     product.wholesale_price != null &&
@@ -38,51 +43,63 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
   return (
     <Link
       href={`/productos/${product.id}`}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-border/60 bg-card transition-all duration-200 hover:shadow-xl hover:shadow-primary/5 hover:border-primary/40"
+      className="group relative flex flex-col overflow-hidden rounded-xl border border-border/60 bg-card transition-all duration-300 hover:shadow-xl hover:shadow-primary/5 hover:border-primary/40 hover:-translate-y-1"
     >
       {/* Cart icon on hover */}
-      <div className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-lg transition-all duration-200 group-hover:opacity-100 group-hover:scale-100 scale-75">
-        <ShoppingCart className="h-4 w-4" />
+      <div className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-lg transition-all duration-300 group-hover:opacity-100 group-hover:scale-100 scale-75">
+        <ShoppingCart className="h-4.5 w-4.5" />
       </div>
 
       {/* Brand label */}
       {product.brand && (
-        <div className="flex justify-end px-4 pt-3">
-          <span className="text-xs font-bold uppercase tracking-widest text-primary">
+        <div className="absolute left-3 top-3 z-10">
+          <span className="inline-block rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
             {product.brand}
           </span>
         </div>
       )}
 
-      {/* Product image */}
-      <div className="relative mx-auto flex aspect-square w-full max-w-[200px] items-center justify-center p-4">
-        {imageSrc && !imageError ? (
-          <Image
-            src={imageSrc}
-            alt={product.name}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
-            className="object-contain p-2 transition-transform duration-300 group-hover:scale-105"
-            priority={priority}
-            onError={() => setImageError(true)}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center rounded-lg bg-muted/20">
-            <Package className="h-12 w-12 text-muted-foreground/30" />
-          </div>
-        )}
+      {/* Product image - Mejorado */}
+      <div className="relative w-full bg-gradient-to-br from-muted/30 via-muted/10 to-muted/30 overflow-hidden">
+        <div className="relative aspect-[4/3] w-full">
+          {imageSrc && !imageError ? (
+            <div className="absolute inset-0 flex items-center justify-center p-6">
+              <div className="relative w-full h-full">
+                <Image
+                  src={imageSrc}
+                  alt={product.name}
+                  fill
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                  className="object-contain transition-all duration-500 group-hover:scale-110"
+                  priority={priority}
+                  onError={(e) => {
+                    // console.error('Image failed to load:', imageSrc, 'for product:', product.name)
+                    setImageError(true)
+                  }}
+                  unoptimized={imageSrc.startsWith('data:') || imageSrc === '/placeholder-product.svg' || imageSrc.includes('drive.google.com')}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-muted/40">
+                <Package className="h-12 w-12 text-muted-foreground/40" />
+              </div>
+            </div>
+          )}
 
-        {!isInStock && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[2px] rounded-lg">
-            <span className="rounded-full bg-destructive/90 px-3 py-1 text-xs font-semibold text-destructive-foreground">
-              Agotado
-            </span>
-          </div>
-        )}
+          {!isInStock && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+              <span className="rounded-full bg-destructive px-4 py-1.5 text-xs font-semibold text-destructive-foreground shadow-lg">
+                Agotado
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Separator */}
-      <div className="mx-4 border-t border-border/40" />
+      <div className="border-t border-border/40" />
 
       {/* Product info */}
       <div className="flex flex-1 flex-col px-4 pb-4 pt-3 gap-1.5">
