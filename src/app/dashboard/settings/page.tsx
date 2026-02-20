@@ -224,6 +224,21 @@ export default function SettingsPageOptimized() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="companyRuc">
+                    RUC / Tax ID
+                  </Label>
+                  <Input
+                    id="companyRuc"
+                    value={settings.companyRuc}
+                    onChange={(e) => updateSetting('companyRuc', e.target.value)}
+                    placeholder="80012345-6"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Identificación tributaria
+                  </p>
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="companyEmail" className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     Email de Contacto

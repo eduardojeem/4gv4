@@ -8,7 +8,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/currency'
 import { useSales } from '@/hooks/useSales'
-import { Calendar, User, CreditCard, FileText, ShoppingCart, Receipt } from 'lucide-react'
+import { Calendar, User, CreditCard, FileText, ShoppingCart, Receipt, Printer } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { createReceiptData, printReceipt, CompanyInfo } from '@/lib/receipt-utils'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { config } from '@/lib/config'
 
 interface SaleDetailsModalProps {
   isOpen: boolean
@@ -18,8 +22,73 @@ interface SaleDetailsModalProps {
 
 export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalProps) {
   const { getSale } = useSales()
+  const { settings } = useSharedSettings()
   const [loading, setLoading] = useState(false)
   const [sale, setSale] = useState<any>(null)
+
+  const handlePrintReceipt = () => {
+    if (!sale) return
+
+    const companyInfo: CompanyInfo = {
+        name: settings.companyName || config.company.name,
+        address: settings.companyAddress || config.company.address,
+        phone: settings.companyPhone || config.company.phone,
+        email: settings.companyEmail || config.company.email,
+        ruc: settings.companyRuc
+    }
+
+    const items = (sale.sale_items || sale.items || []).map((item: any) => ({
+        id: item.id,
+        name: item.products?.name || item.product_name || 'Producto',
+        sku: item.products?.sku || item.sku || 'N/A',
+        price: Number(item.price || item.unit_price || 0),
+        quantity: Number(item.quantity || 1),
+        discount: Number(item.discount || 0),
+        isService: item.is_service
+    }))
+
+    const payments = (sale.payments || []).map((p: any) => ({
+        id: p.id,
+        method: p.method,
+        amount: Number(p.amount),
+        reference: p.reference
+    }))
+    
+    // Si no hay pagos registrados pero hay un método de pago en la venta
+    if (payments.length === 0 && sale.payment_method) {
+        payments.push({
+            id: 'default',
+            method: sale.payment_method,
+            amount: Number(sale.total_amount || sale.total),
+        })
+    }
+
+    const receiptData = createReceiptData(
+        items,
+        {
+            subtotal: Number(sale.subtotal ?? (sale.total_amount - (sale.tax_amount || 0))),
+            totalDiscount: Number((sale.discount_amount ?? sale.discount) || 0),
+            tax: Number(sale.tax_amount ?? sale.tax ?? 0),
+            total: Number(sale.total_amount ?? sale.total),
+            change: Number(sale.change_amount || 0),
+        },
+        payments,
+        {
+            name: sale.customer_name || 'Cliente General',
+            phone: '', // Info adicional podría venir del cliente si se carga
+            email: ''
+        },
+        sale.cashier_id ? `Cajero: ${sale.cashier_id}` : 'Sistema POS'
+    )
+
+    // Sobreescribir fecha/hora con la original de la venta
+    const saleDate = new Date(sale.created_at)
+    receiptData.date = saleDate.toLocaleDateString('es-PY', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    receiptData.time = saleDate.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    receiptData.receiptNumber = sale.sale_number || sale.id.slice(0, 12)
+
+    printReceipt(receiptData, companyInfo)
+  }
 
   useEffect(() => {
     const fetch = async () => {
@@ -36,15 +105,23 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <FileText className="h-5 w-5 text-primary" />
-            Detalle de la Venta
-            {sale && (
-              <Badge variant="outline" className="ml-2">
-                {sale.sale_number || (sale.id?.slice(0, 8) + '...')}
-              </Badge>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2 text-xl">
+                <FileText className="h-5 w-5 text-primary" />
+                Detalle de la Venta
+                {sale && (
+                <Badge variant="outline" className="ml-2">
+                    {sale.sale_number || (sale.id?.slice(0, 8) + '...')}
+                </Badge>
+                )}
+            </DialogTitle>
+            {!loading && sale && (
+                <Button variant="outline" size="sm" onClick={handlePrintReceipt}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Imprimir Copia
+                </Button>
             )}
-          </DialogTitle>
+          </div>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-6 pr-1">

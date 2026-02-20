@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useTransition } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { Badge } from '@/components/ui/badge'
-import { X } from 'lucide-react'
+import { X, Loader2 } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import {
   Accordion,
@@ -21,81 +22,96 @@ interface Category {
 }
 
 interface ProductFiltersProps {
-  filters: {
-    category_id: string
-    brand: string
-    min_price: number
-    max_price: number
-    in_stock: boolean
-  }
-  setFilters: (filters: ProductFiltersProps['filters']) => void
-  priceRange?: { min: number; max: number }
+  priceRange: { min: number; max: number }
   categories?: Category[]
   brands?: string[]
 }
 
 export function ProductFilters({
-  filters,
-  setFilters,
-  priceRange = { min: 0, max: 1000000 },
+  priceRange = { min: 0, max: 50000000 },
   categories = [],
   brands = [],
 }: ProductFiltersProps) {
-  const [localPriceRange, setLocalPriceRange] = useState([
-    filters.min_price,
-    filters.max_price,
-  ])
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [isPending, startTransition] = useTransition()
+
+  // Get current filter values from URL
+  const categoryId = searchParams.get('category_id') || ''
+  const brand = searchParams.get('brand') || ''
+  const minPrice = Number(searchParams.get('min_price')) || 0
+  const maxPrice = Number(searchParams.get('max_price')) || 50000000
+  const inStock = searchParams.get('in_stock') === 'true'
+
+  // Local state for slider dragging
+  const [localPriceRange, setLocalPriceRange] = useState([minPrice, maxPrice])
 
   useEffect(() => {
-    setLocalPriceRange([filters.min_price, filters.max_price])
-  }, [filters.min_price, filters.max_price])
+    setLocalPriceRange([
+      Number(searchParams.get('min_price')) || 0,
+      Number(searchParams.get('max_price')) || 50000000
+    ])
+  }, [searchParams])
+
+  // Helper to update URL params
+  const updateFilters = (updates: Record<string, string | number | boolean | null>) => {
+    const params = new URLSearchParams(searchParams.toString())
+    // Reset page on filter change
+    params.set('page', '1')
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || value === false) {
+        params.delete(key)
+      } else {
+        params.set(key, String(value))
+      }
+    })
+
+    startTransition(() => {
+      router.push(`?${params.toString()}`, { scroll: false })
+    })
+  }
 
   const handlePriceChange = (values: number[]) => {
     setLocalPriceRange(values)
   }
 
   const handlePriceCommit = (values: number[]) => {
-    setFilters({ ...filters, min_price: values[0]!, max_price: values[1]! })
-  }
-
-  const handleCategoryChange = (categoryId: string) => {
-    setFilters({
-      ...filters,
-      category_id: filters.category_id === categoryId ? '' : categoryId,
-    })
-  }
-
-  const handleBrandChange = (brandName: string) => {
-    setFilters({
-      ...filters,
-      brand: filters.brand === brandName ? '' : brandName,
+    updateFilters({
+      min_price: values[0] > 0 ? values[0] : null,
+      max_price: values[1] < 50000000 ? values[1] : null, // Assuming 50M is effectively infinite/max
     })
   }
 
   const clearFilters = () => {
-    setFilters({
-      category_id: '',
-      brand: '',
-      min_price: 0,
-      max_price: 50000000,
-      in_stock: false,
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('category_id')
+    params.delete('brand')
+    params.delete('min_price')
+    params.delete('max_price')
+    params.delete('in_stock')
+    params.set('page', '1')
+    
+    startTransition(() => {
+      router.push(`?${params.toString()}`, { scroll: false })
     })
     setLocalPriceRange([0, 50000000])
   }
 
   const activeFiltersCount = [
-    filters.category_id !== '',
-    filters.brand !== '',
-    filters.in_stock,
-    filters.min_price > 0 || filters.max_price < 50000000,
+    categoryId !== '',
+    brand !== '',
+    inStock,
+    minPrice > 0 || maxPrice < 50000000,
   ].filter(Boolean).length
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${isPending ? 'opacity-60 pointer-events-none' : ''}`}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
           Filtros
+          {isPending && <Loader2 className="h-3 w-3 animate-spin" />}
         </h3>
         {activeFiltersCount > 0 && (
           <Button
@@ -112,31 +128,31 @@ export function ProductFilters({
       {/* Active filter chips */}
       {activeFiltersCount > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {filters.category_id && (
+          {categoryId && (
             <Badge
               variant="secondary"
               className="gap-1 text-xs font-normal rounded-full"
             >
-              {categories.find((c) => c.id === filters.category_id)?.name}
+              {categories.find((c) => c.id === categoryId)?.name || 'Categoria'}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => setFilters({ ...filters, category_id: '' })}
+                onClick={() => updateFilters({ category_id: null })}
               />
             </Badge>
           )}
-          {filters.brand && (
+          {brand && (
             <Badge
               variant="secondary"
               className="gap-1 text-xs font-normal rounded-full"
             >
-              {filters.brand}
+              {brand}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => setFilters({ ...filters, brand: '' })}
+                onClick={() => updateFilters({ brand: null })}
               />
             </Badge>
           )}
-          {filters.in_stock && (
+          {inStock && (
             <Badge
               variant="secondary"
               className="gap-1 text-xs font-normal rounded-full"
@@ -144,21 +160,19 @@ export function ProductFilters({
               En stock
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => setFilters({ ...filters, in_stock: false })}
+                onClick={() => updateFilters({ in_stock: false })}
               />
             </Badge>
           )}
-          {(filters.min_price > 0 || filters.max_price < 999999) && (
+          {(minPrice > 0 || maxPrice < 50000000) && (
             <Badge
               variant="secondary"
               className="gap-1 text-xs font-normal rounded-full"
             >
-              {formatPrice(filters.min_price)} - {formatPrice(filters.max_price)}
+              {formatPrice(minPrice)} - {formatPrice(maxPrice)}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() =>
-                  setFilters({ ...filters, min_price: 0, max_price: 50000000 })
-                }
+                onClick={() => updateFilters({ min_price: null, max_price: null })}
               />
             </Badge>
           )}
@@ -185,10 +199,8 @@ export function ProductFilters({
               </Label>
               <Switch
                 id="in-stock"
-                checked={filters.in_stock}
-                onCheckedChange={(checked) =>
-                  setFilters({ ...filters, in_stock: checked })
-                }
+                checked={inStock}
+                onCheckedChange={(checked) => updateFilters({ in_stock: checked })}
               />
             </div>
           </AccordionContent>
@@ -206,11 +218,11 @@ export function ProductFilters({
                   <button
                     key={category.id}
                     className={`w-full flex items-center rounded-lg px-2 py-2 text-sm transition-colors text-left ${
-                      filters.category_id === category.id
+                      categoryId === category.id
                         ? 'bg-primary/10 text-primary font-medium'
                         : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     }`}
-                    onClick={() => handleCategoryChange(category.id)}
+                    onClick={() => updateFilters({ category_id: category.id === categoryId ? null : category.id })}
                   >
                     {category.name}
                   </button>
@@ -252,17 +264,17 @@ export function ProductFilters({
             </AccordionTrigger>
             <AccordionContent className="pb-4">
               <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                {brands.map((brand) => (
+                {brands.map((brandName) => (
                   <button
-                    key={brand}
+                    key={brandName}
                     className={`w-full flex items-center rounded-lg px-2 py-2 text-sm transition-colors text-left ${
-                      filters.brand === brand
+                      brand === brandName
                         ? 'bg-primary/10 text-primary font-medium'
                         : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     }`}
-                    onClick={() => handleBrandChange(brand)}
+                    onClick={() => updateFilters({ brand: brand === brandName ? null : brandName })}
                   >
-                    {brand}
+                    {brandName}
                   </button>
                 ))}
               </div>

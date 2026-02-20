@@ -8,6 +8,7 @@ export interface SharedSettings {
   companyName: string
   companyEmail: string
   companyPhone: string
+  companyRuc: string
   companyAddress: string
   city: string
   currency: string
@@ -45,6 +46,7 @@ const defaultSettings: SharedSettings = {
   companyName: 'Mi Empresa',
   companyEmail: 'info@empresa.com',
   companyPhone: '+595 21 123-4567',
+  companyRuc: '',
   companyAddress: '',
   city: 'Asunción',
   currency: 'PYG',
@@ -143,6 +145,20 @@ export function useSharedSettings() {
     }
 
     loadSettings()
+  }, [])
+
+  // Escuchar eventos de actualización de configuraciones
+  useEffect(() => {
+    const handleSettingsUpdated = (event: CustomEvent<SharedSettings>) => {
+      setSettings(event.detail)
+      setOriginalSettings(event.detail)
+    }
+
+    window.addEventListener('settings-updated', handleSettingsUpdated as EventListener)
+    
+    return () => {
+      window.removeEventListener('settings-updated', handleSettingsUpdated as EventListener)
+    }
   }, [])
 
   // Detectar cambios

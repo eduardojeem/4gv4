@@ -35,6 +35,7 @@ import { VirtualizedProductGrid } from './components/VirtualizedProductList'
 import { formatStockStatus } from '@/lib/inventory-manager'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import { config, isDemoNoDb, getTaxConfig, getFeatureFlag } from '@/lib/config'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { SupabaseStatus } from '@/components/supabase-status'
 import { formatCurrency } from '@/lib/currency'
@@ -99,6 +100,16 @@ const isValidEan = (digits: string) => {
 
 
 export default function POSPage() {
+  const { settings } = useSharedSettings()
+  
+  const companyInfo = useMemo(() => ({
+    name: settings.companyName || config.company.name,
+    address: settings.companyAddress || config.company.address,
+    phone: settings.companyPhone || config.company.phone,
+    email: settings.companyEmail || config.company.email,
+    ruc: settings.companyRuc
+  }), [settings])
+
   // Monitoreo de performance y errores
   const {
     measureCartOperation,
@@ -2809,9 +2820,9 @@ export default function POSPage() {
               <ReceiptGenerator
                 receiptData={currentReceipt}
                 formatCurrency={formatCurrency}
-                onPrint={() => printReceipt(currentReceipt)}
-                onDownload={() => downloadReceipt(currentReceipt)}
-                onShare={() => shareReceipt(currentReceipt)}
+                onPrint={() => printReceipt(currentReceipt, companyInfo)}
+                onDownload={() => downloadReceipt(currentReceipt, companyInfo)}
+                onShare={() => shareReceipt(currentReceipt, companyInfo)}
               />
 
               <div className="flex gap-2 pt-4 border-t">
@@ -2819,7 +2830,7 @@ export default function POSPage() {
                   variant="outline"
                   size="sm"
                   className="flex-1"
-                  onClick={() => printReceipt(currentReceipt)}
+                  onClick={() => printReceipt(currentReceipt, companyInfo)}
                 >
                   <Printer className="h-4 w-4 mr-2" />
                   Imprimir
@@ -2829,7 +2840,7 @@ export default function POSPage() {
                   variant="outline"
                   size="sm"
                   className="flex-1"
-                  onClick={() => downloadReceipt(currentReceipt)}
+                  onClick={() => downloadReceipt(currentReceipt, companyInfo)}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Descargar
@@ -2839,7 +2850,7 @@ export default function POSPage() {
                   variant="outline"
                   size="sm"
                   className="flex-1"
-                  onClick={() => shareReceipt(currentReceipt)}
+                  onClick={() => shareReceipt(currentReceipt, companyInfo)}
                 >
                   <Share2 className="h-4 w-4 mr-2" />
                   Compartir

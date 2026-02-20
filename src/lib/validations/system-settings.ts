@@ -106,6 +106,7 @@ export const SystemSettingsDBSchema = z.object({
   company_name: z.string(),
   company_email: z.string(),
   company_phone: z.string(),
+  company_ruc: z.string().nullable().optional(),
   company_address: z.string().nullable(),
   city: z.string().nullable(),
   currency: z.string(),
@@ -133,6 +134,7 @@ export function mapDBToSettings(dbData: z.infer<typeof SystemSettingsDBSchema>):
     companyName: dbData.company_name,
     companyEmail: dbData.company_email,
     companyPhone: dbData.company_phone,
+    companyRuc: dbData.company_ruc || '',
     companyAddress: dbData.company_address || '',
     city: dbData.city || '',
     currency: dbData.currency as 'PYG' | 'USD' | 'EUR' | 'MXN',
@@ -160,6 +162,7 @@ export function mapSettingsToDB(settings: SystemSettingsPartial): Record<string,
   if (settings.companyName !== undefined) dbData.company_name = settings.companyName
   if (settings.companyEmail !== undefined) dbData.company_email = settings.companyEmail
   if (settings.companyPhone !== undefined) dbData.company_phone = settings.companyPhone
+  if (settings.companyRuc !== undefined) dbData.company_ruc = settings.companyRuc
   if (settings.companyAddress !== undefined) dbData.company_address = settings.companyAddress
   if (settings.city !== undefined) dbData.city = settings.city
   if (settings.currency !== undefined) dbData.currency = settings.currency
@@ -218,6 +221,7 @@ export function validateImportedSettings(data: unknown): SystemSettings {
       companyName: sanitizeString(validated.companyName),
       companyEmail: sanitizeString(validated.companyEmail),
       companyPhone: sanitizeString(validated.companyPhone),
+      companyRuc: sanitizeString(validated.companyRuc || ''),
       companyAddress: sanitizeString(validated.companyAddress || ''),
       city: sanitizeString(validated.city || '')
     }

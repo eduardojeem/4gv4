@@ -12,15 +12,19 @@ import { resolveProductImageUrl } from '@/lib/images'
 interface ProductCardProps {
   product: PublicProduct
   priority?: boolean
+  isWholesale?: boolean
 }
 
-export function ProductCard({ product, priority = false }: ProductCardProps) {
+export function ProductCard(props: ProductCardProps) {
+  const { product, priority = false } = props
   const { user } = useAuth()
   const [imageError, setImageError] = useState(false)
 
-  const isWholesale =
+  // Use prop if provided (Server Component), otherwise fall back to client auth
+  const isWholesale = props.isWholesale ?? (
     user?.user_metadata?.customer_type === 'mayorista' ||
     user?.user_metadata?.customer_type === 'client_mayorista'
+  )
 
   const displayPrice =
     isWholesale && product.wholesale_price
@@ -72,11 +76,12 @@ export function ProductCard({ product, priority = false }: ProductCardProps) {
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   className="object-contain transition-all duration-500 group-hover:scale-110"
                   priority={priority}
+                  quality={80}
                   onError={(e) => {
                     // console.error('Image failed to load:', imageSrc, 'for product:', product.name)
                     setImageError(true)
                   }}
-                  unoptimized={imageSrc.startsWith('data:') || imageSrc === '/placeholder-product.svg' || imageSrc.includes('drive.google.com')}
+                  unoptimized={imageSrc.startsWith('data:') || imageSrc === '/placeholder-product.svg'}
                 />
               </div>
             </div>

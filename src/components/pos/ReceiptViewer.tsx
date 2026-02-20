@@ -17,6 +17,9 @@ import {
     InvoiceData 
 } from '@/lib/invoice-generator'
 
+import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { config } from '@/lib/config'
+
 interface ReceiptViewerProps {
     saleNumber: string
     items: CartItem[]
@@ -50,14 +53,25 @@ export function ReceiptViewer({
     onEmail,
     onNewSale
 }: ReceiptViewerProps) {
+    const { settings } = useSharedSettings()
+    
+    const companyInfo = {
+        name: settings.companyName || config.company.name,
+        address: settings.companyAddress || config.company.address,
+        phone: settings.companyPhone || config.company.phone,
+        email: settings.companyEmail || config.company.email,
+        ruc: settings.companyRuc
+    }
 
     const handlePrint = () => {
         const invoiceData: InvoiceData = {
             invoiceNumber: saleNumber,
             date: new Date().toISOString(),
-            sellerName: 'Mi Empresa',
-            sellerAddress: 'Dirección de la empresa',
-            sellerTaxId: '80012345-6',
+            sellerName: companyInfo.name,
+            sellerAddress: companyInfo.address,
+            sellerTaxId: companyInfo.ruc,
+            sellerPhone: companyInfo.phone,
+            sellerEmail: companyInfo.email,
             customerName: customerName || 'Cliente General',
             items: items.map(item => ({
                 description: item.name,
@@ -110,9 +124,12 @@ export function ReceiptViewer({
                 <div className="bg-white border-2 border-gray-200 rounded-lg p-6 space-y-4">
                     {/* Header */}
                     <div className="text-center border-b pb-4">
-                        <h3 className="text-xl font-bold">Mi Empresa</h3>
-                        <p className="text-sm text-gray-600">Dirección de la empresa</p>
-                        <p className="text-sm text-gray-600">RUC: 80012345-6</p>
+                        <h3 className="text-xl font-bold uppercase">{companyInfo.name}</h3>
+                        <p className="text-sm text-gray-600">{companyInfo.address}</p>
+                        {companyInfo.ruc && (
+                            <p className="text-sm text-gray-600">RUC: {companyInfo.ruc}</p>
+                        )}
+                        <p className="text-sm text-gray-600">Tel: {companyInfo.phone}</p>
                     </div>
 
                     {/* Sale Info */}
@@ -234,11 +251,11 @@ export function ReceiptViewer({
                                     const invoiceData: InvoiceData = {
                                         invoiceNumber: saleNumber,
                                         date: new Date().toISOString(),
-                                        sellerName: 'Mi Empresa',
-                                        sellerAddress: 'Dirección de la empresa',
-                                        sellerTaxId: '80012345-6',
-                                        sellerPhone: '123-456-7890',
-                                        sellerEmail: 'info@miempresa.com',
+                                        sellerName: companyInfo.name,
+                                        sellerAddress: companyInfo.address,
+                                        sellerTaxId: companyInfo.ruc,
+                                        sellerPhone: companyInfo.phone,
+                                        sellerEmail: companyInfo.email,
                                         customerName: customerName || 'Cliente General',
                                         items: items.map(item => ({
                                             description: item.name,
@@ -282,11 +299,11 @@ export function ReceiptViewer({
                                     const invoiceData: InvoiceData = {
                                         invoiceNumber: saleNumber,
                                         date: new Date().toISOString(),
-                                        sellerName: 'Mi Empresa',
-                                        sellerAddress: 'Dirección de la empresa',
-                                        sellerTaxId: '80012345-6',
-                                        sellerPhone: '123-456-7890',
-                                        sellerEmail: 'info@miempresa.com',
+                                        sellerName: companyInfo.name,
+                                        sellerAddress: companyInfo.address,
+                                        sellerTaxId: companyInfo.ruc,
+                                        sellerPhone: companyInfo.phone,
+                                        sellerEmail: companyInfo.email,
                                         customerName: customerName || 'Cliente General',
                                         items: items.map(item => ({
                                             description: item.name,
@@ -324,11 +341,11 @@ export function ReceiptViewer({
                                     const invoiceData: InvoiceData = {
                                         invoiceNumber: saleNumber,
                                         date: new Date().toISOString(),
-                                        sellerName: 'Mi Empresa',
-                                        sellerAddress: 'Dirección de la empresa',
-                                        sellerTaxId: '80012345-6',
-                                        sellerPhone: '123-456-7890',
-                                        sellerEmail: 'info@miempresa.com',
+                                        sellerName: companyInfo.name,
+                                        sellerAddress: companyInfo.address,
+                                        sellerTaxId: companyInfo.ruc,
+                                        sellerPhone: companyInfo.phone,
+                                        sellerEmail: companyInfo.email,
                                         customerName: customerName || 'Cliente General',
                                         items: items.map(item => ({
                                             description: item.name,
@@ -372,11 +389,11 @@ export function ReceiptViewer({
                                     const invoiceData: InvoiceData = {
                                         invoiceNumber: saleNumber,
                                         date: new Date().toISOString(),
-                                        sellerName: 'Mi Empresa',
-                                        sellerAddress: 'Dirección de la empresa',
-                                        sellerTaxId: '80012345-6',
-                                        sellerPhone: '123-456-7890',
-                                        sellerEmail: 'info@miempresa.com',
+                                        sellerName: companyInfo.name,
+                                        sellerAddress: companyInfo.address,
+                                        sellerTaxId: companyInfo.ruc,
+                                        sellerPhone: companyInfo.phone,
+                                        sellerEmail: companyInfo.email,
                                         customerName: customerName || 'Cliente General',
                                         items: items.map(item => ({
                                             description: item.name,
@@ -432,9 +449,9 @@ export function ReceiptViewer({
                                     title: 'Recibo', text: formatReceiptForPrinter({
                                         invoiceNumber: saleNumber,
                                         date: new Date().toISOString(),
-                                        sellerName: 'Mi Empresa',
-                                        sellerAddress: 'Dirección de la empresa',
-                                        sellerTaxId: '80012345-6',
+                                        sellerName: companyInfo.name,
+                                        sellerAddress: companyInfo.address,
+                                        sellerTaxId: companyInfo.ruc,
                                         items: items.map(i => ({
                                             description: i.name,
                                             quantity: i.quantity,

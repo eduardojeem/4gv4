@@ -21,6 +21,8 @@ interface ReceiptData {
   date: string
   time: string
   cashier: string
+  cashRegister?: string
+  shift?: string
   customer?: {
     name: string
     phone: string
@@ -87,7 +89,9 @@ export const createReceiptData = (
   calculations: Calculations,
   payments: PaymentSplit[],
   customer?: Customer,
-  cashier: string = 'Sistema POS'
+  cashier: string = 'Sistema POS',
+  cashRegister?: string,
+  shift?: string
 ): ReceiptData => {
   const { date, time } = formatDateTime()
   
@@ -96,6 +100,8 @@ export const createReceiptData = (
     date,
     time,
     cashier,
+    cashRegister,
+    shift,
     customer: customer ? {
       name: customer.name,
       phone: customer.phone,
@@ -113,36 +119,144 @@ export const createReceiptData = (
   }
 }
 
-// Imprimir ticket
-export const printReceipt = (receiptData: ReceiptData): void => {
+export interface CompanyInfo {
+  name: string
+  address: string
+  phone: string
+  email: string
+  ruc?: string
+}
+
+// Imprimir ticket - Captura el contenido del modal directamente
+export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
+  // Intentar capturar el contenido del modal primero
+  const receiptElement = document.getElementById('receipt-content')
+  
+  if (receiptElement) {
+    // Si existe el elemento del modal, clonar su contenido
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      alert('Por favor, permita las ventanas emergentes para imprimir')
+      return
+    }
+
+    // Obtener todos los estilos de la página
+    const styles = Array.from(document.styleSheets)
+      .map(styleSheet => {
+        try {
+          return Array.from(styleSheet.cssRules)
+            .map(rule => rule.cssText)
+            .join('\n')
+        } catch (e) {
+          return ''
+        }
+      })
+      .join('\n')
+
+    // Crear HTML con el contenido clonado
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Ticket - ${receiptData.receiptNumber}</title>
+        <style>
+          @media print {
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
+            body {
+              margin: 0;
+              padding: 5mm;
+            }
+            .print\\:hidden {
+              display: none !important;
+            }
+          }
+          
+          * {
+            box-sizing: border-box;
+          }
+          
+          body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 80mm;
+            margin: 0 auto;
+            padding: 8px;
+            background: white;
+            color: black;
+          }
+          
+          ${styles}
+          
+          /* Asegurar que los colores se impriman */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+        </style>
+      </head>
+      <body>
+        ${receiptElement.innerHTML}
+      </body>
+      </html>
+    `
+
+    printWindow.document.write(printContent)
+    printWindow.document.close()
+
+    setTimeout(() => {
+      try {
+        printWindow.focus()
+        printWindow.print()
+      } catch (error) {
+        console.error('Error printing:', error)
+        printWindow.close()
+      }
+    }, 500)
+  } else {
+    // Fallback: usar el HTML generado si no existe el modal
+    printReceiptFallback(receiptData, companyInfo)
+  }
+}
+
+// Fallback: Imprimir usando HTML generado
+const printReceiptFallback = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
   const printWindow = window.open('', '_blank')
   if (!printWindow) {
     alert('Por favor, permita las ventanas emergentes para imprimir')
     return
   }
 
-  const printContent = generatePrintHTML(receiptData)
+  const printContent = generatePrintHTML(receiptData, companyInfo)
   
   printWindow.document.write(printContent)
   printWindow.document.close()
   
-  // Esperar a que se cargue el contenido antes de imprimir
-  printWindow.onload = () => {
-    printWindow.print()
-    printWindow.close()
-  }
+  setTimeout(() => {
+    try {
+      printWindow.focus()
+      printWindow.print()
+    } catch (error) {
+      console.error('Error printing:', error)
+      printWindow.close()
+    }
+  }, 250)
 }
 
-// Generar HTML para impresión
-const generatePrintHTML = (receiptData: ReceiptData): string => {
+// Generar HTML para impresión con diseño mejorado
+const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo): string => {
   
+  const company = companyInfo || config.company
 
   const getPaymentMethodLabel = (method: string) => {
     const labels = {
-      cash: 'Efectivo',
-      card: 'Tarjeta',
-      transfer: 'Transferencia',
-      credit: 'Crédito'
+      cash: '💵 Efectivo',
+      card: '💳 Tarjeta',
+      transfer: '🏦 Transferencia',
+      credit: '📝 Crédito'
     }
     return labels[method as keyof typeof labels] || method
   }
@@ -165,158 +279,375 @@ const generatePrintHTML = (receiptData: ReceiptData): string => {
           }
         }
         
+        * {
+          box-sizing: border-box;
+        }
+        
         body {
-          font-family: 'Courier New', monospace;
-          font-size: 12px;
-          line-height: 1.2;
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          font-size: 11px;
+          line-height: 1.4;
           max-width: 80mm;
           margin: 0 auto;
-          padding: 10px;
+          padding: 8px;
+          color: #000;
         }
         
         .header {
           text-align: center;
           border-bottom: 2px dashed #333;
-          padding-bottom: 10px;
-          margin-bottom: 10px;
+          padding-bottom: 12px;
+          margin-bottom: 12px;
+          background: linear-gradient(to bottom, #f8f9fa 0%, #ffffff 100%);
+          padding-top: 12px;
+        }
+        
+        .logo {
+          width: 50px;
+          height: 50px;
+          background: #000;
+          color: #fff;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          font-weight: bold;
+          margin-bottom: 8px;
         }
         
         .header h1 {
-          font-size: 16px;
+          font-size: 18px;
           font-weight: bold;
-          margin: 0;
+          margin: 5px 0 2px 0;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        
+        .header .subtitle {
+          font-size: 11px;
+          font-weight: 600;
+          color: #666;
+          margin: 2px 0;
         }
         
         .header p {
           margin: 2px 0;
+          font-size: 9px;
+          color: #666;
+        }
+        
+        .ticket-number {
+          background: #f0f0f0;
+          border-left: 4px solid #000;
+          padding: 8px 10px;
+          margin: 10px 0;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        .ticket-number .label {
           font-size: 10px;
+          color: #666;
+        }
+        
+        .ticket-number .number {
+          font-size: 14px;
+          font-weight: bold;
+          font-family: 'Courier New', monospace;
+        }
+        
+        .info-section {
+          margin: 10px 0;
         }
         
         .info-row {
           display: flex;
           justify-content: space-between;
-          margin: 2px 0;
+          margin: 3px 0;
+          font-size: 10px;
+        }
+        
+        .info-row .label {
+          color: #666;
+        }
+        
+        .info-row .value {
+          font-weight: 600;
         }
         
         .separator {
-          border-top: 1px dashed #333;
-          margin: 10px 0;
+          border-top: 1px dashed #999;
+          margin: 12px 0;
+        }
+        
+        .section-title {
+          text-align: center;
+          font-weight: bold;
+          font-size: 11px;
+          background: #f5f5f5;
+          padding: 6px;
+          margin: 10px 0 8px 0;
+          border-radius: 3px;
         }
         
         .item {
-          margin-bottom: 8px;
+          margin-bottom: 10px;
+          padding-bottom: 8px;
+          border-bottom: 1px dotted #ddd;
+        }
+        
+        .item:last-child {
+          border-bottom: none;
+        }
+        
+        .item-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          font-weight: 600;
+          margin-bottom: 3px;
         }
         
         .item-name {
-          font-weight: bold;
+          flex: 1;
+          line-height: 1.3;
         }
         
-        .item-details {
-          font-size: 10px;
-          color: #666;
+        .item-price {
+          font-weight: bold;
+          white-space: nowrap;
+          margin-left: 8px;
         }
         
         .tag-service {
           display: inline-block;
-          font-size: 9px;
-          color: #0b5ed7;
-          background: #e7f1ff;
-          border: 1px solid #cfe2ff;
-          padding: 1px 4px;
-          border-radius: 3px;
+          font-size: 8px;
+          font-weight: bold;
+          color: #0066cc;
+          background: #e6f2ff;
+          border: 1px solid #b3d9ff;
+          padding: 2px 6px;
+          border-radius: 10px;
           margin-left: 6px;
         }
         
-        .total-section {
-          border-top: 2px solid #333;
-          padding-top: 5px;
-          margin-top: 10px;
+        .item-details {
+          display: flex;
+          justify-content: space-between;
+          font-size: 9px;
+          color: #666;
+          margin-top: 2px;
+        }
+        
+        .item-discount {
+          display: flex;
+          justify-content: space-between;
+          font-size: 9px;
+          color: #28a745;
+          font-weight: 600;
+          margin-top: 2px;
+        }
+        
+        .totals {
+          margin: 12px 0;
         }
         
         .total-row {
           display: flex;
           justify-content: space-between;
-          font-weight: bold;
+          margin: 4px 0;
+          font-size: 11px;
+        }
+        
+        .total-row.discount {
+          color: #28a745;
+          font-weight: 600;
+        }
+        
+        .total-row.final {
+          background: #f0f0f0;
+          padding: 10px;
+          margin-top: 8px;
+          border-radius: 4px;
           font-size: 14px;
+          font-weight: bold;
+        }
+        
+        .payment-section {
+          margin: 12px 0;
+        }
+        
+        .payment-item {
+          background: #f8f8f8;
+          padding: 8px 10px;
+          margin: 4px 0;
+          border-radius: 4px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        .payment-item.change {
+          background: #e8f5e9;
+          color: #2e7d32;
+          font-weight: bold;
+        }
+        
+        .payment-status {
+          text-align: center;
+          background: #e8f5e9;
+          color: #2e7d32;
+          padding: 8px;
+          margin: 8px 0;
+          border-radius: 4px;
+          font-weight: bold;
+          font-size: 12px;
+        }
+        
+        .loyalty-box {
+          background: linear-gradient(135deg, #fff3cd 0%, #fff8e1 100%);
+          border: 1px solid #ffc107;
+          padding: 10px;
+          text-align: center;
+          margin: 12px 0;
+          border-radius: 4px;
+        }
+        
+        .loyalty-box .text {
+          font-weight: bold;
+          color: #856404;
+          font-size: 11px;
+        }
+        
+        .warranty-box {
+          background: #e3f2fd;
+          border: 1px solid #2196f3;
+          padding: 10px;
+          text-align: center;
+          margin: 12px 0;
+          border-radius: 4px;
+        }
+        
+        .warranty-box .title {
+          font-weight: bold;
+          color: #1565c0;
+          font-size: 11px;
+          margin-bottom: 3px;
+        }
+        
+        .warranty-box .subtitle {
+          font-size: 9px;
+          color: #1976d2;
         }
         
         .footer {
           text-align: center;
-          font-size: 10px;
+          font-size: 9px;
           margin-top: 15px;
-          border-top: 1px dashed #333;
-          padding-top: 10px;
+          border-top: 1px dashed #999;
+          padding-top: 12px;
+          color: #666;
         }
         
-        .loyalty-points {
-          background: #f0f8ff;
-          padding: 5px;
-          text-align: center;
-          margin: 10px 0;
-          border: 1px solid #ccc;
+        .footer .thanks {
+          font-weight: bold;
+          font-size: 11px;
+          color: #000;
+          margin-bottom: 5px;
+        }
+        
+        .footer .contact {
+          margin: 3px 0;
+        }
+        
+        .footer .id {
+          font-family: 'Courier New', monospace;
+          font-size: 8px;
+          margin-top: 8px;
+          color: #999;
         }
       </style>
     </head>
     <body>
+      <!-- Encabezado -->
       <div class="header">
-        <h1>COMERCIAL 4G</h1>
-        <p>Sistema de Punto de Venta</p>
-        <p>RUC: 80.123.456-7</p>
-        <p>Av. Principal 123, Asunción</p>
-        <p>Tel: +595-21-123456</p>
+        <div class="logo">4G</div>
+        <h1>${company.name}</h1>
+        <div class="subtitle">Reparación y Service</div>
+        ${company.ruc ? `<p>RUC: ${company.ruc}</p>` : ''}
+        <p>${company.address}</p>
+        <p>☎ ${company.phone}</p>
+        <p>📧 ${company.email}</p>
       </div>
       
-      <div class="info-row">
-        <span>Ticket N°:</span>
-        <span>${receiptData.receiptNumber}</span>
-      </div>
-      <div class="info-row">
-        <span>Fecha:</span>
-        <span>${receiptData.date}</span>
-      </div>
-      <div class="info-row">
-        <span>Hora:</span>
-        <span>${receiptData.time}</span>
-      </div>
-      <div class="info-row">
-        <span>Cajero:</span>
-        <span>${receiptData.cashier}</span>
+      <!-- Número de ticket -->
+      <div class="ticket-number">
+        <span class="label">Ticket N°</span>
+        <span class="number">${receiptData.receiptNumber}</span>
       </div>
       
-      ${receiptData.customer ? `
-        <div class="separator"></div>
+      <!-- Información de la venta -->
+      <div class="info-section">
         <div class="info-row">
-          <span>Cliente:</span>
-          <span>${receiptData.customer.name}</span>
+          <span class="label">📅 Fecha:</span>
+          <span class="value">${receiptData.date}</span>
         </div>
         <div class="info-row">
-          <span>Teléfono:</span>
-          <span>${receiptData.customer.phone}</span>
+          <span class="label">⏰ Hora:</span>
+          <span class="value">${receiptData.time}</span>
         </div>
-      ` : ''}
+        ${receiptData.cashRegister ? `
+          <div class="info-row">
+            <span class="label">🏪 Caja:</span>
+            <span class="value">${receiptData.cashRegister}</span>
+          </div>
+        ` : ''}
+        ${receiptData.shift ? `
+          <div class="info-row">
+            <span class="label">🕐 Turno:</span>
+            <span class="value">${receiptData.shift}</span>
+          </div>
+        ` : ''}
+        <div class="info-row">
+          <span class="label">👤 Cajero:</span>
+          <span class="value">${receiptData.cashier}</span>
+        </div>
+        ${receiptData.customer ? `
+          <div class="separator"></div>
+          <div class="info-row">
+            <span class="label">👥 Cliente:</span>
+            <span class="value">${receiptData.customer.name}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">📱 Teléfono:</span>
+            <span class="value">${receiptData.customer.phone}</span>
+          </div>
+        ` : ''}
+      </div>
       
       <div class="separator"></div>
       
-      <div style="text-align: center; font-weight: bold; margin-bottom: 10px;">
-        DETALLE DE ITEMS
-      </div>
+      <!-- Productos -->
+      <div class="section-title">DETALLE DE PRODUCTOS</div>
       
       ${receiptData.items.map(item => `
         <div class="item">
-          <div class="info-row item-name">
-            <span>
+          <div class="item-header">
+            <span class="item-name">
               ${item.name}
-              ${item.isService ? `<span class="tag-service">SERVICIO</span>` : ``}
+              ${item.isService ? `<span class="tag-service">🔧 SERVICIO</span>` : ''}
             </span>
-            <span>${formatCurrency(item.price * item.quantity)}</span>
+            <span class="item-price">${formatCurrency(item.price * item.quantity)}</span>
           </div>
-          <div class="info-row item-details">
+          <div class="item-details">
             <span>SKU: ${item.sku}</span>
-            <span>${item.quantity} x ${formatCurrency(item.price)}</span>
+            <span>${item.quantity} × ${formatCurrency(item.price)}</span>
           </div>
           ${item.discount && item.discount > 0 ? `
-            <div class="info-row" style="color: green;">
-              <span>Descuento:</span>
+            <div class="item-discount">
+              <span>✨ Descuento:</span>
               <span>-${formatCurrency(item.discount)}</span>
             </div>
           ` : ''}
@@ -325,32 +656,23 @@ const generatePrintHTML = (receiptData: ReceiptData): string => {
       
       <div class="separator"></div>
       
-      <div class="info-row">
-        <span>Subtotal:</span>
-        <span>${formatCurrency(receiptData.subtotal)}</span>
-      </div>
-      
-      ${receiptData.totalDiscount > 0 ? `
-        <div class="info-row" style="color: green;">
-          <span>Descuento Total:</span>
-          <span>-${formatCurrency(receiptData.totalDiscount)}</span>
-        </div>
-      ` : ''}
-      
-      <div class="info-row">
-        <span>${getTaxConfig().label} (${getTaxConfig().percentage}%):</span>
-        <span>${formatCurrency(receiptData.tax)}</span>
-      </div>
-      
-      ${receiptData.repairCost && receiptData.repairCost > 0 ? `
-        <div class="info-row">
-          <span>Reparaciones:</span>
-          <span>${formatCurrency(receiptData.repairCost)}</span>
-        </div>
-      ` : ''}
-      
-      <div class="total-section">
+      <!-- Totales -->
+      <div class="totals">
         <div class="total-row">
+          <span>Subtotal:</span>
+          <span>${formatCurrency(receiptData.subtotal)}</span>
+        </div>
+        ${receiptData.totalDiscount > 0 ? `
+          <div class="total-row discount">
+            <span>✨ Descuento Total:</span>
+            <span>-${formatCurrency(receiptData.totalDiscount)}</span>
+          </div>
+        ` : ''}
+        <div class="total-row">
+          <span>${getTaxConfig().label} (${getTaxConfig().percentage}%):</span>
+          <span>${formatCurrency(receiptData.tax)}</span>
+        </div>
+        <div class="total-row final">
           <span>TOTAL:</span>
           <span>${formatCurrency(receiptData.total)}</span>
         </div>
@@ -358,50 +680,102 @@ const generatePrintHTML = (receiptData: ReceiptData): string => {
       
       <div class="separator"></div>
       
-      <div style="text-align: center; font-weight: bold; margin-bottom: 5px;">
-        FORMA DE PAGO
+      <!-- Métodos de pago -->
+      <div class="section-title">FORMA DE PAGO</div>
+      <div class="payment-section">
+        ${receiptData.payments.map(payment => `
+          <div class="payment-item">
+            <span>
+              ${getPaymentMethodLabel(payment.method)}
+              ${payment.reference ? ` (${payment.reference})` : ''}
+              ${payment.cardLast4 ? ` ****${payment.cardLast4}` : ''}
+            </span>
+            <span style="font-weight: bold;">${formatCurrency(payment.amount)}</span>
+          </div>
+        `).join('')}
+        ${receiptData.change && receiptData.change > 0 ? `
+          <div class="payment-item change">
+            <span>💰 Cambio:</span>
+            <span>${formatCurrency(receiptData.change)}</span>
+          </div>
+        ` : ''}
+        <div class="payment-status">✅ PAGADO</div>
       </div>
       
-      ${receiptData.payments.map(payment => `
-        <div class="info-row">
-          <span>
-            ${getPaymentMethodLabel(payment.method)}
-            ${payment.reference ? ` (${payment.reference})` : ''}
-            ${payment.cardLast4 ? ` ****${payment.cardLast4}` : ''}
-          </span>
-          <span>${formatCurrency(payment.amount)}</span>
-        </div>
-      `).join('')}
-      
-      ${receiptData.change && receiptData.change > 0 ? `
-        <div class="info-row" style="color: green; font-weight: bold;">
-          <span>Cambio:</span>
-          <span>${formatCurrency(receiptData.change)}</span>
-        </div>
-      ` : ''}
-      
       ${receiptData.loyaltyPoints && receiptData.loyaltyPoints > 0 ? `
-        <div class="loyalty-points">
-          🎉 Has ganado ${receiptData.loyaltyPoints} puntos de lealtad
+        <div class="separator"></div>
+        <div class="loyalty-box">
+          <div class="text">🎉 ¡Ganaste ${receiptData.loyaltyPoints} puntos de lealtad! 🎉</div>
         </div>
       ` : ''}
       
+      <div class="separator"></div>
+      
+      <!-- Garantía -->
+      <div class="warranty-box">
+        <div class="title">🛡️ GARANTÍA: 30 días</div>
+        <div class="subtitle">Válido para cambios y reparaciones</div>
+      </div>
+      
+      <!-- Pie del ticket -->
       <div class="footer">
-        <p>¡Gracias por su compra!</p>
-        <p>Conserve este ticket como comprobante</p>
-        <p>Para consultas: info@comercial4g.com</p>
-        <p style="margin-top: 10px;">
-          Generado: ${new Date().toLocaleString()}
-        </p>
+        <div class="thanks">¡Gracias por su compra!</div>
+        <div>Conserve este ticket como comprobante</div>
+        <div class="contact">📱 Consultas: ${company.phone}</div>
+        <div class="contact">📧 ${company.email}</div>
+        <div class="separator"></div>
+        <div class="id">ID: ${receiptData.receiptNumber}</div>
+        <div class="id">Generado: ${new Date().toLocaleString('es-PY')}</div>
       </div>
     </body>
     </html>
   `
 }
 
-// Descargar ticket como PDF (simulado con HTML)
-export const downloadReceipt = (receiptData: ReceiptData): void => {
-  const printContent = generatePrintHTML(receiptData)
+// Descargar ticket como PDF real
+export const downloadReceipt = async (receiptData: ReceiptData, companyInfo?: CompanyInfo): Promise<void> => {
+  try {
+    // Importar dinámicamente para evitar problemas de SSR
+    const html2canvas = (await import('html2canvas')).default
+    const jsPDF = (await import('jspdf')).default
+    
+    const element = document.getElementById('receipt-content')
+    if (!element) {
+      console.error('Receipt element not found')
+      return
+    }
+
+    // Generar canvas del ticket
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true
+    })
+
+    // Crear PDF
+    const imgData = canvas.toDataURL('image/png')
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [80, 297] // 80mm width, altura automática
+    })
+
+    const imgWidth = 80
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight)
+    pdf.save(`ticket-${receiptData.receiptNumber}.pdf`)
+  } catch (error) {
+    console.error('Error generating PDF:', error)
+    // Fallback al método anterior
+    downloadReceiptHTML(receiptData, companyInfo)
+  }
+}
+
+// Fallback: Descargar como HTML
+const downloadReceiptHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
+  const printContent = generatePrintHTML(receiptData, companyInfo)
   const blob = new Blob([printContent], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
   
@@ -415,14 +789,48 @@ export const downloadReceipt = (receiptData: ReceiptData): void => {
   URL.revokeObjectURL(url)
 }
 
-// Compartir ticket
-export const shareReceipt = async (receiptData: ReceiptData): Promise<void> => {
+// Compartir ticket como imagen
+export const shareReceipt = async (receiptData: ReceiptData, companyInfo?: CompanyInfo): Promise<void> => {
+  const companyName = companyInfo?.name || config.company.name
+  
+  try {
+    // Intentar compartir como imagen
+    const html2canvas = (await import('html2canvas')).default
+    const element = document.getElementById('receipt-content')
+    
+    if (element && navigator.share) {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true
+      })
+
+      // Convertir canvas a blob
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => resolve(blob!), 'image/png')
+      })
+
+      const file = new File([blob], `ticket-${receiptData.receiptNumber}.png`, { type: 'image/png' })
+
+      await navigator.share({
+        title: `Ticket ${receiptData.receiptNumber}`,
+        text: `Ticket de venta - ${companyName}\nTotal: ${formatCurrency(receiptData.total)}`,
+        files: [file]
+      })
+      return
+    }
+  } catch (error) {
+    console.log('Error sharing as image:', error)
+  }
+
+  // Fallback: compartir como texto
   const shareText = `
 Ticket: ${receiptData.receiptNumber}
 Fecha: ${receiptData.date} ${receiptData.time}
 Total: ${formatCurrency(receiptData.total)}
 
-¡Gracias por su compra en Comercial 4G!
+¡Gracias por su compra en ${companyName}!
   `.trim()
 
   if (navigator.share) {
@@ -496,5 +904,5 @@ const showShareModal = (text: string): void => {
     }
   })
 }
-import { getTaxConfig } from './config'
+import { getTaxConfig, config } from './config'
 import { formatCurrency } from '@/lib/currency'
