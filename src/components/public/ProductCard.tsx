@@ -34,11 +34,6 @@ export function ProductCard(props: ProductCardProps) {
   const isInStock = product.stock_quantity > 0
   const imageSrc = resolveProductImageUrl(product.image)
 
-  // Debug: Log image info in development
-  if (process.env.NODE_ENV === 'development' && !imageError) {
-    console.log('Product:', product.name, 'Image:', product.image, 'Resolved:', imageSrc)
-  }
-
   const hasDiscount =
     isWholesale &&
     product.wholesale_price != null &&

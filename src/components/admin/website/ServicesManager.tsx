@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import { 
   Loader2, Save, Briefcase, Wrench, Shield, Package, Check, Plus, Trash2, 
   Smartphone, Monitor, Battery, Cpu, Zap, Headset, ArrowUp, ArrowDown, 
-  Settings, Clock, Sparkles, TrendingUp, Laptop, Edit3, X
+  Settings, Clock, Sparkles, TrendingUp, Laptop, Edit3, X, Droplet, Camera
 } from 'lucide-react'
 import { Service } from '@/types/website-settings'
 import {
@@ -36,6 +36,9 @@ const ICON_OPTIONS = [
   { value: 'laptop', label: 'Laptop', icon: Laptop },
   { value: 'clock', label: 'Tiempo', icon: Clock },
   { value: 'sparkles', label: 'Especial', icon: Sparkles },
+  { value: 'droplet', label: 'Agua', icon: Droplet },
+  { value: 'camera', label: 'Cámara', icon: Camera },
+  { value: 'microchip', label: 'Chip', icon: Cpu },
 ]
 
 const COLOR_OPTIONS = [

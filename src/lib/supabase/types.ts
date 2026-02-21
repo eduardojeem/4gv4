@@ -47,6 +47,45 @@ export interface Database {
           }
         ]
       }
+      brands: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          website: string | null
+          country: string | null
+          founded_year: number | null
+          logo_url: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          website?: string | null
+          country?: string | null
+          founded_year?: number | null
+          logo_url?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          website?: string | null
+          country?: string | null
+          founded_year?: number | null
+          logo_url?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       suppliers: {
         Row: {
           id: string
@@ -94,6 +133,7 @@ export interface Database {
           description: string | null
           category_id: string | null
           brand: string | null
+          brand_id: string | null
           supplier_id: string | null
           purchase_price: number
           sale_price: number
@@ -119,6 +159,7 @@ export interface Database {
           description?: string | null
           category_id?: string | null
           brand?: string | null
+          brand_id?: string | null
           supplier_id?: string | null
           purchase_price: number
           sale_price: number
@@ -144,6 +185,7 @@ export interface Database {
           description?: string | null
           category_id?: string | null
           brand?: string | null
+          brand_id?: string | null
           supplier_id?: string | null
           purchase_price?: number
           sale_price?: number
@@ -168,6 +210,13 @@ export interface Database {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
             referencedColumns: ["id"]
           },
           {

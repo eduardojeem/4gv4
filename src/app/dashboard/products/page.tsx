@@ -44,6 +44,7 @@ export default function ProductsPage() {
   const {
     products,
     categories,
+    brands,
     suppliers,
     alerts,
     loading,
@@ -409,6 +410,7 @@ export default function ProductsPage() {
           }}
           product={editingProduct}
           categories={categories as any}
+          brands={brands as any}
           suppliers={suppliers as any}
           onSave={async (data) => {
             // Transform dimensions to ensure compatibility

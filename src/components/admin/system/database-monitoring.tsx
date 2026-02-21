@@ -26,23 +26,26 @@ import {
   BarChart3,
   PieChart,
   Table,
-  Settings
+  Settings,
+  Wrench
 } from 'lucide-react'
-import { LineChart } from 'recharts/es6/chart/LineChart';
-import { Line } from 'recharts/es6/cartesian/Line';
-import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { Area } from 'recharts/es6/cartesian/Area';
-import { BarChart } from 'recharts/es6/chart/BarChart';
-import { Bar } from 'recharts/es6/cartesian/Bar';
-import { PieChart as RechartsPieChart } from 'recharts/es6/chart/PieChart';
-import { Pie } from 'recharts/es6/polar/Pie';
-import { Cell } from 'recharts/es6/component/Cell';
-import { XAxis } from 'recharts/es6/cartesian/XAxis';
-import { YAxis } from 'recharts/es6/cartesian/YAxis';
-import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
-import { Tooltip } from 'recharts/es6/component/Tooltip';
-import { Legend } from 'recharts/es6/component/Legend';
-import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
+import { 
+  LineChart, 
+  Line, 
+  AreaChart, 
+  Area, 
+  BarChart, 
+  Bar, 
+  PieChart as RechartsPieChart, 
+  Pie, 
+  Cell, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer 
+} from 'recharts';
 import { databaseMonitoringService, DatabaseMetrics, DatabaseAlert, TableSize } from '@/services/database-monitoring-service'
 import { useDatabaseMonitoring } from '@/hooks/use-database-monitoring'
 
@@ -160,7 +163,8 @@ export default function DatabaseMonitoring() {
     error, 
     refreshing, 
     refresh,
-    quickMetrics 
+    quickMetrics,
+    performMaintenance
   } = useDatabaseMonitoring()
   
   const [selectedPeriod, setSelectedPeriod] = useState('7d')
@@ -402,6 +406,7 @@ export default function DatabaseMonitoring() {
           <TabsTrigger value="performance">Rendimiento</TabsTrigger>
           <TabsTrigger value="growth">Crecimiento</TabsTrigger>
           <TabsTrigger value="recommendations">Recomendaciones</TabsTrigger>
+          <TabsTrigger value="maintenance">Mantenimiento</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tables" className="space-y-4">
@@ -626,6 +631,61 @@ export default function DatabaseMonitoring() {
                     <span className="text-sm">{recommendation}</span>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="maintenance" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5" />
+                Tareas de Mantenimiento
+              </CardTitle>
+              <CardDescription>
+                Ejecuta tareas de mantenimiento para optimizar la base de datos
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg bg-card">
+                  <div className="space-y-1">
+                    <div className="font-medium flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-blue-500" />
+                      Resetear Estadísticas
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Limpia las estadísticas acumuladas de rendimiento (pg_stat_database)
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline"
+                    onClick={() => performMaintenance('reset_stats')}
+                    disabled={refreshing}
+                  >
+                    Ejecutar
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 border rounded-lg bg-card">
+                  <div className="space-y-1">
+                    <div className="font-medium flex items-center gap-2">
+                      <RefreshCw className="h-4 w-4 text-green-500" />
+                      Refrescar Métricas
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Fuerza una actualización inmediata de todos los datos de monitoreo
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline"
+                    onClick={refresh}
+                    disabled={refreshing}
+                  >
+                    {refreshing ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Ejecutar'}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

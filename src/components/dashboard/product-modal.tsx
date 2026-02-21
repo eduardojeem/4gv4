@@ -26,7 +26,7 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { Product, Category, Supplier, ProductFormData } from '@/types/products'
+import type { Product, Category, Supplier, Brand, ProductFormData } from '@/types/products'
 import type { Category as UICategory } from '@/lib/types/catalog'
 import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
@@ -34,8 +34,10 @@ import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { validateProductForm, generateEAN13 } from '@/lib/validations/product-validation'
 import { CategoryModal } from './category-modal'
 import { SupplierModal } from './supplier-modal'
+import { BrandModal } from '@/components/dashboard/brands/BrandModal'
 import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
+import { useBrands } from '@/hooks/useBrands'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { uploadFile } from '@/lib/supabase-storage'
 import { createClient } from '@/lib/supabase/client'
@@ -46,6 +48,7 @@ interface ProductModalProps {
   onClose: () => void
   onSave: (productData: ProductFormData) => Promise<void>
   categories: Category[]
+  brands: Brand[]
   suppliers: Supplier[]
 }
 
@@ -55,6 +58,7 @@ export function ProductModal({
   onClose,
   onSave,
   categories,
+  brands,
   suppliers
 }: ProductModalProps) {
   const [formData, setFormData] = useState<ProductFormData>({
@@ -63,6 +67,7 @@ export function ProductModal({
     description: '',
     category_id: '',
     brand: '',
+    brand_id: '',
     supplier_id: '',
     purchase_price: 0,
     sale_price: 0,
@@ -84,16 +89,23 @@ export function ProductModal({
 
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false)
+  const [isBrandModalOpen, setIsBrandModalOpen] = useState(false)
   const { createCategory } = useCategories()
   const { createSupplier } = useSuppliers()
+  const { createBrand } = useBrands()
 
   // Local state for lists to support instant updates
   const [localCategories, setLocalCategories] = useState<Category[]>(categories)
+  const [localBrands, setLocalBrands] = useState<Brand[]>(brands)
   const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers)
 
   useEffect(() => {
     setLocalCategories(categories)
   }, [categories])
+
+  useEffect(() => {
+    setLocalBrands(brands)
+  }, [brands])
 
   useEffect(() => {
     setLocalSuppliers(suppliers)
@@ -148,6 +160,22 @@ export function ProductModal({
     }
   }
 
+  const handleSaveBrand = async (brandData: any) => {
+    const result = await createBrand(brandData)
+    if (result.success && result.data) {
+       toast.success('Marca creada')
+       const newBrand = result.data as unknown as Brand
+       setLocalBrands(prev => [...prev, newBrand])
+       handleInputChange('brand_id', newBrand.id)
+       handleInputChange('brand', newBrand.name) // Legacy support
+       setIsBrandModalOpen(false)
+       return { success: true }
+    } else {
+       toast.error(result.error || 'Error al crear marca')
+       return { success: false, error: result.error }
+    }
+  }
+
   // Generar SKU automático
   const generateSKU = () => {
     const timestamp = Date.now().toString(36).toUpperCase()
@@ -186,6 +214,7 @@ export function ProductModal({
         description: '',
         category_id: '',
         brand: '',
+        brand_id: '',
         supplier_id: '',
         purchase_price: 0,
         sale_price: 0,
@@ -468,13 +497,39 @@ export function ProductModal({
 
                       <div className="space-y-2">
                         <Label htmlFor="brand" className="text-sm font-medium text-gray-700 dark:text-gray-300">Marca</Label>
-                        <Input
-                          id="brand"
-                          value={formData.brand || ''}
-                          onChange={(e) => handleInputChange('brand', e.target.value)}
-                          placeholder="Ej: Apple"
-                          className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700"
-                        />
+                        <div className="flex gap-2">
+                          <Select
+                            value={formData.brand_id || ''}
+                            onValueChange={(value) => {
+                              const selectedBrand = localBrands.find(b => b.id === value)
+                              handleInputChange('brand_id', value)
+                              if (selectedBrand) {
+                                handleInputChange('brand', selectedBrand.name)
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 w-full">
+                              <SelectValue placeholder="Seleccionar marca" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700">
+                              {localBrands.map((brand) => (
+                                <SelectItem key={brand.id} value={brand.id} className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">
+                                  {brand.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => setIsBrandModalOpen(true)}
+                            title="Agregar nueva marca"
+                            className="shrink-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
 
                       <div className="space-y-2">
@@ -1021,6 +1076,12 @@ export function ProductModal({
       onClose={() => setIsSupplierModalOpen(false)}
       mode="add"
       onSave={handleSaveSupplier}
+    />
+
+    <BrandModal
+      isOpen={isBrandModalOpen}
+      onClose={() => setIsBrandModalOpen(false)}
+      onSave={handleSaveBrand}
     />
     </>
   )

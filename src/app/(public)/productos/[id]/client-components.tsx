@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { MessageCircle, Mail, Phone, Share2, Package } from 'lucide-react'
@@ -41,8 +42,12 @@ export function ProductGallery({ product, hasDiscount, discountPercent }: Produc
         // User cancelled
       }
     } else {
-      navigator.clipboard.writeText(window.location.href)
-      toast.success('Enlace copiado al portapapeles')
+      try {
+        await navigator.clipboard.writeText(window.location.href)
+        toast.success('Enlace copiado al portapapeles')
+      } catch {
+        toast.error('No se pudo copiar el enlace automaticamente')
+      }
     }
   }
 
@@ -55,7 +60,7 @@ export function ProductGallery({ product, hasDiscount, discountPercent }: Produc
             alt={product.name}
             fill
             sizes="(max-width: 1024px) 100vw, 50vw"
-            className="object-cover"
+            className="object-contain p-4"
             priority
             onError={() => setImageErrors((prev) => ({ ...prev, [selectedImage]: true }))}
             unoptimized={
@@ -101,7 +106,10 @@ export function ProductGallery({ product, hasDiscount, discountPercent }: Produc
           {images.map((img, i) => (
             <button
               key={i}
+              type="button"
               onClick={() => setSelectedImage(i)}
+              aria-label={`Ver imagen ${i + 1} de ${images.length}`}
+              aria-pressed={selectedImage === i}
               className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border-2 transition-all ${
                 selectedImage === i
                   ? 'border-primary ring-1 ring-primary/20'
@@ -135,9 +143,10 @@ export function ProductGallery({ product, hasDiscount, discountPercent }: Produc
 
 interface ProductActionsProps {
   product: PublicProduct
+  isInStock: boolean
 }
 
-export function ProductActions({ product }: ProductActionsProps) {
+export function ProductActions({ product, isInStock }: ProductActionsProps) {
   const { settings } = useWebsiteSettings()
 
   const companyInfo = settings?.company_info
@@ -161,22 +170,31 @@ export function ProductActions({ product }: ProductActionsProps) {
         if (phoneClean) {
           window.open(
             `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`,
-            '_blank'
+            '_blank',
+            'noopener,noreferrer'
           )
         } else if (emailDisplay) {
           window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${product.sku}&body=${encodeURIComponent(
             message
           )}`
+        } else {
+          toast.error('No hay un canal de contacto configurado')
         }
         break
       case 'email':
-        window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${product.sku}&body=${encodeURIComponent(
-          message
-        )}`
+        if (emailDisplay) {
+          window.location.href = `mailto:${emailDisplay}?subject=Consulta producto ${product.sku}&body=${encodeURIComponent(
+            message
+          )}`
+        } else {
+          toast.error('No hay correo de contacto configurado')
+        }
         break
       case 'phone':
         if (phoneClean) {
           window.location.href = `tel:${phoneClean}`
+        } else {
+          toast.error('No hay telefono de contacto configurado')
         }
         break
     }
@@ -185,10 +203,12 @@ export function ProductActions({ product }: ProductActionsProps) {
   return (
     <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
       <h3 className="font-semibold text-foreground">
-        Te interesa este producto?
+        {isInStock ? 'Te interesa este producto?' : 'Producto temporalmente agotado'}
       </h3>
       <p className="mt-1 text-sm text-muted-foreground">
-        Contactanos para disponibilidad, pedidos o consultas.
+        {isInStock
+          ? 'Contactanos para disponibilidad, pedidos o consultas.'
+          : 'Contactanos para consultar reposicion o alternativas disponibles.'}
       </p>
       <div className="mt-4 flex flex-col gap-2">
         <Button
@@ -197,13 +217,14 @@ export function ProductActions({ product }: ProductActionsProps) {
           onClick={() => handleContact('whatsapp')}
         >
           <MessageCircle className="h-4 w-4" />
-          Consultar por WhatsApp
+          {isInStock ? 'Consultar por WhatsApp' : 'Consultar reposicion por WhatsApp'}
         </Button>
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="outline"
             className="gap-2 rounded-xl"
             onClick={() => handleContact('email')}
+            disabled={!emailDisplay}
           >
             <Mail className="h-4 w-4" />
             Email
@@ -212,11 +233,19 @@ export function ProductActions({ product }: ProductActionsProps) {
             variant="outline"
             className="gap-2 rounded-xl"
             onClick={() => handleContact('phone')}
+            disabled={!phoneClean}
           >
             <Phone className="h-4 w-4" />
             Llamar
           </Button>
         </div>
+        {!isInStock && (
+          <Button asChild variant="secondary" className="w-full rounded-xl">
+            <Link href={product.category ? `/productos?category_id=${product.category.id}` : '/productos'}>
+              Ver productos similares
+            </Link>
+          </Button>
+        )}
       </div>
     </div>
   )

@@ -2,6 +2,8 @@ import { Metadata } from 'next'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { PublicFooter } from '@/components/public/PublicFooter'
 import { MaintenanceGuard } from '@/components/public/MaintenanceGuard'
+import { SkipToContentLink } from '@/components/ui/skip-link'
+import { WhatsAppFloatButton } from '@/components/whatsapp-float-button'
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'),
@@ -25,9 +27,11 @@ export default function PublicLayout({
   return (
     <MaintenanceGuard>
       <div className="flex min-h-screen flex-col">
+        <SkipToContentLink />
         <PublicHeader />
-        <main className="flex-1">{children}</main>
+        <main id="main-content" className="flex-1">{children}</main>
         <PublicFooter />
+        <WhatsAppFloatButton />
       </div>
     </MaintenanceGuard>
   )

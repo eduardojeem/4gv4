@@ -39,6 +39,7 @@ interface DashboardStats {
   lowStockCount: number
   outOfStockCount: number
   categoriesCount: number
+  brandsCount: number
   suppliersCount: number
 }
 
@@ -46,6 +47,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [brands, setBrands] = useState<Brand[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [alerts, setAlerts] = useState<ProductAlert[]>([])
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
@@ -256,6 +258,24 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     } catch (err) {
       console.error('Error fetching categories:', err)
       setCategories([])
+    }
+  }, [supabase, enabled])
+
+  // Función para obtener marcas
+  const fetchBrands = useCallback(async () => {
+    if (!enabled) return
+    try {
+      const { data, error } = await supabase
+        .from('brands')
+        .select('*')
+        .eq('is_active', true)
+        .order('name')
+
+      if (error) throw error
+      setBrands((data || []) as unknown as Brand[])
+    } catch (err) {
+      console.error('Error fetching brands:', err)
+      setBrands([])
     }
   }, [supabase, enabled])
 
@@ -766,11 +786,12 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     if (!enabled) return
     Promise.all([
       fetchCategories(),
+      fetchBrands(),
       fetchSuppliers(),
       fetchDashboardStats(),
       fetchAlerts()
     ])
-  }, [enabled, fetchCategories, fetchSuppliers, fetchDashboardStats, fetchAlerts])
+  }, [enabled, fetchCategories, fetchBrands, fetchSuppliers, fetchDashboardStats, fetchAlerts])
 
   // Cargar productos cuando cambien filtros, ordenamiento o paginación
   useEffect(() => {
@@ -782,6 +803,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const memoizedValues = useMemo(() => ({
     products,
     categories,
+    brands,
     suppliers,
     alerts,
     dashboardStats,
@@ -793,7 +815,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       hasNextPage: totalCount > products.length,
       hasPreviousPage: products.length > 0
     }
-  }), [products, categories, suppliers, alerts, dashboardStats, loading, error, totalCount])
+  }), [products, categories, brands, suppliers, alerts, dashboardStats, loading, error, totalCount])
 
   return {
     ...memoizedValues,
@@ -812,6 +834,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     fetchProducts,
     fetchDashboardStats,
     fetchCategories,
+    fetchBrands,
     fetchSuppliers,
     fetchAlerts,
     // Funciones CRUD
@@ -834,19 +857,21 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       await Promise.all([
         fetchProducts(),
         fetchCategories(),
+        fetchBrands(),
         fetchSuppliers(),
         fetchDashboardStats(),
         fetchAlerts()
       ])
-    }, [fetchProducts, fetchCategories, fetchSuppliers, fetchDashboardStats, fetchAlerts]),
+    }, [fetchProducts, fetchCategories, fetchBrands, fetchSuppliers, fetchDashboardStats, fetchAlerts]),
     refreshAll: useCallback(async () => {
       await Promise.all([
         fetchProducts(),
         fetchCategories(),
+        fetchBrands(),
         fetchSuppliers(),
         fetchDashboardStats(),
         fetchAlerts()
       ])
-    }, [fetchProducts, fetchCategories, fetchSuppliers, fetchDashboardStats, fetchAlerts])
+    }, [fetchProducts, fetchCategories, fetchBrands, fetchSuppliers, fetchDashboardStats, fetchAlerts])
   }
 }

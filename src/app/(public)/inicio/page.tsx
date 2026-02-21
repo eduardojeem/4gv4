@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowRight, Package, Wrench, Shield, Clock, Star, CheckCircle, Phone, Mail, MapPin, Loader2, MessageCircle, Smartphone, Monitor, Battery, Cpu, Zap, Headset, Laptop, Sparkles } from 'lucide-react'
+import { ArrowRight, Package, Wrench, Shield, Clock, Star, CheckCircle, Phone, Mail, MapPin, Loader2, MessageCircle, Smartphone, Monitor, Battery, Cpu, Zap, Headset, Laptop, Sparkles, Droplet, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -19,7 +19,10 @@ const iconMap = {
   headset: Headset,
   laptop: Laptop,
   clock: Clock,
-  sparkles: Sparkles
+  sparkles: Sparkles,
+  droplet: Droplet,
+  camera: Camera,
+  microchip: Cpu
 }
 
 const colorMap = {

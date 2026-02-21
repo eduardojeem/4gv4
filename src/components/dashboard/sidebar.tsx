@@ -26,7 +26,9 @@ import {
   Activity,
   CreditCard,
   Tag,
-  Percent
+  Percent,
+  Building2,
+  MessageCircle
 } from 'lucide-react'
 
 type NavItem = { name: string; href: string; icon: any; roles: Array<'admin' | 'vendedor' | 'tecnico'>; description?: string }
@@ -46,6 +48,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { name: 'Clientes', href: '/dashboard/customers', icon: Users, roles: ['admin', 'vendedor'] },
       { name: 'Créditos', href: '/dashboard/credits', icon: CreditCard, roles: ['admin', 'vendedor'] },
       { name: 'Productos', href: '/dashboard/products', icon: Package, roles: ['admin', 'vendedor'] },
+      { name: 'Marcas', href: '/dashboard/brands', icon: Building2, roles: ['admin', 'vendedor'] },
       { name: 'Categorías', href: '/dashboard/categories', icon: Tag, roles: ['admin', 'vendedor'] },
       { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, roles: ['admin', 'vendedor'] },
       { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['admin'] },
@@ -57,6 +60,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: 'Análisis',
     items: [
       { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, roles: ['admin', 'vendedor'] },
+      { name: 'WhatsApp', href: '/dashboard/whatsapp', icon: MessageCircle, roles: ['admin', 'vendedor'] },
       { name: 'Administración', href: '/admin', icon: Settings, roles: ['admin'] },
     ],
   },
@@ -121,7 +125,7 @@ export const Sidebar = memo(function Sidebar() {
       {/* Mobile Overlay */}
       {!collapsed && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={toggleSidebar}
           onKeyDown={(e) => {
             if (e.key === 'Escape') toggleSidebar()
@@ -135,19 +139,19 @@ export const Sidebar = memo(function Sidebar() {
       {/* Sidebar */}
       <div className={cn(
         "bg-background border-r border-border flex flex-col transition-all duration-300 z-50",
-        "fixed lg:relative inset-y-0 left-0",
-        collapsed ? "w-16 -translate-x-full lg:translate-x-0" : "w-64 translate-x-0"
+        "fixed lg:relative inset-y-0 left-0 shadow-2xl lg:shadow-none h-dvh",
+        collapsed ? "w-16 -translate-x-full lg:translate-x-0" : "w-72 sm:w-80 translate-x-0"
       )}>
         {/* Logo */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center justify-between p-4 border-b border-border bg-linear-to-r from-primary/5 to-primary/10 shrink-0">
           {!collapsed && (
-            <div className="flex items-center space-x-2">
-              <div className="bg-blue-600 p-2 rounded-lg">
+            <div className="flex items-center space-x-3">
+              <div className="bg-linear-to-br from-blue-600 to-blue-700 p-2.5 rounded-xl shadow-lg">
                 <Settings className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-foreground">4G celulares</h1>
-                <p className="text-xs text-muted-foreground">POS System</p>
+                <p className="text-xs text-muted-foreground">Sistema POS</p>
               </div>
             </div>
           )}
@@ -155,7 +159,7 @@ export const Sidebar = memo(function Sidebar() {
             variant="ghost"
             size="sm"
             onClick={toggleSidebar}
-            className="p-2"
+            className="p-2 hover:bg-primary/10"
             aria-label={collapsed ? 'Expandir sidebar' : 'Contraer sidebar'}
           >
             {collapsed ? (
@@ -167,7 +171,7 @@ export const Sidebar = memo(function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-4">
+        <nav className="flex-1 p-4 space-y-4 overflow-y-auto scroll-smooth">
           {filteredGroups.map(group => (
             <div key={group.label} className="space-y-2">
               {!collapsed && (
@@ -194,7 +198,7 @@ export const Sidebar = memo(function Sidebar() {
                       {isActive && (
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-primary rounded-r" />
                       )}
-                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      <item.icon className="h-5 w-5 shrink-0" />
                       {!collapsed && (
                         <div className="flex items-center gap-2">
                           <span>{item.name}</span>
@@ -213,7 +217,7 @@ export const Sidebar = memo(function Sidebar() {
 
         {/* User info */}
         {!collapsed && (
-          <div className="p-4 border-t border-border">
+          <div className="p-4 border-t border-border shrink-0">
             <div className="flex items-center space-x-3">
               <Avatar className="h-8 w-8 border border-border shadow-sm">
                 <AvatarImage src={user?.profile?.avatar_url || "/avatars/01.svg"} alt={user?.profile?.name || "Usuario"} />

@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
@@ -27,6 +27,8 @@ import { es } from 'date-fns/locale'
 import { WarrantyBadge } from './WarrantyBadge'
 import { printRepairReceipt, RepairPrintPayload } from '@/lib/repair-receipt'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { useWhatsApp } from '@/hooks/useWhatsApp'
+import { toast } from 'sonner'
 
 interface RepairRowProps {
   repair: Repair
@@ -41,6 +43,7 @@ export const RepairRow = memo<RepairRowProps>(
     const StatusIcon = statusConfig[repair.status].icon
     const priority = priorityConfig[repair.priority]
     const { settings } = useSharedSettings()
+    const { notifyRepairStatus, notifyRepairReady, sendPaymentReminder } = useWhatsApp()
     
     // Safely handle date formatting with validation
     const timeAgo = (() => {
@@ -57,6 +60,17 @@ export const RepairRow = memo<RepairRowProps>(
         return 'Fecha no disponible'
       }
     })()
+
+    const handleWhatsAppAction = (action: () => void, actionName: string) => {
+      if (!repair.customer.phone) {
+        toast.error('El cliente no tiene número de teléfono registrado')
+        return
+      }
+      action()
+      toast.success(`${actionName} enviado por WhatsApp`)
+    }
+
+    const pendingAmount = (repair.finalCost || 0) - (repair.paidAmount || 0)
 
     const getPrintPayload = (): RepairPrintPayload => {
       return {
@@ -252,6 +266,62 @@ export const RepairRow = memo<RepairRowProps>(
                 <Printer className="mr-2 h-4 w-4" />
                 Ficha técnica
               </DropdownMenuItem>
+              <DropdownMenuSeparator className="dark:bg-muted/50" />
+              <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
+                WhatsApp
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => handleWhatsAppAction(
+                  () => notifyRepairStatus(
+                    repair.customer.phone,
+                    repair.ticketNumber || repair.id.slice(0, 8),
+                    repair.customer.name,
+                    statusConfig[repair.status].label
+                  ),
+                  'Estado de reparación'
+                )}
+                disabled={!repair.customer.phone}
+                className="dark:hover:bg-muted/50"
+              >
+                <MessageCircle className="mr-2 h-4 w-4 text-[#25D366]" />
+                Enviar Estado Actual
+              </DropdownMenuItem>
+              {repair.status === 'listo' && (
+                <DropdownMenuItem
+                  onClick={() => handleWhatsAppAction(
+                    () => notifyRepairReady(
+                      repair.customer.phone,
+                      repair.ticketNumber || repair.id.slice(0, 8),
+                      repair.customer.name,
+                      `${repair.brand} ${repair.model}`
+                    ),
+                    'Notificación de reparación lista'
+                  )}
+                  disabled={!repair.customer.phone}
+                  className="dark:hover:bg-muted/50"
+                >
+                  <CheckCircle className="mr-2 h-4 w-4 text-green-600" />
+                  Notificar Listo para Retirar
+                </DropdownMenuItem>
+              )}
+              {pendingAmount > 0 && (
+                <DropdownMenuItem
+                  onClick={() => handleWhatsAppAction(
+                    () => sendPaymentReminder(
+                      repair.customer.phone,
+                      repair.customer.name,
+                      pendingAmount,
+                      repair.ticketNumber || repair.id.slice(0, 8)
+                    ),
+                    'Recordatorio de pago'
+                  )}
+                  disabled={!repair.customer.phone}
+                  className="dark:hover:bg-muted/50"
+                >
+                  <Send className="mr-2 h-4 w-4 text-amber-600" />
+                  Recordatorio de Pago
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator className="dark:bg-muted/50" />
               <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">
                 Cambiar estado

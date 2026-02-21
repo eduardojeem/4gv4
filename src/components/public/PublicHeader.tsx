@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Package, Wrench, Menu, X, Phone, MessageCircle, User, Shield, Clock, ChevronDown } from 'lucide-react'
+import { Package, Wrench, Menu, X, Phone, MessageCircle, User, Shield, Clock } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
@@ -77,6 +77,28 @@ export function PublicHeader() {
     return () => document.removeEventListener('mousedown', handler)
   }, [mobileMenuOpen])
 
+  // Close mobile menu with Escape key
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false)
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [mobileMenuOpen])
+
+  // Prevent body scroll while mobile menu is open
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = originalOverflow
+    }
+  }, [mobileMenuOpen])
+
   const userInitials = useMemo(() => {
     if (!user?.profile?.name) return 'U'
     return user.profile.name
@@ -109,7 +131,11 @@ export function PublicHeader() {
     { href: '/perfil', label: 'Perfil', icon: User },
   ]
 
-  const isActive = (href: string) => pathname === href
+  const isActive = (href: string) => {
+    if (href === '/inicio') return pathname === '/inicio' || pathname === '/'
+    if (href === '/perfil') return pathname === '/perfil' || pathname.startsWith('/perfil/')
+    return pathname === href || pathname.startsWith(`${href}/`)
+  }
 
   return (
     <header
@@ -154,7 +180,7 @@ export function PublicHeader() {
       {/* Main header */}
       <div className="container flex h-16 items-center justify-between gap-4">
         {/* Logo */}
-        <Link href="/inicio" className="group flex items-center gap-3 shrink-0">
+        <Link href="/inicio" className="group flex items-center gap-3 shrink-0" aria-label="Ir a inicio">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-transform group-hover:scale-105">
             <Wrench className="h-5 w-5" />
           </div>
@@ -176,6 +202,7 @@ export function PublicHeader() {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={active ? 'page' : undefined}
                 className={`relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
                   active
                     ? 'text-foreground bg-accent'
@@ -293,6 +320,7 @@ export function PublicHeader() {
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label={mobileMenuOpen ? 'Cerrar menu' : 'Abrir menu'}
             aria-expanded={mobileMenuOpen}
+            aria-controls="public-mobile-menu"
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -301,9 +329,10 @@ export function PublicHeader() {
 
       {/* Mobile menu */}
       <div
+        id="public-mobile-menu"
         ref={mobileMenuRef}
-        className={`overflow-hidden border-t border-border/50 bg-background transition-all duration-300 ease-in-out md:hidden ${
-          mobileMenuOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0 border-transparent'
+        className={`overflow-y-auto border-t border-border/50 bg-background transition-all duration-300 ease-in-out md:hidden ${
+          mobileMenuOpen ? 'max-h-[calc(100vh-4rem)] opacity-100' : 'max-h-0 opacity-0 border-transparent'
         }`}
       >
         <nav className="container flex flex-col gap-1 py-4" aria-label="Navegacion movil">
@@ -313,6 +342,7 @@ export function PublicHeader() {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={active ? 'page' : undefined}
                 className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
                   active
                     ? 'bg-accent text-foreground'

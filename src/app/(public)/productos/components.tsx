@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { ProductFilters } from '@/components/public/ProductFilters'
+import { formatPrice } from '@/lib/utils'
 
 export function ProductSearch() {
   const router = useRouter()
@@ -92,7 +93,7 @@ export function ProductSearch() {
 export function ProductSort() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [isPending, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
   
   const sort = searchParams.get('sort') || 'name'
 
@@ -215,7 +216,7 @@ export function MobileFilters({ activeFiltersCount, ...props }: MobileFiltersPro
         <Button
           variant="outline"
           size="sm"
-          className="lg:hidden gap-2 rounded-lg"
+          className="lg:hidden gap-2 rounded-lg border-border/70 bg-background"
         >
           <SlidersHorizontal className="h-4 w-4" />
           Filtros
@@ -229,7 +230,7 @@ export function MobileFilters({ activeFiltersCount, ...props }: MobileFiltersPro
           )}
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-[300px] overflow-y-auto">
+      <SheetContent side="left" className="w-[92vw] max-w-sm overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Filtros</SheetTitle>
           <SheetDescription>Refina tu busqueda</SheetDescription>
@@ -245,10 +246,14 @@ export function MobileFilters({ activeFiltersCount, ...props }: MobileFiltersPro
 export function FilterBadges({ categories }: { categories: any[] }) {
     const router = useRouter()
     const searchParams = useSearchParams()
-    const [isPending, startTransition] = useTransition()
+    const [, startTransition] = useTransition()
   
+    const query = searchParams.get('query')
     const categoryId = searchParams.get('category_id')
     const brand = searchParams.get('brand')
+    const inStock = searchParams.get('in_stock') === 'true'
+    const minPrice = Number(searchParams.get('min_price')) || 0
+    const maxPrice = Number(searchParams.get('max_price')) || 50000000
     
     // We only show simple badges here for common filters to avoid complexity
     // Sync with ProductFilters logic for full cleanup
@@ -275,36 +280,135 @@ export function FilterBadges({ categories }: { categories: any[] }) {
         })
     }
 
-    const hasActiveFilters = categoryId || brand // simplified check for this component
+    const hasActiveFilters =
+      !!query ||
+      !!categoryId ||
+      !!brand ||
+      inStock ||
+      minPrice > 0 ||
+      maxPrice < 50000000
 
     if (!hasActiveFilters) return null
 
     return (
-        <div className="hidden sm:flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+        {query && (
+            <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
+            Busqueda: {query}
+            <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => removeFilter('query')}
+                aria-label="Quitar filtro de busqueda"
+            >
+              <X className="h-3 w-3" />
+            </button>
+            </Badge>
+        )}
         {categoryId && (
             <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
             {categories.find((c) => c.id === categoryId)?.name}
-            <X
-                className="h-3 w-3 cursor-pointer"
+            <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => removeFilter('category_id')}
-            />
+                aria-label="Quitar filtro de categoria"
+            >
+              <X className="h-3 w-3" />
+            </button>
             </Badge>
         )}
         {brand && (
             <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
             {brand}
-            <X
-                className="h-3 w-3 cursor-pointer"
+            <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => removeFilter('brand')}
-            />
+                aria-label="Quitar filtro de marca"
+            >
+              <X className="h-3 w-3" />
+            </button>
+            </Badge>
+        )}
+        {inStock && (
+            <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
+            En stock
+            <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => removeFilter('in_stock')}
+                aria-label="Quitar filtro de stock"
+            >
+              <X className="h-3 w-3" />
+            </button>
+            </Badge>
+        )}
+        {(minPrice > 0 || maxPrice < 50000000) && (
+            <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
+            {formatPrice(minPrice)} - {formatPrice(maxPrice)}
+            <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => {
+                  const params = new URLSearchParams(searchParams.toString())
+                  params.delete('min_price')
+                  params.delete('max_price')
+                  params.set('page', '1')
+                  startTransition(() => {
+                    router.push(`?${params.toString()}`, { scroll: false })
+                  })
+                }}
+                aria-label="Quitar filtro de precio"
+            >
+              <X className="h-3 w-3" />
+            </button>
             </Badge>
         )}
         <button
             onClick={clearAll}
+            type="button"
             className="text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
         >
             Limpiar
         </button>
         </div>
     )
+}
+
+export function ClearAllFiltersButton() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [, startTransition] = useTransition()
+
+  const hasFilters =
+    !!searchParams.get('query') ||
+    !!searchParams.get('category_id') ||
+    !!searchParams.get('brand') ||
+    searchParams.get('in_stock') === 'true' ||
+    Number(searchParams.get('min_price')) > 0 ||
+    (searchParams.get('max_price') !== null && Number(searchParams.get('max_price')) < 50000000)
+
+  if (!hasFilters) return null
+
+  const onClear = () => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('query')
+    params.delete('category_id')
+    params.delete('brand')
+    params.delete('min_price')
+    params.delete('max_price')
+    params.delete('in_stock')
+    params.set('page', '1')
+
+    startTransition(() => {
+      router.push(`?${params.toString()}`, { scroll: false })
+    })
+  }
+
+  return (
+    <Button variant="outline" onClick={onClear} className="rounded-lg">
+      Limpiar filtros y busqueda
+    </Button>
+  )
 }

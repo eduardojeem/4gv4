@@ -5,8 +5,15 @@ import { getPublicProducts, getPublicCategories } from '@/lib/api/products-serve
 import { ProductCard } from '@/components/public/ProductCard'
 import { ProductFilters } from '@/components/public/ProductFilters'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
-import { ProductSearch, ProductSort, ProductPagination, MobileFilters, FilterBadges } from './components'
-import { Package, Search } from 'lucide-react'
+import {
+  ProductSearch,
+  ProductSort,
+  ProductPagination,
+  MobileFilters,
+  FilterBadges,
+  ClearAllFiltersButton,
+} from './components'
+import { Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 
 export const metadata: Metadata = {
@@ -100,25 +107,27 @@ export default async function ProductsPage(props: {
 
       {/* Main content */}
       <div className="container py-6 lg:py-8">
-        <div className="flex gap-8">
+        <div className="flex gap-6 xl:gap-8">
           {/* Sidebar filters - Desktop */}
-          <aside className="hidden lg:block w-56 shrink-0">
+          <aside className="hidden lg:block w-64 xl:w-72 shrink-0">
             <div className="sticky top-24">
-              <Suspense fallback={<div className="h-96 w-full bg-muted animate-pulse rounded-lg" />}>
-                <ProductFilters
-                  priceRange={priceRange}
-                  categories={categories}
-                  brands={brands}
-                />
-              </Suspense>
+              <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
+                <Suspense fallback={<div className="h-96 w-full bg-muted animate-pulse rounded-lg" />}>
+                  <ProductFilters
+                    priceRange={priceRange}
+                    categories={categories}
+                    brands={brands}
+                  />
+                </Suspense>
+              </div>
             </div>
           </aside>
 
           {/* Products area */}
           <div className="flex-1 min-w-0">
             {/* Toolbar row */}
-            <div className="flex items-center justify-between gap-3 mb-5">
-              <div className="flex items-center gap-2">
+            <div className="sticky top-16 z-30 mb-5 border-y border-border/60 bg-background/90 px-3 py-3 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/75 sm:rounded-2xl sm:border sm:bg-card/70 sm:p-4 lg:static lg:bg-card/60">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                 {/* Mobile filter trigger */}
                 <MobileFilters
                   activeFiltersCount={activeFiltersCount}
@@ -126,16 +135,15 @@ export default async function ProductsPage(props: {
                   categories={categories}
                   brands={brands}
                 />
-
-                {/* Active filters chips */}
-                <Suspense>
-                    <FilterBadges categories={categories} />
+                <Suspense fallback={<div className="h-9 w-[150px] bg-muted animate-pulse rounded-lg" />}>
+                  <ProductSort />
                 </Suspense>
               </div>
-
-              <Suspense fallback={<div className="h-9 w-[150px] bg-muted animate-pulse rounded-lg" />}>
-                <ProductSort />
-              </Suspense>
+              <div className="mt-3">
+                <Suspense>
+                  <FilterBadges categories={categories} />
+                </Suspense>
+              </div>
             </div>
 
             {/* Product grid */}
@@ -153,22 +161,15 @@ export default async function ProductsPage(props: {
                     : 'No hay productos que coincidan con los filtros seleccionados.'}
                 </p>
                 {(query || activeFiltersCount > 0) && (
-                   <Suspense>
-                        {/* We reuse FilterBadges clear all logic or add a dedicated clear button here 
-                            but for now let's just show a simple clear filters link using Next Link or just rely on the sidebar/top bar
-                            Actually let's just put a clear button.
-                        */}
-                       <div className="mt-4">
-                           {/* Simplified clear button logic handled by FilterBadges mostly, 
-                               but here we might want a direct "Start Over" action. 
-                               For now, the user can use the top bar chips.
-                           */}
-                       </div>
-                   </Suspense>
+                  <div className="mt-5">
+                    <Suspense>
+                      <ClearAllFiltersButton />
+                    </Suspense>
+                  </div>
                 )}
               </div>
             ) : (
-              <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
                 {products.map((product, index) => (
                   <ProductCard
                     key={product.id}

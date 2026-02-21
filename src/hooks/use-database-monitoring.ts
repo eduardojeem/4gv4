@@ -15,6 +15,7 @@ interface UseDatabaseMonitoringReturn {
     activeConnections: number
     connectionUsage: number
   } | null
+  performMaintenance: (task: 'reset_stats' | 'clear_logs') => Promise<{ success: boolean; message: string }>
 }
 
 export function useDatabaseMonitoring(autoRefresh = true): UseDatabaseMonitoringReturn {
@@ -54,6 +55,19 @@ export function useDatabaseMonitoring(autoRefresh = true): UseDatabaseMonitoring
     await loadMetrics()
   }, [loadMetrics])
 
+  const performMaintenance = useCallback(async (task: 'reset_stats' | 'clear_logs') => {
+    setRefreshing(true)
+    try {
+      const result = await databaseMonitoringService.performMaintenanceTask(task)
+      if (result.success) {
+        await loadMetrics()
+      }
+      return result
+    } finally {
+      setRefreshing(false)
+    }
+  }, [loadMetrics])
+
   useEffect(() => {
     loadMetrics()
     
@@ -70,6 +84,7 @@ export function useDatabaseMonitoring(autoRefresh = true): UseDatabaseMonitoring
     error,
     refreshing,
     refresh,
-    quickMetrics
+    quickMetrics,
+    performMaintenance
   }
 }

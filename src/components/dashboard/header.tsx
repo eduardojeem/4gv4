@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Bell, Search, LogOut, User, Settings, Menu, AlertCircle } from 'lucide-react'
+import { Bell, Search, LogOut, User, Settings, Menu, AlertCircle, Shield } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
@@ -140,7 +140,7 @@ export const Header = memo(function Header() {
   }, [user])
 
   return (
-    <header className="border-b border-border px-6 py-3 sticky top-0 z-30 transition-all duration-200 backdrop-blur-sm bg-background/95 supports-[backdrop-filter]:bg-background/60">
+    <header className="border-b border-border px-6 py-3 sticky top-0 z-30 transition-all duration-200 backdrop-blur-sm bg-background/95 supports-backdrop-filter:bg-background/60">
       <div className="flex items-center justify-between gap-4">
         {/* Mobile hamburger + Breadcrumb */}
         <div className="flex items-center gap-3 min-w-0">
@@ -267,6 +267,22 @@ export const Header = memo(function Header() {
                   </div>
                 </Link>
               </DropdownMenuItem>
+              {user?.role === 'admin' && (
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/admin"
+                    className="cursor-pointer py-2.5 px-3 focus:bg-accent focus:text-accent-foreground rounded-md transition-colors mt-1 flex items-center w-full"
+                  >
+                    <div className="flex items-center justify-center h-8 w-8 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 mr-3">
+                      <Shield className="h-4 w-4" />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium">Panel Admin</span>
+                      <span className="text-xs text-muted-foreground">Administración del sistema</span>
+                    </div>
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator className="my-2" />
               <DropdownMenuItem
                 onClick={() => setLogoutOpen(true)}
@@ -297,7 +313,7 @@ export const Header = memo(function Header() {
               <div className="absolute inset-0 bg-red-500/10 rounded-full animate-[ping_2s_ease-out_infinite]" />
 
               {/* Background layers */}
-              <div className="absolute inset-0 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 rounded-full transition-transform duration-500 group-hover:scale-105" />
+              <div className="absolute inset-0 bg-linear-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 rounded-full transition-transform duration-500 group-hover:scale-105" />
 
               {/* Icon container */}
               <div className="absolute inset-2 bg-white dark:bg-zinc-900 rounded-full flex items-center justify-center border-4 border-red-50 dark:border-red-900/30 shadow-inner">

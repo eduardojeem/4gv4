@@ -30,6 +30,7 @@ export interface ProductFormData {
   description?: string | null
   category_id?: string | null
   brand?: string | null
+  brand_id?: string | null
   supplier_id?: string | null
   purchase_price: number
   sale_price: number

@@ -9,6 +9,7 @@ import type { Database } from '@/lib/supabase/types'
 export type DbProduct = Database['public']['Tables']['products']['Row']
 export type DbCategory = Database['public']['Tables']['categories']['Row']
 export type DbSupplier = Database['public']['Tables']['suppliers']['Row']
+export type DbBrand = Database['public']['Tables']['brands']['Row']
 
 // Json type compatibility
 type Json = Database['public']['Tables']['products']['Row']['dimensions']
@@ -53,6 +54,7 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
 // Re-export for compatibility
 export type Category = DbCategory
 export type Supplier = DbSupplier
+export type Brand = DbBrand
 
 // Product Alert type (moved from products.ts)
 export interface ProductAlert {
@@ -102,6 +104,7 @@ export interface ProductMovement {
 export type ProductWithRelations = Product & {
   category: DbCategory
   supplier: DbSupplier
+  brand_data: DbBrand
 }
 
 // For forms and creation
@@ -124,4 +127,5 @@ export type ProductDisplay = Product & {
 export type LegacyProduct = Product
 export type LegacyCategory = Category
 export type LegacySupplier = Supplier
+export type LegacyBrand = Brand
 export type LegacyProductAlert = ProductAlert

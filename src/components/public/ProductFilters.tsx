@@ -111,6 +111,11 @@ export function ProductFilters({
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
           Filtros
+          {activeFiltersCount > 0 && (
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">
+              {activeFiltersCount}
+            </span>
+          )}
           {isPending && <Loader2 className="h-3 w-3 animate-spin" />}
         </h3>
         {activeFiltersCount > 0 && (
@@ -134,10 +139,14 @@ export function ProductFilters({
               className="gap-1 text-xs font-normal rounded-full"
             >
               {categories.find((c) => c.id === categoryId)?.name || 'Categoria'}
-              <X
-                className="h-3 w-3 cursor-pointer"
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => updateFilters({ category_id: null })}
-              />
+                aria-label="Quitar filtro de categoria"
+              >
+                <X className="h-3 w-3" />
+              </button>
             </Badge>
           )}
           {brand && (
@@ -146,10 +155,14 @@ export function ProductFilters({
               className="gap-1 text-xs font-normal rounded-full"
             >
               {brand}
-              <X
-                className="h-3 w-3 cursor-pointer"
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => updateFilters({ brand: null })}
-              />
+                aria-label="Quitar filtro de marca"
+              >
+                <X className="h-3 w-3" />
+              </button>
             </Badge>
           )}
           {inStock && (
@@ -158,10 +171,14 @@ export function ProductFilters({
               className="gap-1 text-xs font-normal rounded-full"
             >
               En stock
-              <X
-                className="h-3 w-3 cursor-pointer"
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => updateFilters({ in_stock: false })}
-              />
+                aria-label="Quitar filtro de stock"
+              >
+                <X className="h-3 w-3" />
+              </button>
             </Badge>
           )}
           {(minPrice > 0 || maxPrice < 50000000) && (
@@ -170,10 +187,14 @@ export function ProductFilters({
               className="gap-1 text-xs font-normal rounded-full"
             >
               {formatPrice(minPrice)} - {formatPrice(maxPrice)}
-              <X
-                className="h-3 w-3 cursor-pointer"
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => updateFilters({ min_price: null, max_price: null })}
-              />
+                aria-label="Quitar filtro de precio"
+              >
+                <X className="h-3 w-3" />
+              </button>
             </Badge>
           )}
         </div>
@@ -182,7 +203,7 @@ export function ProductFilters({
       <Accordion
         type="multiple"
         defaultValue={['stock', 'category', 'price', 'brand']}
-        className="w-full"
+        className="w-full rounded-xl border border-border/60 bg-background/70 px-3"
       >
         {/* Disponibilidad */}
         <AccordionItem value="stock" className="border-b border-border/50">

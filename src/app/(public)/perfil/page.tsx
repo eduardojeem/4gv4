@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/contexts/auth-context'
+import { WhatsAppButton } from '@/components/ui/whatsapp-button'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,7 +14,7 @@ import { toast } from 'sonner'
 import {
   Mail, Phone, Loader2, Save, AlertCircle, Shield, Clock,
   MapPin, LogOut, Wrench, Award, Calendar, UserRound,
-  History, Smartphone, ChevronRight, TrendingUp
+  History, Smartphone, ChevronRight, TrendingUp, LayoutDashboard, Settings, MessageCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import { logAndTranslateError } from '@/lib/error-translator'
@@ -213,6 +214,17 @@ export default function CustomerProfilePage() {
                   <History className="mr-1.5 h-4 w-4" /> Historial
                 </Link>
               </Button>
+              {profile.phone && (
+                <WhatsAppButton
+                  phone={profile.phone}
+                  message="Hola! Quisiera actualizar mi información de perfil."
+                  variant="outline"
+                  size="sm"
+                  className="rounded-lg"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </WhatsAppButton>
+              )}
               <Button variant="ghost" size="icon" onClick={() => setShowLogoutConfirm(true)}
                 className="text-muted-foreground hover:text-destructive rounded-lg" aria-label="Cerrar sesion">
                 <LogOut className="h-4 w-4" />
@@ -329,6 +341,45 @@ export default function CustomerProfilePage() {
                 </Link>
               </Button>
             </div>
+
+            {/* Admin Access - Only for admin, vendedor, and tecnico roles */}
+            {(profile.role === 'admin' || profile.role === 'vendedor' || profile.role === 'tecnico') && (
+              <Card className="border-2 border-primary/20 shadow-sm bg-linear-to-br from-primary/5 to-primary/10">
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg">
+                      <Shield className="h-6 w-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base font-semibold mb-1">Panel de Administración</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        {profile.role === 'admin' 
+                          ? 'Accede al panel completo de administración del sistema'
+                          : profile.role === 'vendedor'
+                          ? 'Accede al dashboard de ventas y gestión de productos'
+                          : 'Accede al panel técnico y gestión de reparaciones'}
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Button asChild className="rounded-lg shadow-md">
+                          <Link href="/dashboard">
+                            <LayoutDashboard className="mr-2 h-4 w-4" />
+                            Ir al Dashboard
+                          </Link>
+                        </Button>
+                        {profile.role === 'admin' && (
+                          <Button asChild variant="outline" className="rounded-lg">
+                            <Link href="/admin">
+                              <Settings className="mr-2 h-4 w-4" />
+                              Panel Admin
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Sidebar: Recent Activity */}

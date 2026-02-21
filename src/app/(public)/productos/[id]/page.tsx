@@ -149,7 +149,7 @@ export default async function ProductDetailPage(props: Props) {
           {/* Back link */}
           <Link
             href="/productos"
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors mb-8"
+            className="mb-8 hidden items-center text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
           >
             <ArrowLeft className="mr-1.5 h-4 w-4" />
             Volver al catalogo
@@ -217,9 +217,13 @@ export default async function ProductDetailPage(props: Props) {
                   )}
                 </div>
                 <p className="mt-1.5 text-xs text-muted-foreground">
-                  Precio por {product.unit_measure} &middot; SKU:{' '}
-                  <span className="font-mono">{product.sku}</span>
+                  Precio por {product.unit_measure}
                 </p>
+                {isInStock && (
+                  <p className="mt-1 text-xs text-primary">
+                    Stock disponible: {product.stock_quantity} {product.stock_quantity === 1 ? 'unidad' : 'unidades'}
+                  </p>
+                )}
               </div>
 
               {/* Description */}
@@ -246,14 +250,6 @@ export default async function ProductDetailPage(props: Props) {
                       {product.sku}
                     </dd>
                   </div>
-                  {product.barcode && (
-                    <div>
-                      <dt className="text-muted-foreground">Codigo de barras</dt>
-                      <dd className="font-mono font-medium text-foreground">
-                        {product.barcode}
-                      </dd>
-                    </div>
-                  )}
                   <div>
                     <dt className="text-muted-foreground">Unidad</dt>
                     <dd className="font-medium text-foreground">
@@ -290,7 +286,7 @@ export default async function ProductDetailPage(props: Props) {
               </div>
 
               {/* Contact CTA - Client Component */}
-              <ProductActions product={product} />
+              <ProductActions product={product} isInStock={isInStock} />
             </div>
           </div>
 
