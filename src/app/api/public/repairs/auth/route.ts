@@ -185,13 +185,50 @@ export async function POST(request: NextRequest) {
     }
     
     // Verify contact matches (email or phone)
-    const customer = repair.customer as any
-    const contactMatch = 
-      customer.email?.toLowerCase() === contact.toLowerCase() ||
-      customer.phone?.replace(/\s|-/g, '') === contact.replace(/\s|-/g, '')
+    const customer = Array.isArray(repair.customer) ? repair.customer[0] : repair.customer
+    
+    if (!customer) {
+      logger.warn('Public repair auth failed - no customer data', { ticketNumber, clientIp })
+      
+      await logSecurityEvent({
+        type: 'auth_failure',
+        ticketNumber,
+        contact,
+        clientIp,
+        userAgent,
+        reason: 'No customer data'
+      })
+      
+      return NextResponse.json(
+        { success: false, error: 'Datos de cliente no encontrados' },
+        { status: 401 }
+      )
+    }
+    
+    // Normalizar email y teléfono (manejar strings vacíos)
+    const customerEmail = customer.email?.trim() || null
+    const customerPhone = customer.phone?.trim() || null
+    const inputContact = contact.trim()
+    
+    // Verificar si el contacto coincide con email o teléfono
+    const emailMatch = customerEmail && 
+      customerEmail.toLowerCase() === inputContact.toLowerCase()
+    
+    const phoneMatch = customerPhone && 
+      customerPhone.replace(/\s|-|\(|\)/g, '') === inputContact.replace(/\s|-|\(|\)/g, '')
+    
+    const contactMatch = emailMatch || phoneMatch
     
     if (!contactMatch) {
-      logger.warn('Public repair auth failed - contact mismatch', { ticketNumber, contact, clientIp })
+      logger.warn('Public repair auth failed - contact mismatch', { 
+        ticketNumber, 
+        contact: inputContact, 
+        clientIp,
+        customerEmail: customerEmail || '(vacío)',
+        customerPhone: customerPhone || '(vacío)',
+        hasEmail: !!customerEmail,
+        hasPhone: !!customerPhone
+      })
       
       await logSecurityEvent({
         type: 'auth_failure',
