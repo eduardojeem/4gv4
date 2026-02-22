@@ -1,5 +1,6 @@
 import { config } from '@/lib/config'
 import { formatCurrency } from '@/lib/currency'
+import { generateQRCodeURL, generateRepairTrackingURL, generateRepairHash } from '@/lib/repair-qr'
 
 /**
  * Utilidades de impresión de comprobantes de reparación.
@@ -781,8 +782,11 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
             width="120" 
             height="120" 
             style="display:block;"
-            src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(`TICKET:${ticketNumber}|CLIENTE:${payload.customer.name}`)}&size=120x120&margin=0" 
+            src="${generateQRCodeURL(ticketNumber, payload.customer.name, dateObj, 120)}" 
           />
+          <div style="font-size: 10px; color: #6b7280; margin-top: 4px; text-align: center;">
+            Escanea para rastrear
+          </div>
         </div>
 
         <div class="footer">
@@ -913,15 +917,6 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
             <span class="info-label">Hora:</span>
             <span class="info-value">${time}</span>
           </div>
-          <div class="info-row">
-            <span class="info-label">Prioridad:</span>
-            <span class="info-value">${payload.priority === 'high' ? '🔴 Alta' : payload.priority === 'medium' ? '🟡 Media' : '🟢 Normal'}</span>
-          </div>
-          ${payload.urgency === 'urgent' ? `
-          <div class="info-row">
-            <span class="info-label">Urgencia:</span>
-            <span class="info-value">⚡ Urgente</span>
-          </div>` : ''}
         </div>
       </div>
 
@@ -951,8 +946,31 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
         La empresa no se responsabiliza por pérdida de datos; se recomienda realizar copias de seguridad.
       </div>
 
-      <div class="qr-placeholder">
-        <div style="font-size: 12px; font-weight: bold; color: #111827;">Firma Cliente</div>
+      <div style="display: flex; gap: 16px; margin-top: 16px; align-items: center; justify-content: space-between;">
+        <div style="flex: 1; text-align: center;">
+          <div style="width: 100%; height: 60px; border: 1px solid #111827; border-radius: 6px; display: flex; align-items: center; justify-content: center;">
+            <div style="font-size: 11px; font-weight: 600; color: #6b7280;">Firma Cliente</div>
+          </div>
+        </div>
+        <div style="flex: 0 0 auto; text-align: center;">
+          <img 
+            alt="QR Verificación" 
+            width="100" 
+            height="100" 
+            style="display:block; border: 2px solid #111827; border-radius: 6px; padding: 4px; background: white;"
+            src="${generateQRCodeURL(ticketNumber, payload.customer.name, dateObj, 100)}" 
+          />
+          <div style="font-size: 9px; color: #6b7280; margin-top: 4px; font-weight: 600;">
+            Escanea para rastrear
+          </div>
+        </div>
+      </div>
+      
+      <div style="margin-top: 12px; padding: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; text-align: center;">
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">
+          <strong>Hash de verificación:</strong><br/>
+          <code style="font-size: 9px; color: #111827; letter-spacing: 0.5px;">${generateRepairHash(ticketNumber, payload.customer.name, dateObj)}</code>
+        </div>
       </div>
 
       <div class="footer">

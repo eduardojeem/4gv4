@@ -78,16 +78,23 @@ export function useBrands() {
   }, [supabase, filters])
 
   const createBrand = useCallback(async (payload: BrandInsert) => {
+    console.log('Creating brand:', payload)
     const { valid, errors } = validateBrandInput({ name: payload.name, description: payload.description })
-    if (!valid) return { success: false as const, error: 'Validación fallida', details: errors }
+    
+    if (!valid) {
+      const errorMsg = Object.values(errors).join('. ')
+      return { success: false as const, error: errorMsg || 'Validación fallida' }
+    }
     
     try {
       const normalizedName = payload.name.trim()
-      const { data: existing } = await supabase
+      const { data: existing, error: checkError } = await supabase
         .from('brands')
         .select('id,name')
         .ilike('name', normalizedName)
         .maybeSingle()
+      
+      if (checkError) throw checkError
       
       if (existing) {
         return { success: false as const, error: 'Ya existe una marca con este nombre' }
@@ -110,29 +117,55 @@ export function useBrands() {
   }, [supabase, fetchBrands])
 
   const updateBrand = useCallback(async (id: string, updates: BrandUpdate) => {
+    console.log('Updating brand:', id, updates)
     try {
       if (updates.name) {
+        const { valid, errors } = validateBrandInput({ name: updates.name })
+        if (!valid) {
+            const errorMsg = Object.values(errors).join('. ')
+            return { success: false as const, error: errorMsg || 'Nombre inválido' }
+        }
+
         const normalizedName = updates.name.trim()
-        const { data: existing } = await supabase
+        const { data: existing, error: checkError } = await supabase
           .from('brands')
           .select('id,name')
           .ilike('name', normalizedName)
+          .neq('id', id)
           .maybeSingle()
         
-        if (existing && existing.id !== id) {
+        if (checkError) {
+          console.error('Error checking duplicate name:', checkError)
+          throw checkError
+        }
+        
+        if (existing) {
           return { success: false as const, error: 'Ya existe otra marca con este nombre' }
         }
         updates.name = normalizedName
       }
 
+      // Ensure updated_at is set
+      const updateData = {
+        ...updates,
+        updated_at: new Date().toISOString()
+      }
+
+      console.log('Sending update to Supabase:', updateData)
+
       const { data, error } = await supabase
         .from('brands')
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update(updateData)
         .eq('id', id)
         .select('*')
         .single()
       
-      if (error) throw error
+      if (error) {
+        console.error('Supabase update error:', error)
+        throw error
+      }
+      
+      console.log('Update successful:', data)
       await fetchBrands()
       return { success: true as const, data }
     } catch (err) {

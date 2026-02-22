@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { Loader2, Search } from 'lucide-react'
+import { Loader2, Search, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner'
 import { RecaptchaProvider } from '@/components/public/RecaptchaProvider'
 import { useRecaptcha } from '@/hooks/use-recaptcha'
+import { cn } from '@/lib/utils'
 
 const searchSchema = z.object({
   ticketNumber: z.string().min(1, 'El número de ticket es requerido'),
@@ -29,7 +30,10 @@ type SearchFormValues = z.infer<typeof searchSchema>
 
 export function RepairSearchForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
+  const [qrVerified, setQrVerified] = useState<boolean | null>(null)
+  const [verifying, setVerifying] = useState(false)
   const { executeRecaptcha } = useRecaptcha()
 
   const form = useForm<SearchFormValues>({
@@ -39,6 +43,43 @@ export function RepairSearchForm() {
       contact: '',
     },
   })
+
+  // Detectar parámetros del QR y verificar automáticamente
+  useEffect(() => {
+    const ticketFromQR = searchParams.get('ticket')
+    const verifyHash = searchParams.get('verify')
+    
+    if (ticketFromQR && verifyHash && !verifying && qrVerified === null) {
+      setVerifying(true)
+      
+      // Pre-llenar el formulario con el ticket
+      form.setValue('ticketNumber', ticketFromQR)
+      
+      // Verificar el hash
+      fetch(`/api/repairs/verify-qr?ticket=${ticketFromQR}&hash=${verifyHash}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.verified) {
+            setQrVerified(true)
+            toast.success('✓ Comprobante verificado correctamente', {
+              description: 'Este es un comprobante auténtico',
+              duration: 5000
+            })
+          } else {
+            setQrVerified(false)
+            toast.error('⚠ Verificación fallida', {
+              description: 'El código QR no pudo ser verificado',
+              duration: 5000
+            })
+          }
+        })
+        .catch(() => {
+          setQrVerified(false)
+          toast.error('Error al verificar el comprobante')
+        })
+        .finally(() => setVerifying(false))
+    }
+  }, [searchParams, form, verifying, qrVerified])
 
   async function onSubmit(data: SearchFormValues) {
     setIsLoading(true)
@@ -77,50 +118,84 @@ export function RepairSearchForm() {
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="ticketNumber"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Número de Ticket</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ej: 10234" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="contact"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email o Teléfono</FormLabel>
-                <FormControl>
-                  <Input placeholder="Registrado en la orden" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? (
+    <div className="space-y-4">
+      {/* QR Verification Badge */}
+      {qrVerified !== null && (
+        <div className={cn(
+          'rounded-xl border p-4 flex items-center gap-3',
+          qrVerified 
+            ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-900'
+            : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900'
+        )}>
+          {qrVerified ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Verificando...
+              <ShieldCheck className="h-6 w-6 text-green-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-green-900 dark:text-green-100">Comprobante Verificado</p>
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  Este es un comprobante auténtico. Ingresa tu contacto para ver el estado.
+                </p>
+              </div>
             </>
           ) : (
             <>
-              <Search className="mr-2 h-4 w-4" />
-              Consultar Estado
+              <ShieldAlert className="h-6 w-6 text-red-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-red-900 dark:text-red-100">Verificación Fallida</p>
+                <p className="text-sm text-red-700 dark:text-red-300">
+                  No se pudo verificar la autenticidad de este comprobante
+                </p>
+              </div>
             </>
           )}
-        </Button>
-      </form>
-    </Form>
+        </div>
+      )}
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="ticketNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Número de Ticket</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ej: 10234" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="contact"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email o Teléfono</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Registrado en la orden" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Verificando...
+              </>
+            ) : (
+              <>
+                <Search className="mr-2 h-4 w-4" />
+                Consultar Estado
+              </>
+            )}
+          </Button>
+        </form>
+      </Form>
+    </div>
   )
 }

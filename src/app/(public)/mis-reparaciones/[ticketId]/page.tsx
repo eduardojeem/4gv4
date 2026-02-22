@@ -1,7 +1,7 @@
 'use client'
 
-import { use, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import { use, useMemo, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import {
   ArrowLeft,
@@ -19,6 +19,8 @@ import {
   CircleDot,
   Phone,
   Banknote,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -130,7 +132,40 @@ const TIMELINE_STEPS = [
 /* ------------------------------------------------------------------ */
 export default function RepairDetailPage({ params }: { params: Promise<{ ticketId: string }> }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { ticketId } = use(params)
+  const [qrVerified, setQrVerified] = useState<boolean | null>(null)
+  const [verifying, setVerifying] = useState(false)
+
+  // Verificar hash del QR si viene en la URL
+  useEffect(() => {
+    const verifyHash = searchParams.get('verify')
+    if (verifyHash && !qrVerified && !verifying) {
+      setVerifying(true)
+      fetch(`/api/repairs/verify-qr?ticket=${ticketId}&hash=${verifyHash}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.verified) {
+            setQrVerified(true)
+            toast.success('✓ Comprobante verificado correctamente', {
+              description: 'Este es un comprobante auténtico',
+              duration: 5000
+            })
+          } else {
+            setQrVerified(false)
+            toast.error('⚠ Verificación fallida', {
+              description: 'El código QR no pudo ser verificado',
+              duration: 5000
+            })
+          }
+        })
+        .catch(() => {
+          setQrVerified(false)
+          toast.error('Error al verificar el comprobante')
+        })
+        .finally(() => setVerifying(false))
+    }
+  }, [ticketId, searchParams, qrVerified, verifying])
 
   const { data: repair, error, isLoading } = useSWR<PublicRepair>(
     `/api/public/repairs/${ticketId}`,
@@ -193,6 +228,38 @@ export default function RepairDetailPage({ params }: { params: Promise<{ ticketI
         <ArrowLeft className="h-4 w-4" />
         Volver
       </button>
+
+      {/* QR Verification Badge */}
+      {qrVerified !== null && (
+        <div className={cn(
+          'mb-6 rounded-xl border p-4 flex items-center gap-3',
+          qrVerified 
+            ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-900'
+            : 'bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-900'
+        )}>
+          {qrVerified ? (
+            <>
+              <ShieldCheck className="h-6 w-6 text-green-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-green-900 dark:text-green-100">Comprobante Verificado</p>
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  Este es un comprobante auténtico emitido por {repair?.ticketNumber}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <ShieldAlert className="h-6 w-6 text-red-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-red-900 dark:text-red-100">Verificación Fallida</p>
+                <p className="text-sm text-red-700 dark:text-red-300">
+                  No se pudo verificar la autenticidad de este comprobante
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ---- Status banner ---- */}
       <div className={cn('rounded-2xl border p-6 md:p-8', cfg.bgCard)}>

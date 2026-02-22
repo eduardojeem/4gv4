@@ -126,7 +126,18 @@ export function BrandModal({
     setIsSubmitting(true)
 
     try {
-      const result = await onSave(formData)
+      // Clean up data before sending - ensure proper null values
+      const dataToSend: BrandInsert = {
+        name: formData.name.trim(),
+        description: formData.description?.trim() || null,
+        website: formData.website?.trim() || null,
+        country: formData.country || null,
+        founded_year: formData.founded_year || null,
+        is_active: formData.is_active ?? true
+      }
+
+      console.log('Submitting brand data:', dataToSend)
+      const result = await onSave(dataToSend)
       
       if (result.success) {
         toast.success(
@@ -137,10 +148,11 @@ export function BrandModal({
         onClose()
       } else {
         toast.error(result.error || 'Error al guardar la marca')
+        console.error('Error saving brand:', result)
       }
     } catch (error) {
       toast.error('Error al guardar la marca')
-      console.error(error)
+      console.error('Exception saving brand:', error)
     } finally {
       setIsSubmitting(false)
     }

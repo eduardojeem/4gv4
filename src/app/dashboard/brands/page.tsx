@@ -191,7 +191,7 @@ export default function BrandsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem]">
+                  <div className="text-sm text-muted-foreground line-clamp-2 min-h-10">
                     {brand.description || 'Sin descripción'}
                   </div>
                   <div className="mt-4 flex items-center justify-between">
