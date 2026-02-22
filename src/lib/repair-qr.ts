@@ -70,6 +70,22 @@ export function verifyRepairHash(
 }
 
 /**
+ * Obtiene la URL base de la aplicación
+ * Prioriza: window.location.origin > NEXT_PUBLIC_APP_URL > localhost
+ */
+function getBaseURL(): string {
+  // En el cliente, usar window.location.origin
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+  
+  // En el servidor, usar variable de entorno
+  return process.env.NEXT_PUBLIC_APP_URL || 
+         process.env.NEXT_PUBLIC_BASE_URL || 
+         'http://localhost:3000'
+}
+
+/**
  * Genera la URL completa para consultar el estado de una reparación
  * Redirige a la página de búsqueda con el ticket pre-cargado
  */
@@ -78,7 +94,7 @@ export function generateRepairTrackingURL(
   hash: string,
   baseUrl?: string
 ): string {
-  const base = baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const base = baseUrl || getBaseURL()
   // Redirige a /mis-reparaciones con el ticket como parámetro de búsqueda
   return `${base}/mis-reparaciones?ticket=${ticketNumber}&verify=${hash}`
 }

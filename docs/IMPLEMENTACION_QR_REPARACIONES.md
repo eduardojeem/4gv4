@@ -87,10 +87,15 @@ Agregar a `.env.local`:
 REPAIR_QR_SECRET=tu-secret-key-super-seguro-aqui
 
 # URL base de la aplicación (para QR)
+# En desarrollo, se usa automáticamente window.location.origin
+# En producción, configurar con tu dominio real
 NEXT_PUBLIC_APP_URL=https://tu-dominio.com
 ```
 
-⚠️ **IMPORTANTE**: Cambiar `REPAIR_QR_SECRET` en producción por un valor aleatorio y seguro.
+⚠️ **IMPORTANTE**: 
+- En desarrollo, el sistema usa automáticamente `window.location.origin`
+- En producción, configurar `NEXT_PUBLIC_APP_URL` con tu dominio real
+- Cambiar `REPAIR_QR_SECRET` por un valor aleatorio y seguro
 
 ### Generar Secret Seguro
 
