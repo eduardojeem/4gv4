@@ -30,7 +30,8 @@ export function CompanyInfoForm() {
         logoUrl: '',
         brandColor: 'blue',
         headerStyle: 'glass',
-        showTopBar: true
+        showTopBar: true,
+        headerColor: ''
       })
     }
   }, [settings?.company_info])
@@ -86,7 +87,18 @@ export function CompanyInfoForm() {
       }
     }
 
-    const result = await updateSetting('company_info', formData)
+    // Ensure formData has all required fields with proper types
+    const sanitizedData = {
+      ...formData,
+      hours: formData.hours || { weekdays: '', saturday: '', sunday: '' },
+      logoUrl: formData.logoUrl || '',
+      brandColor: formData.brandColor || 'blue',
+      headerStyle: formData.headerStyle || 'glass',
+      headerColor: formData.headerColor || '',
+      showTopBar: formData.showTopBar !== undefined ? formData.showTopBar : true
+    }
+
+    const result = await updateSetting('company_info', sanitizedData)
     if (result.success) {
       toast.success('Información de empresa actualizada', {
         description: 'Los cambios se reflejarán en el portal público',
@@ -115,7 +127,7 @@ export function CompanyInfoForm() {
       setFormData({
         ...formData,
         [field]: value
-      })
+      } as CompanyInfo)
     }
   }
 
@@ -306,7 +318,7 @@ export function CompanyInfoForm() {
                       checked={formData.showTopBar !== false}
                       onCheckedChange={(checked) => {
                         setHasChanges(true)
-                        setFormData({ ...formData, showTopBar: checked })
+                        setFormData({ ...formData, showTopBar: checked } as CompanyInfo)
                       }}
                     />
                     <span className="text-sm text-muted-foreground">

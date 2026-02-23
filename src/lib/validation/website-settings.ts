@@ -14,28 +14,32 @@ export const CompanyInfoSchema = z.object({
   phone: z.string()
     .min(9, 'Teléfono debe tener al menos 9 dígitos')
     .max(20, 'Teléfono no puede exceder 20 caracteres')
-    .regex(/^[\d\s\+\-\(\)]+$/, 'Teléfono contiene caracteres inválidos'),
+    .regex(/^[\d\s\+\-\(\)]+$/, 'Teléfono contiene caracteres inválidos')
+    .optional(),
   email: z.string()
     .email('Email inválido')
-    .max(100, 'Email no puede exceder 100 caracteres'),
+    .max(100, 'Email no puede exceder 100 caracteres')
+    .optional(),
   address: z.string()
     .min(10, 'Dirección debe tener al menos 10 caracteres')
-    .max(200, 'Dirección no puede exceder 200 caracteres'),
+    .max(200, 'Dirección no puede exceder 200 caracteres')
+    .optional(),
   hours: z.object({
     weekdays: z.string().max(50, 'Horario no puede exceder 50 caracteres'),
     saturday: z.string().max(50, 'Horario no puede exceder 50 caracteres'),
     sunday: z.string().max(50, 'Horario no puede exceder 50 caracteres'),
-  }),
+  }).optional(),
   logoUrl: z.string()
     .url('URL de logo inválida')
     .max(300, 'URL muy larga')
-    .optional(),
+    .optional()
+    .or(z.literal('')),
   brandColor: z.enum(['blue','green','purple','orange','red','indigo','teal','rose','amber','emerald','cyan','sky'])
     .optional(),
   headerStyle: z.enum(['glass', 'solid', 'accent', 'dark']).optional(),
   headerColor: z.string().max(50).optional(),
   showTopBar: z.boolean().optional()
-})
+}).passthrough()
 
 // Esquema para contenido del hero
 export const HeroContentSchema = z.object({

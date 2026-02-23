@@ -6,6 +6,7 @@ import { motion, AnimatePresence  } from '../../../../components/ui/motion'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import { getPublicUrl } from '@/lib/supabase-storage'
+import { logger } from '@/lib/logger'
 import type { Database } from '@/lib/supabase/types'
 type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { ProductModal } from '@/components/dashboard/product-modal'
@@ -26,6 +27,8 @@ import {
   Upload,
   Download,
   Edit,
+  Copy,
+  ExternalLink,
   ImageIcon,
   Plus,
   AlertTriangle
@@ -78,6 +81,7 @@ export default function ProductDetailPageModern() {
     }
   }
   const productImageUrl = resolveImageUrl((product?.images && product.images[0]) || undefined)
+  const normalizedBarcode = (product?.barcode || '').trim()
 
   const formatCurrency = (amount: number) => {
     const formatted = new Intl.NumberFormat('es-PY', { minimumFractionDigits: 0 }).format(amount)
@@ -206,10 +210,14 @@ export default function ProductDetailPageModern() {
     if (!product) return
 
     try {
-      await deleteProduct(product.id)
+      const result = await deleteProduct(product.id)
+      if (!result.success) {
+        throw new Error(result.error || 'No se pudo eliminar el producto.')
+      }
       toast.success('Producto eliminado exitosamente')
       router.push('/dashboard/products')
   } catch (e) {
+    logger.error('Error deleting product from modern detail page', { error: e, productId: product.id })
     toast.error('No se pudo eliminar el producto')
   }
   }
@@ -218,6 +226,18 @@ export default function ProductDetailPageModern() {
     const url = window.location.href
     navigator.clipboard.writeText(url)
     toast.success('Enlace copiado al portapapeles')
+  }
+
+  const handleCopyBarcode = () => {
+    if (!normalizedBarcode) return
+    navigator.clipboard.writeText(normalizedBarcode)
+    toast.success('Código de barras copiado')
+  }
+
+  const handleSearchBarcode = () => {
+    if (!normalizedBarcode) return
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(normalizedBarcode)}`
+    window.open(searchUrl, '_blank', 'noopener,noreferrer')
   }
 
   const formatDate = (dateString: string) => {
@@ -370,10 +390,28 @@ export default function ProductDetailPageModern() {
                           </Badge>
                         </div>
                         <div className="space-y-2">
-                          <label className="text-sm font-semibold text-gray-600">Código de Barras</label>
-                          <code className="text-sm bg-gray-100 px-3 py-1.5 rounded-md block">
-                            {product.barcode || 'Sin código'}
-                          </code>
+                          <label className="text-sm font-semibold text-gray-600">Codigo de Barras</label>
+                          {normalizedBarcode ? (
+                            <div className="space-y-2">
+                              <code className="text-sm bg-gray-100 px-3 py-1.5 rounded-md block">
+                                {normalizedBarcode}
+                              </code>
+                              <div className="flex gap-2">
+                                <Button variant="outline" size="sm" onClick={handleCopyBarcode}>
+                                  <Copy className="h-3.5 w-3.5 mr-1" />
+                                  Copiar
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={handleSearchBarcode}>
+                                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                                  Buscar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <code className="text-sm bg-gray-100 px-3 py-1.5 rounded-md block">
+                              Sin codigo
+                            </code>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <label className="text-sm font-semibold text-gray-600">Unidad de Medida</label>

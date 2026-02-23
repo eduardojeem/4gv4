@@ -17,6 +17,7 @@ import {
   Copy,
   Check,
   Share2,
+  ExternalLink,
   Clock,
   Image as ImageIcon,
   DollarSign,
@@ -34,6 +35,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/use-toast'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 import type { Database } from '@/lib/supabase/types'
 type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { ProductModal } from '@/components/dashboard/product-modal'
@@ -246,13 +248,17 @@ export default function ProductDetailPage() {
     if (!product) return
     
     try {
-      await deleteProduct(product.id)
+      const result = await deleteProduct(product.id)
+      if (!result.success) {
+        throw new Error(result.error || 'No se pudo eliminar el producto.')
+      }
       toast({
         title: "Producto eliminado",
         description: "El producto ha sido eliminado exitosamente."
       })
       router.push('/dashboard/products')
-    } catch (_) {
+    } catch (error) {
+      logger.error('Error deleting product from detail page', { error, productId: product.id })
       toast({
         title: "Error",
         description: "No se pudo eliminar el producto.",
@@ -278,6 +284,23 @@ export default function ProductDetailPage() {
       title: "Enlace copiado",
       description: "El enlace del producto ha sido copiado al portapapeles."
     })
+  }
+
+  const normalizedBarcode = (product?.barcode || '').trim()
+
+  const handleCopyBarcode = () => {
+    if (!normalizedBarcode) return
+    navigator.clipboard.writeText(normalizedBarcode)
+    toast({
+      title: "Código copiado",
+      description: "El código de barras fue copiado al portapapeles."
+    })
+  }
+
+  const handleSearchBarcode = () => {
+    if (!normalizedBarcode) return
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(normalizedBarcode)}`
+    window.open(searchUrl, '_blank', 'noopener,noreferrer')
   }
 
   const getStockStatusColor = (status: string) => {
@@ -489,8 +512,26 @@ export default function ProductDetailPage() {
                           <p className="text-gray-900 dark:text-gray-100">{product.supplier?.name || 'Sin proveedor'}</p>
                         </div>
                         <div>
-                          <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Código de Barras</label>
-                          <p className="text-gray-900 dark:text-gray-100">{product.barcode || 'Sin código'}</p>
+                          <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Codigo de Barras</label>
+                          {normalizedBarcode ? (
+                            <div className="mt-1 space-y-2">
+                              <code className="block rounded-md bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm font-mono text-gray-900 dark:text-gray-100">
+                                {normalizedBarcode}
+                              </code>
+                              <div className="flex gap-2">
+                                <Button variant="outline" size="sm" onClick={handleCopyBarcode}>
+                                  <Copy className="h-3.5 w-3.5 mr-1" />
+                                  Copiar
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={handleSearchBarcode}>
+                                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                                  Buscar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-gray-900 dark:text-gray-100">Sin codigo</p>
+                          )}
                         </div>
                         <div>
                           <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Unidad de Medida</label>

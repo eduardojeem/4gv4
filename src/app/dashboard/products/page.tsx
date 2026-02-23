@@ -70,6 +70,7 @@ export default function ProductsPage() {
     filters,
     sortConfig,
     selectedProductIds,
+    setSelectedProductIds,
     isFilterPanelOpen,
     setIsFilterPanelOpen,
     handleSearch,
@@ -77,7 +78,6 @@ export default function ProductsPage() {
     handleQuickFilter,
     handleSort,
     handleSelectProduct,
-    handleSelectAll,
     clearFilters,
     clearSelection
   } = useProductsDashboard({
@@ -92,6 +92,17 @@ export default function ProductsPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [productToDelete, setProductToDelete] = useState<Product | null>(null)
+
+  const handleSelectAllOnPage = (selected: boolean) => {
+    const pageIds = paginatedProducts.map(product => product.id)
+
+    if (selected) {
+      setSelectedProductIds(Array.from(new Set([...selectedProductIds, ...pageIds])))
+      return
+    }
+
+    setSelectedProductIds(selectedProductIds.filter(id => !pageIds.includes(id)))
+  }
 
   // Handle product actions
   const handleProductEdit = (product: Product) => {
@@ -360,7 +371,7 @@ export default function ProductsPage() {
                 selectedProductIds={selectedProductIds}
                 sortConfig={sortConfig}
                 onSort={handleSort}
-                onSelectAll={handleSelectAll}
+                onSelectAll={handleSelectAllOnPage}
                 onSelect={handleSelectProduct}
                 onEdit={handleProductEdit}
                 onDelete={handleProductDelete}

@@ -95,20 +95,20 @@ export function ProductModal({
   const { createBrand } = useBrands()
 
   // Local state for lists to support instant updates
-  const [localCategories, setLocalCategories] = useState<Category[]>(categories)
-  const [localBrands, setLocalBrands] = useState<Brand[]>(brands)
-  const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers)
+  const [localCategories, setLocalCategories] = useState<Category[]>(categories ?? [])
+  const [localBrands, setLocalBrands] = useState<Brand[]>(brands ?? [])
+  const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers ?? [])
 
   useEffect(() => {
-    setLocalCategories(categories)
+    setLocalCategories(categories ?? [])
   }, [categories])
 
   useEffect(() => {
-    setLocalBrands(brands)
+    setLocalBrands(brands ?? [])
   }, [brands])
 
   useEffect(() => {
-    setLocalSuppliers(suppliers)
+    setLocalSuppliers(suppliers ?? [])
   }, [suppliers])
 
   const handleSaveCategory = async (categoryData: any) => {

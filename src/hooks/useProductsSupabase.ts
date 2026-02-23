@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import type { Database } from '@/lib/supabase/types'
-import type { Product, ProductAlert, Category, Supplier } from '@/types/product-unified'
+import type { Product, ProductAlert, Category, Supplier, Brand } from '@/types/product-unified'
 
 type ProductMovement = Database['public']['Tables']['product_movements']['Row']
 
@@ -99,6 +99,13 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       if (suppliersError) throw suppliersError
 
+      // Obtener marcas
+      const { data: brands, error: brandsError } = await supabase
+        .from('brands')
+        .select('id')
+
+      if (brandsError) throw brandsError
+
       // Calcular estadísticas
       const productList = products as unknown as Product[]
       const totalProducts = productList?.length || 0
@@ -120,6 +127,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         lowStockCount,
         outOfStockCount,
         categoriesCount: categories?.length || 0,
+        brandsCount: brands?.length || 0,
         suppliersCount: suppliers?.length || 0,
       })
     } catch (err) {
@@ -190,7 +198,6 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         if (activeFilters.stockStatus === 'in_stock') {
           query = query.filter('stock_quantity', 'gt', 0)
         } else if (activeFilters.stockStatus === 'low_stock') {
-          query = query.filter('stock_quantity', 'lte', 5)
           query = query.filter('stock_quantity', 'gt', 0)
         } else if (activeFilters.stockStatus === 'out_of_stock') {
           query = query.filter('stock_quantity', 'eq', 0)
@@ -228,12 +235,19 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       
       console.log(`Fetched ${data?.length || 0} products. Total count: ${count}`)
 
-      if (!data || data.length === 0) {
+      let resultData = (data || []) as unknown as Product[]
+      if (activeFilters.stockStatus === 'low_stock') {
+        resultData = resultData.filter(
+          p => (p.stock_quantity || 0) <= (p.min_stock || 0) && (p.stock_quantity || 0) > 0
+        )
+      }
+
+      if (!resultData || resultData.length === 0) {
         setProducts([])
       } else {
-        setProducts(data as unknown as Product[])
+        setProducts(resultData)
       }
-      setTotalCount(count || 0)
+      setTotalCount(activeFilters.stockStatus === 'low_stock' ? resultData.length : (count || 0))
     } catch (err) {
       console.error('Error fetching products:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -692,7 +706,6 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         if (filters.stockStatus === 'in_stock') {
           query = query.filter('stock_quantity', 'gt', 0)
         } else if (filters.stockStatus === 'low_stock') {
-          query = query.filter('stock_quantity', 'lte', 5)
           query = query.filter('stock_quantity', 'gt', 0)
         } else if (filters.stockStatus === 'out_of_stock') {
           query = query.filter('stock_quantity', 'eq', 0)
@@ -730,7 +743,10 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         supplier?: { name?: string } | null
       }
 
-      const items = (data as unknown as CSVProduct[])
+      const baseItems = (data as unknown as CSVProduct[])
+      const items = filters.stockStatus === 'low_stock'
+        ? baseItems.filter(p => (Number(p.stock_quantity || 0) <= Number(p.min_stock || 0)) && Number(p.stock_quantity || 0) > 0)
+        : baseItems
 
       const csvContent = [
         headers.join(','),
@@ -811,11 +827,11 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     error,
     totalCount,
     pagination: {
-      totalPages: Math.ceil(totalCount / 20),
-      hasNextPage: totalCount > products.length,
-      hasPreviousPage: products.length > 0
+      totalPages: Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit))),
+      hasNextPage: pagination.page < Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit))),
+      hasPreviousPage: pagination.page > 1
     }
-  }), [products, categories, brands, suppliers, alerts, dashboardStats, loading, error, totalCount])
+  }), [products, categories, brands, suppliers, alerts, dashboardStats, loading, error, totalCount, pagination.page, pagination.limit])
 
   return {
     ...memoizedValues,

@@ -42,6 +42,8 @@ export function FilterPanel({
   onClearFilters,
   className
 }: FilterPanelProps) {
+  const ALL_OPTION_VALUE = '__all__'
+
   // Get unique brands from products
   const brands = useMemo(() => getUniqueBrands(products), [products])
 
@@ -99,14 +101,14 @@ export function FilterPanel({
         <div className="space-y-2">
           <Label htmlFor="category-filter">Categoría</Label>
           <Select
-            value={filters.category_id || ''}
-            onValueChange={(value) => handleFilterChange('category_id', value || undefined)}
+            value={filters.category_id || ALL_OPTION_VALUE}
+            onValueChange={(value) => handleFilterChange('category_id', value === ALL_OPTION_VALUE ? undefined : value)}
           >
             <SelectTrigger id="category-filter">
               <SelectValue placeholder="Todas las categorías" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todas las categorías</SelectItem>
+              <SelectItem value={ALL_OPTION_VALUE}>Todas las categorías</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category.id} value={category.id}>
                   {category.name}
@@ -120,14 +122,14 @@ export function FilterPanel({
         <div className="space-y-2">
           <Label htmlFor="supplier-filter">Proveedor</Label>
           <Select
-            value={filters.supplier_id || ''}
-            onValueChange={(value) => handleFilterChange('supplier_id', value || undefined)}
+            value={filters.supplier_id || ALL_OPTION_VALUE}
+            onValueChange={(value) => handleFilterChange('supplier_id', value === ALL_OPTION_VALUE ? undefined : value)}
           >
             <SelectTrigger id="supplier-filter">
               <SelectValue placeholder="Todos los proveedores" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos los proveedores</SelectItem>
+              <SelectItem value={ALL_OPTION_VALUE}>Todos los proveedores</SelectItem>
               {suppliers.map((supplier) => (
                 <SelectItem key={supplier.id} value={supplier.id}>
                   {supplier.name}
@@ -141,14 +143,14 @@ export function FilterPanel({
         <div className="space-y-2">
           <Label htmlFor="brand-filter">Marca</Label>
           <Select
-            value={filters.brand || ''}
-            onValueChange={(value) => handleFilterChange('brand', value || undefined)}
+            value={filters.brand || ALL_OPTION_VALUE}
+            onValueChange={(value) => handleFilterChange('brand', value === ALL_OPTION_VALUE ? undefined : value)}
           >
             <SelectTrigger id="brand-filter">
               <SelectValue placeholder="Todas las marcas" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todas las marcas</SelectItem>
+              <SelectItem value={ALL_OPTION_VALUE}>Todas las marcas</SelectItem>
               {brands.map((brand) => (
                 <SelectItem key={brand} value={brand}>
                   {brand}
@@ -190,14 +192,14 @@ export function FilterPanel({
         <div className="space-y-2">
           <Label htmlFor="stock-status-filter">Estado de Stock</Label>
           <Select
-            value={filters.stock_status || ''}
-            onValueChange={(value) => handleFilterChange('stock_status', value || undefined)}
+            value={filters.stock_status || ALL_OPTION_VALUE}
+            onValueChange={(value) => handleFilterChange('stock_status', value === ALL_OPTION_VALUE ? undefined : value)}
           >
             <SelectTrigger id="stock-status-filter">
               <SelectValue placeholder="Todos los estados" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos los estados</SelectItem>
+              <SelectItem value={ALL_OPTION_VALUE}>Todos los estados</SelectItem>
               <SelectItem value="in_stock">En Stock</SelectItem>
               <SelectItem value="low_stock">Bajo Stock</SelectItem>
               <SelectItem value="out_of_stock">Agotado</SelectItem>
