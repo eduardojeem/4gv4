@@ -148,20 +148,21 @@ export async function POST(request: NextRequest) {
       .select(`
         id,
         ticket_number,
-        device,
-        brand,
-        model,
-        deviceType,
-        issue,
+        device_brand,
+        device_model,
+        device_type,
+        problem_description,
         status,
         priority,
         created_at,
-        estimatedCost,
-        finalCost,
-        warrantyMonths,
-        warrantyType,
-        technician:technicians(id, name),
-        customer:customers(id, name, email, phone)
+        estimated_cost,
+        final_cost,
+        warranty_months,
+        warranty_type,
+        estimated_completion,
+        completed_at,
+        technician_id,
+        customer_id
       `)
       .eq('ticket_number', ticketNumber)
       .single()
