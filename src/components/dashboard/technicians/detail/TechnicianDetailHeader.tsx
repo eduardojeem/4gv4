@@ -123,7 +123,11 @@ export function TechnicianDetailHeader({
 
                         {/* Actions */}
                         <div className="flex md:flex-col gap-2">
-                            <Button variant="outline" className="gap-2">
+                            <Button
+                                variant="outline"
+                                className="gap-2"
+                                onClick={() => router.push(`/admin/users?search=${encodeURIComponent(id)}`)}
+                            >
                                 <Edit className="h-4 w-4" />
                                 Editar
                             </Button>

@@ -7,7 +7,6 @@ import { AppStateProvider } from "@/contexts/app-state-context";
 import { SWRProvider } from "@/providers/swr-provider";
 import { Toaster } from "sonner";
 import "./globals.css";
-import { ServiceWorkerRegistration } from "@/components/util/ServiceWorkerRegistration";
 import { PredictivePrefetchInit } from "@/components/util/PredictivePrefetchInit";
 
 
@@ -44,7 +43,6 @@ export default function RootLayout({
             <AuthProvider>
               <AppStateProvider>
                 <SWRProvider>
-                  <ServiceWorkerRegistration />
                   <PredictivePrefetchInit />
                   <main id="main-content" tabIndex={-1}>
                     {children}

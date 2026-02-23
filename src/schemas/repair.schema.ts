@@ -10,6 +10,11 @@
 
 import { z } from 'zod'
 
+const MAX_REPAIR_COST = 1_000_000_000
+const MAX_REPAIR_COST_MSG = `El costo es demasiado alto. Máximo permitido: ${MAX_REPAIR_COST.toLocaleString('es-PY')}`
+const MAX_LABOR_COST_MSG = `El costo de mano de obra es demasiado alto. Máximo permitido: ${MAX_REPAIR_COST.toLocaleString('es-PY')}`
+const MAX_FINAL_COST_MSG = `El costo final es demasiado alto. Máximo permitido: ${MAX_REPAIR_COST.toLocaleString('es-PY')}`
+
 /**
  * Customer information schema
  */
@@ -22,8 +27,9 @@ export const CustomerSchema = z.object({
   
   phone: z
     .string()
-    .min(7, 'El teléfono debe tener al menos 7 dígitos')
-    .regex(/^\+?[0-9\s\-()]{7,20}$/, 'Formato de teléfono inválido. Use números, espacios, guiones o paréntesis'),
+    .regex(/^\+?[0-9\s\-()]{7,20}$/, 'Formato de teléfono inválido. Use números, espacios, guiones o paréntesis')
+    .optional()
+    .or(z.literal('')),
   
   email: z
     .string()
@@ -123,12 +129,14 @@ export const DeviceSchema = z.object({
   
   technician: z
     .string()
-    .min(1, 'Selecciona un técnico'),
+    .min(1, 'Selecciona un técnico')
+    .optional()
+    .or(z.literal('')),
   
   estimatedCost: z
     .number()
     .positive('El costo debe ser un número positivo')
-    .max(1000000, 'El costo es demasiado alto')
+    .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG)
     .optional()
     .or(z.literal(0))
 })
@@ -161,7 +169,10 @@ export const UrgencyEnum = z.enum(['low', 'medium', 'high'], 'Selecciona una urg
 export const RepairPartSchema = z.object({
   id: z.number().optional(),
   name: z.string().min(1, 'El nombre del repuesto es obligatorio'),
-  cost: z.number().min(0, 'El costo no puede ser negativo'),
+  cost: z
+    .number()
+    .min(0, 'El costo no puede ser negativo')
+    .max(MAX_REPAIR_COST, MAX_REPAIR_COST_MSG),
   quantity: z.number().min(1, 'La cantidad debe ser al menos 1'),
   supplier: z.string().optional().or(z.literal('')),
   partNumber: z.string().optional().or(z.literal(''))
@@ -237,14 +248,14 @@ export const RepairFormSchema = z.object({
   laborCost: z
     .number()
     .min(0, 'El costo de mano de obra no puede ser negativo')
-    .max(1000000, 'El costo de mano de obra es demasiado alto')
+    .max(MAX_REPAIR_COST, MAX_LABOR_COST_MSG)
     .optional()
     .default(0),
     
   finalCost: z
     .number()
     .min(0, 'El costo final no puede ser negativo')
-    .max(1000000, 'El costo final es demasiado alto')
+    .max(MAX_REPAIR_COST, MAX_FINAL_COST_MSG)
     .optional()
     .nullable()
     .default(null),
@@ -302,14 +313,14 @@ export const RepairFormQuickSchema = z.object({
   laborCost: z
     .number()
     .min(0, 'El costo de mano de obra no puede ser negativo')
-    .max(1000000, 'El costo de mano de obra es demasiado alto')
+    .max(MAX_REPAIR_COST, MAX_LABOR_COST_MSG)
     .optional()
     .default(0),
     
   finalCost: z
     .number()
     .min(0, 'El costo final no puede ser negativo')
-    .max(1000000, 'El costo final es demasiado alto')
+    .max(MAX_REPAIR_COST, MAX_FINAL_COST_MSG)
     .optional()
     .nullable()
     .default(null),

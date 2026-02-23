@@ -1,7 +1,7 @@
 
 import { Suspense } from 'react'
 import { Metadata } from 'next'
-import { getPublicProducts, getPublicCategories } from '@/lib/api/products-server'
+import { getPublicProducts, getPublicCategories, resolveWholesaleStatus } from '@/lib/api/products-server'
 import { ProductCard } from '@/components/public/ProductCard'
 import { ProductFilters } from '@/components/public/ProductFilters'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
@@ -14,12 +14,13 @@ import {
   ClearAllFiltersButton,
 } from './components'
 import { Search } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
 
 export const metadata: Metadata = {
   title: 'Catálogo de Productos | 4G Celulares',
   description: 'Explora nuestra amplia gama de celulares, repuestos y accesorios. Encuentra las mejores marcas y precios.',
 }
+
+const MAX_PRICE = 50_000_000
 
 export default async function ProductsPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -30,25 +31,14 @@ export default async function ProductsPage(props: {
   const categoryId = searchParams.category_id as string || ''
   const brand = searchParams.brand as string || ''
   const minPrice = Number(searchParams.min_price) || 0
-  const maxPrice = Number(searchParams.max_price) || 50000000
+  const maxPrice = Number(searchParams.max_price) || MAX_PRICE
   const inStock = searchParams.in_stock === 'true'
   const sort = searchParams.sort as string || 'name'
 
-  // Determine wholesale status for accurate SSR pricing
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  let isWholesale = false
-  if (session?.user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .maybeSingle()
-    const role = profile?.role || session.user.user_metadata?.role
-    isWholesale = role === 'mayorista' || role === 'client_mayorista'
-  }
+  // Resolve wholesale status once — pass it down to avoid redundant DB queries
+  const { isWholesale } = await resolveWholesaleStatus()
 
-  // Fetch data in parallel
+  // Fetch data in parallel (categories don't need session)
   const [productsData, categories] = await Promise.all([
     getPublicProducts({
       query,
@@ -60,17 +50,26 @@ export default async function ProductsPage(props: {
       sort,
       page,
       perPage: 16,
+      isWholesale,
     }),
     getPublicCategories()
   ])
 
   const { products, total, totalPages, brands, priceRange } = productsData
 
+  const hasActiveFilters = (
+    categoryId !== '' ||
+    brand !== '' ||
+    inStock ||
+    minPrice > 0 ||
+    maxPrice < MAX_PRICE
+  )
+
   const activeFiltersCount = [
     categoryId !== '',
     brand !== '',
     inStock,
-    minPrice > 0 || maxPrice < 50000000,
+    minPrice > 0 || maxPrice < MAX_PRICE,
   ].filter(Boolean).length
 
   return (
@@ -160,7 +159,7 @@ export default async function ProductsPage(props: {
                     ? `Sin resultados para "${query}". Intenta con otros terminos.`
                     : 'No hay productos que coincidan con los filtros seleccionados.'}
                 </p>
-                {(query || activeFiltersCount > 0) && (
+                {(query || hasActiveFilters) && (
                   <div className="mt-5">
                     <Suspense>
                       <ClearAllFiltersButton />

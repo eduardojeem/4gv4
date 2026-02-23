@@ -238,6 +238,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             if (repairData.status !== undefined) dbUpdateData.status = repairData.status
             if (repairData.priority !== undefined) dbUpdateData.priority = repairData.priority
             if (repairData.urgency !== undefined) dbUpdateData.urgency = repairData.urgency
+            if (repairData.customer_id !== undefined) dbUpdateData.customer_id = repairData.customer_id
             if (repairData.technician_id !== undefined) dbUpdateData.technician_id = repairData.technician_id
             if (repairData.estimatedCost !== undefined) dbUpdateData.estimated_cost = repairData.estimatedCost
             if (repairData.laborCost !== undefined) dbUpdateData.labor_cost = repairData.laborCost
@@ -340,6 +341,34 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                         .upsert(notesToUpsert)
                     
                     if (upsertNotesError) throw upsertNotesError
+                }
+            }
+
+            // Handle Images - Strategy: replace full gallery with current form state
+            if (images) {
+                const { error: deleteImagesError } = await supabase
+                    .from('repair_images')
+                    .delete()
+                    .eq('repair_id', id)
+
+                if (deleteImagesError) throw deleteImagesError
+
+                const normalizedImages = (images as any[])
+                    .map((img: any) => typeof img === 'string' ? img : img?.url)
+                    .filter((url: string | undefined) => typeof url === 'string' && url.length > 0)
+
+                if (normalizedImages.length > 0) {
+                    const imagesToInsert = normalizedImages.map((url: string) => ({
+                        repair_id: id,
+                        image_url: url,
+                        image_type: 'general'
+                    }))
+
+                    const { error: insertImagesError } = await supabase
+                        .from('repair_images')
+                        .insert(imagesToInsert)
+
+                    if (insertImagesError) throw insertImagesError
                 }
             }
 

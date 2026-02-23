@@ -62,6 +62,15 @@ export default function HomePage() {
   }
 
   const { company_info, hero_stats, hero_content, services, testimonials } = settings
+  const safeServices = Array.isArray(services) ? services : []
+  const safeTestimonials = Array.isArray(testimonials) ? testimonials : []
+  const phoneClean = (company_info?.phone || '').replace(/\D/g, '')
+  const emailSafe = company_info?.email || ''
+  const contactHref = phoneClean
+    ? `https://wa.me/${phoneClean}`
+    : emailSafe
+      ? `mailto:${emailSafe}`
+      : '/inicio#contacto'
 
   const brandColor = company_info.brandColor || 'blue'
   const brandMap: Record<string, { hero: string; text200: string; text300: string; cta: string }> = {
@@ -109,7 +118,7 @@ export default function HomePage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/20">
-                <a href={`https://wa.me/${company_info.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+                <a href={contactHref} target={phoneClean ? "_blank" : undefined} rel={phoneClean ? "noopener noreferrer" : undefined}>
                   <MessageCircle className="mr-2 h-5 w-5" />
                   Escribinos
                 </a>
@@ -148,7 +157,7 @@ export default function HomePage() {
           </div>
 
           <div className="mx-auto mt-16 grid max-w-5xl gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {services.map((service) => {
+            {safeServices.map((service) => {
               const IconComponent = iconMap[service.icon] || Wrench
               const colors = colorMap[service.color] || colorMap.blue
 
@@ -241,11 +250,11 @@ export default function HomePage() {
           </div>
 
           <div className="mx-auto mt-16 grid max-w-5xl gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {testimonials.map((testimonial) => (
+            {safeTestimonials.map((testimonial) => (
               <Card key={testimonial.id}>
                 <CardContent className="pt-6">
                   <div className="flex gap-1 text-yellow-400">
-                    {[...Array(testimonial.rating)].map((_, i) => (
+                    {[...Array(Math.max(0, Math.min(5, Math.round(Number(testimonial.rating) || 0))))].map((_, i) => (
                       <Star key={i} className="h-4 w-4 fill-current" />
                     ))}
                   </div>
@@ -261,7 +270,7 @@ export default function HomePage() {
       </section>
 
       {/* CTA Final */}
-      <section className={`border-t bg-gradient-to-br ${brand.cta} py-16 text-white md:py-24`}>
+      <section id="contacto" className={`border-t bg-gradient-to-br ${brand.cta} py-16 text-white md:py-24`}>
         <div className="container">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
@@ -279,7 +288,7 @@ export default function HomePage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/20">
-                <a href={`https://wa.me/${company_info.phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">
+                <a href={contactHref} target={phoneClean ? "_blank" : undefined} rel={phoneClean ? "noopener noreferrer" : undefined}>
                   <MessageCircle className="mr-2 h-5 w-5" />
                   Escribinos
                 </a>

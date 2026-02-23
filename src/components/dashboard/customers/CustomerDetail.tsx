@@ -49,6 +49,7 @@ import { useAuthorizedPersons, prefetchAuthorizedPersons } from '@/hooks/useAuth
 import { createClient } from '@/lib/supabase/client'
 import { CustomerDetailHeader } from './CustomerDetailHeader'
 import { CustomerDetailMetrics } from './CustomerDetailMetrics'
+import { WholesaleToggle } from './WholesaleToggle'
 
 interface CustomerDetailProps {
   customer: Customer
@@ -496,6 +497,14 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Wholesale Access Toggle */}
+              {(resolvedProfileId || currentCustomer.id) && (
+                <WholesaleToggle
+                  profileId={resolvedProfileId || currentCustomer.id}
+                  customerName={currentCustomer.name}
+                />
+              )}
 
               <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20">
                 <CardHeader>

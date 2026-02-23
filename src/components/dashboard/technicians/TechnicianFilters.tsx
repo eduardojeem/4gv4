@@ -67,7 +67,7 @@ export function TechnicianFilters({
                         <SelectItem value="name">Nombre (A-Z)</SelectItem>
                         <SelectItem value="activeJobs">Trabajos activos</SelectItem>
                         <SelectItem value="completedThisMonth">Completados este mes</SelectItem>
-                        <SelectItem value="rating">Calificación</SelectItem>
+                        <SelectItem value="rating">Total completados</SelectItem>
                         <SelectItem value="workload">Carga de trabajo</SelectItem>
                     </SelectContent>
                 </Select>

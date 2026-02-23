@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react'
@@ -27,22 +28,21 @@ import {
   Package,
   DollarSign,
   TrendingUp,
-  TrendingDown,
   Calendar,
   Tag,
   Building2,
   AlertTriangle,
   Edit,
   History,
-  BarChart3,
   X,
   Plus,
   Minus,
   RefreshCw
 } from 'lucide-react'
-import type { Product } from '@/types/product-unified'
+import type { Product, ProductMovement } from '@/types/product-unified'
 import { useInventory } from '../context/InventoryContext'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
 
 interface ProductDetailDialogProps {
   product: Product | null
@@ -58,7 +58,7 @@ export function ProductDetailDialog({
   onEdit
 }: ProductDetailDialogProps) {
   const { updateStock } = useInventory()
-  const [movements, setMovements] = useState<any[]>([])
+  const [movements, setMovements] = useState<ProductMovement[]>([])
   const [loadingMovements, setLoadingMovements] = useState(false)
   const [adjustmentQuantity, setAdjustmentQuantity] = useState('')
   const [adjustmentReason, setAdjustmentReason] = useState('')
@@ -296,7 +296,7 @@ export function ProductDetailDialog({
                       <Calendar className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Creado:</span>
                       <span className="font-semibold">
-                        {new Date(product.created_at).toLocaleDateString()}
+                        {new Date(product.created_at || new Date().toISOString()).toLocaleDateString()}
                       </span>
                     </div>
                   </div>

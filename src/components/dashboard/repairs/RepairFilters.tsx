@@ -108,7 +108,7 @@ export const RepairFilters = memo<RepairFiltersProps>(function RepairFilters({
                                 )}
                             </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-96 dark:bg-card/98 dark:border-muted/60 backdrop-blur-sm shadow-lg dark:shadow-2xl" align="end">
+                        <PopoverContent className="w-[calc(100vw-2rem)] max-w-md sm:w-96 dark:bg-card/98 dark:border-muted/60 backdrop-blur-sm shadow-lg dark:shadow-2xl" align="end">
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
                                     <h4 className="font-semibold text-sm">Filtros Avanzados</h4>

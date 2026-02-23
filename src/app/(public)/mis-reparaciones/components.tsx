@@ -44,42 +44,18 @@ export function RepairSearchForm() {
     },
   })
 
-  // Detectar parámetros del QR y verificar automáticamente
+  // Detectar parámetros del QR y redirigir al nuevo formato
   useEffect(() => {
     const ticketFromQR = searchParams.get('ticket')
     const verifyHash = searchParams.get('verify')
     
-    if (ticketFromQR && verifyHash && !verifying && qrVerified === null) {
-      setVerifying(true)
-      
-      // Pre-llenar el formulario con el ticket
-      form.setValue('ticketNumber', ticketFromQR)
-      
-      // Verificar el hash
-      fetch(`/api/repairs/verify-qr?ticket=${ticketFromQR}&hash=${verifyHash}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.verified) {
-            setQrVerified(true)
-            toast.success('✓ Comprobante verificado correctamente', {
-              description: 'Este es un comprobante auténtico',
-              duration: 5000
-            })
-          } else {
-            setQrVerified(false)
-            toast.error('⚠ Verificación fallida', {
-              description: 'El código QR no pudo ser verificado',
-              duration: 5000
-            })
-          }
-        })
-        .catch(() => {
-          setQrVerified(false)
-          toast.error('Error al verificar el comprobante')
-        })
-        .finally(() => setVerifying(false))
+    if (ticketFromQR && verifyHash) {
+      // Redirigir automáticamente a la página de detalle con el hash de verificación
+      // Esto da soporte a los códigos QR antiguos que apuntaban a esta página
+      toast.info('Redirigiendo a los detalles de la reparación...')
+      router.replace(`/mis-reparaciones/${ticketFromQR}?verify=${verifyHash}`)
     }
-  }, [searchParams, form, verifying, qrVerified])
+  }, [searchParams, router])
 
   async function onSubmit(data: SearchFormValues) {
     setIsLoading(true)

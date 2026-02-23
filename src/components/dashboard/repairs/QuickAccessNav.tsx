@@ -26,14 +26,14 @@ export function QuickAccessNav({ sections }: QuickAccessNavProps) {
     const router = useRouter()
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {sections.map((section) => {
                 const Icon = section.icon
                 return (
                     <button
                         key={section.path}
                         onClick={() => router.push(section.path)}
-                        className="flex items-start gap-3 p-4 rounded-lg border bg-card hover:shadow-md transition-all duration-200 text-left group hover:scale-[1.02] dark:border-muted/50 dark:bg-card/50 dark:hover:bg-card/80"
+                        className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:shadow-md transition-all duration-200 text-left group dark:border-muted/50 dark:bg-card/50 dark:hover:bg-card/80"
                     >
                         <div className={`p-2 rounded-lg ${colorClasses[section.color]}`}>
                             <Icon className="h-5 w-5" />
@@ -42,7 +42,7 @@ export function QuickAccessNav({ sections }: QuickAccessNavProps) {
                             <h3 className="font-semibold text-sm group-hover:text-primary transition-colors">
                                 {section.title}
                             </h3>
-                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                                 {section.description}
                             </p>
                         </div>

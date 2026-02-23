@@ -1,7 +1,7 @@
 'use client'
 import { logger } from '@/lib/logger'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -43,20 +43,50 @@ export default function TechnicianProfilePage() {
         location: user?.profile?.location || '',
     })
 
-    // Calculate stats
+    // Notification preferences state
+    const [notifications, setNotifications] = useState({
+        newAssignments: true,
+        statusUpdates: true,
+        weeklyReport: false,
+    })
+
+    // Sync formData when user loads asynchronously
+    useEffect(() => {
+        if (user) {
+            setFormData({
+                name: user.profile?.name || '',
+                phone: user.profile?.phone || '',
+                location: user.profile?.location || '',
+            })
+        }
+    }, [user])
+
+    // Calculate stats from real data
     const stats = useMemo(() => {
-        if (!user?.id) return { completed: 0, efficiency: 0, rating: 0, active: 0 }
+        if (!user?.id) return { completed: 0, avgTime: 0, rating: 0, active: 0 }
 
         const myRepairs = repairs.filter(r => r.technician?.id === user.id)
-        const completed = myRepairs.filter(r => r.dbStatus === 'listo' || r.dbStatus === 'entregado').length
+        const completed = myRepairs.filter(r => r.dbStatus === 'listo' || r.dbStatus === 'entregado')
         const active = myRepairs.filter(r => r.dbStatus !== 'listo' && r.dbStatus !== 'entregado').length
 
-        // Mock efficiency (avg days to complete)
-        const efficiency = 2.4
-        // Mock rating
-        const rating = 4.8
+        // Avg time to complete
+        const completedWithDates = completed.filter(r => r.completedAt && r.createdAt)
+        const avgTime = completedWithDates.length > 0
+            ? Math.round(
+                completedWithDates.reduce((acc, r) => {
+                    const days = (new Date(r.completedAt!).getTime() - new Date(r.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+                    return acc + days
+                }, 0) / completedWithDates.length * 10
+              ) / 10
+            : 0
 
-        return { completed, efficiency, rating, active }
+        // Avg rating
+        const rated = myRepairs.filter(r => r.customerRating && r.customerRating > 0)
+        const rating = rated.length > 0
+            ? Math.round(rated.reduce((acc, r) => acc + (r.customerRating || 0), 0) / rated.length * 10) / 10
+            : 0
+
+        return { completed: completed.length, avgTime, rating, active }
     }, [repairs, user?.id])
 
     const handleSaveProfile = async () => {
@@ -86,7 +116,7 @@ export default function TechnicianProfilePage() {
         <div className="space-y-6 p-6 max-w-6xl mx-auto animate-in fade-in duration-500">
             {/* Header Section */}
             <div className="relative mb-8">
-                <div className="h-48 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg opacity-90"></div>
+                <div className="h-48 bg-linear-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg opacity-90"></div>
                 <div className="absolute -bottom-16 left-8 flex items-end gap-6">
                     <Avatar className="h-32 w-32 border-4 border-white shadow-xl">
                         <AvatarImage src={user.profile?.avatar_url} />
@@ -115,31 +145,33 @@ export default function TechnicianProfilePage() {
                 <div className="md:col-span-4 space-y-6">
                     {/* Quick Stats */}
                     <div className="grid grid-cols-2 gap-4">
-                        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-100">
+                        <Card className="bg-linear-to-br from-green-50 to-emerald-50 border-green-100">
                             <CardContent className="p-4 flex flex-col items-center justify-center text-center">
                                 <CheckCircle2 className="h-8 w-8 text-green-600 mb-2" />
                                 <span className="text-2xl font-bold text-green-700">{stats.completed}</span>
                                 <span className="text-xs text-green-600 font-medium">Completadas</span>
                             </CardContent>
                         </Card>
-                        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100">
+                        <Card className="bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100">
                             <CardContent className="p-4 flex flex-col items-center justify-center text-center">
                                 <Activity className="h-8 w-8 text-blue-600 mb-2" />
                                 <span className="text-2xl font-bold text-blue-700">{stats.active}</span>
                                 <span className="text-xs text-blue-600 font-medium">Activas</span>
                             </CardContent>
                         </Card>
-                        <Card className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-100">
+                        <Card className="bg-linear-to-br from-amber-50 to-orange-50 border-amber-100">
                             <CardContent className="p-4 flex flex-col items-center justify-center text-center">
                                 <Trophy className="h-8 w-8 text-amber-600 mb-2" />
                                 <span className="text-2xl font-bold text-amber-700">{stats.rating}</span>
                                 <span className="text-xs text-amber-600 font-medium">Calificación</span>
                             </CardContent>
                         </Card>
-                        <Card className="bg-gradient-to-br from-purple-50 to-pink-50 border-purple-100">
+                        <Card className="bg-linear-to-br from-purple-50 to-pink-50 border-purple-100">
                             <CardContent className="p-4 flex flex-col items-center justify-center text-center">
                                 <Clock className="h-8 w-8 text-purple-600 mb-2" />
-                                <span className="text-2xl font-bold text-purple-700">{stats.efficiency}d</span>
+                                <span className="text-2xl font-bold text-purple-700">
+                                    {stats.avgTime > 0 ? `${stats.avgTime}d` : '—'}
+                                </span>
                                 <span className="text-xs text-purple-600 font-medium">Promedio</span>
                             </CardContent>
                         </Card>
@@ -254,21 +286,30 @@ export default function TechnicianProfilePage() {
                                                 <Label className="text-base">Nuevas Asignaciones</Label>
                                                 <p className="text-sm text-muted-foreground">Recibir notificaciones cuando se me asigne una reparación</p>
                                             </div>
-                                            <Switch defaultChecked />
+                                            <Switch
+                                                checked={notifications.newAssignments}
+                                                onCheckedChange={v => setNotifications(n => ({ ...n, newAssignments: v }))}
+                                            />
                                         </div>
                                         <div className="flex items-center justify-between p-4 border rounded-lg">
                                             <div className="space-y-0.5">
                                                 <Label className="text-base">Actualizaciones de Estado</Label>
                                                 <p className="text-sm text-muted-foreground">Notificar cuando un cliente apruebe un presupuesto</p>
                                             </div>
-                                            <Switch defaultChecked />
+                                            <Switch
+                                                checked={notifications.statusUpdates}
+                                                onCheckedChange={v => setNotifications(n => ({ ...n, statusUpdates: v }))}
+                                            />
                                         </div>
                                         <div className="flex items-center justify-between p-4 border rounded-lg">
                                             <div className="space-y-0.5">
                                                 <Label className="text-base">Resumen Semanal</Label>
                                                 <p className="text-sm text-muted-foreground">Recibir un reporte de rendimiento semanal por email</p>
                                             </div>
-                                            <Switch />
+                                            <Switch
+                                                checked={notifications.weeklyReport}
+                                                onCheckedChange={v => setNotifications(n => ({ ...n, weeklyReport: v }))}
+                                            />
                                         </div>
                                     </div>
                                 </TabsContent>
@@ -289,12 +330,12 @@ export default function TechnicianProfilePage() {
 
                                         <div className="space-y-2">
                                             <Label>Sesiones Activas</Label>
-                                            <div className="flex items-center justify-between p-3 border rounded bg-slate-50">
+                                            <div className="flex items-center justify-between p-3 border rounded bg-slate-50 dark:bg-slate-900">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                                                    <div className="h-2 w-2 rounded-full bg-green-500" />
                                                     <div className="text-sm">
-                                                        <p className="font-medium">Windows PC - Chrome</p>
-                                                        <p className="text-xs text-muted-foreground">Activo ahora • Buenos Aires, AR</p>
+                                                        <p className="font-medium">Sesión actual</p>
+                                                        <p className="text-xs text-muted-foreground">{user?.email} • Activo ahora</p>
                                                     </div>
                                                 </div>
                                                 <Badge variant="outline">Actual</Badge>

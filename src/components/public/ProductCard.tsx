@@ -123,9 +123,6 @@ export function ProductCard(props: ProductCardProps) {
               {formatPrice(product.sale_price)}
             </p>
           )}
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            IVA incluido
-          </p>
         </div>
       </div>
     </Link>

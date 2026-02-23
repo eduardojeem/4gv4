@@ -7,12 +7,11 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
 import { ProductCard } from '@/components/public/ProductCard'
-import { getPublicProduct, getPublicProducts } from '@/lib/api/products-server'
+import { getPublicProduct, getPublicProducts, resolveWholesaleStatus } from '@/lib/api/products-server'
 import { generateProductSchema } from '@/lib/seo'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import { ProductGallery, ProductActions } from './client-components'
-import { createClient } from '@/lib/supabase/server'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -23,14 +22,15 @@ export async function generateMetadata(
   parent: ResolvingMetadata
 ): Promise<Metadata> {
   const params = await props.params
-  const product = await getPublicProduct(params.id)
+  const result = await getPublicProduct(params.id)
 
-  if (!product) {
+  if (!result) {
     return {
       title: 'Producto no encontrado',
     }
   }
 
+  const { product } = result
   const previousImages = (await parent).openGraph?.images || []
   const productImage = resolveProductImageUrl(product.image)
 
@@ -47,9 +47,13 @@ export async function generateMetadata(
 
 export default async function ProductDetailPage(props: Props) {
   const params = await props.params
-  const product = await getPublicProduct(params.id)
 
-  if (!product) {
+  // Resolve wholesale status once — shared across all queries in this page
+  const { isWholesale } = await resolveWholesaleStatus()
+
+  const result = await getPublicProduct(params.id, isWholesale)
+
+  if (!result) {
     return (
       <div className="container py-20 text-center">
         <div className="mx-auto max-w-md">
@@ -71,19 +75,7 @@ export default async function ProductDetailPage(props: Props) {
     )
   }
 
-  // Get wholesale status
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  let isWholesale = false
-  if (session?.user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .maybeSingle()
-    const role = profile?.role || session.user.user_metadata?.role
-    isWholesale = role === 'mayorista' || role === 'client_mayorista'
-  }
+  const { product } = result
 
   // Prepare display data
   const isInStock = product.stock_quantity > 0
@@ -97,12 +89,12 @@ export default async function ProductDetailPage(props: Props) {
     ? Math.round(((product.sale_price - product.wholesale_price!) / product.sale_price) * 100)
     : 0
 
-  // Fetch related products
-  const relatedData = product.category 
-    ? await getPublicProducts({ categoryId: product.category.id, perPage: 4 })
-    : { products: [] }
-  
-  const relatedProducts = relatedData.products
+  // Fetch related products — pass isWholesale to avoid another session lookup
+  const relatedData = product.category
+    ? await getPublicProducts({ categoryId: product.category.id, perPage: 4, isWholesale })
+    : { products: [] as typeof result.product[] }
+
+  const relatedProducts = (relatedData.products as typeof result.product[])
     .filter((p) => p.id !== product.id)
     .slice(0, 3)
 
@@ -157,10 +149,10 @@ export default async function ProductDetailPage(props: Props) {
 
           <div className="grid gap-10 lg:grid-cols-2">
             {/* Images - Client Component */}
-            <ProductGallery 
-                product={product} 
-                hasDiscount={hasDiscount} 
-                discountPercent={discountPercent} 
+            <ProductGallery
+                product={product}
+                hasDiscount={hasDiscount}
+                discountPercent={discountPercent}
             />
 
             {/* Product info */}

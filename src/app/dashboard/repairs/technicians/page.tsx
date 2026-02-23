@@ -19,6 +19,9 @@ export default function TechniciansPage() {
     const [statusFilter, setStatusFilter] = useState('all')
     const [sortBy, setSortBy] = useState('name')
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+    const handleAddTechnician = () => {
+        router.push('/admin/users')
+    }
 
     // Calculate technician stats
     const technicianData = useMemo(() => {
@@ -40,6 +43,18 @@ export default function TechniciansPage() {
             const totalCompleted = techRepairs.filter(r =>
                 r.dbStatus === 'listo' || r.dbStatus === 'entregado'
             ).length
+            const completedWithDates = techRepairs.filter(r =>
+                (r.dbStatus === 'listo' || r.dbStatus === 'entregado') &&
+                !!r.createdAt &&
+                !!r.completedAt
+            )
+            const avgCompletionDays = completedWithDates.length > 0
+                ? completedWithDates.reduce((sum, r) => {
+                    const start = new Date(r.createdAt).getTime()
+                    const end = new Date(r.completedAt as string).getTime()
+                    return sum + Math.max(0, (end - start) / (1000 * 60 * 60 * 24))
+                }, 0) / completedWithDates.length
+                : 0
 
             // Determine status based on active jobs
             let status: 'available' | 'busy' | 'offline' | 'unavailable'
@@ -62,7 +77,7 @@ export default function TechniciansPage() {
                 activeJobs,
                 completedThisMonth,
                 totalCompleted,
-                rating: 4.5, // TODO: Get from database
+                avgCompletionDays,
                 workloadPercentage
             }
         })
@@ -94,7 +109,7 @@ export default function TechniciansPage() {
                 case 'completedThisMonth':
                     return b.completedThisMonth - a.completedThisMonth
                 case 'rating':
-                    return (b.rating || 0) - (a.rating || 0)
+                    return b.totalCompleted - a.totalCompleted
                 case 'workload':
                     return b.workloadPercentage - a.workloadPercentage
                 default:
@@ -111,6 +126,9 @@ export default function TechniciansPage() {
         const active = technicianData.filter(t => t.status === 'available' || t.status === 'busy').length
         const totalActiveJobs = technicianData.reduce((sum, t) => sum + t.activeJobs, 0)
         const avgJobsPerTech = total > 0 ? totalActiveJobs / total : 0
+        const avgCompletionDays = technicianData.length > 0
+            ? technicianData.reduce((sum, t) => sum + t.avgCompletionDays, 0) / technicianData.length
+            : 0
 
         // Find best performer
         const bestPerformer = technicianData.reduce((best, current) => {
@@ -122,7 +140,7 @@ export default function TechniciansPage() {
             activeTechnicians: active,
             totalActiveJobs,
             avgJobsPerTech,
-            avgCompletionTime: '2.5 días', // TODO: Calculate from actual data
+            avgCompletionTime: avgCompletionDays > 0 ? `${avgCompletionDays.toFixed(1)} días` : undefined,
             bestPerformer: bestPerformer?.name
         }
     }, [technicianData])
@@ -172,7 +190,7 @@ export default function TechniciansPage() {
                     >
                         <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                     </Button>
-                    <Button className="gap-2">
+                    <Button className="gap-2" onClick={handleAddTechnician}>
                         <UserPlus className="h-4 w-4" />
                         Agregar Técnico
                     </Button>

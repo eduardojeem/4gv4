@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { verifyPublicToken, extractBearerToken } from '@/lib/public-session'
+import { verifyRepairHash } from '@/lib/repair-qr'
 import { PublicRepair } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { LRUCache } from '@/lib/cache'
@@ -13,7 +14,7 @@ setInterval(() => repairCache.cleanup(), 10 * 60 * 1000)
 
 /**
  * GET /api/public/repairs/[ticketId]
- * Get repair details (requires valid session token)
+ * Get repair details (requires valid session token OR valid QR hash)
  * Optimized with LRU cache and specific field selection
  */
 export async function GET(
@@ -22,51 +23,45 @@ export async function GET(
 ) {
   try {
     const { ticketId } = await props.params
+    const searchParams = request.nextUrl.searchParams
+    const verifyHash = searchParams.get('verify')
     
-    // Extract token from httpOnly cookie or Authorization header (fallback)
+    // 1. Try authentication via Token
     let token = request.cookies.get('repair_token')?.value
-    
     if (!token) {
       const authHeader = request.headers.get('Authorization')
       token = extractBearerToken(authHeader) || undefined
     }
+
+    let isTokenAuthorized = false
     
-    if (!token) {
+    if (token) {
+      const session = await verifyPublicToken(token)
+      if (session && session.ticketNumber === ticketId) {
+        isTokenAuthorized = true
+      }
+    }
+
+    // 2. If not authenticated via token and no hash, reject
+    if (!isTokenAuthorized && !verifyHash) {
       return NextResponse.json(
         { success: false, error: 'Token de autenticación requerido' },
         { status: 401 }
       )
     }
     
-    const session = await verifyPublicToken(token)
-    
-    if (!session) {
-      return NextResponse.json(
-        { success: false, error: 'Token inválido o expirado' },
-        { status: 401 }
-      )
-    }
-    
-    // Verify ticket number matches
-    if (session.ticketNumber !== ticketId) {
-      logger.warn('Public repair access denied - ticket mismatch', {
-        requestedTicket: ticketId,
-        sessionTicket: session.ticketNumber
-      })
-      return NextResponse.json(
-        { success: false, error: 'No autorizado para ver esta reparación' },
-        { status: 403 }
-      )
-    }
-    
-    // Check cache first
-    const cached = repairCache.get(ticketId)
-    if (cached) {
-      return NextResponse.json({
-        success: true,
-        data: cached,
-        cached: true
-      })
+    // 3. Check cache (only if we trust the request, but for hash verification we need to verify against DB data anyway, 
+    //    so we might need to skip cache or store hash in cache? 
+    //    For simplicity, if using hash, we fetch DB to verify hash. If token, we can use cache)
+    if (isTokenAuthorized) {
+      const cached = repairCache.get(ticketId)
+      if (cached) {
+        return NextResponse.json({
+          success: true,
+          data: cached,
+          cached: true
+        })
+      }
     }
     
     const supabase = await createClient()
@@ -103,7 +98,7 @@ export async function GET(
         { status: 404 }
       )
     }
-    
+
     // Fetch related data in parallel
     const [technicianResult, customerResult, statusHistoryResult] = await Promise.all([
       repair.technician_id 
@@ -116,6 +111,24 @@ export async function GET(
         .eq('repair_id', repair.id)
         .order('created_at', { ascending: true })
     ])
+
+    // 4. If relying on Hash, verify it now using the fetched data
+    if (!isTokenAuthorized && verifyHash) {
+      const customerId = repair.customer_id || ''
+      const customerName = customerResult.data?.name || ''
+      const repairDate = new Date(repair.created_at)
+      
+      const isValid =
+        (customerId ? verifyRepairHash(ticketId, customerId, repairDate, verifyHash) : false) ||
+        (customerName ? verifyRepairHash(ticketId, customerName, repairDate, verifyHash) : false)
+
+      if (!isValid) {
+        return NextResponse.json(
+          { success: false, error: 'Enlace de verificación inválido o expirado' },
+          { status: 403 }
+        )
+      }
+    }
     
     // Build public repair object (filter sensitive data)
     const publicRepair: PublicRepair = {

@@ -108,7 +108,7 @@ export function TechnicianActiveJobs({ repairs }: TechnicianActiveJobsProps) {
                                     <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => router.push(`/dashboard/repairs?id=${repair.id}`)}
+                                        onClick={() => router.push(`/dashboard/repairs?id=${repair.id}&edit=true`)}
                                     >
                                         <ExternalLink className="h-4 w-4" />
                                     </Button>

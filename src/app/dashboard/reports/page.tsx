@@ -37,6 +37,7 @@ import Link from 'next/link'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { Input } from '@/components/ui/input'
 import { chartColors } from '@/utils/chart-utils'
+import { logger } from '@/lib/logger'
 
 interface SalesData {
   date: string
@@ -50,6 +51,7 @@ interface ProductData {
   name: string
   sales: number
   quantity: number
+  profit: number
   category?: string
   share?: number
 }
@@ -81,7 +83,7 @@ export default function ReportsPage() {
   const [selectedProductTrend, setSelectedProductTrend] = useState<{ date: string; sales: number; qty: number }[]>([])
   const [repairsTrend, setRepairsTrend] = useState<{ date: string; count: number }[]>([])
   const [repairsStatusDist, setRepairsStatusDist] = useState<{ name: string; value: number; color: string }[]>([])
-  const [repairsMetrics, setRepairsMetrics] = useState<{ total: number; completionRate: number; avgCost: number; avgTATDays: number }>({ total: 0, completionRate: 0, avgCost: 0, avgTATDays: 0 })
+  const [repairsMetrics, setRepairsMetrics] = useState<{ total: number; completionRate: number; avgCost: number; avgTATDays: number; avgLabor: number; avgParts: number }>({ total: 0, completionRate: 0, avgCost: 0, avgTATDays: 0, avgLabor: 0, avgParts: 0 })
   const [categoryTopCount, setCategoryTopCount] = useState(5)
   const [categoryMetricBy, setCategoryMetricBy] = useState<'sales' | 'quantity'>('sales')
   const [categoryChartType, setCategoryChartType] = useState<'pie' | 'bar'>('pie')
@@ -91,6 +93,7 @@ export default function ReportsPage() {
   })
   const [categoryMinSales, setCategoryMinSales] = useState<number>(0)
   const [saleItemsAll, setSaleItemsAll] = useState<any[]>([])
+  const [totalProfit, setTotalProfit] = useState(0)
 
   useEffect(() => {
     const byDate: Record<string, { sales: number; qty: number }> = {}
@@ -101,7 +104,7 @@ export default function ReportsPage() {
     (saleItemsAll as any[]).forEach((item: any) => {
       const status = item?.sale?.status
       const created = item?.sale?.created_at ? new Date(item.sale.created_at) : null
-      if (status !== 'completada' || !created) return
+      if (status !== 'completed' || !created) return
       if (created < dateRange.from || created > dateRange.to) return
       const key = String(item.product_id || item.product?.name)
       if (key !== selectedProductId) return
@@ -124,7 +127,7 @@ export default function ReportsPage() {
     ;(saleItemsAll as any[]).forEach((item: any, idx: number) => {
       const status = item?.sale?.status
       const created = item?.sale?.created_at ? new Date(item.sale.created_at) : null
-      if (status !== 'completada' || !created) return
+      if (status !== 'completed' || !created) return
       if (created < categoryDateRange.from || created > categoryDateRange.to) return
       const name = item.product?.category?.name || 'Sin categoría'
       const qty = Number(item.quantity) || 0
@@ -193,6 +196,7 @@ export default function ReportsPage() {
             subtotal,
             product:products (
               name,
+              purchase_price,
               category:categories (
                 name
               )
@@ -208,7 +212,7 @@ export default function ReportsPage() {
           const created = i?.sale?.created_at ? new Date(i.sale.created_at) : null
           const status = i?.sale?.status
           if (!created) return false
-          return created >= dateRange.from && created <= dateRange.to && status === 'completada'
+          return created >= dateRange.from && created <= dateRange.to && status === 'completed'
         })
 
         // Obtener nuevos clientes en el periodo
@@ -225,7 +229,7 @@ export default function ReportsPage() {
         
         // Inicializar con ventas
         safeSales.forEach(sale => {
-          if (sale.status !== 'completada') return
+          if (sale.status !== 'completed') return
           
           const date = new Date(sale.created_at).toISOString().split('T')[0]
           if (!salesByDate[date]) {
@@ -266,7 +270,7 @@ export default function ReportsPage() {
 
         const { data: repairsData, error: repairsError } = await supabase
           .from('repairs')
-          .select('id, created_at, received_at, completed_at, status, final_cost')
+          .select('id, created_at, received_at, completed_at, status, final_cost, labor_cost, parts_cost')
           .gte('created_at', dateRange.from.toISOString())
           .lte('created_at', dateRange.to.toISOString())
 
@@ -276,6 +280,8 @@ export default function ReportsPage() {
         const statusMap: Record<string, number> = {}
         let completed = 0
         let totalCost = 0
+        let totalLabor = 0
+        let totalParts = 0
         let tatSumDays = 0
         let tatCount = 0
 
@@ -288,7 +294,11 @@ export default function ReportsPage() {
           statusMap[st] = (statusMap[st] || 0) + 1
 
           const fc = Number(r.final_cost) || 0
+          const lc = Number(r.labor_cost) || 0
+          const pc = Number(r.parts_cost) || 0
           totalCost += fc
+          totalLabor += lc
+          totalParts += pc
 
           if (r.status === 'entregado' && r.received_at && r.completed_at) {
             completed += 1
@@ -319,33 +329,44 @@ export default function ReportsPage() {
         const totalRepairs = safeRepairs.length
         const completionRate = totalRepairs > 0 ? (completed / totalRepairs) * 100 : 0
         const avgCost = totalRepairs > 0 ? totalCost / totalRepairs : 0
+        const avgLabor = totalRepairs > 0 ? totalLabor / totalRepairs : 0
+        const avgParts = totalRepairs > 0 ? totalParts / totalRepairs : 0
         const avgTATDays = tatCount > 0 ? tatSumDays / tatCount : 0
-        setRepairsMetrics({ total: totalRepairs, completionRate, avgCost, avgTATDays })
+        setRepairsMetrics({ total: totalRepairs, completionRate, avgCost, avgTATDays, avgLabor, avgParts })
 
         // Procesar datos de productos
-        const productStats: Record<string, { id?: string; name: string; sales: number; quantity: number; category: string }> = {}
+        const productStats: Record<string, { id?: string; name: string; sales: number; quantity: number; category: string; profit: number }> = {}
         const categorySales: Record<string, number> = {}
         const categoryQty: Record<string, number> = {}
+        let overallProfit = 0
 
         safeSaleItems.forEach((item: any) => {
           const pid = item.product_id || item.product?.id
           const productName = item.product?.name || 'Desconocido'
           const categoryName = item.product?.category?.name || 'Sin categoría'
           const quantity = Number(item.quantity) || 0
-          const total = Number(item.subtotal ?? quantity * Number(item.unit_price ?? 0)) || 0
+          const unitPrice = Number(item.unit_price) || 0
+          const purchasePrice = Number(item.product?.purchase_price) || 0
+          const total = Number(item.subtotal ?? quantity * unitPrice) || 0
+          const profit = total - (quantity * purchasePrice)
+
+          overallProfit += profit
 
           // Productos
           const key = String(pid || productName)
           if (!productStats[key]) {
-            productStats[key] = { id: pid, name: productName, sales: 0, quantity: 0, category: categoryName }
+            productStats[key] = { id: pid, name: productName, sales: 0, quantity: 0, category: categoryName, profit: 0 }
           }
           productStats[key].sales += total
           productStats[key].quantity += quantity
+          productStats[key].profit += profit
 
           // Categorías
           categorySales[categoryName] = (categorySales[categoryName] || 0) + total
           categoryQty[categoryName] = (categoryQty[categoryName] || 0) + quantity
         })
+        
+        setTotalProfit(overallProfit)
 
         // Top 5 Productos
         const processedProductData: ProductData[] = Object.values(productStats)
@@ -354,6 +375,7 @@ export default function ReportsPage() {
             name: stats.name,
             sales: stats.sales,
             quantity: stats.quantity,
+            profit: stats.profit,
             category: stats.category
           }))
           .sort((a, b) => b.sales - a.sales)
@@ -478,7 +500,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950/40 dark:to-emerald-900/40 border border-emerald-200 dark:border-emerald-700 shadow-sm">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -570,6 +592,27 @@ export default function ReportsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <Card className="bg-gradient-to-br from-indigo-50 to-pink-50 dark:from-indigo-950/40 dark:to-pink-950/40 border border-indigo-200 dark:border-indigo-800 shadow-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Ganancia Est.</p>
+                <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-200">
+                  {formatFullPrice(totalProfit)}
+                </p>
+              </div>
+              <div className="h-10 w-10 bg-pink-100 dark:bg-pink-900/60 rounded-full flex items-center justify-center shadow-sm">
+                <DollarSign className="h-5 w-5 text-pink-600 dark:text-pink-300" />
+              </div>
+            </div>
+            <div className="flex items-center mt-2">
+               <span className="text-sm text-slate-700/80 dark:text-slate-100/80">
+                Margen: {totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(1) : 0}%
+              </span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Gráficos y análisis */}
@@ -655,11 +698,13 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm font-medium text-muted-foreground">Reparaciones</p><p className="text-2xl font-bold">{repairsMetrics.total}</p></div></div></CardContent></Card>
-            <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm font-medium text-muted-foreground">Tasa de Finalización</p><p className="text-2xl font-bold">{repairsMetrics.completionRate.toFixed(0)}%</p></div></div></CardContent></Card>
-            <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm font-medium text-muted-foreground">Costo Promedio</p><p className="text-2xl font-bold">{formatFullPrice(Math.round(repairsMetrics.avgCost))}</p></div></div></CardContent></Card>
-            <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm font-medium text-muted-foreground">TAT Promedio</p><p className="text-2xl font-bold">{repairsMetrics.avgTATDays.toFixed(1)} días</p></div></div></CardContent></Card>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Reparaciones</p><p className="text-xl font-bold">{repairsMetrics.total}</p></div></CardContent></Card>
+            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Finalización</p><p className="text-xl font-bold">{repairsMetrics.completionRate.toFixed(0)}%</p></div></CardContent></Card>
+            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Ticket Promedio</p><p className="text-xl font-bold">{formatFullPrice(Math.round(repairsMetrics.avgCost))}</p></div></CardContent></Card>
+            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Mano de Obra</p><p className="text-xl font-bold text-blue-600">{formatFullPrice(Math.round(repairsMetrics.avgLabor))}</p></div></CardContent></Card>
+            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Repuestos</p><p className="text-xl font-bold text-amber-600">{formatFullPrice(Math.round(repairsMetrics.avgParts))}</p></div></CardContent></Card>
+            <Card className="col-span-1"><CardContent className="p-4"><div className="flex flex-col"> <p className="text-xs font-medium text-muted-foreground">Tiempo (TAT)</p><p className="text-xl font-bold">{repairsMetrics.avgTATDays.toFixed(1)} días</p></div></CardContent></Card>
           </div>
 
           <div className="flex justify-end">
@@ -807,7 +852,7 @@ export default function ReportsPage() {
                       </div>
                       <div className="text-right">
                         <p className="font-bold">{formatFullPrice(product.sales)}</p>
-                        <p className="text-xs text-muted-foreground">{(product.share || 0).toFixed(1)}% del total</p>
+                        <p className="text-xs text-green-600 font-medium">G: {formatFullPrice(product.profit)}</p>
                       </div>
                     </div>
                   ))}
@@ -815,8 +860,8 @@ export default function ReportsPage() {
                   <div className="flex justify-end mt-4">
                     <Button variant="outline" onClick={() => {
                       const BOM = '\uFEFF'
-                      const headers = ['Rank','Producto','Categoría','Ventas','Cantidad','Participación %']
-                      const rows = visibleProducts.map((p, i) => [String(i + 1), p.name, p.category || '', String(p.sales), String(p.quantity), ((p.share || 0).toFixed(1))])
+                      const headers = ['Rank','Producto','Categoría','Ventas','Ganancia','Cantidad','Participación %']
+                      const rows = visibleProducts.map((p, i) => [String(i + 1), p.name, p.category || '', String(p.sales), String(p.profit), String(p.quantity), ((p.share || 0).toFixed(1))])
                       const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
                       const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' })
                       const url = window.URL.createObjectURL(blob)

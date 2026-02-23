@@ -25,6 +25,7 @@ interface RepairDevicePrintItem {
 }
 
 interface RepairCustomerInfo {
+  id?: string
   name: string
   phone?: string
   email?: string
@@ -54,6 +55,7 @@ export interface RepairPrintPayload {
   warrantyType?: 'labor' | 'parts' | 'full'
   warrantyNotes?: string
   company?: CompanyInfo
+  verificationHash?: string
 }
 
 /**
@@ -782,7 +784,7 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
             width="120" 
             height="120" 
             style="display:block;"
-            src="${generateQRCodeURL(ticketNumber, payload.customer.name, dateObj, 120)}" 
+            src="${generateQRCodeURL(ticketNumber, payload.customer.id || payload.customer.name, dateObj, 120, payload.verificationHash)}" 
           />
           <div style="font-size: 10px; color: #6b7280; margin-top: 4px; text-align: center;">
             Escanea para rastrear
@@ -958,7 +960,7 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
             width="100" 
             height="100" 
             style="display:block; border: 2px solid #111827; border-radius: 6px; padding: 4px; background: white;"
-            src="${generateQRCodeURL(ticketNumber, payload.customer.name, dateObj, 100)}" 
+            src="${generateQRCodeURL(ticketNumber, payload.customer.id || payload.customer.name, dateObj, 100, payload.verificationHash)}" 
           />
           <div style="font-size: 9px; color: #6b7280; margin-top: 4px; font-weight: 600;">
             Escanea para rastrear
@@ -969,7 +971,7 @@ const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrint
       <div style="margin-top: 12px; padding: 8px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; text-align: center;">
         <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">
           <strong>Hash de verificación:</strong><br/>
-          <code style="font-size: 9px; color: #111827; letter-spacing: 0.5px;">${generateRepairHash(ticketNumber, payload.customer.name, dateObj)}</code>
+          <code style="font-size: 9px; color: #111827; letter-spacing: 0.5px;">${payload.verificationHash || generateRepairHash(ticketNumber, payload.customer.id || payload.customer.name, dateObj)}</code>
         </div>
       </div>
 

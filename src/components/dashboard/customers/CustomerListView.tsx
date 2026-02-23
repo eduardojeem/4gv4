@@ -71,12 +71,14 @@ interface CustomerListViewProps {
   onViewCustomer: (customer: Customer) => void
   onEditCustomer: (customer: Customer) => void
   onDeleteCustomer: (customer: Customer) => void
+  viewMode: 'table' | 'grid' | 'timeline'
+  onViewModeChange: (mode: 'table' | 'grid' | 'timeline') => void
+  onBulkDelete?: (customerIds: string[]) => void
+  bulkDeleting?: boolean
   onToggleCustomerStatus?: (customer: Customer) => void
   onBulkStatusChange?: (customerIds: string[], status: 'active' | 'inactive' | 'suspended') => void
   loading?: boolean
 }
-
-type ViewMode = 'table' | 'grid'
 type SortField = 'name' | 'email' | 'phone' | 'status' | 'lifetime_value' | 'last_activity'
 type SortOrder = 'asc' | 'desc'
 
@@ -90,18 +92,22 @@ export function CustomerListView({
   onViewCustomer,
   onEditCustomer,
   onDeleteCustomer,
+  viewMode,
+  onViewModeChange,
+  onBulkDelete,
+  bulkDeleting = false,
   onToggleCustomerStatus,
   onBulkStatusChange,
   loading = false
 }: CustomerListViewProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [searchTerm, setSearchTerm] = useState('')
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
+  const effectiveViewMode = viewMode === 'grid' ? 'grid' : 'table'
 
   // Filtrar y ordenar clientes
   const processedCustomers = useMemo(() => {
-    let filtered = customers
+    let filtered = [...customers]
 
     // Aplicar búsqueda
     if (searchTerm) {
@@ -174,7 +180,7 @@ export function CustomerListView({
           <div className="text-sm text-muted-foreground">
             {processedCustomers.length} cliente{processedCustomers.length !== 1 ? 's' : ''}
             {selectedCustomers.length > 0 && (
-              <span className="ml-2 text-blue-600">
+              <span className="ml-2 text-blue-600 dark:text-blue-400">
                 ({selectedCustomers.length} seleccionado{selectedCustomers.length !== 1 ? 's' : ''})
               </span>
             )}
@@ -185,17 +191,17 @@ export function CustomerListView({
           {/* Selector de vista */}
           <div className="flex items-center bg-muted rounded-lg p-1">
             <Button
-              variant={viewMode === 'table' ? 'default' : 'ghost'}
+              variant={effectiveViewMode === 'table' ? 'default' : 'ghost'}
               size="sm"
-              onClick={() => setViewMode('table')}
+              onClick={() => onViewModeChange('table')}
               className="h-8 px-3"
             >
               <List className="h-4 w-4" />
             </Button>
             <Button
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
+              variant={effectiveViewMode === 'grid' ? 'default' : 'ghost'}
               size="sm"
-              onClick={() => setViewMode('grid')}
+              onClick={() => onViewModeChange('grid')}
               className="h-8 px-3"
             >
               <Grid3X3 className="h-4 w-4" />
@@ -205,11 +211,11 @@ export function CustomerListView({
           {/* Acciones de selección */}
           {selectedCustomers.length > 0 && (
             <div className="flex items-center gap-2">
-              <Button 
+              <Button
                 variant="outline" 
                 size="sm" 
                 onClick={onClearSelection}
-                className="hover:bg-gray-50 dark:hover:bg-gray-800"
+                className="hover:bg-gray-50 dark:hover:bg-slate-800"
               >
                 Limpiar ({selectedCustomers.length})
               </Button>
@@ -222,13 +228,18 @@ export function CustomerListView({
                 />
               )}
               
-              <Button 
+              <Button
                 variant="destructive" 
                 size="sm"
-                className="hover:bg-red-600 dark:hover:bg-red-700"
+                onClick={() => {
+                  if (bulkDeleting) return
+                  onBulkDelete?.(selectedCustomers)
+                }}
+                disabled={!onBulkDelete || selectedCustomers.length === 0 || bulkDeleting}
+                className="hover:bg-red-600 dark:hover:bg-red-600/90"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Eliminar
+                {bulkDeleting ? 'Eliminando...' : 'Eliminar'}
               </Button>
             </div>
           )}
@@ -237,7 +248,7 @@ export function CustomerListView({
 
       {/* Contenido según vista */}
       <AnimatePresence mode="wait">
-        {viewMode === 'table' ? (
+        {effectiveViewMode === 'table' ? (
           <motion.div
             key="table"
             initial={{ opacity: 0, y: 20 }}
@@ -329,12 +340,12 @@ function TableView({
   }
 
   return (
-    <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-sm">
+    <Card className="border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm">
       <CardContent className="p-0">
         <Table>
           <TableHeader>
-            <TableRow className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
-              <TableHead className="w-12 bg-gray-50 dark:bg-gray-800/50">
+            <TableRow className="border-b border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800/40">
+              <TableHead className="w-12 bg-gray-50 dark:bg-slate-800/70">
                 <Checkbox
                   checked={allSelected || someSelected}
                   onCheckedChange={onSelectAll}
@@ -342,62 +353,62 @@ function TableView({
                 />
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
                 onClick={() => onSort('name')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
                   Cliente
                   <SortIcon field="name" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
                 onClick={() => onSort('email')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
                   Contacto
                   <SortIcon field="email" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
                 onClick={() => onSort('status')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
                   Estado
                   <SortIcon field="status" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
                 onClick={() => onSort('lifetime_value')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
                   Valor
                   <SortIcon field="lifetime_value" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
                 onClick={() => onSort('total_purchases')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
                   Compras
                 </div>
               </TableHead>
-              <TableHead className="bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300">
+              <TableHead className="bg-gray-50 dark:bg-slate-800/70 text-gray-700 dark:text-slate-200">
                 Última compra
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors bg-gray-50 dark:bg-gray-800/50"
+                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
                 onClick={() => onSort('last_activity')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
                   Última Actividad
                   <SortIcon field="last_activity" />
                 </div>
               </TableHead>
-              <TableHead className="w-20 bg-gray-50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300">
+              <TableHead className="w-20 bg-gray-50 dark:bg-slate-800/70 text-gray-700 dark:text-slate-200">
                 Acciones
               </TableHead>
             </TableRow>
@@ -409,7 +420,7 @@ function TableView({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer border-b border-gray-100 dark:border-gray-800"
+                className="group hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors cursor-pointer border-b border-gray-100 dark:border-slate-800"
                 onClick={() => onViewCustomer(customer)}
               >
                 <TableCell onClick={(e) => e.stopPropagation()}>

@@ -9,6 +9,13 @@ import { RepairStatus, RepairPriority } from './repairs'
  * Public Product - Safe for public viewing
  * Excludes sensitive data like purchase prices, supplier details, etc.
  */
+export interface Category {
+  id: string
+  name: string
+  parent_id?: string | null
+  subcategories?: Category[]
+}
+
 export interface PublicProduct {
   id: string
   name: string

@@ -142,6 +142,7 @@ export interface Database {
           min_stock: number
           unit_measure: string
           is_active: boolean
+          visibility: 'public' | 'wholesale' | 'hidden'
           images: string[] | null
           location: string | null
           barcode: string | null
@@ -168,6 +169,7 @@ export interface Database {
           min_stock?: number
           unit_measure?: string
           is_active?: boolean
+          visibility?: 'public' | 'wholesale' | 'hidden'
           images?: string[] | null
           location?: string | null
           barcode?: string | null
@@ -194,6 +196,7 @@ export interface Database {
           min_stock?: number
           unit_measure?: string
           is_active?: boolean
+          visibility?: 'public' | 'wholesale' | 'hidden'
           images?: string[] | null
           location?: string | null
           barcode?: string | null

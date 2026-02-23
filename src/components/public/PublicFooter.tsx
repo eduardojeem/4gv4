@@ -34,7 +34,7 @@ export function PublicFooter() {
             <ul className="space-y-2.5 text-sm">
               <li>
                 <Link
-                  href="/"
+                  href="/inicio"
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Inicio

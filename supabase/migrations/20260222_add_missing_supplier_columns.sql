@@ -1,0 +1,8 @@
+
+ALTER TABLE suppliers
+ADD COLUMN IF NOT EXISTS city text,
+ADD COLUMN IF NOT EXISTS country text,
+ADD COLUMN IF NOT EXISTS postal_code text,
+ADD COLUMN IF NOT EXISTS website text,
+ADD COLUMN IF NOT EXISTS rating numeric DEFAULT 0,
+ADD COLUMN IF NOT EXISTS notes text;

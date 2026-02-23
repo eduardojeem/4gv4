@@ -138,28 +138,32 @@ export function useCustomerState() {
         console.log('🔄 [CustomerState] Starting to load customers...')
         setState(prev => ({ ...prev, loading: true, error: null }))
 
-        // Load only the first page (50 customers) for better performance
-        // This reduces initial load time and memory usage
-        console.log('📞 [CustomerState] Calling customerService.getCustomers(1, 50)...')
-        const response = await customerService.getCustomers(1, 50)
-        console.log('📊 [CustomerState] Service response:', response)
+        // Load all pages to keep local pagination aligned with filtered results.
+        const pageSize = 200
+        let currentPage = 1
+        let totalPages = 1
+        const allCustomers: Customer[] = []
 
-        if (!response.success || !response.data) {
-          console.error('❌ [CustomerState] Service returned error:', response.error)
-          throw new Error(response.error || 'Error al cargar clientes')
+        while (currentPage <= totalPages) {
+          const response = await customerService.getCustomers(currentPage, pageSize)
+
+          if (!response.success || !response.data) {
+            throw new Error(response.error || 'Error al cargar clientes')
+          }
+
+          allCustomers.push(...response.data)
+          totalPages = response.pagination?.totalPages || 1
+          currentPage += 1
         }
-
-        console.log('✅ [CustomerState] Successfully loaded', response.data.length, 'customers')
-        console.log('📋 [CustomerState] First customer sample:', response.data[0])
 
         setState(prev => ({
           ...prev,
-          customers: response.data || [],
+          customers: allCustomers,
           loading: false,
           pagination: {
             ...prev.pagination,
-            totalItems: response.pagination?.total || response.data?.length || 0,
-            totalPages: response.pagination?.totalPages || Math.ceil((response.data?.length || 0) / prev.pagination.itemsPerPage)
+            totalItems: allCustomers.length,
+            totalPages: Math.ceil(allCustomers.length / prev.pagination.itemsPerPage)
           }
         }))
         

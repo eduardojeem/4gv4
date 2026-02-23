@@ -181,7 +181,11 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
 
             {/* Actions */}
             <div className="flex lg:flex-col gap-2">
-              <Button variant="outline" className="gap-2 flex-1 lg:flex-none">
+              <Button
+                variant="outline"
+                className="gap-2 flex-1 lg:flex-none"
+                onClick={() => router.push(`/admin/users?search=${encodeURIComponent(id)}`)}
+              >
                 <Edit className="h-4 w-4" />
                 Editar
               </Button>

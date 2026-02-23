@@ -19,6 +19,26 @@ interface DbProfile {
     specialty?: string
 }
 
+const TECHNICIAN_ROLES = ['technician', 'tecnico', 'técnico']
+
+function isMissingSpecialtyColumnError(error: unknown) {
+    const msg = (error as any)?.message?.toLowerCase?.() || ''
+    return msg.includes('specialty') && (msg.includes('column') || msg.includes('schema cache'))
+}
+
+function mapTechnicians(data: DbProfile[]): Technician[] {
+    const filtered = (data || []).filter((p: DbProfile) => {
+        const normalizedRole = String(p.role || '').trim().toLowerCase()
+        return TECHNICIAN_ROLES.includes(normalizedRole)
+    })
+
+    return filtered.map((t: DbProfile): Technician => ({
+        ...t,
+        name: t.full_name,
+        specialty: t.specialty || undefined
+    }))
+}
+
 export function useTechnicians() {
     const [technicians, setTechnicians] = useState<Technician[]>([])
     const [isLoading, setIsLoading] = useState(true)
@@ -37,10 +57,25 @@ export function useTechnicians() {
 
             try {
                 const supabase = createClient()
-                const { data, error } = await supabase
+                let data: DbProfile[] | null = null
+                let error: unknown = null
+
+                const withSpecialty = await supabase
                     .from('profiles')
-                    .select('id, full_name, email, role')
+                    .select('id, full_name, email, role, specialty')
                     .order('full_name')
+
+                data = withSpecialty.data as DbProfile[] | null
+                error = withSpecialty.error
+
+                if (error && isMissingSpecialtyColumnError(error)) {
+                    const fallback = await supabase
+                        .from('profiles')
+                        .select('id, full_name, email, role')
+                        .order('full_name')
+                    data = fallback.data as DbProfile[] | null
+                    error = fallback.error
+                }
 
                 if (error) {
                     const msg = (error as any)?.message || String(error)
@@ -54,14 +89,7 @@ export function useTechnicians() {
                     throw error
                 }
 
-                const filtered = (data || []).filter((p: DbProfile) => ['technician', 'admin', 'vendedor'].includes(p.role))
-                // Map full_name to name for easier component usage
-                const mapped = filtered.map((t: DbProfile): Technician => ({
-                    ...t,
-                    name: t.full_name,
-                    specialty: t.specialty || undefined
-                }))
-                setTechnicians(mapped)
+                setTechnicians(mapTechnicians(data || []))
             } catch (err: unknown) {
                 const msg = err && typeof err === 'object' && 'message' in err ? String((err as Error).message) : String(err)
                 console.error('Error fetching technicians:', { message: msg })
@@ -89,20 +117,29 @@ export function useTechnicians() {
 
             try {
                 const supabase = createClient()
-                const { data, error } = await supabase
+                let data: DbProfile[] | null = null
+                let error: unknown = null
+
+                const withSpecialty = await supabase
                     .from('profiles')
-                    .select('id, full_name, email, role')
+                    .select('id, full_name, email, role, specialty')
                     .order('full_name')
+
+                data = withSpecialty.data as DbProfile[] | null
+                error = withSpecialty.error
+
+                if (error && isMissingSpecialtyColumnError(error)) {
+                    const fallback = await supabase
+                        .from('profiles')
+                        .select('id, full_name, email, role')
+                        .order('full_name')
+                    data = fallback.data as DbProfile[] | null
+                    error = fallback.error
+                }
 
                 if (error) throw error
 
-                const filtered = (data || []).filter((p: DbProfile) => ['technician', 'admin', 'vendedor'].includes(p.role))
-                const mapped = filtered.map((t: DbProfile): Technician => ({
-                    ...t,
-                    name: t.full_name,
-                    specialty: t.specialty || undefined
-                }))
-                setTechnicians(mapped)
+                setTechnicians(mapTechnicians(data || []))
             } catch (err: unknown) {
                 console.error('Error refreshing technicians:', err)
                 const errorMessage = err instanceof Error ? err.message : 'Error desconocido'

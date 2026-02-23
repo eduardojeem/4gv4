@@ -315,7 +315,7 @@ export const OptimizedTechnicianActiveJobs = memo(function OptimizedTechnicianAc
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => router.push(`/dashboard/repairs?id=${repair.id}`)}
+                    onClick={() => router.push(`/dashboard/repairs?id=${repair.id}&edit=true`)}
                     className="flex-shrink-0"
                   >
                     <ExternalLink className="h-4 w-4" />

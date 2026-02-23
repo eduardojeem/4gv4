@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, memo } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -15,11 +14,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Bell, Search, LogOut, User, Settings, Menu, AlertCircle, Shield } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { Search, LogOut, User, Settings, Menu, Shield } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { NotificationSystem, useNotifications } from '@/components/dashboard/notification-system'
+import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { useAuth } from '@/contexts/auth-context'
 import { useProducts } from '@/hooks/useProducts'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
@@ -35,8 +34,8 @@ export const Header = memo(function Header() {
   const [loading, setLoading] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [isCompact, setIsCompact] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
   const { toggleSidebar } = useDashboardLayout()
   const { search } = useDashboardSearch()
   const { user, signOut } = useAuth()
@@ -47,33 +46,35 @@ export const Header = memo(function Header() {
   // Notifications logic
   const { 
     notifications, 
-    addNotification,
     markAsRead, 
     markAllAsRead, 
     deleteNotification, 
     clearAll,
     generateStockNotifications
   } = useNotifications()
+  const shouldTrackStock = user?.role === 'admin' || user?.role === 'vendedor'
 
   // Load products periodically to check for low stock
   useEffect(() => {
+    if (!shouldTrackStock) return
+
     // Initial load
     loadProducts({ is_active: true })
 
-    // Check every 5 minutes
+    // Check every 10 minutes
     const interval = setInterval(() => {
       loadProducts({ is_active: true })
-    }, 5 * 60 * 1000)
+    }, 10 * 60 * 1000)
 
     return () => clearInterval(interval)
-  }, [loadProducts])
+  }, [loadProducts, shouldTrackStock])
 
   // Generate notifications when products change
   useEffect(() => {
-    if (products.length > 0) {
+    if (shouldTrackStock && products.length > 0) {
       generateStockNotifications(products)
     }
-  }, [products, generateStockNotifications])
+  }, [products, generateStockNotifications, shouldTrackStock])
 
   // Prefetch critical routes
   useEffect(() => {
@@ -93,6 +94,17 @@ export const Header = memo(function Header() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Compact header on scroll for better content visibility
+  useEffect(() => {
+    const onScroll = () => {
+      setIsCompact(window.scrollY > 16)
+    }
+
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   const handleLogout = async () => {
     setLoading(true)
     try {
@@ -110,22 +122,29 @@ export const Header = memo(function Header() {
 
   const pathname = usePathname()
   const breadcrumb = useMemo(() => {
-    const map: Record<string, string> = {
-      '/dashboard': 'Dashboard',
-      '/dashboard/customers': 'Clientes',
-      '/dashboard/products': 'Productos',
-      '/dashboard/suppliers': 'Proveedores',
-      '/dashboard/pos': 'Punto de Venta',
-      '/dashboard/repairs': 'Reparaciones',
-      '/dashboard/technician': 'Panel Técnico',
-      '/dashboard/reports': 'Reportes',
-      '/admin': 'Administración',
-      '/dashboard/settings': 'Configuración',
-      '/dashboard/catalog': 'Catálogo',
-      '/dashboard/posts': 'Publicaciones',
-      '/dashboard/profile': 'Perfil',
-    }
-    return map[pathname] || 'Sección'
+    const sectionMap: Array<{ prefix: string; label: string }> = [
+      { prefix: '/dashboard/customers', label: 'Clientes' },
+      { prefix: '/dashboard/products', label: 'Productos' },
+      { prefix: '/dashboard/suppliers', label: 'Proveedores' },
+      { prefix: '/dashboard/pos/caja', label: 'Caja' },
+      { prefix: '/dashboard/pos', label: 'Punto de Venta' },
+      { prefix: '/dashboard/repairs', label: 'Reparaciones' },
+      { prefix: '/dashboard/technician', label: 'Panel Técnico' },
+      { prefix: '/dashboard/reports', label: 'Reportes' },
+      { prefix: '/dashboard/settings', label: 'Configuración' },
+      { prefix: '/dashboard/catalog', label: 'Catálogo' },
+      { prefix: '/dashboard/posts', label: 'Publicaciones' },
+      { prefix: '/dashboard/profile', label: 'Perfil' },
+      { prefix: '/admin', label: 'Administración' },
+      { prefix: '/dashboard', label: 'Dashboard' },
+    ]
+
+    const mapped = sectionMap.find(section => pathname === section.prefix || pathname.startsWith(`${section.prefix}/`))
+    if (mapped) return mapped.label
+
+    const lastSegment = pathname.split('/').filter(Boolean).pop()
+    if (!lastSegment) return 'Dashboard'
+    return lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1).replace(/-/g, ' ')
   }, [pathname])
 
   // Get user initials for avatar fallback
@@ -140,7 +159,13 @@ export const Header = memo(function Header() {
   }, [user])
 
   return (
-    <header className="border-b border-border px-6 py-3 sticky top-0 z-30 transition-all duration-200 backdrop-blur-sm bg-background/95 supports-backdrop-filter:bg-background/60">
+    <header
+      className={cn(
+        "border-b border-border sticky top-0 z-30 backdrop-blur-sm bg-background/95 supports-backdrop-filter:bg-background/60",
+        "transition-[padding,box-shadow,background-color] duration-200",
+        isCompact ? "px-4 sm:px-5 py-2 shadow-sm" : "px-6 py-3"
+      )}
+    >
       <div className="flex items-center justify-between gap-4">
         {/* Mobile hamburger + Breadcrumb */}
         <div className="flex items-center gap-3 min-w-0">
@@ -157,8 +182,12 @@ export const Header = memo(function Header() {
 
           {/* Breadcrumb + Title */}
           <div className="min-w-0 flex flex-col">
-            <div className="text-xs text-muted-foreground hidden sm:block">Dashboard / {breadcrumb}</div>
-            <h2 className="text-lg font-semibold truncate leading-tight">{breadcrumb}</h2>
+            <div className={cn("text-xs text-muted-foreground hidden sm:block", isCompact && "opacity-80")}>
+              Dashboard / {breadcrumb}
+            </div>
+            <h2 className={cn("font-semibold truncate leading-tight transition-all duration-200", isCompact ? "text-base" : "text-lg")}>
+              {breadcrumb}
+            </h2>
           </div>
         </div>
 
@@ -166,7 +195,10 @@ export const Header = memo(function Header() {
         <div className="flex-1 max-w-md hidden md:block">
           <Button
             variant="outline"
-            className="w-full justify-start text-muted-foreground font-normal bg-muted/50 hover:bg-muted border-muted-foreground/10"
+            className={cn(
+              "w-full justify-start text-muted-foreground font-normal bg-muted/50 hover:bg-muted border-muted-foreground/10",
+              isCompact ? "h-9" : "h-10"
+            )}
             onClick={() => setSearchOpen(true)}
           >
             <Search className="mr-2 h-4 w-4" />
@@ -186,6 +218,7 @@ export const Header = memo(function Header() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+          <InstallPrompt />
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="md:hidden h-9 w-9" onClick={() => setSearchOpen(true)}>
               <Search className="h-5 w-5" />
@@ -249,7 +282,7 @@ export const Header = memo(function Header() {
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="text-sm font-medium">Mi Perfil</span>
-                    <span className="text-xs text-muted-foreground">Ver informaicón personal</span>
+                    <span className="text-xs text-muted-foreground">Ver información personal</span>
                   </div>
                 </Link>
               </DropdownMenuItem>

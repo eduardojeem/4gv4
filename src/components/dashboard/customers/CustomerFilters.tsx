@@ -37,6 +37,7 @@ interface CustomerFiltersProps {
   onViewModeChange: (mode: "table" | "grid" | "timeline") => void
   customers: Customer[]
   onAddCustomer?: () => void
+  onRefresh?: () => Promise<void> | void
   compact?: boolean
   onCustomerSelect?: (customer: Customer) => void // Nueva prop
 }
@@ -48,6 +49,7 @@ export function CustomerFilters({
   onViewModeChange,
   customers,
   onAddCustomer,
+  onRefresh,
   compact,
   onCustomerSelect
 }: CustomerFiltersProps) {
@@ -177,7 +179,7 @@ export function CustomerFilters({
 
   return (
     <>
-    <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900">
+    <Card className="border border-gray-200 dark:border-slate-700 shadow-lg bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950">
       <CardHeader className={compact ? "pb-2" : "pb-3"}>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
@@ -185,7 +187,7 @@ export function CustomerFilters({
               <Filter className="h-5 w-5 text-white" />
             </div>
             <div>
-              <span className="text-xl font-bold">Filtros Inteligentes</span>
+              <span className="text-xl font-bold text-gray-900 dark:text-slate-100">Filtros Inteligentes</span>
               {activeFiltersCount > 0 && (
                 <Badge className="ml-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-0">
                   {activeFiltersCount}
@@ -195,15 +197,15 @@ export function CustomerFilters({
           </CardTitle>
           <div className="flex items-center gap-3">
             {/* View Mode Toggle */}
-            <div className={compact ? "flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-0.5 shadow-inner" : "flex items-center bg-gray-100 dark:bg-gray-800 rounded-xl p-1 shadow-inner"}>
+            <div className={compact ? "flex items-center bg-gray-100 dark:bg-slate-800 rounded-xl p-0.5 shadow-inner" : "flex items-center bg-gray-100 dark:bg-slate-800 rounded-xl p-1 shadow-inner"}>
               <Button
                 variant={viewMode === "table" ? "default" : "ghost"}
                 size="sm"
                 onClick={() => onViewModeChange("table")}
                 className={`${compact ? "h-7 w-7" : "h-8 w-8"} p-0 rounded-lg transition-all duration-200 ${
                   viewMode === "table" 
-                    ? "bg-white shadow-md dark:bg-gray-700" 
-                    : "hover:bg-white/50 dark:hover:bg-gray-700/50"
+                    ? "bg-white shadow-md dark:bg-slate-700 dark:text-slate-100" 
+                    : "hover:bg-white/50 dark:hover:bg-slate-700/50 dark:text-slate-300"
                 }`}
                 aria-label="Vista de tabla"
                 aria-pressed={viewMode === "table"}
@@ -216,8 +218,8 @@ export function CustomerFilters({
                 onClick={() => onViewModeChange("grid")}
                 className={`${compact ? "h-7 w-7" : "h-8 w-8"} p-0 rounded-lg transition-all duration-200 ${
                   viewMode === "grid" 
-                    ? "bg-white shadow-md dark:bg-gray-700" 
-                    : "hover:bg-white/50 dark:hover:bg-gray-700/50"
+                    ? "bg-white shadow-md dark:bg-slate-700 dark:text-slate-100" 
+                    : "hover:bg-white/50 dark:hover:bg-slate-700/50 dark:text-slate-300"
                 }`}
                 aria-label="Vista de cuadrícula"
                 aria-pressed={viewMode === "grid"}
@@ -230,8 +232,8 @@ export function CustomerFilters({
                 onClick={() => onViewModeChange("timeline")}
                 className={`${compact ? "h-7 w-7" : "h-8 w-8"} p-0 rounded-lg transition-all duration-200 ${
                   viewMode === "timeline" 
-                    ? "bg-white shadow-md dark:bg-gray-700" 
-                    : "hover:bg-white/50 dark:hover:bg-gray-700/50"
+                    ? "bg-white shadow-md dark:bg-slate-700 dark:text-slate-100" 
+                    : "hover:bg-white/50 dark:hover:bg-slate-700/50 dark:text-slate-300"
                 }`}
                 aria-label="Vista de línea de tiempo"
                 aria-pressed={viewMode === "timeline"}
@@ -244,7 +246,7 @@ export function CustomerFilters({
               variant="outline"
               size="sm"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="border-blue-200 hover:bg-blue-50 hover:border-blue-300 dark:border-blue-700 dark:hover:bg-blue-900/20"
+              className="border-blue-200 hover:bg-blue-50 hover:border-blue-300 dark:border-blue-500/50 dark:text-slate-100 dark:hover:bg-blue-500/20"
               aria-label={showAdvanced ? "Ocultar filtros avanzados" : "Mostrar filtros avanzados"}
               aria-expanded={showAdvanced}
             >
@@ -258,7 +260,7 @@ export function CustomerFilters({
                 variant="outline"
                 size="sm"
                 onClick={clearFilters}
-                className="border-red-200 hover:bg-red-50 hover:border-red-300 dark:border-red-700 dark:hover:bg-red-900/20"
+                className="border-red-200 hover:bg-red-50 hover:border-red-300 dark:border-red-500/50 dark:text-slate-100 dark:hover:bg-red-500/20"
                 aria-label="Limpiar todos los filtros aplicados"
               >
                 <X className="h-4 w-4 mr-1" />
@@ -285,7 +287,7 @@ export function CustomerFilters({
                   variant="outline"
                   size="sm"
                   onClick={filter.action}
-                  className="flex items-center gap-2 bg-white hover:bg-gray-50 border-gray-200 hover:border-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 dark:border-gray-600"
+                  className="flex items-center gap-2 bg-white hover:bg-gray-50 border-gray-200 hover:border-gray-300 dark:bg-slate-900 dark:hover:bg-slate-800 dark:border-slate-700 dark:text-slate-200"
                   aria-label={filter.ariaLabel}
                   role="button"
                   tabIndex={0}
@@ -348,7 +350,7 @@ export function CustomerFilters({
               value={filters.status}
               onValueChange={(value) => handleFilterChange("status", value)}
             >
-              <SelectTrigger className={`${compact ? "h-9" : "h-11"} border-gray-200 focus:border-blue-400 dark:border-gray-700`}>
+              <SelectTrigger className={`${compact ? "h-9" : "h-11"} border-gray-200 focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100`}>
                 <SelectValue placeholder="Todos los estados" />
               </SelectTrigger>
               <SelectContent>
@@ -387,7 +389,7 @@ export function CustomerFilters({
               value={filters.customer_type}
               onValueChange={(value) => handleFilterChange("customer_type", value)}
             >
-              <SelectTrigger className={`${compact ? "h-9" : "h-11"} border-gray-200 focus:border-blue-400 dark:border-gray-700`}>
+              <SelectTrigger className={`${compact ? "h-9" : "h-11"} border-gray-200 focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100`}>
                 <SelectValue placeholder="Todos los tipos" />
               </SelectTrigger>
               <SelectContent>
@@ -421,7 +423,7 @@ export function CustomerFilters({
               value={filters.segment}
               onValueChange={(value) => handleFilterChange("segment", value)}
             >
-              <SelectTrigger className={`${compact ? "h-9" : "h-11"} border-gray-200 focus:border-blue-400 dark:border-gray-700`}>
+              <SelectTrigger className={`${compact ? "h-9" : "h-11"} border-gray-200 focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100`}>
                 <SelectValue placeholder="Todos los segmentos" />
               </SelectTrigger>
               <SelectContent>
@@ -461,7 +463,7 @@ export function CustomerFilters({
               value={filters.city}
               onValueChange={(value) => handleFilterChange("city", value)}
             >
-              <SelectTrigger className={`${compact ? "h-9" : "h-11"} border-gray-200 focus:border-blue-400 dark:border-gray-700`}>
+              <SelectTrigger className={`${compact ? "h-9" : "h-11"} border-gray-200 focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100`}>
                 <SelectValue placeholder="Todas las ciudades" />
               </SelectTrigger>
               <SelectContent>
@@ -508,7 +510,7 @@ export function CustomerFilters({
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
-                        className={`w-full ${compact ? "h-9" : "h-11"} justify-start text-left font-normal border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800`}
+                        className={`w-full ${compact ? "h-9" : "h-11"} justify-start text-left font-normal border-gray-200 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800`}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {filters.date_range.from ? (
@@ -553,7 +555,7 @@ export function CustomerFilters({
                     value={filters.assigned_salesperson}
                     onValueChange={(value) => handleFilterChange("assigned_salesperson", value)}
                   >
-                    <SelectTrigger className="h-11 border-gray-200 focus:border-blue-400 dark:border-gray-700">
+                    <SelectTrigger className="h-11 border-gray-200 focus:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                       <SelectValue placeholder="Todos los vendedores" />
                     </SelectTrigger>
                     <SelectContent>
@@ -668,7 +670,11 @@ export function CustomerFilters({
               setDataDialogTab('import')
               setShowDataDialog(true)
             }}
-            onRefresh={() => window.location.reload()}
+            onRefresh={() => {
+              if (onRefresh) {
+                void Promise.resolve(onRefresh())
+              }
+            }}
             viewMode={viewMode}
             onViewModeChange={onViewModeChange}
             compact={compact}
@@ -688,8 +694,9 @@ export function CustomerFilters({
           
           if (result.success) {
             toast.success(`${result.imported} clientes importados exitosamente`)
-            // Refresh the customer list
-            window.location.reload()
+            if (onRefresh) {
+              await Promise.resolve(onRefresh())
+            }
           } else {
             toast.error(result.error || 'Error al importar clientes')
           }

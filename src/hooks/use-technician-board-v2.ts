@@ -3,6 +3,7 @@ import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
 import { DbRepairStatus } from '@/types/repairs'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
 
 export function useTechnicianBoardV2() {
     // Usar el contexto global para datos
@@ -80,7 +81,7 @@ export function useTechnicianBoardV2() {
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Error desconocido al actualizar estado'
-            console.error('Error updating repair status:', {
+            logger.error('Error updating repair status', {
                 repairId: draggedRepairId,
                 fromStatus: previousStatus,
                 toStatus: status,
@@ -126,13 +127,11 @@ interface RepairCreateData {
     // Wrapper para actualizar reparación manteniendo compatibilidad
     const updateRepair = async (id: string, data: RepairUpdateData) => {
         try {
-            const result = await globalUpdateRepair(id, data)
-            if (result) {
-                toast.success('Reparación actualizada correctamente')
-            }
+            // Cast necesario: RepairUpdateData usa snake_case (DB) mientras globalUpdateRepair espera Partial<Repair>
+            const result = await globalUpdateRepair(id, data as any)
             return result
         } catch (error) {
-            console.error('Error updating repair:', error)
+            logger.error('Error updating repair', { error })
             toast.error('Error al actualizar la reparación')
             throw error
         }
@@ -140,13 +139,14 @@ interface RepairCreateData {
 
     const createRepair = async (data: RepairCreateData) => {
         try {
-            const result = await globalCreateRepair(data)
+            // Cast necesario: RepairCreateData usa snake_case (DB) mientras globalCreateRepair espera RepairFormData
+            const result = await globalCreateRepair(data as any)
             if (result) {
                 toast.success('Reparación creada correctamente')
             }
             return result
         } catch (error) {
-            console.error('Error creating repair:', error)
+            logger.error('Error creating repair', { error })
             toast.error('Error al crear la reparación')
             throw error
         }
@@ -156,7 +156,7 @@ interface RepairCreateData {
         try {
             return await globalAddImages(repairId, urls, imageType)
         } catch (error) {
-            console.error('Error adding images:', error)
+            logger.error('Error adding images', { error })
             toast.error('Error al agregar imágenes')
             return false
         }

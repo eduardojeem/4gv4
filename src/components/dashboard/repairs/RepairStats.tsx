@@ -87,15 +87,15 @@ export const RepairStats = memo(function RepairStats({ repairs }: RepairStatsPro
     ]
 
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             {statCards.map((stat, index) => {
                 const Icon = stat.icon
                 return (
                     <Card
                         key={index}
-                        className={`${stat.bgGradient} border-0 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 dark:shadow-lg dark:hover:shadow-xl`}
+                        className={`${stat.bgGradient} border-0 shadow-sm hover:shadow-md transition-shadow duration-200 dark:shadow-lg dark:hover:shadow-xl`}
                     >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5">
                             <CardTitle className="text-sm font-medium text-foreground/80 dark:text-foreground/90">
                                 {stat.title}
                             </CardTitle>
@@ -103,8 +103,8 @@ export const RepairStats = memo(function RepairStats({ repairs }: RepairStatsPro
                                 <Icon className="h-full w-full text-white" />
                             </div>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold bg-gradient-to-br bg-clip-text text-transparent from-foreground to-foreground/70 dark:from-foreground dark:to-foreground/80">
+                        <CardContent className="pt-0">
+                            <div className="text-2xl font-bold bg-gradient-to-br bg-clip-text text-transparent from-foreground to-foreground/70 dark:from-foreground dark:to-foreground/80">
                                 {stat.value}
                             </div>
                             <p className="text-xs text-muted-foreground dark:text-muted-foreground/90 mt-1">

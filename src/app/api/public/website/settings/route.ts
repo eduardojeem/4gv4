@@ -47,6 +47,30 @@ export async function GET() {
       }
     }
 
+    if (!settingsObj.hero_content) {
+      settingsObj.hero_content = {
+        badge: 'Servicio técnico especializado',
+        title: 'Reparación profesional para tu equipo',
+        subtitle: 'Diagnóstico claro, repuestos de calidad y seguimiento en línea.'
+      }
+    }
+
+    if (!settingsObj.hero_stats) {
+      settingsObj.hero_stats = {
+        repairs: '0+',
+        satisfaction: '0%',
+        avgTime: '24h'
+      }
+    }
+
+    if (!Array.isArray(settingsObj.services)) {
+      settingsObj.services = []
+    }
+
+    if (!Array.isArray(settingsObj.testimonials)) {
+      settingsObj.testimonials = []
+    }
+
     return NextResponse.json({
       success: true,
       data: settingsObj

@@ -113,15 +113,7 @@ export function useSuppliers() {
                 query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,contact_person.ilike.%${q}%`)
             }
             if (params?.status && params.status !== 'all') {
-                // Try status column first, fallback to is_active for backward compatibility
-                if (params.status === 'active') {
-                    query = query.or('status.eq.active,is_active.eq.true')
-                } else if (params.status === 'inactive') {
-                    query = query.or('status.eq.inactive,is_active.eq.false')
-                } else {
-                    // For pending/suspended, only use status column
-                    query = query.eq('status', params.status)
-                }
+                query = query.eq('status', params.status)
             }
             if (params?.businessType && params.businessType !== 'all') {
                 query = query.eq('business_type', params.businessType)
@@ -146,7 +138,7 @@ export function useSuppliers() {
             const list: Supplier[] = dbSuppliers.map((s: any) => ({
                 id: s.id,
                 name: s.name,
-                contact_person: s.contact_person || '',
+                contact_person: s.contact_name || s.contact_person || '',
                 email: s.email || '',
                 phone: s.phone || '',
                 address: s.address || '',
@@ -156,7 +148,7 @@ export function useSuppliers() {
                 website: s.website || '',
                 business_type: (s.business_type || 'distributor') as any, 
                 // Use status column if available, otherwise map from is_active
-                status: s.status || (s.is_active ? 'active' : 'inactive') as 'active' | 'inactive' | 'pending' | 'suspended',
+                status: s.status || 'inactive',
                 rating: s.rating || 0,
                 products_count: s.products_count || 0,
                 total_orders: s.total_orders || 0,
@@ -195,12 +187,6 @@ export function useSuppliers() {
         const payload: any = {
             ...supplierData,
             updated_at: new Date().toISOString()
-        }
-        
-        // Map status to is_active
-        if (supplierData.status) {
-            payload.is_active = supplierData.status === 'active'
-            delete payload.status
         }
         
         // Map contact_person to contact_name
@@ -335,10 +321,9 @@ export function useSuppliers() {
     // Bulk update supplier status
     const bulkUpdateStatus = async (ids: string[], status: string) => {
         try {
-            const is_active = status === 'active'
             const { error } = await supabase
                 .from('suppliers')
-                .update({ is_active, updated_at: new Date().toISOString() })
+                .update({ status, updated_at: new Date().toISOString() })
                 .in('id', ids)
 
             if (error) throw error

@@ -3,9 +3,45 @@ import useSWR, { mutate } from 'swr'
 import { WebsiteSettings } from '@/types/website-settings'
 import { createSupabaseClient } from '@/lib/supabase/client'
 
+let publicRealtimeRefCount = 0
+let publicRealtimeSupabase: ReturnType<typeof createSupabaseClient> | null = null
+let publicRealtimeChannel: ReturnType<ReturnType<typeof createSupabaseClient>['channel']> | null = null
+
+const WEBSITE_SETTINGS_CACHE_KEY = '/api/public/website/settings'
+
+function ensurePublicWebsiteSettingsRealtime() {
+  if (publicRealtimeChannel) return
+
+  if (!publicRealtimeSupabase) {
+    publicRealtimeSupabase = createSupabaseClient()
+  }
+
+  publicRealtimeChannel = publicRealtimeSupabase
+    .channel('realtime:website_settings_public')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'website_settings'
+      },
+      async () => {
+        await mutate(WEBSITE_SETTINGS_CACHE_KEY)
+      }
+    )
+    .subscribe()
+}
+
+function releasePublicWebsiteSettingsRealtime() {
+  if (!publicRealtimeSupabase || !publicRealtimeChannel) return
+
+  publicRealtimeSupabase.removeChannel(publicRealtimeChannel)
+  publicRealtimeChannel = null
+}
+
 export function useWebsiteSettings() {
   const fetcher = useMemo(() => async () => {
-    const res = await fetch('/api/public/website/settings')
+    const res = await fetch(WEBSITE_SETTINGS_CACHE_KEY)
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}))
       const statusText = res.statusText || 'Error'
@@ -18,32 +54,22 @@ export function useWebsiteSettings() {
     return data.data as WebsiteSettings
   }, [])
 
-  const { data, error, isLoading } = useSWR<WebsiteSettings>('/api/public/website/settings', fetcher)
+  const { data, error, isLoading } = useSWR<WebsiteSettings>(WEBSITE_SETTINGS_CACHE_KEY, fetcher)
 
-  // Realtime subscription to reflect public changes instantly
+  // Share a single realtime subscription across all consumers of this hook.
   useEffect(() => {
-    let supabase: ReturnType<typeof createSupabaseClient> | null = null
+    publicRealtimeRefCount += 1
     try {
-      supabase = createSupabaseClient()
+      ensurePublicWebsiteSettingsRealtime()
     } catch {
       // Supabase not configured; skip realtime
-      return
     }
 
-    const channel = supabase
-      .channel('realtime:website_settings_public')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'website_settings'
-      }, async () => {
-        // Revalidate on any change
-        await mutate('/api/public/website/settings')
-      })
-      .subscribe()
-
     return () => {
-      supabase?.removeChannel(channel)
+      publicRealtimeRefCount = Math.max(0, publicRealtimeRefCount - 1)
+      if (publicRealtimeRefCount === 0) {
+        releasePublicWebsiteSettingsRealtime()
+      }
     }
   }, [])
 

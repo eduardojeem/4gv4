@@ -46,7 +46,7 @@ export function ImageUploader({
 
     try {
       const compressedFile = await imageCompression(file, options)
-      return compressedFile
+      return compressedFile as File
     } catch (error) {
       console.error('Error compressing image:', error)
       return file
@@ -354,7 +354,7 @@ export function ImageUploader({
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden"
               >
-                <Card className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+                <Card className="p-4 bg-linear-to-br from-blue-50 to-indigo-50 border-blue-200">
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-blue-700">
                       <LinkIcon className="h-4 w-4" />
@@ -441,7 +441,7 @@ export function ImageUploader({
       {images.length === 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex gap-3">
-            <ImageIcon className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <ImageIcon className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
             <div className="text-sm">
               <p className="font-medium text-blue-900 mb-1">Consejos para mejores imágenes:</p>
               <ul className="text-blue-700 space-y-1 text-xs">

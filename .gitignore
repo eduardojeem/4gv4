@@ -177,3 +177,8 @@ tsconfig.*.json
 !tsconfig.test.json
 next.config.*.ts
 !next.config.ts
+
+# PWA
+public/sw.js
+public/workbox-*.js
+public/worker-*.js

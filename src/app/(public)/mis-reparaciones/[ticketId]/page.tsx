@@ -140,7 +140,7 @@ export default function RepairDetailPage({ params }: { params: Promise<{ ticketI
   // Verificar hash del QR si viene en la URL
   useEffect(() => {
     const verifyHash = searchParams.get('verify')
-    if (verifyHash && !qrVerified && !verifying) {
+    if (verifyHash && qrVerified === null && !verifying) {
       setVerifying(true)
       fetch(`/api/repairs/verify-qr?ticket=${ticketId}&hash=${verifyHash}`)
         .then(res => res.json())
@@ -168,15 +168,18 @@ export default function RepairDetailPage({ params }: { params: Promise<{ ticketI
   }, [ticketId, searchParams, qrVerified, verifying])
 
   const { data: repair, error, isLoading } = useSWR<PublicRepair>(
-    `/api/public/repairs/${ticketId}`,
+    `/api/public/repairs/${ticketId}${searchParams.get('verify') ? `?verify=${searchParams.get('verify')}` : ''}`,
     fetcher,
     {
       revalidateOnFocus: false,
       dedupingInterval: 60000,
       refreshInterval: 120000,
-      onError: () => {
-        toast.error('No se pudo cargar la reparacion')
-        router.push('/mis-reparaciones')
+      onError: (err) => {
+        // Solo redirigir si no hay hash de verificación o si el error no es de autorización
+        if (!searchParams.get('verify')) {
+            toast.error('No se pudo cargar la reparacion')
+            router.push('/mis-reparaciones')
+        }
       },
     },
   )
@@ -212,7 +215,28 @@ export default function RepairDetailPage({ params }: { params: Promise<{ ticketI
     )
   }
 
-  if (error || !repair) return null
+  if (error) {
+    return (
+      <div className="container max-w-lg py-20">
+        <div className="flex flex-col items-center text-center gap-4 p-8 rounded-2xl border bg-card shadow-sm">
+          <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+            <ShieldAlert className="h-6 w-6 text-red-600 dark:text-red-400" />
+          </div>
+          <h2 className="text-xl font-bold">No se pudo cargar la reparación</h2>
+          <p className="text-muted-foreground">
+            {searchParams.get('verify') 
+              ? 'El enlace de verificación es inválido o ha expirado. Por favor intenta escanear el código nuevamente o busca tu reparación manualmente.'
+              : 'No tienes permisos para ver esta reparación o el ticket no existe.'}
+          </p>
+          <Button onClick={() => router.push('/mis-reparaciones')} variant="outline" className="mt-2">
+            Volver a Buscar
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!repair) return null
 
   const cfg = STATUS_CONFIG[(repair.status as StatusKey)] || STATUS_CONFIG.recibido
   const StatusIcon = cfg.Icon

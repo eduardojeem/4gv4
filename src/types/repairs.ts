@@ -194,6 +194,7 @@ export interface PriorityLogEntry {
 }
 
 export type CommunicationChannel = 'email' | 'sms' | 'whatsapp' | 'in_app'
+export type CommunicationStatus = 'pending' | 'sent' | 'failed'
 
 export interface CommunicationMessage {
   id: string
@@ -201,7 +202,7 @@ export interface CommunicationMessage {
   channel: CommunicationChannel
   content: string
   sentAt: string
-  status: 'sent' | 'failed'
+  status: CommunicationStatus
 }
 
 export interface CommunicationTemplate {

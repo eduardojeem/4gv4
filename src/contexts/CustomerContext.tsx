@@ -44,6 +44,7 @@ interface CustomerContextValue {
     sendMessage: (customerIds: string[], message: string, type: 'email' | 'sms' | 'whatsapp') => Promise<{ success: boolean; sent?: number; error?: any }>
     generateReport: (type: 'sales' | 'activity' | 'segmentation', filters?: Partial<CustomerFilters>) => Promise<{ success: boolean; reportUrl?: string; error?: any }>
     bulkUpdate: (customerIds: string[], updates: Partial<Customer>) => Promise<{ success: boolean; updated?: number; error?: any }>
+    bulkDelete: (customerIds: string[]) => Promise<{ success: boolean; deleted?: number; error?: any }>
     addNote: (customerId: string, note: string) => Promise<{ success: boolean; error?: any }>
     addTag: (customerId: string, tag: string) => Promise<{ success: boolean; error?: any }>
     removeTag: (customerId: string, tag: string) => Promise<{ success: boolean; error?: any }>

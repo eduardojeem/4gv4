@@ -1,11 +1,13 @@
+
 'use client'
 
 import { useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronLeft, BarChart3, Activity, Zap } from 'lucide-react'
-import { OptimizedRepairAnalytics } from '@/components/dashboard/repairs/analytics/OptimizedRepairAnalytics'
+import { ChevronLeft, BarChart3, Activity, Users } from 'lucide-react'
+import { AnalyticsOverview } from '@/components/dashboard/repairs/analytics/AnalyticsOverview'
+import { AnalyticsTechnicians } from '@/components/dashboard/repairs/analytics/AnalyticsTechnicians'
 import { RepairPerformanceMetrics } from '@/components/dashboard/repairs/analytics/RepairPerformanceMetrics'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -49,7 +51,7 @@ export default function RepairsAnalyticsPage() {
                 Analytics de Reparaciones
               </h1>
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1">
-                Análisis optimizado del rendimiento y métricas de reparaciones
+                Análisis integral del rendimiento, métricas y productividad
               </p>
             </div>
           </div>
@@ -58,7 +60,7 @@ export default function RepairsAnalyticsPage() {
         {/* Tabs optimizados */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl shadow-lg border-0 p-2">
-            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 bg-transparent h-auto p-0">
+            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 gap-2 bg-transparent h-auto p-0">
               <TabsTrigger 
                 value="overview" 
                 className="flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
@@ -74,18 +76,18 @@ export default function RepairsAnalyticsPage() {
                 <span>Rendimiento</span>
               </TabsTrigger>
               <TabsTrigger 
-                value="optimized" 
+                value="technicians" 
                 className="flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200"
               >
-                <Zap className="h-4 w-4" />
-                <span>Optimizado</span>
+                <Users className="h-4 w-4" />
+                <span>Técnicos</span>
               </TabsTrigger>
             </TabsList>
           </div>
 
           <TabsContent value="overview" className="mt-6">
             <Suspense fallback={<AnalyticsLoading />}>
-              <OptimizedRepairAnalytics />
+              <AnalyticsOverview />
             </Suspense>
           </TabsContent>
 
@@ -95,9 +97,9 @@ export default function RepairsAnalyticsPage() {
             </Suspense>
           </TabsContent>
 
-          <TabsContent value="optimized" className="mt-6">
+          <TabsContent value="technicians" className="mt-6">
             <Suspense fallback={<AnalyticsLoading />}>
-              <OptimizedRepairAnalytics />
+              <AnalyticsTechnicians />
             </Suspense>
           </TabsContent>
         </Tabs>

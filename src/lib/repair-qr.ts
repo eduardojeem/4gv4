@@ -95,8 +95,8 @@ export function generateRepairTrackingURL(
   baseUrl?: string
 ): string {
   const base = baseUrl || getBaseURL()
-  // Redirige a /mis-reparaciones con el ticket como parámetro de búsqueda
-  return `${base}/mis-reparaciones?ticket=${ticketNumber}&verify=${hash}`
+  // Redirige directamente a la página de detalle con el hash de verificación
+  return `${base}/mis-reparaciones/${ticketNumber}?verify=${hash}`
 }
 
 /**
@@ -126,9 +126,10 @@ export function generateQRCodeURL(
   ticketNumber: string,
   customerName: string,
   date: Date,
-  size: number = 150
+  size: number = 150,
+  precomputedHash?: string
 ): string {
-  const hash = generateRepairHash(ticketNumber, customerName, date)
+  const hash = precomputedHash || generateRepairHash(ticketNumber, customerName, date)
   const trackingURL = generateRepairTrackingURL(ticketNumber, hash)
   
   // Codificar la URL para el QR

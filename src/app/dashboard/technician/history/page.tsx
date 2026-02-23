@@ -45,6 +45,132 @@ import { Repair } from '@/types/repairs'
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
 
+function RepairTable({ repairs, emptyMessage }: { repairs: Repair[], emptyMessage: string }) {
+    if (repairs.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="p-4 bg-slate-100 rounded-full mb-4 dark:bg-slate-800">
+                    <Package className="h-8 w-8 text-slate-400" />
+                </div>
+                <p className="text-muted-foreground">{emptyMessage}</p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="rounded-md border">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Dispositivo</TableHead>
+                        <TableHead>Problema</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Duración</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead className="text-right">Costo</TableHead>
+                        <TableHead className="text-center">Calificación</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {repairs.map((repair) => {
+                        const repairDuration = repair.completedAt && repair.createdAt
+                            ? Math.ceil((new Date(repair.completedAt).getTime() - new Date(repair.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+                            : null
+
+                        return (
+                            <TableRow key={repair.id} className="cursor-pointer hover:bg-muted/50">
+                                <TableCell className="font-mono text-xs">
+                                    {repair.id.slice(0, 8)}
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex items-center gap-2">
+                                        <User className="h-4 w-4 text-muted-foreground" />
+                                        <div>
+                                            <p className="font-medium">{repair.customer.name}</p>
+                                            <p className="text-xs text-muted-foreground">{repair.customer.phone}</p>
+                                        </div>
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex items-center gap-2">
+                                        <Smartphone className="h-4 w-4 text-muted-foreground" />
+                                        <div>
+                                            <p className="font-medium">{repair.brand} {repair.model}</p>
+                                            <p className="text-xs text-muted-foreground capitalize">{repair.deviceType}</p>
+                                        </div>
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <div className="max-w-xs">
+                                        <p className="truncate text-sm">{repair.issue}</p>
+                                        <div className="flex gap-1 mt-1">
+                                            <Badge variant="outline" className="text-xs">
+                                                {repair.priority === 'high' ? 'Alta' : repair.priority === 'medium' ? 'Media' : 'Baja'}
+                                            </Badge>
+                                            {repair.urgency === 'urgent' && (
+                                                <Badge variant="destructive" className="text-xs">Urgente</Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <Badge
+                                        variant={
+                                            repair.dbStatus === 'entregado' ? 'default' :
+                                            repair.dbStatus === 'listo' ? 'secondary' :
+                                            repair.dbStatus === 'cancelado' ? 'destructive' : 'outline'
+                                        }
+                                        className="text-xs"
+                                    >
+                                        {repair.dbStatus === 'entregado' ? 'Entregado' :
+                                         repair.dbStatus === 'listo' ? 'Listo' :
+                                         repair.dbStatus === 'cancelado' ? 'Cancelado' :
+                                         repair.dbStatus === 'reparacion' ? 'En Reparación' :
+                                         repair.dbStatus === 'diagnostico' ? 'Diagnóstico' :
+                                         'Recibido'}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell>
+                                    {repairDuration && (
+                                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                            <Timer className="h-4 w-4" />
+                                            {repairDuration} días
+                                        </div>
+                                    )}
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <Calendar className="h-4 w-4" />
+                                        {format(new Date(repair.completedAt || repair.createdAt), 'dd MMM yyyy', { locale: es })}
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <div className="flex items-center justify-end gap-1 font-medium">
+                                        <GSIcon className="h-4 w-4" />
+                                        {(repair.finalCost || repair.estimatedCost).toLocaleString()}
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                    {repair.customerRating ? (
+                                        <div className="flex items-center justify-center gap-1">
+                                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                                            <span className="text-sm font-medium">{repair.customerRating}</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-xs text-muted-foreground">Sin calificar</span>
+                                    )}
+                                </TableCell>
+                            </TableRow>
+                        )
+                    })}
+                </TableBody>
+            </Table>
+        </div>
+    )
+}
+
 export default function TechnicianHistoryPage() {
     const { repairs, isLoading } = useRepairs()
     const { user } = useAuth()
@@ -72,10 +198,11 @@ export default function TechnicianHistoryPage() {
                 case 'thisMonth':
                     dateRange = { start: startOfMonth(now), end: endOfMonth(now) }
                     break
-                case 'lastMonth':
+                case 'lastMonth': {
                     const lastMonth = subMonths(now, 1)
                     dateRange = { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) }
                     break
+                }
                 case 'last3Months':
                     dateRange = { start: subMonths(now, 3), end: now }
                     break
@@ -309,7 +436,7 @@ export default function TechnicianHistoryPage() {
 
             {/* Performance Metrics */}
             <div className="grid gap-4 md:grid-cols-4">
-                <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-900">
+                <Card className="bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-900">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300">
                             Total Completadas
@@ -326,7 +453,7 @@ export default function TechnicianHistoryPage() {
                     </CardContent>
                 </Card>
                 
-                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-100 dark:from-green-950/20 dark:to-emerald-950/20 dark:border-green-900">
+                <Card className="bg-linear-to-br from-green-50 to-emerald-50 border-green-100 dark:from-green-950/20 dark:to-emerald-950/20 dark:border-green-900">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-green-700 dark:text-green-300">
                             Ingresos Generados
@@ -344,7 +471,7 @@ export default function TechnicianHistoryPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-orange-100 dark:from-orange-950/20 dark:to-amber-950/20 dark:border-orange-900">
+                <Card className="bg-linear-to-br from-orange-50 to-amber-50 border-orange-100 dark:from-orange-950/20 dark:to-amber-950/20 dark:border-orange-900">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-300">
                             Tiempo Promedio
@@ -361,7 +488,7 @@ export default function TechnicianHistoryPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-purple-50 to-violet-50 border-purple-100 dark:from-purple-950/20 dark:to-violet-950/20 dark:border-purple-900">
+                <Card className="bg-linear-to-br from-purple-50 to-violet-50 border-purple-100 dark:from-purple-950/20 dark:to-violet-950/20 dark:border-purple-900">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-300">
                             Calificación Promedio
@@ -382,7 +509,7 @@ export default function TechnicianHistoryPage() {
 
             {/* Status Summary Cards */}
             <div className="grid gap-4 md:grid-cols-4">
-                <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-100 dark:from-green-950/20 dark:to-emerald-950/20 dark:border-green-900">
+                <Card className="bg-linear-to-br from-green-50 to-emerald-50 border-green-100 dark:from-green-950/20 dark:to-emerald-950/20 dark:border-green-900">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-green-700 dark:text-green-300">
                             Entregadas
@@ -399,7 +526,7 @@ export default function TechnicianHistoryPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-900">
+                <Card className="bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-900">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300">
                             Listas
@@ -416,7 +543,7 @@ export default function TechnicianHistoryPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-100 dark:from-yellow-950/20 dark:to-orange-950/20 dark:border-yellow-900">
+                <Card className="bg-linear-to-br from-yellow-50 to-orange-50 border-yellow-100 dark:from-yellow-950/20 dark:to-orange-950/20 dark:border-yellow-900">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
                             En Progreso
@@ -433,7 +560,7 @@ export default function TechnicianHistoryPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-red-50 to-rose-50 border-red-100 dark:from-red-950/20 dark:to-rose-950/20 dark:border-red-900">
+                <Card className="bg-linear-to-br from-red-50 to-rose-50 border-red-100 dark:from-red-950/20 dark:to-rose-950/20 dark:border-red-900">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-red-700 dark:text-red-300">
                             Canceladas

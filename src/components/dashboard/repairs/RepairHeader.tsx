@@ -14,7 +14,7 @@ export function RepairHeader({ onRefresh, onNewRepair, isLoading }: RepairHeader
     return (
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-                <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
                     Reparaciones
                 </h1>
                 <p className="text-muted-foreground mt-1">

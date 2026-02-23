@@ -13,6 +13,7 @@ import {
 
 // UI Components
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { GlobalSearch } from '@/components/ui/global-search'
@@ -36,11 +37,13 @@ import { RepairEmptyState } from '@/components/dashboard/repairs/RepairEmptyStat
 import { RepairDeleteDialog } from '@/components/dashboard/repairs/RepairDeleteDialog'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import { RepairSuccessDialog } from '@/components/dashboard/repairs/RepairSuccessDialog'
+import { RepairCardsView } from '@/components/dashboard/repairs/RepairCardsView'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
 import { RepairPrintPayload } from '@/lib/repair-receipt'
 import { deviceTypeConfig } from '@/config/repair-constants'
+import { cn } from '@/lib/utils'
 
 // Types
 import { Repair } from '@/types/repairs'
@@ -96,7 +99,7 @@ function RepairsPageContent() {
     activeFiltersCount
   } = useRepairFilters({ repairs })
 
-  const [viewMode, setViewMode] = useState<'table' | 'kanban' | 'calendar'>('table')
+  const [viewMode, setViewMode] = useState<'table' | 'cards' | 'kanban' | 'calendar'>('table')
   const [calendarDate, setCalendarDate] = useState<Date | undefined>(undefined)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
@@ -108,7 +111,23 @@ function RepairsPageContent() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [successDialogData, setSuccessDialogData] = useState<RepairPrintPayload | null>(null)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [quickAccessOpen, setQuickAccessOpen] = useState(false)
+  const [statsOpen, setStatsOpen] = useState(false)
   const searchParams = useSearchParams()
+  const handleDialogClose = useCallback(() => {
+    setIsDialogOpen(false)
+    setSelectedRepair(undefined)
+
+    const params = new URLSearchParams(searchParams.toString())
+    const hadEditParams = params.has('id') || params.has('edit')
+
+    if (hadEditParams) {
+      params.delete('id')
+      params.delete('edit')
+      const query = params.toString()
+      router.replace(query ? `/dashboard/repairs?${query}` : '/dashboard/repairs')
+    }
+  }, [router, searchParams])
 
   // Handle URL query parameters for direct edit
   useEffect(() => {
@@ -239,8 +258,39 @@ function RepairsPageContent() {
         // Show success dialog with print options
         const validRepairs = createdRepairs.filter(Boolean) as Repair[]
         if (validRepairs.length > 0) {
+          
+          let verificationHash: string | undefined = undefined
+          let dateObj = new Date()
+
+          // If single repair, fetch secure hash from server
+          if (validRepairs.length === 1) {
+            const repair = validRepairs[0]
+            const ticketNum = repair.ticketNumber || repair.id
+            const customerName = repair.customer?.name || data.customerName
+            dateObj = new Date(repair.createdAt) // Use DB timestamp for consistency
+
+            try {
+              const res = await fetch('/api/repairs/sign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ticketNumber: ticketNum,
+                  customerName: customerName,
+                  date: dateObj.toISOString()
+                })
+              })
+              const json = await res.json()
+              if (json.success) {
+                verificationHash = json.hash
+              }
+            } catch (e) {
+              console.error("Failed to sign ticket", e)
+            }
+          }
+
           const payload: RepairPrintPayload = {
             customer: {
+              id: validRepairs[0]?.customer?.id || data.existingCustomerId,
               name: data.customerName,
               phone: data.customerPhone,
               email: data.customerEmail,
@@ -249,13 +299,14 @@ function RepairsPageContent() {
               city: data.customerCity,
               country: data.customerCountry
             },
-            date: new Date(),
-            ticketNumber: validRepairs.length === 1 ? validRepairs[0].id : undefined,
+            date: dateObj,
+            ticketNumber: validRepairs.length === 1 ? (validRepairs[0].ticketNumber || validRepairs[0].id) : undefined,
             priority: data.priority,
             urgency: data.urgency,
             warrantyMonths: data.warrantyMonths,
             warrantyType: data.warrantyType,
             warrantyNotes: data.warrantyNotes,
+            verificationHash,
             devices: data.devices.map((deviceFormData, index) => {
               const createdRepair = createdRepairs[index]
               if (!createdRepair) return null
@@ -270,7 +321,7 @@ function RepairsPageContent() {
                 description: deviceFormData.description,
                 technician: techName,
                 estimatedCost: deviceFormData.estimatedCost,
-                ticketNumber: createdRepair.id
+                ticketNumber: createdRepair.ticketNumber || createdRepair.id
               }
             }).filter(Boolean) as any
           }
@@ -281,7 +332,11 @@ function RepairsPageContent() {
         const d = data.devices[0]
         const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
 
-        const updatePayload: Partial<Repair> = {
+        const updatePayload: Partial<Repair> & {
+          customer_id?: string
+          technician_id?: string
+          images?: string[]
+        } = {
           brand: d.brand,
           model: d.model,
           deviceType: d.deviceType,
@@ -297,17 +352,21 @@ function RepairsPageContent() {
           warrantyMonths: data.warrantyMonths,
           warrantyType: data.warrantyType,
           warrantyNotes: data.warrantyNotes,
-          technician: d.technician ? { id: d.technician, name: '' } : undefined
+          customer_id: data.existingCustomerId || undefined,
+          technician_id: d.technician || undefined,
+          parts: data.parts || [],
+          notes: data.notes || [],
+          images: Array.isArray(d.images) ? d.images : []
         }
         
         await updateRepair(selectedRepair.id, updatePayload)
       }
-      setIsDialogOpen(false)
+      handleDialogClose()
     } catch (error) {
       logger.error('Error submitting repair form', { error })
       toast.error('Error al guardar la reparación')
     }
-  }, [dialogMode, selectedRepair, createRepair, updateRepair, addImages, technicianOptions])
+  }, [dialogMode, selectedRepair, createRepair, updateRepair, addImages, technicianOptions, handleDialogClose])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -352,8 +411,10 @@ function RepairsPageContent() {
       accessPassword: selectedRepair.accessPassword || '',
       technician: selectedRepair.technician?.id || '',
       estimatedCost: selectedRepair.estimatedCost,
-      images: []
-    }]
+      images: Array.isArray(selectedRepair.images) ? selectedRepair.images.map(img => img.url) : []
+    }],
+    parts: selectedRepair.parts || [],
+    notes: selectedRepair.notes || []
   } : undefined
 
   // Quick access navigation items
@@ -388,17 +449,55 @@ function RepairsPageContent() {
     }
   ]
 
+  const calendarRepairs = useMemo(() => {
+    return uiFiltered.filter(r => {
+      if (!calendarDate) return true
+      const d = new Date(r.createdAt)
+      return d.toDateString() === calendarDate.toDateString()
+    })
+  }, [uiFiltered, calendarDate])
+
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 p-4 sm:gap-5 sm:p-5">
       <RepairHeader
         onRefresh={refreshRepairs}
         onNewRepair={handleNewRepair}
         isLoading={isLoading}
       />
 
-      <QuickAccessNav sections={quickAccessSections} />
+      <div className="md:hidden space-y-2">
+        <Collapsible open={quickAccessOpen} onOpenChange={setQuickAccessOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full justify-between">
+              <span className="text-sm font-medium">Accesos rápidos</span>
+              <span className={cn("text-xs transition-transform", quickAccessOpen && "rotate-180")}>⌄</span>
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <QuickAccessNav sections={quickAccessSections} />
+          </CollapsibleContent>
+        </Collapsible>
 
-      <RepairStats repairs={repairs} />
+        <Collapsible open={statsOpen} onOpenChange={setStatsOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" className="w-full justify-between">
+              <span className="text-sm font-medium">Métricas</span>
+              <span className={cn("text-xs transition-transform", statsOpen && "rotate-180")}>⌄</span>
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <RepairStats repairs={repairs} />
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+
+      <div className="hidden md:block">
+        <QuickAccessNav sections={quickAccessSections} />
+      </div>
+
+      <div className="hidden md:block">
+        <RepairStats repairs={repairs} />
+      </div>
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -434,7 +533,7 @@ function RepairsPageContent() {
           </div>
         ) : uiFiltered.length === 0 ? (
           <RepairEmptyState
-            hasFilters={!!(searchTerm || statusFilter !== 'all' || priorityFilter !== 'all')}
+            hasFilters={!!(searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || (technicianFilter && technicianFilter !== 'all') || dateRange?.from || dateRange?.to)}
             onNewRepair={handleNewRepair}
           />
         ) : viewMode === 'table' ? (
@@ -446,8 +545,13 @@ function RepairsPageContent() {
             onDelete={handleDeleteClick}
             isLoading={false}
           />
+        ) : viewMode === 'cards' ? (
+          <RepairCardsView
+            repairs={visibleRepairs}
+            onView={handleViewRepair}
+          />
         ) : viewMode === 'kanban' ? (
-          <div className="h-[calc(100vh-300px)] min_h-[500px]">
+          <div className="h-[calc(100vh-300px)] min-h-[500px]">
             <RepairKanban
               repairs={uiFiltered}
               onStatusChange={async (id, status) => { await updateStatus(id, status) }}
@@ -461,19 +565,20 @@ function RepairsPageContent() {
               <Calendar mode="single" selected={calendarDate} onSelect={handleCalendarSelect} />
             </div>
             <div className="lg:col-span-2 rounded-lg border p-3 space-y-2">
-              {uiFiltered.filter(r => {
-                if (!calendarDate) return true
-                const d = new Date(r.createdAt)
-                return d.toDateString() === calendarDate.toDateString()
-              }).map(r => (
-                <div key={r.id} className="flex items-center justify-between border rounded p-2">
-                  <div>
-                    <div className="font-medium">{r.customer.name} • {r.device}</div>
+              {calendarRepairs.map(r => (
+                <div key={r.id} className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/30 transition-colors">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{r.customer.name} • {r.device}</div>
                     <div className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</div>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => handleEditRepair(r)}>Programar</Button>
                 </div>
               ))}
+              {calendarRepairs.length === 0 && (
+                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  No hay reparaciones para la fecha seleccionada.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -485,7 +590,7 @@ function RepairsPageContent() {
         technicians={technicianOptions}
         initialData={initialFormData}
         repair={selectedRepair}
-        onClose={() => setIsDialogOpen(false)}
+        onClose={handleDialogClose}
         onSubmit={handleFormSubmit}
       />
 
@@ -498,7 +603,7 @@ function RepairsPageContent() {
         data={successDialogData}
       />
 
-      {uiFiltered.length > visibleRepairs.length && viewMode === 'table' && (
+      {uiFiltered.length > visibleRepairs.length && (viewMode === 'table' || viewMode === 'cards') && (
         <div className="flex items-center justify-center">
           <Button variant="outline" onClick={() => setPageSize(s => s + 20)}>Cargar más</Button>
         </div>

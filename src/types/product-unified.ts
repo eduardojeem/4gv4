@@ -1,3 +1,4 @@
+
 /**
  * Unified Product Types
  * Consolidates Supabase schema with local extensions
@@ -29,6 +30,9 @@ export type Product = Omit<DbProduct, 'dimensions'> & {
   stock_value?: number
   stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'
   
+  // New field
+  visibility?: 'public' | 'wholesale' | 'hidden'
+
   // Legacy compatibility - ensure these exist
   stock_quantity: number
   sale_price: number
@@ -112,6 +116,7 @@ export type ProductInput = Omit<DbProduct, 'id' | 'created_at' | 'updated_at'> &
   id?: string
   created_at?: string
   updated_at?: string
+  visibility?: 'public' | 'wholesale' | 'hidden'
 }
 
 // For display/UI components

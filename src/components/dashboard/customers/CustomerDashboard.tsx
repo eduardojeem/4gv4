@@ -77,15 +77,18 @@ export function CustomerDashboard() {
     filteredCustomers, 
     paginatedCustomers, 
     filters, 
+    viewMode,
     loading, 
     error, 
     pagination,
     setPage,
     setItemsPerPage,
     updateFilters, 
+    setViewMode,
+    deleteCustomer,
+    bulkDelete,
     toggleCustomerStatus, 
     updateCustomer,
-    updateCustomerStatus, 
     bulkUpdateCustomerStatus,
     refreshCustomers 
   } = useCustomers()
@@ -116,7 +119,6 @@ export function CustomerDashboard() {
     }
   }, [updateFilters, customers, filteredCustomers.length])
   const { creditSummaries, getCustomerCreditSummary } = useCustomersWithCredits(customers)
-  const [viewMode, setViewMode] = useState<"table" | "grid" | "timeline">("table")
   const [activeTab, setActiveTab] = useState("customers")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [compactMode, setCompactMode] = useState(true)
@@ -129,6 +131,8 @@ export function CustomerDashboard() {
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [selectedCreditCustomerId, setSelectedCreditCustomerId] = useState<string>("")
   const [creditSearchTerm, setCreditSearchTerm] = useState("")
+  const [isDeletingCustomer, setIsDeletingCustomer] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   
   // Estados para búsqueda inteligente
   const [searchTime, setSearchTime] = useState(0)
@@ -196,7 +200,7 @@ export function CustomerDashboard() {
         change: "+15%",
         changeType: "positive" as const,
         gradient: "from-purple-500 to-violet-500",
-        description: `${Math.round((creditMetrics.customersWithCredits / totalCustomers) * 100)}% del total`
+        description: `${totalCustomers > 0 ? Math.round((creditMetrics.customersWithCredits / totalCustomers) * 100) : 0}% del total`
       },
       {
         title: "Saldo Pendiente",
@@ -400,6 +404,29 @@ export function CustomerDashboard() {
     setCurrentView('edit')
   }
 
+  const handleDeleteCustomer = async (customer: Customer) => {
+    if (isDeletingCustomer) return
+    const confirmed = window.confirm(`¿Eliminar cliente "${customer.name}"? Esta acción no se puede deshacer.`)
+    if (!confirmed) return
+
+    try {
+      setIsDeletingCustomer(true)
+      const result = await deleteCustomer(customer.id)
+      if (result.success) {
+        setSelectedCustomers(prev => prev.filter(id => id !== customer.id))
+        if (selectedCustomer?.id === customer.id) {
+          handleBackToList()
+        }
+        await refreshCustomers()
+      }
+    } catch (error) {
+      console.error('Error deleting customer:', error)
+      toast.error('No se pudo eliminar el cliente')
+    } finally {
+      setIsDeletingCustomer(false)
+    }
+  }
+
   const handleToggleCustomerStatus = async (customer: Customer) => {
     try {
       const result = await toggleCustomerStatus(customer.id)
@@ -423,6 +450,30 @@ export function CustomerDashboard() {
       }
     } catch (error) {
       console.error('Error updating bulk status:', error)
+    }
+  }
+
+  const handleBulkDelete = async (customerIds: string[]) => {
+    if (isBulkDeleting) return
+    if (customerIds.length === 0) return
+    const confirmed = window.confirm(`¿Eliminar ${customerIds.length} cliente(s)? Esta acción no se puede deshacer.`)
+    if (!confirmed) return
+
+    try {
+      setIsBulkDeleting(true)
+      const result = await bulkDelete(customerIds)
+      if (result.success) {
+        setSelectedCustomers([])
+        if (selectedCustomer && customerIds.includes(selectedCustomer.id)) {
+          handleBackToList()
+        }
+        await refreshCustomers()
+      }
+    } catch (error) {
+      console.error('Error deleting customers in bulk:', error)
+      toast.error('No se pudo completar la eliminación masiva')
+    } finally {
+      setIsBulkDeleting(false)
     }
   }
 
@@ -510,7 +561,7 @@ export function CustomerDashboard() {
   }, [selectedCustomer])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 p-3 sm:p-4 lg:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-3 sm:p-4 lg:p-6">
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
         <motion.div
@@ -538,8 +589,8 @@ export function CustomerDashboard() {
                 IA Activada
               </Badge>
             </div>
-            <div className="flex items-center gap-2 bg-white/70 dark:bg-slate-800/70 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700">
-              <span className="text-xs text-gray-700 dark:text-gray-300">Compacto</span>
+            <div className="flex items-center gap-2 bg-white/70 dark:bg-slate-900/80 px-2 py-1 rounded-lg border border-gray-200 dark:border-slate-700">
+              <span className="text-xs text-gray-700 dark:text-slate-200">Compacto</span>
               <Switch 
                 checked={compactMode} 
                 onCheckedChange={setCompactMode}
@@ -579,46 +630,46 @@ export function CustomerDashboard() {
         >
           <Tabs value={activeTab} onValueChange={setActiveTab} className={compactMode ? "space-y-3 sm:space-y-4" : "space-y-4 sm:space-y-6"}>
             {/* Mobile-Optimized Tab List */}
-            <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-2">
+            <div className="bg-white/80 dark:bg-slate-900/85 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 p-2">
               <TabsList className={compactMode ? "grid w-full grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-1 bg-transparent h-auto p-0" : "grid w-full grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2 bg-transparent h-auto p-0"}>
                 <TabsTrigger 
                   value="customers" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
                 >
                   <Users className="h-4 w-4" />
                   <span className="hidden sm:inline">Clientes</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="analytics" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
                 >
                   <BarChart3 className="h-4 w-4" />
                   <span className="hidden sm:inline">Analíticas</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="segmentation" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
                 >
                   <PieChart className="h-4 w-4" />
                   <span className="hidden sm:inline">Segmentación</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="communications" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
                 >
                   <MessageSquare className="h-4 w-4" />
                   <span className="hidden sm:inline">Comunicaciones</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="metrics" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
                 >
                   <Activity className="h-4 w-4" />
                   <span className="hidden sm:inline">Métricas</span>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="notifications" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"}
+                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
                 >
                   <Bell className="h-4 w-4" />
                   <span className="hidden sm:inline">Notificaciones</span>
@@ -631,7 +682,7 @@ export function CustomerDashboard() {
               <div className={compactMode ? "space-y-3 sm:space-y-4" : "space-y-4 sm:space-y-6"}>
                 {currentView === 'list' && (
                   <>
-                    <Card className="border border-gray-200 dark:border-gray-700 shadow-lg bg-white/80 dark:bg-slate-800/70">
+                    <Card className="border border-gray-200 dark:border-slate-700 shadow-lg bg-white/80 dark:bg-slate-900/70">
                       <CardHeader className="pb-2">
                         <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
                           <CreditCard className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -644,24 +695,24 @@ export function CustomerDashboard() {
                             placeholder="Buscar cliente"
                             value={creditSearchTerm}
                             onChange={(e) => setCreditSearchTerm(e.target.value)}
-                            className="lg:w-1/3 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                            className="lg:w-1/3 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100"
                           />
                           <Select value={selectedCreditCustomerId} onValueChange={setSelectedCreditCustomerId}>
-                            <SelectTrigger className="lg:w-1/3 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                            <SelectTrigger className="lg:w-1/3 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
                               <SelectValue placeholder="Seleccionar cliente" />
                             </SelectTrigger>
-                            <SelectContent className="max-h-[300px] bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
+                            <SelectContent className="max-h-[300px] bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-700">
                               {customersWithActiveCredits.map(c => (
-                                <SelectItem key={c.id} value={c.id} className="text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800">
+                                <SelectItem key={c.id} value={c.id} className="text-gray-900 dark:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-800">
                                   {c.name} • {c.email || c.phone || ""}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                           <div className="flex gap-2">
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryCSV} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">Exportar CSV</Button>
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryExcel} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">Exportar Excel</Button>
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryPDF} className="border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">Exportar PDF</Button>
+                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryCSV} className="border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800">Exportar CSV</Button>
+                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryExcel} className="border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800">Exportar Excel</Button>
+                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryPDF} className="border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800">Exportar PDF</Button>
                           </div>
                         </div>
                         {selectedCreditCustomerId && (
@@ -671,7 +722,7 @@ export function CustomerDashboard() {
                               onMarkPaid={(id, method, amount) => markInstallmentPaid(id, method, amount)}
                               creditById={{}}
                             />
-                            <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50">
+                            <Card className="border dark:border-slate-700 shadow-lg bg-gradient-to-br from-white to-gray-50/50 dark:from-slate-900 dark:to-slate-800/50">
                               <CardHeader>
                                 <CardTitle className="flex items-center justify-between">
                                   <span>Historial Completo</span>
@@ -749,6 +800,7 @@ export function CustomerDashboard() {
                       onViewModeChange={setViewMode}
                       customers={customers}
                       onAddCustomer={handleAddCustomer}
+                      onRefresh={handleRefresh}
                       compact={compactMode}
                       onCustomerSelect={handleCustomerSelectFromSearch}
                     />
@@ -774,6 +826,8 @@ export function CustomerDashboard() {
                     <CustomerListView
                       customers={paginatedCustomers}
                       selectedCustomers={selectedCustomers}
+                      viewMode={viewMode}
+                      onViewModeChange={setViewMode}
                       onCustomerSelect={handleViewDetail}
                       onCustomerToggle={(customerId) => {
                         setSelectedCustomers(prev => 
@@ -788,13 +842,12 @@ export function CustomerDashboard() {
                       onClearSelection={() => setSelectedCustomers([])}
                       onViewCustomer={handleViewDetail}
                       onEditCustomer={handleEditCustomer}
-                      onDeleteCustomer={(customer) => {
-                        // Implementar lógica de eliminación
-                        console.log('Delete customer:', customer.id)
-                      }}
+                      onDeleteCustomer={handleDeleteCustomer}
+                      onBulkDelete={handleBulkDelete}
                       onToggleCustomerStatus={handleToggleCustomerStatus}
                       onBulkStatusChange={handleBulkStatusChange}
-                      loading={loading}
+                      bulkDeleting={isBulkDeleting}
+                      loading={loading || isDeletingCustomer || isBulkDeleting}
                     />
                     
                     {/* Paginación */}

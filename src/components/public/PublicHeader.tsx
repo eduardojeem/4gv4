@@ -1,12 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { Package, Wrench, Menu, X, Phone, MessageCircle, User, Shield, Clock } from 'lucide-react'
+import { Package, Wrench, Menu, X, Phone, MessageCircle, User, Shield, Clock, LayoutDashboard } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { isWholesale as checkIsWholesale } from '@/lib/auth/role-utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +54,8 @@ export function PublicHeader() {
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
   const emailDisplay = companyInfo?.email || envSupportEmail
   const showTopBar = companyInfo?.showTopBar !== false
+  const canAccessDashboard = user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'
+  const isWholesaleUser = checkIsWholesale(user?.user_metadata?.role as string | undefined)
 
   // Scroll detection for shadow
   useEffect(() => {
@@ -264,15 +268,31 @@ export function PublicHeader() {
               <DropdownMenuContent className="w-60" align="end" sideOffset={8}>
                 <DropdownMenuLabel className="font-normal pb-0">
                   <div className="flex flex-col gap-1">
-                    <p className="text-sm font-semibold leading-none">
-                      {user?.profile?.name || 'Usuario'}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold leading-none">
+                        {user?.profile?.name || 'Usuario'}
+                      </p>
+                      {isWholesaleUser && (
+                        <Badge className="h-4 px-1.5 text-[10px] bg-primary/10 text-primary border-primary/20 font-semibold">
+                          Mayorista
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground break-all">
                       {user?.email || 'usuario@email.com'}
                     </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {canAccessDashboard && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/dashboard" className="flex items-center gap-2.5 cursor-pointer font-medium text-primary">
+                      <LayoutDashboard className="h-4 w-4" />
+                      Ir al Panel
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {canAccessDashboard && <DropdownMenuSeparator />}
                 <DropdownMenuItem asChild>
                   <Link href="/perfil" className="flex items-center gap-2.5 cursor-pointer">
                     <User className="h-4 w-4 text-muted-foreground" />
@@ -372,6 +392,15 @@ export function PublicHeader() {
 
             {user ? (
               <>
+                {canAccessDashboard && (
+                  <Link
+                    href="/dashboard"
+                    className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-primary bg-primary/10 transition-colors hover:bg-primary/20"
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    Ir al Panel
+                  </Link>
+                )}
                 <Link
                   href="/perfil"
                   className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"

@@ -446,45 +446,31 @@ export function RepairFormDialogV2({
                       </p>
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => append({
-                      deviceType: 'smartphone',
-                      brand: '',
-                      model: '',
-                      issue: '',
-                      description: '',
-                      accessType: 'none',
-                      images: [],
-                      technician: '',
-                      estimatedCost: 0
-                    })}
-                    className="h-8 gap-1.5 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950/50 dark:hover:text-green-400 transition-colors text-xs"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Agregar
-                  </Button>
+                  {mode === 'add' && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => append({
+                        deviceType: 'smartphone',
+                        brand: '',
+                        model: '',
+                        issue: '',
+                        description: '',
+                        accessType: 'none',
+                        images: [],
+                        technician: '',
+                        estimatedCost: 0
+                      })}
+                      className="h-8 gap-1.5 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950/50 dark:hover:text-green-400 transition-colors text-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Agregar
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4 pt-4">
-                {mode === 'edit' && repair?.images?.length ? (
-                  <div className="space-y-3">
-                    <Label className="text-sm font-medium">Galería de imágenes existentes</Label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                      {repair.images.map((img) => (
-                        <div key={img.id} className="relative rounded-lg overflow-hidden border shadow-sm">
-                          <img
-                            src={img.url}
-                            alt={img.description || 'Imagen de reparación'}
-                            className="w-full h-full object-cover aspect-square"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
                 {fields.map((field, index) => {
                   const deviceType = watch(`devices.${index}.deviceType`)
                   const DeviceIcon = deviceTypeOptions.find(opt => opt.value === deviceType)?.icon || Smartphone
@@ -509,7 +495,7 @@ export function RepairFormDialogV2({
                             )}
                           </div>
                         </div>
-                        {fields.length > 1 && (
+                        {mode === 'add' && fields.length > 1 && (
                           <Button
                             type="button"
                             variant="ghost"
@@ -1450,7 +1436,7 @@ export function RepairFormDialogV2({
               </Button>
               <Button
                 type="submit"
-                disabled={!isValid || isSubmitting}
+                disabled={isSubmitting}
                 onClick={handleSubmit(onSubmitForm)}
                 className="min-w-[160px] h-11 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 dark:from-primary dark:to-primary/90 shadow-lg hover:shadow-xl transition-all"
               >

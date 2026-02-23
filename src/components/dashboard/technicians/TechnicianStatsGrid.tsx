@@ -20,6 +20,10 @@ export function TechnicianStatsGrid({
     avgCompletionTime,
     bestPerformer
 }: TechnicianStatsGridProps) {
+    const activePct = totalTechnicians > 0
+        ? Math.round((activeTechnicians / totalTechnicians) * 100)
+        : 0
+
     return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <StatsCard
@@ -33,7 +37,7 @@ export function TechnicianStatsGrid({
             <StatsCard
                 title="Disponibles"
                 value={activeTechnicians}
-                subtitle={`${Math.round((activeTechnicians / totalTechnicians) * 100)}% del equipo`}
+                subtitle={`${activePct}% del equipo`}
                 icon={UserCheck}
                 color="green"
             />

@@ -1,5 +1,17 @@
 import type { NextConfig } from "next";
 
+const withPWAInit = require("@ducanh2912/next-pwa").default({
+  dest: "public",
+  cacheOnFrontEndNav: true,
+  aggressiveFrontEndNavCaching: true,
+  reloadOnOnline: true,
+  swcMinify: true,
+  disable: process.env.NODE_ENV === "development",
+  workboxOptions: {
+    disableDevLogs: true,
+  },
+});
+
 // Configurar bundle analyzer
 const withBundleAnalyzer = require('@next/bundle-analyzer')({
   enabled: process.env.ANALYZE === 'true',
@@ -64,12 +76,12 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
-          pathname: '/**',
+        pathname: '/**',
       },
       {
         protocol: 'https',
-          hostname: 'example.com',
-          pathname: '/**',
+        hostname: 'example.com',
+        pathname: '/**',
         },
         {
         protocol: 'https',
@@ -209,4 +221,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withBundleAnalyzer(nextConfig);
+export default withBundleAnalyzer(withPWAInit(nextConfig));

@@ -27,7 +27,7 @@ export default function DashboardLayout({
                   <Header />
                   <main 
                     id="dashboard-main"
-                    className="flex-1 overflow-x-hidden overflow-y-auto scroll-smooth overscroll-none bg-background text-foreground p-4 sm:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6 relative will-change-scroll scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent"
+                    className="dashboard-scroll flex-1 overflow-x-hidden overflow-y-auto scroll-smooth overscroll-none bg-background text-foreground p-4 sm:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6 relative will-change-scroll"
                   >
                     <div className="min-h-full">
                       <DemoBanner />

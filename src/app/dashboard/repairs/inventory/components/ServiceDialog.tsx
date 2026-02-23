@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from 'react'
@@ -9,15 +10,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useInventory } from '../context/InventoryContext'
+import { logger } from '@/lib/logger'
+import type { Product } from '@/types/product-unified'
 
 interface ServiceDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  service?: any
+  service?: Product | null
 }
 
 export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProps) {
@@ -28,7 +38,8 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
     price: '',
     wholesalePrice: '',
     cost: '',
-    description: ''
+    description: '',
+    visibility: 'public'
   })
 
   useEffect(() => {
@@ -38,7 +49,8 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
         price: String(service.sale_price || ''),
         wholesalePrice: service.wholesale_price ? String(service.wholesale_price) : '',
         cost: String(service.purchase_price || ''),
-        description: service.description || ''
+        description: service.description || '',
+        visibility: service.visibility || 'public'
       })
     } else {
       setFormData({
@@ -46,7 +58,8 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
         price: '',
         wholesalePrice: '',
         cost: '',
-        description: ''
+        description: '',
+        visibility: 'public'
       })
     }
   }, [service, open])
@@ -65,6 +78,7 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
         sale_price: parseFloat(formData.price),
         wholesale_price: formData.wholesalePrice ? parseFloat(formData.wholesalePrice) : null,
         purchase_price: formData.cost ? parseFloat(formData.cost) : 0,
+        visibility: formData.visibility,
       }
 
       if (service) {
@@ -83,7 +97,7 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             {service ? "Editar Servicio" : "Agregar Nuevo Servicio"}
@@ -95,18 +109,39 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="name" className="text-sm font-semibold">
-              Nombre del Servicio
-            </Label>
-            <Input
-              id="name"
-              placeholder="Ej: Cambio Pantalla iPhone 13"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="name" className="text-sm font-semibold">
+                Nombre del Servicio
+              </Label>
+              <Input
+                id="name"
+                placeholder="Ej: Cambio Pantalla iPhone 13"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="visibility" className="text-sm font-semibold">
+                Visibilidad
+              </Label>
+              <Select
+                value={formData.visibility}
+                onValueChange={(value) => setFormData({ ...formData, visibility: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="public">Público (Todos)</SelectItem>
+                  <SelectItem value="wholesale">Solo Mayoristas</SelectItem>
+                  <SelectItem value="hidden">Oculto (Solo Admin)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+          
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="price" className="text-sm font-semibold text-blue-600 dark:text-blue-400">

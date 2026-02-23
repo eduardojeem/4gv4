@@ -1,3 +1,4 @@
+
 import { createClient } from '@/lib/supabase/server'
 import { PublicProduct } from '@/types/public'
 
@@ -5,6 +6,23 @@ import { PublicProduct } from '@/types/public'
 function sanitizeSearch(input: string): string {
   // Remove PostgREST special characters: . , ( ) : ! < > = & | %
   return input.replace(/[.,()!<>=&|%:*\\]/g, '').trim().slice(0, 100)
+}
+
+/** Resolve whether the current session belongs to a wholesale customer.
+ *  Accepts an optional pre-fetched supabase client to avoid creating a new one. */
+export async function resolveWholesaleStatus(): Promise<{ isWholesale: boolean }> {
+  const supabase = await createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return { isWholesale: false }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', session.user.id)
+    .maybeSingle()
+  const role = profile?.role || session.user.user_metadata?.role
+  const isWholesale = role === 'mayorista' || role === 'client_mayorista'
+  return { isWholesale }
 }
 
 export type ProductFilters = {
@@ -17,6 +35,8 @@ export type ProductFilters = {
   sort?: string
   page?: number
   perPage?: number
+  /** Pass the already-resolved wholesale status to skip a redundant DB round-trip. */
+  isWholesale?: boolean
 }
 
 export type ProductsResponse = {
@@ -27,7 +47,10 @@ export type ProductsResponse = {
   totalPages: number
   brands: string[]
   priceRange: { min: number; max: number }
+  isWholesale: boolean
 }
+
+const MAX_PRICE = 50_000_000
 
 export async function getPublicProducts(filters: ProductFilters): Promise<ProductsResponse> {
   const supabase = await createClient()
@@ -37,7 +60,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     categoryId,
     brand,
     minPrice = 0,
-    maxPrice = 99999999,
+    maxPrice = MAX_PRICE,
     inStock = false,
     sort = 'name',
     page = 1,
@@ -46,17 +69,11 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
   const query = sanitizeSearch(rawQuery)
 
-  // Only check wholesale status if user has a session (skip 2 queries for anonymous)
-  let isWholesale = false
-  const { data: { session } } = await supabase.auth.getSession()
-  if (session?.user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .maybeSingle()
-    const role = profile?.role || session.user.user_metadata?.role
-    isWholesale = role === 'mayorista' || role === 'client_mayorista'
+  // Resolve wholesale status — use caller-supplied value if available to avoid re-querying.
+  let isWholesale = filters.isWholesale ?? false
+  if (filters.isWholesale === undefined) {
+    const result = await resolveWholesaleStatus()
+    isWholesale = result.isWholesale
   }
 
   // Build query - only active products, never select wholesale_price for non-wholesale
@@ -68,6 +85,15 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     .from('products')
     .select(selectFields, { count: 'exact' })
     .eq('is_active', true)
+
+  // Filter visibility
+  // If wholesale: show 'public' and 'wholesale'
+  // If retail: show 'public' only
+  if (isWholesale) {
+    queryBuilder = queryBuilder.in('visibility', ['public', 'wholesale'])
+  } else {
+    queryBuilder = queryBuilder.eq('visibility', 'public')
+  }
 
   // Apply search filter with sanitized input
   if (query) {
@@ -84,7 +110,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     queryBuilder = queryBuilder.eq('brand', brand)
   }
 
-  if (minPrice > 0 || maxPrice < 99999999) {
+  if (minPrice > 0 || maxPrice < MAX_PRICE) {
     const priceCol = isWholesale ? 'wholesale_price' : 'sale_price'
     queryBuilder = queryBuilder.gte(priceCol, minPrice).lte(priceCol, maxPrice)
   }
@@ -131,7 +157,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       category: cat ? { id: cat.id, name: cat.name } : undefined,
       sale_price: p.sale_price as number,
       wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-      stock_quantity: (p.stock_quantity as number) > 0 ? 1 : 0,
+      // Expose real stock quantity — UI can decide how to format it
+      stock_quantity: p.stock_quantity as number,
       is_active: p.is_active as boolean,
       featured: (p.featured as boolean) || false,
       image: (p.image_url as string | null) || (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
@@ -141,28 +168,30 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     }
   })
 
-  // Fetch meta data (brands and price range) - can be optimized, but good for now to have it all in one server action if needed, or fetched separately.
-  // For now, let's keep it simple and just return the products, and let the page fetch meta if needed or we can add it here.
-  // Actually, the page likely needs brands for the filter sidebar. Let's fetch them in parallel if they are lightweight, or defer.
-  // The current page implementation fetches meta separately. We can replicate that pattern or bundle it.
-  // Bundling is better for SSR to avoid waterfalls.
-
+  // Fetch brands for filter sidebar
   const { data: brandsData } = await supabase
-      .from('products')
-      .select('brand')
-      .eq('is_active', true)
-      .not('brand', 'is', null)
+    .from('products')
+    .select('brand')
+    .eq('is_active', true)
+    .not('brand', 'is', null)
+    // Also apply visibility filter to brands query to show relevant brands only
+    .or(isWholesale ? 'visibility.in.(public,wholesale)' : 'visibility.eq.public')
 
   const brands = Array.from(new Set(brandsData?.map((p: any) => p.brand) || [])).sort() as string[]
 
+  // Fetch price range meta — use the appropriate price column for the user type
+  const priceCol = isWholesale ? 'wholesale_price' : 'sale_price'
   const { data: priceData } = await supabase
-      .from('products')
-      .select('sale_price')
-      .eq('is_active', true)
+    .from('products')
+    .select(priceCol)
+    .eq('is_active', true)
+    .not(priceCol, 'is', null)
+    // Also apply visibility filter
+    .or(isWholesale ? 'visibility.in.(public,wholesale)' : 'visibility.eq.public')
 
-  const prices = priceData?.map((p: any) => p.sale_price).filter((p: number) => p > 0) || []
+  const prices = priceData?.map((p: any) => p[priceCol]).filter((p: number) => p > 0) || []
   const metaMinPrice = prices.length > 0 ? Math.floor(Math.min(...prices) / 5000) * 5000 : 0
-  const metaMaxPrice = prices.length > 0 ? Math.ceil(Math.max(...prices) / 5000) * 5000 : 5000000
+  const metaMaxPrice = prices.length > 0 ? Math.ceil(Math.max(...prices) / 5000) * 5000 : MAX_PRICE
 
   return {
     products: publicProducts,
@@ -171,7 +200,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     perPage,
     totalPages: Math.ceil((count || 0) / perPage),
     brands,
-    priceRange: { min: metaMinPrice, max: metaMaxPrice }
+    priceRange: { min: metaMinPrice, max: metaMaxPrice },
+    isWholesale,
   }
 }
 
@@ -179,39 +209,67 @@ export async function getPublicCategories() {
   const supabase = await createClient()
   const { data } = await supabase
     .from('categories')
-    .select('id, name')
+    .select('id, name, parent_id')
     .order('name')
-  return data || []
+  
+  const categories = data || []
+  
+  // Organizar categorías en jerarquía
+  const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, subcategories: [] as any[] }]))
+  const rootCategories: any[] = []
+  
+  categoryMap.forEach(category => {
+    if (category.parent_id) {
+      const parent = categoryMap.get(category.parent_id)
+      if (parent) {
+        parent.subcategories.push(category)
+      } else {
+        // Si el padre no existe, tratarla como raíz
+        rootCategories.push(category)
+      }
+    } else {
+      rootCategories.push(category)
+    }
+  })
+  
+  return rootCategories
 }
 
-export async function getPublicProduct(id: string) {
+export async function getPublicProduct(id: string, isWholesaleOverride?: boolean) {
   const supabase = await createClient()
-  
+
   // Clean ID
   const cleanId = decodeURIComponent(id).trim()
 
-  // Check wholesale
-  let isWholesale = false
-  const { data: { session } } = await supabase.auth.getSession()
-  if (session?.user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .maybeSingle()
-    const role = profile?.role || session.user.user_metadata?.role
-    isWholesale = role === 'mayorista' || role === 'client_mayorista'
+  // Resolve wholesale status — accept pre-computed value to avoid redundant queries
+  let isWholesale = isWholesaleOverride ?? false
+  if (isWholesaleOverride === undefined) {
+    const result = await resolveWholesaleStatus()
+    isWholesale = result.isWholesale
   }
 
   const selectFields = isWholesale
     ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
     : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
 
-  const { data, error } = await supabase
+  let queryBuilder = supabase
     .from('products')
     .select(selectFields)
     .eq('id', cleanId)
     .single()
+
+  // Visibility check is tricky with single() because if filtered out it returns null/error.
+  // We can't use .or() easily here for filtering visibility because it's an AND condition with ID.
+  // So we fetch it and then check visibility if we want to be strict, OR add the filter to the query.
+  // Adding filter to query:
+  
+  if (isWholesale) {
+    queryBuilder = queryBuilder.in('visibility', ['public', 'wholesale'])
+  } else {
+    queryBuilder = queryBuilder.eq('visibility', 'public')
+  }
+
+  const { data, error } = await queryBuilder
 
   if (error || !data) return null
 
@@ -219,7 +277,7 @@ export async function getPublicProduct(id: string) {
   const p = data as any
   const category = Array.isArray(p.category) ? p.category[0] : p.category
   const cat = category as { id: string; name: string } | null
-  
+
   const product: PublicProduct = {
     id: p.id,
     name: p.name,
@@ -229,7 +287,8 @@ export async function getPublicProduct(id: string) {
     category: cat ? { id: cat.id, name: cat.name } : undefined,
     sale_price: p.sale_price,
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-    stock_quantity: (p.stock_quantity as number) > 0 ? 1 : 0,
+    // Real stock quantity exposed
+    stock_quantity: p.stock_quantity as number,
     is_active: p.is_active,
     featured: p.featured || false,
     image: p.image_url || (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
@@ -238,5 +297,5 @@ export async function getPublicProduct(id: string) {
     barcode: p.barcode,
   }
 
-  return product
+  return { product, isWholesale }
 }

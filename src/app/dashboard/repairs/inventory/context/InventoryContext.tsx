@@ -1,12 +1,3 @@
-/**
- * Context API para gestión centralizada del estado de inventario
- * 
- * Beneficios:
- * - Elimina props drilling
- * - Estado centralizado y predecible
- * - Fácil de testear
- * - Optimistic updates integrados
- */
 
 "use client"
 import { logger } from '@/lib/logger'
@@ -14,7 +5,7 @@ import { logger } from '@/lib/logger'
 import { createContext, useContext, useCallback, useMemo, ReactNode, useState } from 'react'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { toast } from 'sonner'
-import type { Product } from '@/types/product-unified'
+import type { Product, ProductMovement } from '@/types/product-unified'
 
 interface InventoryFilters {
   search: string
@@ -28,7 +19,7 @@ interface InventoryContextValue {
   services: Product[]
   inventory: Product[]
   categories: any[]
-  movements: any[]
+  movements: ProductMovement[]
   
   // Estados
   loading: boolean
@@ -96,10 +87,18 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     
     const servicesList = products.filter(p => {
       const isServiceCategory = serviceCategoryId && p.category_id === serviceCategoryId
+      const name = p.name.toLowerCase()
       const nameIndicatesService = 
-        p.name.toLowerCase().startsWith('reparación') || 
-        p.name.toLowerCase().startsWith('servicio') || 
-        p.name.toLowerCase().includes('mano de obra')
+        name.startsWith('reparación') || 
+        name.startsWith('servicio') || 
+        name.includes('mano de obra') ||
+        name.startsWith('cambio') ||
+        name.startsWith('limpieza') ||
+        name.startsWith('baño') ||
+        name.startsWith('software') ||
+        name.startsWith('backup') ||
+        name.startsWith('instalación')
+      
       return isServiceCategory || nameIndicatesService
     })
     
@@ -110,10 +109,11 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
   }, [products, serviceCategoryId])
 
   // Obtener movimientos (lazy load)
-  const [movements, setMovements] = useState<any[]>([])
+  const [movements, setMovements] = useState<ProductMovement[]>([])
   const loadMovements = useCallback(async () => {
     const result = await getAllMovements(50)
     if (result.success) {
+      // @ts-ignore - The hook returns compatible data but types might mismatch slightly
       setMovements(result.data)
     }
   }, [getAllMovements])

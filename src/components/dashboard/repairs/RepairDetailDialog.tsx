@@ -23,7 +23,7 @@ import {
   Smartphone, Tablet, Laptop, Monitor, AlertCircle, 
   DollarSign, Clock, FileText, Image as ImageIcon,
   Edit, Trash, Printer, Package as PackageIcon, CheckCircle,
-  Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield
+  Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -32,6 +32,7 @@ import { toast } from 'sonner'
 import { Repair } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import { PatternDrawer } from './PatternDrawer'
 import { printRepairReceipt, generateRepairShareText, RepairPrintPayload } from '@/lib/repair-receipt'
 import { 
@@ -58,7 +59,51 @@ export function RepairDetailDialog({
   onEdit
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
+  const [showSensitiveData, setShowSensitiveData] = useState(false)
   const { settings } = useSharedSettings()
+  const [verificationHash, setVerificationHash] = useState<string | undefined>(undefined)
+
+  // Fetch verification hash when repair is loaded
+  React.useEffect(() => {
+    const controller = new AbortController()
+
+    if (repair && open) {
+      const ticketNum = repair.ticketNumber || repair.id
+      const customerName = repair.customer.name
+      const dateObj = new Date(repair.createdAt)
+
+      fetch('/api/repairs/sign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          ticketNumber: ticketNum,
+          customerName: customerName,
+          date: dateObj.toISOString()
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setVerificationHash(data.hash)
+        }
+      })
+      .catch(err => {
+        if (err?.name !== 'AbortError') {
+          console.error("Failed to fetch verification hash", err)
+        }
+      })
+    } else {
+      setVerificationHash(undefined)
+    }
+    return () => controller.abort()
+  }, [repair, open])
+
+  React.useEffect(() => {
+    if (!open) {
+      setShowSensitiveData(false)
+    }
+  }, [open])
 
   if (!repair) return null
 
@@ -74,13 +119,6 @@ export function RepairDetailDialog({
     }
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-MX', {
-      style: 'currency',
-      currency: 'MXN'
-    }).format(amount)
-  }
-
   const getPrintPayload = (): RepairPrintPayload => {
     if (!repair) throw new Error("No repair")
     return {
@@ -89,6 +127,7 @@ export function RepairDetailDialog({
       priority: repair.priority,
       urgency: repair.urgency,
       customer: {
+        id: repair.customer.id,
         name: repair.customer.name,
         customerCode: repair.customer.customerCode,
         phone: repair.customer.phone,
@@ -113,7 +152,8 @@ export function RepairDetailDialog({
         phone: settings.companyPhone,
         address: settings.companyAddress,
         email: settings.companyEmail,
-      }
+      },
+      verificationHash
     }
   }
 
@@ -142,14 +182,20 @@ export function RepairDetailDialog({
           handlePrint('customer')
        }, 1500)
     } else if (method === 'copy') {
-      navigator.clipboard.writeText(shareText)
-      toast.success('Texto copiado al portapapeles')
+      try {
+        await navigator.clipboard.writeText(shareText)
+        toast.success('Texto copiado al portapapeles')
+      } catch (error) {
+        toast.error('No se pudo copiar el texto')
+      }
     } else if (method === 'native') {
       if (navigator.share) {
         navigator.share({
           title: `Reparación ${payload.ticketNumber}`,
           text: shareText,
-        }).catch(console.error)
+        }).catch(() => {
+          toast.error('No se pudo compartir')
+        })
       } else {
         toast.error('Tu dispositivo no soporta compartir nativo')
       }
@@ -230,7 +276,7 @@ export function RepairDetailDialog({
               )}
               <Button variant="ghost" size="icon" onClick={onClose}>
                 <span className="sr-only">Cerrar</span>
-                {/* Close icon is handled by DialogContent default but we can add custom if needed */}
+                <X className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -680,22 +726,52 @@ export function RepairDetailDialog({
                       {repair.accessType === 'pattern' && repair.accessPassword && (
                         <div>
                           <p className="text-sm font-medium mb-2">Patrón de Desbloqueo</p>
-                          <div className="w-fit mx-auto bg-background rounded-lg p-2">
-                             <PatternDrawer 
-                               value={repair.accessPassword} 
-                               onChange={() => {}} 
-                               disabled={true} 
-                               minimal={true}
-                             />
+                          <div className="flex flex-col items-center gap-2">
+                            {!showSensitiveData ? (
+                              <div className="text-xs text-muted-foreground bg-background px-3 py-2 rounded border">
+                                Patrón oculto por seguridad
+                              </div>
+                            ) : (
+                              <div className="w-fit mx-auto bg-background rounded-lg p-2">
+                                <PatternDrawer
+                                  value={repair.accessPassword}
+                                  onChange={() => {}}
+                                  disabled={true}
+                                  minimal={true}
+                                />
+                              </div>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              type="button"
+                              className="h-7 px-2"
+                              onClick={() => setShowSensitiveData(prev => !prev)}
+                            >
+                              {showSensitiveData ? <EyeOff className="h-3.5 w-3.5 mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
+                              {showSensitiveData ? 'Ocultar' : 'Ver'}
+                            </Button>
                           </div>
                         </div>
                       )}
 
                       {repair.accessType !== 'pattern' && repair.accessType !== 'none' && repair.accessPassword && (
                         <div>
-                          <p className="text-sm font-medium mb-1">Contraseña / PIN</p>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-sm font-medium">Contraseña / PIN</p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              type="button"
+                              className="h-7 px-2"
+                              onClick={() => setShowSensitiveData(prev => !prev)}
+                            >
+                              {showSensitiveData ? <EyeOff className="h-3.5 w-3.5 mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
+                              {showSensitiveData ? 'Ocultar' : 'Ver'}
+                            </Button>
+                          </div>
                           <code className="bg-background px-2 py-1 rounded border text-sm font-mono block w-full">
-                            {repair.accessPassword}
+                            {showSensitiveData ? repair.accessPassword : '•'.repeat(Math.max(repair.accessPassword.length, 6))}
                           </code>
                         </div>
                       )}
@@ -952,12 +1028,6 @@ export function RepairDetailDialog({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {onEdit && (
-            <Button onClick={() => onEdit(repair)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Editar
-            </Button>
-          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

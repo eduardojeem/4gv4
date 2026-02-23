@@ -24,6 +24,21 @@ import { Badge } from '@/components/ui/badge'
 import { ProductFilters } from '@/components/public/ProductFilters'
 import { formatPrice } from '@/lib/utils'
 
+const MAX_PRICE = 50_000_000
+
+/** Returns a set of active filter states derived from URLSearchParams. */
+function readActiveFilters(searchParams: ReturnType<typeof useSearchParams>) {
+  const query = searchParams.get('query')
+  const categoryId = searchParams.get('category_id')
+  const brand = searchParams.get('brand')
+  const inStock = searchParams.get('in_stock') === 'true'
+  const minPrice = Number(searchParams.get('min_price')) || 0
+  const maxPrice = Number(searchParams.get('max_price')) || MAX_PRICE
+  const hasActiveFilters =
+    !!query || !!categoryId || !!brand || inStock || minPrice > 0 || maxPrice < MAX_PRICE
+  return { query, categoryId, brand, inStock, minPrice, maxPrice, hasActiveFilters }
+}
+
 export function ProductSearch() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -247,14 +262,9 @@ export function FilterBadges({ categories }: { categories: any[] }) {
     const router = useRouter()
     const searchParams = useSearchParams()
     const [, startTransition] = useTransition()
-  
-    const query = searchParams.get('query')
-    const categoryId = searchParams.get('category_id')
-    const brand = searchParams.get('brand')
-    const inStock = searchParams.get('in_stock') === 'true'
-    const minPrice = Number(searchParams.get('min_price')) || 0
-    const maxPrice = Number(searchParams.get('max_price')) || 50000000
-    
+
+    const { query, categoryId, brand, inStock, minPrice, maxPrice } = readActiveFilters(searchParams)
+
     // We only show simple badges here for common filters to avoid complexity
     // Sync with ProductFilters logic for full cleanup
     const removeFilter = (key: string) => {
@@ -281,12 +291,7 @@ export function FilterBadges({ categories }: { categories: any[] }) {
     }
 
     const hasActiveFilters =
-      !!query ||
-      !!categoryId ||
-      !!brand ||
-      inStock ||
-      minPrice > 0 ||
-      maxPrice < 50000000
+      !!query || !!categoryId || !!brand || inStock || minPrice > 0 || maxPrice < MAX_PRICE
 
     if (!hasActiveFilters) return null
 
@@ -344,7 +349,7 @@ export function FilterBadges({ categories }: { categories: any[] }) {
             </button>
             </Badge>
         )}
-        {(minPrice > 0 || maxPrice < 50000000) && (
+        {(minPrice > 0 || maxPrice < MAX_PRICE) && (
             <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
             {formatPrice(minPrice)} - {formatPrice(maxPrice)}
             <button
@@ -381,13 +386,7 @@ export function ClearAllFiltersButton() {
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
 
-  const hasFilters =
-    !!searchParams.get('query') ||
-    !!searchParams.get('category_id') ||
-    !!searchParams.get('brand') ||
-    searchParams.get('in_stock') === 'true' ||
-    Number(searchParams.get('min_price')) > 0 ||
-    (searchParams.get('max_price') !== null && Number(searchParams.get('max_price')) < 50000000)
+  const { hasActiveFilters: hasFilters } = readActiveFilters(searchParams)
 
   if (!hasFilters) return null
 

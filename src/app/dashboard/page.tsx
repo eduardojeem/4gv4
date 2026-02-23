@@ -208,17 +208,17 @@ export default function DashboardPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-50 to-blue-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-blue-950/20">
+    <div className="min-h-screen bg-linear-to-br from-gray-50 via-gray-50 to-blue-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-blue-950/20">
       {/* Header Premium */}
       <div className="sticky top-0 z-20 backdrop-blur-xl bg-white/70 dark:bg-gray-900/70 border-b border-gray-200/50 dark:border-gray-700/50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-700 dark:from-gray-100 dark:via-gray-200 dark:to-gray-300 bg-clip-text text-transparent">
+                <h1 className="text-3xl font-bold bg-linear-to-r from-gray-900 via-gray-800 to-gray-700 dark:from-gray-100 dark:via-gray-200 dark:to-gray-300 bg-clip-text text-transparent">
                   Dashboard
                 </h1>
-                <Badge variant="outline" className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white border-0">
+                <Badge variant="outline" className="bg-linear-to-r from-blue-500 to-cyan-500 text-white border-0">
                   <Zap className="h-3 w-3 mr-1" />
                   En vivo
                 </Badge>
@@ -269,7 +269,7 @@ export default function DashboardPage() {
         <div className="grid gap-6 lg:grid-cols-3">
 
           {/* Quick Actions */}
-          <Card className="lg:col-span-1 border-0 shadow-lg bg-gradient-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50">
+          <Card className="lg:col-span-1 border-0 shadow-lg bg-linear-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Zap className="h-5 w-5 text-blue-500" />
@@ -301,7 +301,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Recent Activity */}
-          <Card className="lg:col-span-2 border-0 shadow-lg bg-gradient-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50">
+          <Card className="lg:col-span-2 border-0 shadow-lg bg-linear-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
