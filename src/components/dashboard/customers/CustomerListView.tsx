@@ -60,6 +60,7 @@ import { useCustomerSalesMetricsMap, CustomerMetrics } from '@/hooks/use-custome
 import { StatusBadge, StatusToggle, BulkStatusSelector } from '@/components/ui/StatusBadge'
 import { formatters } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/auth-context'
 
 interface CustomerListViewProps {
   customers: Customer[]
@@ -100,6 +101,8 @@ export function CustomerListView({
   onBulkStatusChange,
   loading = false
 }: CustomerListViewProps) {
+  const { isAdmin, isManager } = useAuth()
+  const canDelete = isAdmin || isManager
   const [searchTerm, setSearchTerm] = useState('')
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
@@ -113,9 +116,9 @@ export function CustomerListView({
     if (searchTerm) {
       const search = searchTerm.toLowerCase()
       filtered = filtered.filter(customer =>
-        customer.name.toLowerCase().includes(search) ||
-        customer.email.toLowerCase().includes(search) ||
-        customer.phone.includes(search)
+        (customer.name && customer.name.toLowerCase().includes(search)) ||
+        (customer.email && customer.email.toLowerCase().includes(search)) ||
+        (customer.phone && customer.phone.includes(search))
       )
     }
 
@@ -228,19 +231,21 @@ export function CustomerListView({
                 />
               )}
               
-              <Button
-                variant="destructive" 
-                size="sm"
-                onClick={() => {
-                  if (bulkDeleting) return
-                  onBulkDelete?.(selectedCustomers)
-                }}
-                disabled={!onBulkDelete || selectedCustomers.length === 0 || bulkDeleting}
-                className="hover:bg-red-600 dark:hover:bg-red-600/90"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                {bulkDeleting ? 'Eliminando...' : 'Eliminar'}
-              </Button>
+              {canDelete && (
+                <Button
+                  variant="destructive" 
+                  size="sm"
+                  onClick={() => {
+                    if (bulkDeleting) return
+                    onBulkDelete?.(selectedCustomers)
+                  }}
+                  disabled={!onBulkDelete || selectedCustomers.length === 0 || bulkDeleting}
+                  className="hover:bg-red-600 dark:hover:bg-red-600/90"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {bulkDeleting ? 'Eliminando...' : 'Eliminar'}
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -435,7 +440,7 @@ function TableView({
                     <Avatar className="h-8 w-8 ring-2 ring-gray-100 dark:ring-gray-700">
                       <AvatarImage src={customer.avatar} />
                       <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-xs font-medium">
-                        {customer.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                        {(customer.name || 'C').split(' ').map(n => n[0]).join('').toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div>
@@ -621,7 +626,7 @@ function CustomerCard({
           <Avatar className="h-12 w-12 ring-2 ring-gray-100 dark:ring-gray-700">
             <AvatarImage src={customer.avatar} />
             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-medium">
-              {customer.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+              {(customer.name || 'C').split(' ').map(n => n[0]).join('').toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
@@ -724,6 +729,9 @@ function CustomerActions({
   onDelete: () => void
   onToggleStatus?: () => void
 }) {
+  const { isAdmin, isManager } = useAuth()
+  const canDelete = isAdmin || isManager
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -786,13 +794,15 @@ function CustomerActions({
           </DropdownMenuItem>
         )}
         
-        <DropdownMenuItem 
-          onClick={onDelete} 
-          className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
-        >
-          <Trash2 className="h-4 w-4" />
-          Eliminar
-        </DropdownMenuItem>
+        {canDelete && (
+          <DropdownMenuItem 
+            onClick={onDelete} 
+            className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 cursor-pointer"
+          >
+            <Trash2 className="h-4 w-4" />
+            Eliminar
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

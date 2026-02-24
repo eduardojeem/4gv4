@@ -18,8 +18,6 @@ export async function POST(request: NextRequest) {
   const userAgent = request.headers.get('user-agent') || 'unknown'
   
   try {
-    console.log('[Auth API] Received request from:', clientIp)
-    
     // 1. IP Block check (Persistent DB-based rate limiting)
     // Checks failures and rate limit events in the last 15 minutes
     const { blocked, attemptsCount } = await isIpBlocked(clientIp, 10, 15)
@@ -130,19 +128,21 @@ export async function POST(request: NextRequest) {
     }
     
     const { contact, ticketNumber } = validation.data
+    const normalizedTicket = ticketNumber.trim().toUpperCase()
+    const normalizedContact = contact.trim()
     
     // Log auth attempt
     await logSecurityEvent({
       type: 'auth_attempt',
-      ticketNumber,
-      contact,
+      ticketNumber: normalizedTicket,
+      contact: normalizedContact,
       clientIp,
       userAgent
     })
     
     const supabase = await createClient()
     
-    // Query repair with customer info
+    // Query repair
     const { data: repair, error } = await supabase
       .from('repairs')
       .select(`
@@ -164,16 +164,16 @@ export async function POST(request: NextRequest) {
         technician_id,
         customer_id
       `)
-      .eq('ticket_number', ticketNumber)
+      .eq('ticket_number', normalizedTicket)
       .single()
     
     if (error || !repair) {
-      logger.warn('Public repair auth failed - ticket not found', { ticketNumber, clientIp })
+      logger.warn('Public repair auth failed - ticket not found', { ticketNumber: normalizedTicket, clientIp })
       
       await logSecurityEvent({
         type: 'auth_failure',
-        ticketNumber,
-        contact,
+        ticketNumber: normalizedTicket,
+        contact: normalizedContact,
         clientIp,
         userAgent,
         reason: 'Ticket not found'
@@ -185,16 +185,22 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Verify contact matches (email or phone)
-    const customer = Array.isArray(repair.customer) ? repair.customer[0] : repair.customer
+    // Fetch customer and technician details
+    const [customerResult, technicianResult] = await Promise.all([
+      supabase.from('customers').select('name, email, phone').eq('id', repair.customer_id).single(),
+      repair.technician_id
+        ? supabase.from('profiles').select('full_name').eq('id', repair.technician_id).single()
+        : Promise.resolve({ data: null, error: null })
+    ])
+    const customer = customerResult.data
     
     if (!customer) {
-      logger.warn('Public repair auth failed - no customer data', { ticketNumber, clientIp })
+      logger.warn('Public repair auth failed - no customer data', { ticketNumber: normalizedTicket, clientIp })
       
       await logSecurityEvent({
         type: 'auth_failure',
-        ticketNumber,
-        contact,
+        ticketNumber: normalizedTicket,
+        contact: normalizedContact,
         clientIp,
         userAgent,
         reason: 'No customer data'
@@ -209,20 +215,28 @@ export async function POST(request: NextRequest) {
     // Normalizar email y teléfono (manejar strings vacíos)
     const customerEmail = customer.email?.trim() || null
     const customerPhone = customer.phone?.trim() || null
-    const inputContact = contact.trim()
+    const inputContact = normalizedContact
     
     // Verificar si el contacto coincide con email o teléfono
     const emailMatch = customerEmail && 
       customerEmail.toLowerCase() === inputContact.toLowerCase()
     
-    const phoneMatch = customerPhone && 
-      customerPhone.replace(/\s|-|\(|\)/g, '') === inputContact.replace(/\s|-|\(|\)/g, '')
+    const normalizePhone = (value: string) => value.replace(/\D/g, '')
+    const customerPhoneNormalized = customerPhone ? normalizePhone(customerPhone) : ''
+    const inputPhoneNormalized = normalizePhone(inputContact)
+    const phoneMatch = !!customerPhoneNormalized &&
+      !!inputPhoneNormalized &&
+      (
+        customerPhoneNormalized === inputPhoneNormalized ||
+        customerPhoneNormalized.endsWith(inputPhoneNormalized) ||
+        inputPhoneNormalized.endsWith(customerPhoneNormalized)
+      )
     
     const contactMatch = emailMatch || phoneMatch
     
     if (!contactMatch) {
       logger.warn('Public repair auth failed - contact mismatch', { 
-        ticketNumber, 
+        ticketNumber: normalizedTicket, 
         contact: inputContact, 
         clientIp,
         customerEmail: customerEmail || '(vacío)',
@@ -233,8 +247,8 @@ export async function POST(request: NextRequest) {
       
       await logSecurityEvent({
         type: 'auth_failure',
-        ticketNumber,
-        contact,
+        ticketNumber: normalizedTicket,
+        contact: normalizedContact,
         clientIp,
         userAgent,
         reason: 'Contact mismatch'
@@ -251,40 +265,42 @@ export async function POST(request: NextRequest) {
     const token = await generatePublicToken({
       repairId: repair.id,
       ticketNumber: repair.ticket_number,
-      contact
+      contact: normalizedContact
     }, tokenExpiresIn)
     
     // Build public repair object
     const publicRepair: PublicRepair = {
       ticketNumber: repair.ticket_number,
-      device: repair.device,
-      brand: repair.brand,
-      model: repair.model,
-      deviceType: repair.deviceType,
-      issue: repair.issue,
+      device: `${repair.device_brand || ''} ${repair.device_model || ''}`.trim() || repair.device_type || 'Dispositivo',
+      brand: repair.device_brand || '',
+      model: repair.device_model || '',
+      deviceType: repair.device_type || '',
+      issue: repair.problem_description || '',
       status: repair.status,
       priority: repair.priority,
       createdAt: repair.created_at,
-      estimatedCost: repair.estimatedCost || 0,
-      finalCost: repair.finalCost,
-      warrantyMonths: repair.warrantyMonths,
-      warrantyType: repair.warrantyType,
-      technician: repair.technician ? {
-        name: (repair.technician as any).name
+      estimatedCompletion: repair.estimated_completion || null,
+      completedAt: repair.completed_at || null,
+      estimatedCost: repair.estimated_cost || 0,
+      finalCost: repair.final_cost,
+      warrantyMonths: repair.warranty_months,
+      warrantyType: repair.warranty_type,
+      technician: technicianResult.data?.full_name ? {
+        name: technicianResult.data.full_name
       } : null,
       customer: {
-        name: customer.name,
-        phone: customer.phone
+        name: customer.name || 'Cliente',
+        phone: customer.phone || ''
       }
     }
     
-    logger.info('Public repair auth successful', { ticketNumber, clientIp })
+    logger.info('Public repair auth successful', { ticketNumber: normalizedTicket, clientIp })
     
     // Log successful authentication
     await logSecurityEvent({
       type: 'auth_success',
-      ticketNumber,
-      contact,
+      ticketNumber: normalizedTicket,
+      contact: normalizedContact,
       clientIp,
       userAgent,
       metadata: { repairId: repair.id }

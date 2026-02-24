@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useMemo, useEffect, useState } from 'react'
+import { use, useMemo, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import {
@@ -16,8 +16,6 @@ import {
   MessageCircle,
   Copy,
   Wrench,
-  CircleDot,
-  Phone,
   Banknote,
   ShieldCheck,
   ShieldAlert,
@@ -134,55 +132,36 @@ export default function RepairDetailPage({ params }: { params: Promise<{ ticketI
   const router = useRouter()
   const searchParams = useSearchParams()
   const { ticketId } = use(params)
+  const verifyHash = searchParams.get('verify')
   const [qrVerified, setQrVerified] = useState<boolean | null>(null)
-  const [verifying, setVerifying] = useState(false)
-
-  // Verificar hash del QR si viene en la URL
-  useEffect(() => {
-    const verifyHash = searchParams.get('verify')
-    if (verifyHash && qrVerified === null && !verifying) {
-      setVerifying(true)
-      fetch(`/api/repairs/verify-qr?ticket=${ticketId}&hash=${verifyHash}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.verified) {
-            setQrVerified(true)
-            toast.success('✓ Comprobante verificado correctamente', {
-              description: 'Este es un comprobante auténtico',
-              duration: 5000
-            })
-          } else {
-            setQrVerified(false)
-            toast.error('⚠ Verificación fallida', {
-              description: 'El código QR no pudo ser verificado',
-              duration: 5000
-            })
-          }
-        })
-        .catch(() => {
-          setQrVerified(false)
-          toast.error('Error al verificar el comprobante')
-        })
-        .finally(() => setVerifying(false))
-    }
-  }, [ticketId, searchParams, qrVerified, verifying])
+  const hasShownVerifiedToast = useRef(false)
 
   const { data: repair, error, isLoading } = useSWR<PublicRepair>(
-    `/api/public/repairs/${ticketId}${searchParams.get('verify') ? `?verify=${searchParams.get('verify')}` : ''}`,
+    `/api/public/repairs/${encodeURIComponent(ticketId)}${verifyHash ? `?verify=${encodeURIComponent(verifyHash)}` : ''}`,
     fetcher,
     {
       revalidateOnFocus: false,
       dedupingInterval: 60000,
       refreshInterval: 120000,
-      onError: (err) => {
+      onError: () => {
         // Solo redirigir si no hay hash de verificación o si el error no es de autorización
-        if (!searchParams.get('verify')) {
+        if (!verifyHash) {
             toast.error('No se pudo cargar la reparacion')
             router.push('/mis-reparaciones')
         }
       },
     },
   )
+
+  useEffect(() => {
+    if (!verifyHash || !repair || hasShownVerifiedToast.current) return
+    setQrVerified(true)
+    toast.success('Comprobante verificado correctamente', {
+      description: 'Este es un comprobante autentico',
+      duration: 5000
+    })
+    hasShownVerifiedToast.current = true
+  }, [verifyHash, repair])
 
   const formatPrice = useMemo(() => {
     const fmt = new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', minimumFractionDigits: 0 })
@@ -537,3 +516,4 @@ export default function RepairDetailPage({ params }: { params: Promise<{ ticketI
     </div>
   )
 }
+

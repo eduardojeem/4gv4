@@ -1,10 +1,46 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
-// Tipos compartidos para configuraciones
+// Interface matching the database table 'system_settings'
+export interface SystemSettingsRow {
+  id: string
+  company_name: string | null
+  company_email: string | null
+  company_phone: string | null
+  company_ruc: string | null
+  company_address: string | null
+  city: string | null
+  currency: string
+  tax_rate: number
+  low_stock_threshold: number
+  session_timeout: number
+  auto_backup: boolean
+  email_notifications: boolean
+  sms_notifications: boolean
+  maintenance_mode: boolean
+  allow_registration: boolean
+  require_email_verification: boolean
+  max_login_attempts: number
+  password_min_length: number
+  require_two_factor: boolean
+  theme: string
+  primary_color: string
+  date_format: string
+  time_zone: string
+  language: string
+  items_per_page: number
+  social_links: any
+  features: any
+  retention_days: number
+  updated_at: string
+  updated_by: string | null
+}
+
+// Shared settings interface used in the application
 export interface SharedSettings {
-  // Empresa
+  // Company
   companyName: string
   companyEmail: string
   companyPhone: string
@@ -14,60 +50,62 @@ export interface SharedSettings {
   currency: string
   taxRate: number
   
-  // Apariencia
+  // Appearance
   theme: string
-  colorScheme: string
+  primaryColor: string
   
-  // Sistema
+  // System
   sessionTimeout: number
   lowStockThreshold: number
-  requireSupplier: boolean
-  autoGenerateSKU: boolean
+  autoBackup: boolean
+  dateFormat: string
+  timeZone: string
+  language: string
+  itemsPerPage: number
+  retentionDays: number
   
-  // Notificaciones
+  // Notifications
   emailNotifications: boolean
   smsNotifications: boolean
-  lowStockAlerts: boolean
-  salesAlerts: boolean
   
-  // Seguridad
-  passwordMinLength: number
-  requireSpecialChars: boolean
-  twoFactorAuth: boolean
+  // Security
+  allowRegistration: boolean
+  requireEmailVerification: boolean
   maxLoginAttempts: number
+  passwordMinLength: number
+  requireTwoFactor: boolean
   
-  // Sistema (Admin)
+  // Admin
   maintenanceMode: boolean
-  enableBackups: boolean
-  backupFrequency: string
 }
 
 const defaultSettings: SharedSettings = {
   companyName: 'Mi Empresa',
   companyEmail: 'info@empresa.com',
-  companyPhone: '+595 21 123-4567',
+  companyPhone: '',
   companyRuc: '',
   companyAddress: '',
   city: 'Asunción',
   currency: 'PYG',
   taxRate: 10,
   theme: 'system',
-  colorScheme: 'blue',
+  primaryColor: 'blue',
   sessionTimeout: 60,
   lowStockThreshold: 10,
-  requireSupplier: false,
-  autoGenerateSKU: true,
+  autoBackup: true,
+  dateFormat: 'DD/MM/YYYY',
+  timeZone: 'America/Asuncion',
+  language: 'es',
+  itemsPerPage: 10,
+  retentionDays: 90,
   emailNotifications: true,
   smsNotifications: false,
-  lowStockAlerts: true,
-  salesAlerts: false,
+  allowRegistration: false,
+  requireEmailVerification: true,
+  maxLoginAttempts: 3,
   passwordMinLength: 8,
-  requireSpecialChars: true,
-  twoFactorAuth: false,
-  maxLoginAttempts: 5,
-  maintenanceMode: false,
-  enableBackups: true,
-  backupFrequency: 'daily'
+  requireTwoFactor: false,
+  maintenanceMode: false
 }
 
 const STORAGE_KEY = 'app-shared-settings'
@@ -75,96 +113,148 @@ const STORAGE_KEY = 'app-shared-settings'
 export function useSharedSettings() {
   const [settings, setSettings] = useState<SharedSettings>(defaultSettings)
   const [originalSettings, setOriginalSettings] = useState<SharedSettings>(defaultSettings)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  const supabase = createClientComponentClient()
 
-  // Cargar configuraciones al iniciar
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        // Intentar cargar desde Supabase primero
-        const { createClient } = await import('@/lib/supabase/client')
-        const supabase = createClient()
+  // Mapper function: Database -> App
+  const mapToAppSettings = useCallback((data: SystemSettingsRow): SharedSettings => {
+    return {
+      companyName: data.company_name || defaultSettings.companyName,
+      companyEmail: data.company_email || defaultSettings.companyEmail,
+      companyPhone: data.company_phone || defaultSettings.companyPhone,
+      companyRuc: data.company_ruc || defaultSettings.companyRuc,
+      companyAddress: data.company_address || defaultSettings.companyAddress,
+      city: data.city || defaultSettings.city,
+      currency: data.currency || defaultSettings.currency,
+      taxRate: Number(data.tax_rate) || defaultSettings.taxRate,
+      theme: data.theme || defaultSettings.theme,
+      primaryColor: data.primary_color || defaultSettings.primaryColor,
+      sessionTimeout: data.session_timeout || defaultSettings.sessionTimeout,
+      lowStockThreshold: data.low_stock_threshold || defaultSettings.lowStockThreshold,
+      autoBackup: data.auto_backup ?? defaultSettings.autoBackup,
+      dateFormat: data.date_format || defaultSettings.dateFormat,
+      timeZone: data.time_zone || defaultSettings.timeZone,
+      language: data.language || defaultSettings.language,
+      itemsPerPage: data.items_per_page || defaultSettings.itemsPerPage,
+      retentionDays: data.retention_days || defaultSettings.retentionDays,
+      emailNotifications: data.email_notifications ?? defaultSettings.emailNotifications,
+      smsNotifications: data.sms_notifications ?? defaultSettings.smsNotifications,
+      allowRegistration: data.allow_registration ?? defaultSettings.allowRegistration,
+      requireEmailVerification: data.require_email_verification ?? defaultSettings.requireEmailVerification,
+      maxLoginAttempts: data.max_login_attempts || defaultSettings.maxLoginAttempts,
+      passwordMinLength: data.password_min_length || defaultSettings.passwordMinLength,
+      requireTwoFactor: data.require_two_factor ?? defaultSettings.requireTwoFactor,
+      maintenanceMode: data.maintenance_mode ?? defaultSettings.maintenanceMode
+    }
+  }, [])
 
-        const { data: settingsData, error: settingsError } = await supabase
-          .from('system_settings')
-          .select('*')
-          .eq('id', 'system')
-          .single()
+  // Mapper function: App -> Database
+  const mapToDbSettings = useCallback((appSettings: SharedSettings): Partial<SystemSettingsRow> => {
+    return {
+      company_name: appSettings.companyName,
+      company_email: appSettings.companyEmail,
+      company_phone: appSettings.companyPhone,
+      company_ruc: appSettings.companyRuc,
+      company_address: appSettings.companyAddress,
+      city: appSettings.city,
+      currency: appSettings.currency,
+      tax_rate: appSettings.taxRate,
+      theme: appSettings.theme,
+      primary_color: appSettings.primaryColor,
+      session_timeout: appSettings.sessionTimeout,
+      low_stock_threshold: appSettings.lowStockThreshold,
+      auto_backup: appSettings.autoBackup,
+      date_format: appSettings.dateFormat,
+      time_zone: appSettings.timeZone,
+      language: appSettings.language,
+      items_per_page: appSettings.itemsPerPage,
+      retention_days: appSettings.retentionDays,
+      email_notifications: appSettings.emailNotifications,
+      sms_notifications: appSettings.smsNotifications,
+      allow_registration: appSettings.allowRegistration,
+      require_email_verification: appSettings.requireEmailVerification,
+      max_login_attempts: appSettings.maxLoginAttempts,
+      password_min_length: appSettings.passwordMinLength,
+      require_two_factor: appSettings.requireTwoFactor,
+      maintenance_mode: appSettings.maintenanceMode,
+      updated_at: new Date().toISOString()
+    }
+  }, [])
 
-        if (!settingsError && settingsData) {
-          const { mapDBToSettings } = await import('@/lib/validations/system-settings')
-          const mappedSettings = mapDBToSettings(settingsData)
-          setSettings(mappedSettings)
-          setOriginalSettings(mappedSettings)
-          // Guardar en localStorage como cache
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(mappedSettings))
-          return
-        }
+  // Load settings from Supabase
+  const loadSettings = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('*')
+        .eq('id', 'system')
+        .single()
 
-        // Si falla Supabase, intentar cargar desde localStorage
-        const saved = localStorage.getItem(STORAGE_KEY)
-        if (saved) {
+      if (error) throw error
+
+      if (data) {
+        const mapped = mapToAppSettings(data as SystemSettingsRow)
+        setSettings(mapped)
+        setOriginalSettings(mapped)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
+      }
+    } catch (err) {
+      console.error('Error loading settings:', err)
+      setError('Error al cargar configuraciones')
+      // Fallback to localStorage
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        try {
           const parsed = JSON.parse(saved)
           setSettings(parsed)
           setOriginalSettings(parsed)
-          return
-        }
-
-        // Si no hay guardado, intentar migrar desde versiones antiguas
-        const oldSettings = localStorage.getItem('app-settings-v2')
-        if (oldSettings) {
-          const parsed = JSON.parse(oldSettings)
-          const migrated = { ...defaultSettings, ...parsed }
-          setSettings(migrated)
-          setOriginalSettings(migrated)
-          // Guardar en nuevo formato
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated))
-          return
-        }
-
-        // Si no hay nada, usar defaults
-        setSettings(defaultSettings)
-        setOriginalSettings(defaultSettings)
-      } catch (error) {
-        console.error('Error loading settings:', error)
-        // Intentar cargar desde localStorage como fallback
-        try {
-          const saved = localStorage.getItem(STORAGE_KEY)
-          if (saved) {
-            const parsed = JSON.parse(saved)
-            setSettings(parsed)
-            setOriginalSettings(parsed)
-            return
-          }
         } catch (e) {
-          console.error('Error loading from localStorage:', e)
+          console.error('Error parsing local settings:', e)
         }
-        setSettings(defaultSettings)
-        setOriginalSettings(defaultSettings)
       }
+    } finally {
+      setIsLoading(false)
     }
+  }, [mapToAppSettings, supabase])
 
-    loadSettings()
-  }, [])
-
-  // Escuchar eventos de actualización de configuraciones
+  // Initial load and Real-time subscription
   useEffect(() => {
-    const handleSettingsUpdated = (event: CustomEvent<SharedSettings>) => {
-      setSettings(event.detail)
-      setOriginalSettings(event.detail)
-    }
+    loadSettings()
 
-    window.addEventListener('settings-updated', handleSettingsUpdated as EventListener)
-    
+    const channel = supabase
+      .channel('system_settings_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'system_settings',
+          filter: 'id=eq.system'
+        },
+        (payload) => {
+          console.log('Real-time update received:', payload)
+          if (payload.new) {
+            const mapped = mapToAppSettings(payload.new as SystemSettingsRow)
+            setSettings(mapped)
+            setOriginalSettings(mapped)
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
+          }
+        }
+      )
+      .subscribe()
+
     return () => {
-      window.removeEventListener('settings-updated', handleSettingsUpdated as EventListener)
+      supabase.removeChannel(channel)
     }
-  }, [])
+  }, [loadSettings, mapToAppSettings, supabase])
 
-  // Detectar cambios
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings)
 
-  // Actualizar configuración
   const updateSetting = useCallback(<K extends keyof SharedSettings>(
     key: K,
     value: SharedSettings[K]
@@ -172,121 +262,45 @@ export function useSharedSettings() {
     setSettings(prev => ({ ...prev, [key]: value }))
   }, [])
 
-  // Actualizar múltiples configuraciones
   const updateSettings = useCallback((updates: Partial<SharedSettings>) => {
     setSettings(prev => ({ ...prev, ...updates }))
   }, [])
 
-  // Guardar configuraciones
   const saveSettings = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    setIsLoading(true)
+    setIsSaving(true)
     try {
-      // Validaciones básicas
+      // Basic validation
       if (!settings.companyName.trim()) {
         return { success: false, error: 'El nombre de la empresa es requerido' }
       }
 
-      if (settings.taxRate < 0 || settings.taxRate > 100) {
-        return { success: false, error: 'La tasa de impuesto debe estar entre 0 y 100' }
-      }
-
-      // Importar dinámicamente para evitar problemas de SSR
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-
-      // Mapear a formato de base de datos
-      const { mapSettingsToDB } = await import('@/lib/validations/system-settings')
-      const dbData = mapSettingsToDB(settings)
-
-      // Guardar en Supabase
-      const { error: supabaseError } = await supabase
+      const dbData = mapToDbSettings(settings)
+      
+      const { error: updateError } = await supabase
         .from('system_settings')
         .update(dbData)
         .eq('id', 'system')
 
-      if (supabaseError) {
-        console.error('Error saving to Supabase:', supabaseError)
-        // Continuar con localStorage como fallback
-      }
+      if (updateError) throw updateError
 
-      // Guardar en localStorage como backup
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
       setOriginalSettings(settings)
-
-      // Disparar evento para notificar otros componentes
-      window.dispatchEvent(new CustomEvent('settings-updated', { 
-        detail: settings 
-      }))
-
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+      
       return { success: true }
-    } catch (error) {
-      console.error('Error saving settings:', error)
-      return { success: false, error: 'Error al guardar las configuraciones' }
+    } catch (err: any) {
+      console.error('Error saving settings:', err)
+      return { success: false, error: err.message || 'Error al guardar las configuraciones' }
     } finally {
-      setIsLoading(false)
+      setIsSaving(false)
     }
-  }, [settings])
+  }, [settings, mapToDbSettings, supabase])
 
-  // Resetear configuraciones
   const resetSettings = useCallback(() => {
     setSettings(originalSettings)
   }, [originalSettings])
 
-  // Resetear a valores por defecto
   const resetToDefaults = useCallback(() => {
     setSettings(defaultSettings)
-  }, [])
-
-  // Exportar configuraciones
-  const exportSettings = useCallback(() => {
-    try {
-      const dataStr = JSON.stringify(settings, null, 2)
-      const dataBlob = new Blob([dataStr], { type: 'application/json' })
-      const url = URL.createObjectURL(dataBlob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `settings-${new Date().toISOString().split('T')[0]}.json`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: 'Error al exportar configuraciones' }
-    }
-  }, [settings])
-
-  // Importar configuraciones
-  const importSettings = useCallback((file: File): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-
-      reader.onload = (e) => {
-        try {
-          const imported = JSON.parse(e.target?.result as string)
-
-          // Validar que tenga el formato correcto
-          if (typeof imported !== 'object' || imported === null) {
-            resolve({ success: false, error: 'Formato de archivo inválido' })
-            return
-          }
-
-          // Merge con defaults para asegurar que tenga todas las propiedades
-          const merged = { ...defaultSettings, ...imported }
-          setSettings(merged)
-
-          resolve({ success: true })
-        } catch (error) {
-          resolve({ success: false, error: 'Error al procesar el archivo' })
-        }
-      }
-
-      reader.onerror = () => {
-        resolve({ success: false, error: 'Error al leer el archivo' })
-      }
-
-      reader.readAsText(file)
-    })
   }, [])
 
   return {
@@ -294,12 +308,12 @@ export function useSharedSettings() {
     originalSettings,
     hasChanges,
     isLoading,
+    isSaving,
+    error,
     updateSetting,
     updateSettings,
     saveSettings,
     resetSettings,
-    resetToDefaults,
-    exportSettings,
-    importSettings
+    resetToDefaults
   }
 }
