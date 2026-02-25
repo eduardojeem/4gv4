@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { memo } from 'react'
 import Link from 'next/link'
@@ -22,6 +22,8 @@ import {
   Calendar,
   Users,
   Clock,
+  PackageCheck,
+  PackageX,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { CustomerCreditHistory } from '@/components/pos/CustomerCreditHistory'
@@ -32,7 +34,6 @@ import { PaymentMethods } from './checkout/PaymentMethods'
 import { CustomerSelection } from './checkout/CustomerSelection'
 import { SaleSummary } from './checkout/SaleSummary'
 import { PromotionsSection } from './checkout/PromotionsSection'
-import { CreditDebugInline } from './checkout/CreditDebugInline'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import type { Promotion } from '@/types/promotion'
 
@@ -47,6 +48,8 @@ export interface CheckoutModalProps {
   customerRepairs: any[]
   markRepairDelivered: boolean
   setMarkRepairDelivered: (val: boolean) => void
+  deliveryOutcome: 'repaired' | 'withdrawn' | 'unrepairable'
+  setDeliveryOutcome: (val: 'repaired' | 'withdrawn' | 'unrepairable') => void
   finalCostFromSale: boolean
   setFinalCostFromSale: (val: boolean) => void
   selectedRepairs: any[]
@@ -95,6 +98,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   customerRepairs,
   markRepairDelivered,
   setMarkRepairDelivered,
+  deliveryOutcome,
+  setDeliveryOutcome,
   finalCostFromSale,
   setFinalCostFromSale,
   selectedRepairs,
@@ -152,22 +157,20 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     return Math.round((cartCalculations.total - getTotalPaid()) * 100) / 100
   }
 
-  // Sistema de créditos
+  // Sistema de creditos
   const { canSellOnCredit, createCreditSale, getCreditSummary, loadCreditData } = useCreditSystem()
   const [showCreditHistory, setShowCreditHistory] = React.useState(false)
   
-  // Cargar datos de crédito cuando cambia el cliente
+  // Cargar datos de credito cuando cambia el cliente
   React.useEffect(() => {
     if (activeCustomer?.id) {
       loadCreditData(activeCustomer.id)
     }
   }, [activeCustomer?.id, loadCreditData])
   
-  // Verificar si el cliente puede comprar a crédito
+  // Verificar si el cliente puede comprar a credito
   const canUseCredit = activeCustomer && canSellOnCredit(activeCustomer, cartCalculations.total)
   const creditSummary = activeCustomer ? getCreditSummary(activeCustomer) : null
-
-  // Procesar venta a crédito
   const processCreditSale = React.useCallback(async () => {
     if (!activeCustomer) return
     
@@ -188,7 +191,12 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
           const supabase = createSupabaseClient()
           const { error } = await supabase
             .from('repairs')
-            .update({ status: 'entregado', delivered_at: new Date().toISOString() })
+            .update({
+              status: 'entregado',
+              picked_up_at: new Date().toISOString(),
+              delivery_outcome: deliveryOutcome,
+              completed_at: new Date().toISOString(),
+            })
             .in('id', selectedRepairIds)
             .select()
             
@@ -196,25 +204,49 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
         }
       } catch (error) {
         console.error('Error updating repair status:', error)
-        toast.error('La venta se procesó pero hubo un error al actualizar el estado de las reparaciones. Por favor actualice manualmente.')
+        toast.error('La venta se proceso pero hubo un error al actualizar el estado de las reparaciones. Por favor actualice manualmente.')
       }
       // Limpiar carrito y cerrar modal
       onCancel()
     }
-  }, [activeCustomer, cartCalculations.total, cart, selectedRepairIds, createCreditSale, onCancel])
+  }, [activeCustomer, cartCalculations.total, cart, selectedRepairIds, deliveryOutcome, createCreditSale, onCancel])
 
   return (
     <Dialog open={isCheckoutOpen} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="w-[95vw] sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Procesar Pago</DialogTitle>
+      <DialogContent className="flex max-h-[90vh] w-[95vw] flex-col p-0 overflow-hidden sm:max-w-3xl md:max-w-5xl lg:max-w-6xl">
+        <DialogHeader className="px-6 py-4 border-b bg-muted/30">
+          <DialogTitle className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-primary" />
+            Procesar Pago
+          </DialogTitle>
         </DialogHeader>
+
+        <div className="px-6 py-3 border-b bg-background/90">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Items</p>
+              <p className="font-semibold">{cart.length}</p>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Reparaciones</p>
+              <p className="font-semibold">{selectedRepairIds.length}</p>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">Pago</p>
+              <p className="font-semibold capitalize">{isMixedPayment ? 'Mixto' : (paymentMethod || 'Sin seleccionar')}</p>
+            </div>
+            <div className="rounded-lg border bg-muted/20 px-3 py-2 text-right">
+              <p className="text-[11px] text-muted-foreground">Total</p>
+              <p className="font-semibold text-primary">{formatCurrency(cartCalculations.total)}</p>
+            </div>
+          </div>
+        </div>
         
         {!isRegisterOpen && (
-          <div className="mb-4 flex items-center justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-destructive">
+          <div className="mx-6 mt-4 mb-1 flex items-center justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-destructive">
              <div className="flex items-center gap-2">
                <AlertCircle className="h-4 w-4" />
-               <span className="text-sm font-medium">La caja está cerrada. Debe abrirla antes de procesar ventas.</span>
+               <span className="text-sm font-medium">La caja esta cerrada. Debe abrirla antes de procesar ventas.</span>
              </div>
              {onOpenRegister && (
                <Button 
@@ -231,11 +263,11 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
 
         {/* Indicadores de estado del pago */}
         {paymentStatus !== 'idle' && (
-          <div aria-live="polite" className="mb-4">
+          <div aria-live="polite" className="mx-6 mt-3 mb-1">
             {paymentStatus === 'processing' && (
               <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                <span className="text-sm">Procesando pago… Esto puede tardar unos segundos.</span>
+                <span className="text-sm">Procesando pago... Esto puede tardar unos segundos.</span>
               </div>
             )}
             {paymentStatus === 'success' && (
@@ -249,15 +281,16 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <XCircle className="h-4 w-4 text-destructive mt-0.5" />
                 <div>
                   <div className="text-sm font-medium">Pago fallido</div>
-                  <div className="text-xs text-muted-foreground">{paymentError || 'Ocurrió un error durante el pago. Verifique la conexión y los datos ingresados.'}</div>
+                  <div className="text-xs text-muted-foreground">{paymentError || 'Ocurrio un error durante el pago. Verifique la conexion y los datos ingresados.'}</div>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-xl border bg-card/70 p-4 md:p-5 space-y-4">
             <CustomerSelection
               creditSummary={creditSummary || undefined}
               showCreditHistory={showCreditHistory}
@@ -269,7 +302,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               paymentStatus={paymentStatus}
             />
 
-            {/* Selector de reparación vinculada (Múltiple) */}
+            {/* Selector de reparacion vinculada (Multiple) */}
             {selectedCustomer && (
               <div className="mt-6 border-t pt-4">
                 {(() => {
@@ -280,11 +313,11 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-medium flex items-center gap-2 text-sm">
                           <Wrench className="h-4 w-4" />
-                          Vincular a Reparación ({selectedRepairIds.length})
+                          Vincular a Reparacion ({selectedRepairIds.length})
                         </h4>
                         {selectedRepairIds.length > 0 && (
                            <Button variant="ghost" size="sm" onClick={() => setSelectedRepairIds([])} className="h-6 text-xs text-muted-foreground hover:text-destructive px-2">
-                              Limpiar selección
+                              Limpiar seleccion
                            </Button>
                         )}
                       </div>
@@ -391,12 +424,38 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                                </div>
                                <div>
                                   <div className="text-xs font-semibold leading-tight">Marcar como entregados</div>
-                                  <div className="text-[10px] text-muted-foreground leading-tight">Actualizar estado a "Entregado"</div>
+                                  <div className="text-[10px] text-muted-foreground leading-tight">Actualizar estado a &quot;Entregado&quot;</div>
                                </div>
                             </div>
                             <Switch checked={markRepairDelivered} onCheckedChange={setMarkRepairDelivered} />
                          </div>
-                         
+
+                         {/* Delivery outcome selector: visible when markRepairDelivered is ON */}
+                         {markRepairDelivered && (
+                           <div className="col-span-2 p-2 rounded-lg border bg-muted/20 animate-in fade-in slide-in-from-top-1 duration-200">
+                             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Resultado de la reparacion</div>
+                             <div className="grid grid-cols-3 gap-1.5">
+                               {([
+                                 { value: 'repaired' as const, label: 'Reparado', Icon: CheckCircle2, cls: 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' },
+                                 { value: 'withdrawn' as const, label: 'Retirado', Icon: PackageX, cls: 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' },
+                                 { value: 'unrepairable' as const, label: 'Sin reparar', Icon: Wrench, cls: 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' },
+                               ]).map(({ value, label, Icon, cls }) => (
+                                 <button
+                                   key={value}
+                                   type="button"
+                                   onClick={() => setDeliveryOutcome(value)}
+                                   className={`flex flex-col items-center gap-1 rounded border p-2 text-center text-[10px] font-medium transition-all ${
+                                     deliveryOutcome === value ? cls : 'border-border bg-background text-muted-foreground hover:bg-muted/30'
+                                   }`}
+                                 >
+                                   <Icon className="h-3.5 w-3.5" />
+                                   {label}
+                                 </button>
+                               ))}
+                             </div>
+                           </div>
+                         )}
+
                          <div className="flex items-center justify-between rounded-lg border p-2 bg-background hover:bg-muted/20 transition-colors">
                             <div className="flex gap-2 items-center">
                                <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
@@ -422,8 +481,8 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               formatCurrency={formatCurrency}
             />
 
-            {/* Sección de Promociones */}
-            <div className="mt-6">
+            {/* Seccion de Promociones */}
+            <div className="pt-2">
               <PromotionsSection
                 cart={cart}
                 cartTotal={cartCalculations.total}
@@ -433,7 +492,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               />
             </div>
 
-            <div className="mt-4">
+            <div>
               <label className="text-sm font-medium mb-2 block">Descuento (%)</label>
               <Input
                 type="number"
@@ -444,7 +503,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               />
             </div>
 
-            <div className="mt-4">
+            <div>
               <label className="text-sm font-medium mb-2 block">Notas</label>
               <Textarea
                 value={notes}
@@ -454,7 +513,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             </div>
           </div>
 
-          <div>
+          <div className="rounded-xl border bg-card/70 p-4 md:p-5">
             <SaleSummary
               cart={cart}
               cartCalculations={cartCalculations}
@@ -468,7 +527,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <>
                   {paymentMethod === 'credit' ? (
                     <Button
-                      className="w-full h-12 text-base font-semibold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-md"
+                      className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
                       onClick={processCreditSale}
                       disabled={
                         !isRegisterOpen ||
@@ -480,13 +539,13 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                       {paymentStatus === 'processing' ? (
                         <span className="flex items-center justify-center gap-2">
                           <Loader2 className="h-5 w-5 animate-spin" />
-                          Procesando venta a crédito…
+                          Procesando...
                         </span>
                       ) : (
                         <div className="flex flex-col items-center w-full">
                           <span className="flex items-center gap-2">
                             <Clock className="h-5 w-5" />
-                            Vender a Crédito
+                            Vender a Credito
                           </span>
                           <span className="text-xs font-normal opacity-90 mt-0.5">
                             Registrar deuda en cuenta corriente
@@ -496,7 +555,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                     </Button>
                   ) : (
                     <Button
-                      className="w-full"
+                      className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
                       onClick={processSale}
                       disabled={
                         !isRegisterOpen ||
@@ -510,7 +569,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                       {paymentStatus === 'processing' ? (
                         <span className="flex items-center justify-center gap-2">
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Procesando…
+                          Procesando...
                         </span>
                       ) : (
                         <>Confirmar Venta - {formatCurrency(cartCalculations.total)}</>
@@ -520,14 +579,14 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 </>
               ) : (
                 <Button
-                  className="w-full"
+                  className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
                   onClick={processMixedPayment}
                   disabled={!isRegisterOpen || paymentStatus === 'processing' || getRemainingAmount() > 0.01}
                 >
                   {paymentStatus === 'processing' ? (
                     <span className="flex items-center justify-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Procesando…
+                          Procesando...
                     </span>
                   ) : (
                     <>
@@ -541,7 +600,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
 
               <Button
                 variant="outline"
-                className="w-full"
+                className="w-full h-11"
                 onClick={onCancel}
                 disabled={paymentStatus === 'processing'}
               >
@@ -550,20 +609,46 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             </div>
           </div>
         </div>
+      </div>
       </DialogContent>
       
-      {/* Modal de historial de crédito */}
+      {/* Modal de historial de credito */}
       <Dialog open={showCreditHistory} onOpenChange={setShowCreditHistory}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Historial de Crédito</DialogTitle>
+        <DialogContent className="max-w-6xl max-h-[92vh] p-0 overflow-hidden">
+          <DialogHeader className="px-6 py-4 border-b bg-muted/30">
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-primary" />
+              Historial de Credito
+            </DialogTitle>
           </DialogHeader>
+
+          <div className="px-6 py-3 border-b bg-background/90">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg border bg-muted/20 px-3 py-2">
+                <p className="text-[11px] text-muted-foreground">Cliente</p>
+                <p className="font-semibold truncate">{activeCustomer?.name || 'Sin cliente seleccionado'}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 px-3 py-2 text-right">
+                <p className="text-[11px] text-muted-foreground">Estado de credito</p>
+                <p className="font-semibold">
+                  {creditSummary
+                    ? `${formatCurrency(creditSummary.availableCredit)} disponible`
+                    : 'Sin informacion'}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {activeCustomer && (
-            <CustomerCreditHistory 
-              customer={activeCustomer} 
-              onClose={() => setShowCreditHistory(false)}
-              compact={true}
-            />
+            <div className="px-6 py-4 overflow-y-auto bg-background/95 max-h-[70vh]">
+              <div className="rounded-xl border bg-card/70 p-4 md:p-5">
+                <CustomerCreditHistory
+                  customer={activeCustomer}
+                  onClose={() => setShowCreditHistory(false)}
+                  compact={true}
+                />
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -572,3 +657,5 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
 })
 
 CheckoutModal.displayName = 'CheckoutModal'
+
+

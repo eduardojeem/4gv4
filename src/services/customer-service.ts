@@ -91,14 +91,37 @@ class CustomerService {
     } as Customer
   }
 
+  private async getRestrictedProfileIds(): Promise<string[]> {
+    try {
+      const { data } = await this.supabase
+        .from('profiles')
+        .select('id')
+        .in('role', ['admin', 'technician', 'vendedor'])
+      
+      return data?.map(p => p.id) || []
+    } catch (error) {
+      console.warn('Error fetching restricted profiles:', error)
+      return []
+    }
+  }
+
   async getCustomers(page = 1, limit = 50): Promise<CustomersListResponse> {
     try {
       const from = (page - 1) * limit
       const to = from + limit - 1
 
-      const result = await this.supabase
+      const restrictedIds = await this.getRestrictedProfileIds()
+
+      let query = this.supabase
         .from('customers')
         .select('*', { count: 'exact' })
+
+      if (restrictedIds.length > 0) {
+        const idsParam = `(${restrictedIds.join(',')})`
+        query = query.or(`profile_id.is.null,profile_id.not.in.${idsParam}`)
+      }
+
+      const result = await query
         .range(from, to)
         .order('created_at', { ascending: false })
 
@@ -472,10 +495,19 @@ class CustomerService {
         return this.getCustomers(1, limit)
       }
 
-      const { data, error, count } = await this.supabase
+      const restrictedIds = await this.getRestrictedProfileIds()
+
+      let dbQuery = this.supabase
         .from('customers')
         .select('*', { count: 'exact' })
         .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%,customer_code.ilike.%${query}%`)
+
+      if (restrictedIds.length > 0) {
+        const idsParam = `(${restrictedIds.join(',')})`
+        dbQuery = dbQuery.or(`profile_id.is.null,profile_id.not.in.${idsParam}`)
+      }
+
+      const { data, error, count } = await dbQuery
         .limit(limit)
         .order('created_at', { ascending: false })
 
@@ -515,6 +547,8 @@ class CustomerService {
       const from = (page - 1) * limit
       const to = from + limit - 1
 
+      const restrictedIds = await this.getRestrictedProfileIds()
+
       let query = this.supabase
         .from('customers')
         .select('*', { count: 'exact' })
@@ -531,6 +565,11 @@ class CustomerService {
       }
       if (filters.city && filters.city !== 'all') {
         query = query.eq('city', filters.city)
+      }
+
+      if (restrictedIds.length > 0) {
+        const idsParam = `(${restrictedIds.join(',')})`
+        query = query.or(`profile_id.is.null,profile_id.not.in.${idsParam}`)
       }
 
       const { data, error, count } = await query

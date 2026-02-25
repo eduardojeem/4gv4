@@ -152,17 +152,47 @@ export const VirtualizedProductGrid: React.FC<VirtualizedProductListProps> = ({
   isWholesale,
   wholesaleDiscountRate
 }) => {
-  const ITEMS_PER_ROW = 3
+  const [containerWidth, setContainerWidth] = useState(1000)
+  const containerRef = React.useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.clientWidth)
+      }
+    }
+
+    // Initial measure
+    updateWidth()
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width)
+      }
+    })
+    
+    resizeObserver.observe(containerRef.current)
+    return () => resizeObserver.disconnect()
+  }, [])
+
+  // Calculate items per row based on container width
+  // Min card width around 220px + 16px gap
+  const ITEM_MIN_WIDTH = 220
+  const GAP = 16
+  const itemsPerRow = Math.max(1, Math.floor((containerWidth + GAP) / (ITEM_MIN_WIDTH + GAP)))
+  
   const ITEM_HEIGHT = 280
 
   // Group products into rows
   const productRows = useMemo(() => {
     const rows: Product[][] = []
-    for (let i = 0; i < products.length; i += ITEMS_PER_ROW) {
-      rows.push(products.slice(i, i + ITEMS_PER_ROW))
+    for (let i = 0; i < products.length; i += itemsPerRow) {
+      rows.push(products.slice(i, i + itemsPerRow))
     }
     return rows
-  }, [products])
+  }, [products, itemsPerRow])
 
   const { virtualItems, containerProps, innerProps } = useVirtualList({
     items: productRows,
@@ -183,7 +213,7 @@ export const VirtualizedProductGrid: React.FC<VirtualizedProductListProps> = ({
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden bg-background">
+    <div className="border rounded-lg overflow-hidden bg-background" ref={containerRef}>
       <div {...containerProps}>
         <div {...innerProps}>
           {virtualItems.map(({ index, item: row, offsetTop }) => (
@@ -196,7 +226,12 @@ export const VirtualizedProductGrid: React.FC<VirtualizedProductListProps> = ({
                 height: ITEM_HEIGHT
               }}
             >
-              <div className="grid grid-cols-3 gap-4 p-4">
+              <div 
+                className="grid gap-4 p-4"
+                style={{ 
+                  gridTemplateColumns: `repeat(${itemsPerRow}, minmax(0, 1fr))` 
+                }}
+              >
                 {row.map((product: Product) => (
                   <ProductCard
                     key={product.id}

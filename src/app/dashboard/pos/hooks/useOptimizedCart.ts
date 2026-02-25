@@ -67,29 +67,35 @@ export const useOptimizedCart = (
   const [cart, setCart] = useState<CartItem[]>([])
   const [isWholesale, setIsWholesale] = useState(false)
   const [discount, setDiscount] = useState(0) // Descuento general manual/promo
+  const [isLoaded, setIsLoaded] = useState(false)
 
-  // Persistencia en localStorage
+  // Persistencia en localStorage: Cargar
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
       const savedCart = localStorage.getItem('pos.cart')
       if (savedCart) {
         const parsed = JSON.parse(savedCart)
-        if (Array.isArray(parsed)) setCart(parsed)
+        if (Array.isArray(parsed)) {
+          setCart(parsed)
+        }
       }
     } catch (e) {
       console.warn('No se pudo restaurar carrito', e)
+    } finally {
+      setIsLoaded(true)
     }
   }, [])
 
+  // Persistencia en localStorage: Guardar
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !isLoaded) return
     try {
       localStorage.setItem('pos.cart', JSON.stringify(cart))
     } catch (e) {
       console.error('Error saving cart to localStorage:', e)
     }
-  }, [cart])
+  }, [cart, isLoaded])
 
   /**
    * Verificar disponibilidad de stock
@@ -272,15 +278,10 @@ export const useOptimizedCart = (
    * Vaciar carrito
    */
   const clearCart = useCallback((force: boolean = false) => {
-    if (!force && cart.length > 0) {
-      const confirmed = window.confirm(
-        `¿Estás seguro de que deseas vaciar el carrito?\n\nEsta acción no se puede deshacer.`
-      )
-      if (!confirmed) return
-    }
+    // La confirmación debe ser manejada por la UI (Dialog)
     setCart([])
     toast.success('Carrito vaciado')
-  }, [cart])
+  }, [])
 
   /**
    * Cálculos completos (Motor de precios)

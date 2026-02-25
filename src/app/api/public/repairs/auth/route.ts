@@ -6,7 +6,6 @@ import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { PublicRepair, RepairAuthResponse } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { logSecurityEvent, isIpBlocked } from '@/lib/security-audit'
-import { verifyRecaptcha } from '@/lib/recaptcha'
 
 /**
  * POST /api/public/repairs/auth
@@ -75,34 +74,6 @@ export async function POST(request: NextRequest) {
     
     const body = await request.json()
     
-    // Verify reCAPTCHA token
-    const recaptchaToken = body.recaptchaToken
-    if (recaptchaToken) {
-      const recaptchaResult = await verifyRecaptcha(recaptchaToken, 'repair_auth', 0.5)
-      
-      if (!recaptchaResult.valid) {
-        await logSecurityEvent({
-          type: 'auth_failure',
-          ticketNumber: body.ticketNumber || 'unknown',
-          contact: body.contact,
-          clientIp,
-          userAgent,
-          reason: `reCAPTCHA failed: ${recaptchaResult.error}`,
-          metadata: { score: recaptchaResult.score }
-        })
-        
-        return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Verificación de seguridad fallida. Por favor, intenta de nuevo.' 
-          },
-          { status: 400 }
-        )
-      }
-      
-      // Log successful reCAPTCHA verification
-      logger.info('reCAPTCHA verified', { score: recaptchaResult.score, clientIp })
-    }
     
     // Validate input
     const validation = repairAuthSchema.safeParse(body)

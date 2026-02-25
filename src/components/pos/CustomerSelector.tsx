@@ -111,15 +111,15 @@ export function CustomerSelector({
         setIsOpen(false)
     }
 
-    const { fetchPendingRepairs, repairs: pendingRepairs, loading: loadingRepairs } = useCustomerRepairs()
+    const { fetchRepairs, repairs: pendingRepairs, loading: loadingRepairs } = useCustomerRepairs()
     const [showRepairsDialog, setShowRepairsDialog] = useState(false)
 
     // Check for repairs when customer is selected
     useEffect(() => {
         if (selectedCustomer) {
-            fetchPendingRepairs(selectedCustomer.id)
+            fetchRepairs(selectedCustomer.id, ['listo', 'entregado'])
         }
-    }, [selectedCustomer, fetchPendingRepairs])
+    }, [selectedCustomer, fetchRepairs])
 
     const handleAddRepairToCart = (repair: CustomerRepair) => {
         // This would need to be passed down or handled via a context/callback

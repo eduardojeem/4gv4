@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 import { createSupabaseClient } from '@/lib/supabase/client'
-import { Repair, RepairStatus } from '@/types/repairs'
+import { Repair, RepairStatus, RepairDeliveryOutcome } from '@/types/repairs'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 import { useErrorHandler } from './use-error-handler'
 import { useDebounce } from './use-debounce'
@@ -55,6 +55,7 @@ export function useRepairs() {
                   warranty_notes,
                   warranty_expires_at,
                   picked_up_at,
+                  delivery_outcome,
                   created_at,
                   estimated_completion,
                   completed_at,
@@ -148,6 +149,50 @@ export function useRepairs() {
       // Handle error and revert optimistic update
       handleError(error, { operation: 'updateStatus', repairId: id })
       fetchRepairs()
+    }
+  }
+
+  const deliverRepair = async (
+    id: string,
+    outcome: RepairDeliveryOutcome,
+    note?: string
+  ) => {
+    // Optimistic update
+    setRepairs(prev =>
+      prev.map(r =>
+        r.id === id
+          ? { ...r, status: 'entregado' as RepairStatus, deliveryOutcome: outcome, pickedUpAt: new Date().toISOString() }
+          : r
+      )
+    )
+
+    if (isDemoMode()) {
+      toast.success('Reparación marcada como entregada (Demo)')
+      return
+    }
+
+    try {
+      const supabase = createSupabaseClient()
+      const now = new Date().toISOString()
+      const updates: Record<string, unknown> = {
+        status: 'entregado',
+        picked_up_at: now,
+        delivery_outcome: outcome,
+        completed_at: now,
+      }
+      if (note?.trim()) {
+        // Append a note via repair_notes table if it exists, otherwise skip
+        // We include the note text in the update for convenience here
+        updates.solution = note.trim()
+      }
+      const { error } = await supabase.from('repairs').update(updates).eq('id', id)
+      if (error) throw error
+      toast.success('Reparación marcada como entregada')
+      // Refresh to get latest server state
+      fetchRepairs()
+    } catch (error) {
+      handleError(error, { operation: 'deliverRepair', repairId: id })
+      fetchRepairs() // revert optimistic
     }
   }
 
@@ -290,6 +335,7 @@ export function useRepairs() {
     repairs,
     isLoading,
     updateStatus,
+    deliverRepair,
     createRepair,
     updateRepair,
     deleteRepair,

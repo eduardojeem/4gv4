@@ -5,7 +5,6 @@ import {
 import { Wrench } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { RepairRow } from './RepairRow'
-import { RepairListVirtualized } from './RepairListVirtualized'
 import { RepairPerformanceMonitor } from './RepairPerformanceMonitor'
 
 interface RepairListProps {
@@ -14,8 +13,8 @@ interface RepairListProps {
     onEdit: (repair: Repair) => void
     onView?: (repair: Repair) => void
     onDelete?: (id: string) => void
+    onDeliver?: (repair: Repair) => void
     isLoading?: boolean
-    virtualized?: boolean // Forzar virtualización (default: auto cuando >500 items)
 }
 
 export const RepairList = memo<RepairListProps>(function RepairList({
@@ -24,12 +23,9 @@ export const RepairList = memo<RepairListProps>(function RepairList({
     onEdit,
     onView,
     onDelete,
+    onDeliver,
     isLoading,
-    virtualized
 }) {
-    // Optimize virtualization threshold based on performance testing
-    // Use virtualization for 100+ items to improve performance
-    const shouldVirtualize = virtualized ?? repairs.length > 100;
     if (isLoading) {
         return (
             <div className="flex items-center justify-center p-12">
@@ -51,38 +47,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
         )
     }
 
-    // Usar lista virtualizada para grandes conjuntos de datos
-    if (shouldVirtualize) {
-        return (
-            <div className="space-y-2">
-                {repairs.length > 100 && (
-                    <div className="text-xs text-muted-foreground dark:text-muted-foreground/80 px-2 flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 dark:bg-green-400 rounded-full animate-pulse"></div>
-                        ⚡ Modo virtualizado activado para mejor rendimiento ({repairs.length} items)
-                    </div>
-                )}
-                <RepairListVirtualized
-                    repairs={repairs}
-                    onEdit={onEdit}
-                    onView={onView}
-                    onDelete={onDelete || (() => {})}
-                    onStatusChange={onStatusChange || (() => {})}
-                />
-                <div className="border-t bg-muted/40 dark:bg-muted/20 px-4 py-2 flex items-center justify-between rounded-b-lg">
-                    <span className="text-xs text-muted-foreground dark:text-muted-foreground/80">
-                        Mostrando <span className="font-medium text-foreground dark:text-foreground">{repairs.length}</span> reparacion{repairs.length !== 1 && 'es'}
-                    </span>
-                    <RepairPerformanceMonitor 
-                        repairCount={repairs.length}
-                        filteredCount={repairs.length}
-                        isVirtualized={shouldVirtualize}
-                    />
-                </div>
-            </div>
-        )
-    }
 
-    // Lista normal para conjuntos pequeños
     return (
         <div className="rounded-lg border border-border dark:border-muted/50 bg-card dark:bg-card/95 overflow-hidden shadow-sm dark:shadow-lg">
             <Table>
@@ -110,6 +75,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
                             onEdit={onEdit}
                             onView={onView}
                             onDelete={onDelete}
+                            onDeliver={onDeliver}
                         />
                     ))}
                 </TableBody>

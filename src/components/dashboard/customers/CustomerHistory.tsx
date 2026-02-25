@@ -327,12 +327,12 @@ export function CustomerHistory({ customer, onBack, onViewDetail, mode = 'detail
 
   // Datos desde hooks con fallback a mock
   const { data: purchasesData } = useCustomerPurchases(customer.id)
-  const { repairs, loading: loadingRepairs, fetchPendingRepairs } = useCustomerRepairs()
+  const { repairs, loading: loadingRepairs, fetchRepairs } = useCustomerRepairs()
 
   // Fetch repairs when component mounts
   React.useEffect(() => {
-    fetchPendingRepairs(customer.id)
-  }, [customer.id, fetchPendingRepairs])
+    fetchRepairs(customer.id)
+  }, [customer.id, fetchRepairs])
 
   const purchases: PurchaseRecord[] = useMemo(() => {
     return (Array.isArray(purchasesData) && purchasesData.length)

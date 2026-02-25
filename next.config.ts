@@ -61,8 +61,8 @@ const nextConfig: NextConfig = {
       'sonner'
     ],
     
-    // Optimizaciones adicionales
-    optimizeCss: true,
+    // Optimizaciones adicionales (optimizeCss usa Critters, solo tiene sentido en producción)
+    optimizeCss: process.env.NODE_ENV === 'production',
     scrollRestoration: true,
   },
 
@@ -119,8 +119,8 @@ const nextConfig: NextConfig = {
   // Configuración de compresión
   compress: true,
   
-  // Configuración de output para optimización
-  output: 'standalone',
+  // Configuración de output para optimización (solo en producción para no penalizar el dev server)
+  ...(process.env.NODE_ENV === 'production' ? { output: 'standalone' } : {}),
   
   // Configuración de PoweredByHeader
   poweredByHeader: false,

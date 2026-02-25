@@ -30,7 +30,6 @@ interface RepairFiltersProps {
     setTechnicianFilter?: (id: string) => void
     dateRange?: DateRange
     setDateRange?: (range: DateRange | undefined) => void
-    onOpenSearch?: () => void
 }
 
 export const RepairFilters = memo<RepairFiltersProps>(function RepairFilters({

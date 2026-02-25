@@ -1,4 +1,4 @@
-import { Repair, RepairPriority, RepairUrgency, DeviceType, RepairStatus } from '@/types/repairs'
+import { Repair, RepairPriority, RepairUrgency, RepairDeliveryOutcome, DeviceType, RepairStatus } from '@/types/repairs'
 
 interface SupabaseCustomer {
     id?: string
@@ -66,6 +66,7 @@ interface SupabaseRepair {
     warranty_notes?: string
     warranty_expires_at?: string
     picked_up_at?: string
+    delivery_outcome?: string
     created_at: string
     estimated_completion?: string
     completed_at?: string
@@ -121,6 +122,7 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         warrantyNotes: r.warranty_notes || undefined,
         warrantyExpiresAt: r.warranty_expires_at || null,
         pickedUpAt: r.picked_up_at || null,
+        deliveryOutcome: (r.delivery_outcome as RepairDeliveryOutcome) || null,
         createdAt: r.created_at,
         estimatedCompletion: r.estimated_completion ?? null,
         completedAt: r.completed_at ?? null,

@@ -22,14 +22,19 @@ export function useCustomerRepairs() {
 
     const supabase = createClient()
 
-    const fetchPendingRepairs = useCallback(async (customerId: string) => {
+    const fetchRepairs = useCallback(async (customerId: string, statusFilter?: string[]) => {
         try {
             setLoading(true)
-            const { data, error } = await supabase
+            let query = supabase
                 .from('repairs')
                 .select('id, device_brand, device_model, problem_description, status, estimated_cost, final_cost, created_at')
                 .eq('customer_id', customerId)
-                .in('status', ['listo', 'entregado'])
+
+            if (statusFilter && statusFilter.length > 0) {
+                query = query.in('status', statusFilter)
+            }
+            
+            const { data, error } = await query
 
             if (error) throw error
 
@@ -50,6 +55,6 @@ export function useCustomerRepairs() {
     return {
         repairs,
         loading,
-        fetchPendingRepairs
+        fetchRepairs
     }
 }

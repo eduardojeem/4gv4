@@ -24,6 +24,7 @@ export type DbRepairStatus = RepairStatus
 
 export type RepairPriority = 'low' | 'medium' | 'high'
 export type RepairUrgency = 'normal' | 'urgent'
+export type RepairDeliveryOutcome = 'repaired' | 'unrepairable' | 'withdrawn'
 export type DeviceType = 'smartphone' | 'tablet' | 'laptop' | 'desktop' | 'accessory' | 'other'
 
 export interface Customer {
@@ -95,6 +96,7 @@ export interface Repair {
   warrantyNotes?: string
   warrantyExpiresAt?: string | null
   pickedUpAt?: string | null  // Fecha en que el cliente retiró el equipo
+  deliveryOutcome?: RepairDeliveryOutcome | null  // Resultado de la entrega
   createdAt: string
   estimatedCompletion: string | null
   completedAt: string | null

@@ -10,7 +10,7 @@ import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 // ============================================================================
 
 // Importar tipos centralizados
-import { Repair, RepairStatus, RepairPriority } from '@/types/repairs'
+import { Repair, RepairStatus, RepairPriority, RepairDeliveryOutcome } from '@/types/repairs'
 
 export interface RepairFormData {
     customer_id: string
@@ -46,6 +46,7 @@ export interface RepairsContextValue {
     updateRepair: (id: string, data: Partial<Repair>) => Promise<Repair | null>
     deleteRepair: (id: string) => Promise<boolean>
     updateStatus: (id: string, status: RepairStatus) => Promise<boolean>
+    deliverRepair: (id: string, outcome: RepairDeliveryOutcome, note?: string) => Promise<boolean>
     assignTechnician: (repairId: string, technicianId: string) => Promise<boolean>
 
     getRepairsByStatus: (status: RepairStatus) => Repair[]
@@ -487,6 +488,53 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         }
     }, [supabase])
 
+    // Deliver repair with outcome
+    const deliverRepair = useCallback(async (
+        id: string,
+        outcome: RepairDeliveryOutcome,
+        note?: string
+    ): Promise<boolean> => {
+        try {
+            setError(null)
+            const now = new Date().toISOString()
+            const updateData: Record<string, unknown> = {
+                status: 'entregado',
+                picked_up_at: now,
+                delivery_outcome: outcome,
+                completed_at: now,
+            }
+            if (note?.trim()) {
+                updateData.solution = note.trim()
+            }
+
+            // Optimistic update
+            setRepairs(prev =>
+                prev.map(r =>
+                    r.id === id
+                        ? { ...r, status: 'entregado' as RepairStatus, deliveryOutcome: outcome, pickedUpAt: now }
+                        : r
+                )
+            )
+
+            const { error: updateError } = await supabase
+                .from('repairs')
+                .update(updateData)
+                .eq('id', id)
+
+            if (updateError) throw updateError
+
+            toast.success('Reparación marcada como entregada')
+            return true
+        } catch (err) {
+            const error = err as Error
+            setError(error)
+            toast.error('Error al registrar entrega: ' + error.message)
+            // Revert optimistic update
+            await fetchRepairs()
+            return false
+        }
+    }, [supabase, fetchRepairs])
+
     // Assign technician
     const assignTechnician = useCallback(async (
         repairId: string,
@@ -668,6 +716,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         updateRepair,
         deleteRepair,
         updateStatus,
+        deliverRepair,
         assignTechnician,
         getRepairsByStatus,
         getRepairsByTechnician,

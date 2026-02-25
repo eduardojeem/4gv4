@@ -17,7 +17,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { toast } from 'sonner'
-import { useRecaptcha } from '@/hooks/use-recaptcha'
 
 const searchSchema = z.object({
   ticketNumber: z.string().min(1, 'El numero de ticket es requerido'),
@@ -30,7 +29,6 @@ export function RepairSearchForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
-  const { executeRecaptcha } = useRecaptcha()
   const hasPrefilledFromQr = useRef(false)
 
   const form = useForm<SearchFormValues>({
@@ -64,20 +62,12 @@ export function RepairSearchForm() {
     try {
       const normalizedTicketNumber = data.ticketNumber.trim().toUpperCase()
 
-      let recaptchaToken = ''
-      try {
-        recaptchaToken = await executeRecaptcha('repair_auth')
-      } catch (error) {
-        console.error('Recaptcha error:', error)
-      }
-
       const response = await fetch('/api/public/repairs/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
           ticketNumber: normalizedTicketNumber,
-          recaptchaToken,
         }),
       })
 

@@ -23,13 +23,14 @@ import {
   Smartphone, Tablet, Laptop, Monitor, AlertCircle, 
   DollarSign, Clock, FileText, Image as ImageIcon,
   Edit, Trash, Printer, Package as PackageIcon, CheckCircle,
-  Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff
+  Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
+  PackageCheck, PackageX, CheckCircle2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 import { toast } from 'sonner'
-import { Repair } from '@/types/repairs'
+import { Repair, RepairDeliveryOutcome } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
@@ -44,6 +45,7 @@ import {
   formatWarrantyExpiration 
 } from '@/lib/warranty-utils'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { logger } from '@/lib/logger'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -90,8 +92,8 @@ export function RepairDetailDialog({
       })
       .catch(err => {
         if (err?.name !== 'AbortError') {
-          console.error("Failed to fetch verification hash", err)
-        }
+            logger.error('Failed to fetch verification hash', { error: err })
+          }
       })
     } else {
       setVerificationHash(undefined)
@@ -342,6 +344,73 @@ export function RepairDetailDialog({
                     </div>
                   </div>
                 )}
+
+                {/* Delivery outcome banner */}
+                {repair.status === 'entregado' && (() => {
+                  const outcome = repair.deliveryOutcome as RepairDeliveryOutcome | null | undefined
+                  const outcomeMap = {
+                    repaired: {
+                      Icon: CheckCircle2,
+                      title: 'Equipo Reparado y Entregado',
+                      desc: 'El equipo fue reparado correctamente y entregado al cliente.',
+                      bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+                      border: 'border-emerald-200 dark:border-emerald-900/50',
+                      iconCls: 'text-emerald-600 dark:text-emerald-400',
+                      titleCls: 'text-emerald-800 dark:text-emerald-300',
+                      descCls: 'text-emerald-700 dark:text-emerald-400/90',
+                    },
+                    withdrawn: {
+                      Icon: PackageX,
+                      title: 'Retirado Sin Reparar',
+                      desc: 'El cliente retiró el equipo antes de completar la reparación.',
+                      bg: 'bg-amber-50 dark:bg-amber-950/30',
+                      border: 'border-amber-200 dark:border-amber-900/50',
+                      iconCls: 'text-amber-600 dark:text-amber-400',
+                      titleCls: 'text-amber-800 dark:text-amber-300',
+                      descCls: 'text-amber-700 dark:text-amber-400/90',
+                    },
+                    unrepairable: {
+                      Icon: Wrench,
+                      title: 'No Fue Posible Reparar',
+                      desc: 'El equipo tiene daños irreparables o no se encontraron los repuestos.',
+                      bg: 'bg-rose-50 dark:bg-rose-950/30',
+                      border: 'border-rose-200 dark:border-rose-900/50',
+                      iconCls: 'text-rose-600 dark:text-rose-400',
+                      titleCls: 'text-rose-800 dark:text-rose-300',
+                      descCls: 'text-rose-700 dark:text-rose-400/90',
+                    },
+                  }
+                  // Fallback for entregado without outcome (legacy records)
+                  const cfg = outcome ? outcomeMap[outcome] : {
+                    Icon: PackageCheck,
+                    title: 'Equipo Entregado',
+                    desc: 'La reparación fue completada y el equipo fue entregado al cliente.',
+                    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+                    border: 'border-emerald-200 dark:border-emerald-900/50',
+                    iconCls: 'text-emerald-600 dark:text-emerald-400',
+                    titleCls: 'text-emerald-800 dark:text-emerald-300',
+                    descCls: 'text-emerald-700 dark:text-emerald-400/90',
+                  }
+                  const { Icon } = cfg
+                  return (
+                    <div className={cn('rounded-lg border p-4 mb-4', cfg.bg, cfg.border)}>
+                      <div className="flex items-start gap-3">
+                        <Icon className={cn('h-5 w-5 mt-0.5 shrink-0', cfg.iconCls)} />
+                        <div className="flex-1 min-w-0">
+                          <h4 className={cn('font-semibold', cfg.titleCls)}>{cfg.title}</h4>
+                          <p className={cn('text-sm mt-1', cfg.descCls)}>{cfg.desc}</p>
+                          {repair.pickedUpAt && (
+                            <p className={cn('text-xs mt-2 flex items-center gap-1.5', cfg.descCls)}>
+                              <Calendar className="h-3.5 w-3.5" />
+                              Entregado el{' '}
+                              {format(new Date(repair.pickedUpAt), "d 'de' MMMM yyyy, HH:mm", { locale: es })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Cliente */}

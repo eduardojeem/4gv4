@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { normalizeRole } from '@/lib/auth/role-utils'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -61,7 +61,7 @@ export async function middleware(request: NextRequest) {
 
       const rawRole = (roleRow?.role as string | undefined)
         // Fallback a profiles solo si user_roles no tiene dato
-        || await getProfileRole(supabase, user.id)
+        || (await getProfileRole(supabase, user.id))
 
       normalizedRole = normalizeRole(rawRole)
     } catch {

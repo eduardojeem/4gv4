@@ -24,6 +24,7 @@ interface CartItem {
   quantity: number
   stock: number
   subtotal: number
+  discount_amount?: number
 }
 
 interface StockMovement {
@@ -333,7 +334,7 @@ export function usePOSProducts() {
 
   // Función para procesar venta
   const processSale = useCallback(async (saleData: SaleData) => {
-    if (cart.length === 0) {
+    if (cart.length === 0 && (!saleData.items || saleData.items.length === 0)) {
       setError('El carrito está vacío')
       return { success: false, error: 'El carrito está vacío' }
     }
@@ -342,69 +343,45 @@ export function usePOSProducts() {
     setError(null)
 
     try {
-      // PROCESAR VENTA EN SUPABASE
-      console.log('Procesando venta en Supabase...', saleData)
-
-      // Crear la venta en Supabase
-      const { data: sale, error: saleError } = await supabase
-        .from('sales')
-        .insert({
-          total_amount: saleData.total,
-          payment_method: saleData.payment_method,
-          customer_id: saleData.customer_id,
-          notes: saleData.notes,
-          status: 'completed'
-        })
-        .select()
-        .single()
-
-      if (saleError) {
-        throw saleError
-      }
-
-      // Crear los items de la venta
-      const saleItems = cart.map(item => ({
-        sale_id: sale.id,
+      const saleItems = (saleData.items || cart).map(item => ({
         product_id: item.id,
         quantity: item.quantity,
         unit_price: item.price,
+        discount_amount: item.discount_amount || 0,
         subtotal: item.subtotal
       }))
 
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(saleItems)
-
-      if (itemsError) throw itemsError
-
-      // Actualizar stock de productos
-      for (const item of cart) {
-        const { error: stockError } = await supabase.rpc('update_product_stock', {
-          product_id: item.id,
-          quantity_change: -item.quantity,
-          movement_type: 'sale',
-          reference: `Venta #${sale.id}`,
-          notes: `Venta de ${item.quantity} unidades`
-        })
-
-        if (stockError) {
-          const newStock = Math.max(0, item.stock - item.quantity)
-          try {
-            const { error: fallbackError } = await supabase.rpc('update_product_stock', {
-              product_id_param: item.id,
-              new_stock: newStock,
-              movement_type_param: 'sale',
-              reference_type_param: 'sale',
-              reference_id_param: sale.id,
-              notes_param: `Venta de ${item.quantity} unidades`
-            })
-            if (fallbackError) {
-              console.error('Fallback stock update failed:', fallbackError)
-            }
-          } catch (e) {
-            console.error('Fallback RPC call threw:', e)
+      const payload = {
+        p_sale_data: {
+          code: `SALE-${Date.now()}`,
+          customer_id: saleData.customer_id || null,
+          total_amount: saleData.total,
+          subtotal_amount: saleItems.reduce((sum, item) => sum + item.subtotal, 0),
+          tax_amount: 0, // Ajustar si se manejan impuestos globales fuera del subtotal
+          discount_amount: saleItems.reduce((sum, item) => sum + item.discount_amount, 0),
+          payment_method: saleData.payment_method,
+          payment_status: 'completed',
+          notes: saleData.notes || '',
+          status: 'completed',
+          created_at: new Date().toISOString()
+        },
+        p_items: saleItems,
+        p_payments: [
+          {
+            payment_method: saleData.payment_method,
+            amount: saleData.total,
+            status: 'completed'
           }
+        ]
+      }
+
+      const { data, error: rpcError } = await supabase.rpc('process_pos_sale', payload)
+
+      if (rpcError) {
+        if (rpcError.code === 'P0001' || rpcError.message.includes('function process_pos_sale')) {
+          throw new Error('La función de base de datos process_pos_sale no existe. Por favor, ejecutá el SQL proporcionado en el plan de implementación.')
         }
+        throw rpcError
       }
 
       // Limpiar carrito y recargar productos
@@ -413,15 +390,16 @@ export function usePOSProducts() {
 
       return { 
         success: true, 
-        saleId: sale.id,
-        data: sale
+        saleId: data.id,
+        data: data
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error processing sale:', err)
-      setError(`Error al procesar venta: ${err instanceof Error ? err.message : 'Error desconocido'}`)
+      const errorMsg = err.message || 'Error desconocido'
+      setError(`Error al procesar venta: ${errorMsg}`)
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Error desconocido'
+        error: errorMsg
       }
     } finally {
       setLoading(false)

@@ -258,35 +258,22 @@ export function usePOS() {
         }
 
         setProcessing(true)
-
         try {
-            // Generar número de venta
-            const saleNumber = `SALE-${Date.now()}`
+            const saleData = {
+                code: `SALE-${Date.now()}`,
+                customer_id: customer?.id || null,
+                total_amount: total,
+                subtotal_amount: subtotal,
+                tax_amount: tax,
+                discount_amount: totalDiscount,
+                payment_method: paymentSplits.length > 1 ? 'multiple' : (paymentSplits[0]?.method || 'cash'),
+                payment_status: 'completed',
+                notes: notes,
+                status: 'completed',
+                created_at: new Date().toISOString()
+            }
 
-            // Crear venta
-            const { data: sale, error: saleError } = await supabase
-                .from('sales')
-                .insert({
-                    code: saleNumber,
-                    customer_id: customer?.id,
-                    total_amount: total,
-                    subtotal_amount: subtotal,
-                    tax_amount: tax,
-                    discount_amount: totalDiscount,
-                    payment_method: paymentSplits.length > 1 ? 'multiple' : paymentSplits[0]?.method || 'cash',
-                    payment_status: 'completed',
-                    notes,
-                    status: 'completed',
-                    created_at: new Date().toISOString()
-                })
-                .select()
-                .single()
-
-            if (saleError) throw saleError
-
-            // Crear items de venta
             const saleItems = cart.map(item => ({
-                sale_id: sale.id,
                 product_id: item.product_id,
                 quantity: item.quantity,
                 unit_price: item.price,
@@ -294,61 +281,39 @@ export function usePOS() {
                 subtotal: item.subtotal
             }))
 
-            const { error: itemsError } = await supabase
-                .from('sale_items')
-                .insert(saleItems)
-
-            if (itemsError) throw itemsError
-
-            // Crear registros de pago
             const payments = paymentSplits.map(payment => ({
-                sale_id: sale.id,
                 payment_method: payment.method,
                 amount: payment.amount,
                 reference_number: payment.reference,
                 status: 'completed'
             }))
 
-            const { error: paymentsError } = await supabase
-                .from('payments')
-                .insert(payments)
+            // Llamada atómica al RPC
+            const { data, error } = await supabase.rpc('process_pos_sale', {
+                p_sale_data: saleData,
+                p_items: saleItems,
+                p_payments: payments
+            })
 
-            if (paymentsError) throw paymentsError
-
-            // Actualizar stock de productos
-            for (const item of cart) {
-                // Get current stock first
-                const { data: currentProduct } = await supabase
-                    .from('products')
-                    .select('stock_quantity')
-                    .eq('id', item.product_id)
-                    .single()
-
-                if (currentProduct) {
-                    const newStock = Math.max(0, currentProduct.stock_quantity - item.quantity)
-                    const { error: stockError } = await supabase
-                        .from('products')
-                        .update({ stock_quantity: newStock })
-                        .eq('id', item.product_id)
-
-                    if (stockError) throw stockError
+            if (error) {
+                // Si el RPC no existe o falla, intentar fallback o informar al usuario
+                if (error.code === 'P0001' || error.message.includes('function process_pos_sale')) {
+                    throw new Error('La función de base de datos process_pos_sale no existe. Por favor, ejecutá el SQL proporcionado en el plan de implementación.')
                 }
+                throw error
             }
 
             toast.success('Venta procesada exitosamente')
-
-            // Limpiar carrito
             clearCart()
-
-            return sale
-        } catch (error: unknown) {
+            return data
+        } catch (error: any) {
             console.error('Error processing sale:', error)
-            toast.error('Error al procesar la venta')
+            toast.error(error.message || 'Error al procesar la venta')
             return null
         } finally {
             setProcessing(false)
         }
-    }, [cart, customer, subtotal, tax, totalDiscount, total, paymentSplits, notes, totalPaid, clearCart, supabase])
+    }, [cart, customer, subtotal, tax, totalDiscount, total, paymentSplits, notes, clearCart, supabase])
 
     return {
         // Estado

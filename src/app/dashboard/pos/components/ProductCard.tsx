@@ -169,6 +169,7 @@ export const ProductCard = memo(({
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
+      aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.`}
     >
       {/* Badge Flotante de Stock (Solo visible si es bajo o crítico) */}
       {showStock && stockStatus && (stockStatus.status === 'low' || stockStatus.status === 'critical' || stockStatus.status === 'out') && (
@@ -243,7 +244,7 @@ export const ProductCard = memo(({
             </div>
 
             {/* Botones de Acción Rápida (Visibles al hover en desktop, siempre en mobile) */}
-            <div className="grid grid-cols-2 gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200 translate-y-2 group-hover:translate-y-0">
+            <div className="grid grid-cols-2 gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-all duration-200 translate-y-0 sm:translate-y-2 sm:group-hover:translate-y-0 sm:group-focus-within:translate-y-0">
               {onQuickAdd && (
                 <Button
                   size="sm"

@@ -1,5 +1,4 @@
 import { Metadata } from 'next'
-import { RecaptchaProvider } from '@/components/public/RecaptchaProvider'
 
 export const metadata: Metadata = {
   title: 'Rastrear Reparación | 4G Celulares',
@@ -21,9 +20,5 @@ export default function MisReparacionesLayout({
 }: {
   children: React.ReactNode
 }) {
-  return (
-    <RecaptchaProvider>
-      {children}
-    </RecaptchaProvider>
-  )
+  return children
 }

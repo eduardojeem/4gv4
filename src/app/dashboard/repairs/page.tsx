@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback, Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
 import type { DateRange } from 'react-day-picker'
 
 // Icons
@@ -38,6 +39,7 @@ import { RepairDeleteDialog } from '@/components/dashboard/repairs/RepairDeleteD
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
 import { RepairSuccessDialog } from '@/components/dashboard/repairs/RepairSuccessDialog'
 import { RepairCardsView } from '@/components/dashboard/repairs/RepairCardsView'
+import { RepairDeliveryDialog } from '@/components/dashboard/repairs/RepairDeliveryDialog'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
@@ -74,6 +76,7 @@ function RepairsPageContent() {
     repairs,
     isLoading,
     updateStatus,
+    deliverRepair,
     createRepair,
     updateRepair,
     deleteRepair,
@@ -107,6 +110,7 @@ function RepairsPageContent() {
   const [selectedRepair, setSelectedRepair] = useState<Repair | undefined>(undefined)
   const [detailRepair, setDetailRepair] = useState<Repair | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
   const [pageSize, setPageSize] = useState<number>(20)
   const [searchOpen, setSearchOpen] = useState(false)
   const [successDialogData, setSuccessDialogData] = useState<RepairPrintPayload | null>(null)
@@ -284,7 +288,7 @@ function RepairsPageContent() {
                 verificationHash = json.hash
               }
             } catch (e) {
-              console.error("Failed to sign ticket", e)
+              logger.error('Failed to sign ticket', { error: e })
             }
           }
 
@@ -452,7 +456,9 @@ function RepairsPageContent() {
   const calendarRepairs = useMemo(() => {
     return uiFiltered.filter(r => {
       if (!calendarDate) return true
-      const d = new Date(r.createdAt)
+      // Use estimatedCompletion if available, fall back to createdAt
+      const dateStr = r.estimatedCompletion || r.createdAt
+      const d = new Date(dateStr)
       return d.toDateString() === calendarDate.toDateString()
     })
   }, [uiFiltered, calendarDate])
@@ -513,7 +519,6 @@ function RepairsPageContent() {
             setTechnicianFilter={setTechnicianFilter}
             dateRange={dateRange}
             setDateRange={setDateRange}
-            onOpenSearch={() => setSearchOpen(true)}
           />
           <div className="flex md:items-center">
             <RepairViewSelector
@@ -543,12 +548,16 @@ function RepairsPageContent() {
             onEdit={handleEditRepair}
             onView={handleViewRepair}
             onDelete={handleDeleteClick}
+            onDeliver={setDeliverTarget}
             isLoading={false}
           />
         ) : viewMode === 'cards' ? (
           <RepairCardsView
             repairs={visibleRepairs}
             onView={handleViewRepair}
+            onEdit={handleEditRepair}
+            onDelete={handleDeleteClick}
+            onDeliver={setDeliverTarget}
           />
         ) : viewMode === 'kanban' ? (
           <div className="h-[calc(100vh-300px)] min-h-[500px]">
@@ -618,25 +627,26 @@ function RepairsPageContent() {
           const q = query.toLowerCase()
           const results: Array<{ title: string; subtitle: string; href: string }> = []
           
-          // Optimize search with early termination
-          for (const repair of uiFiltered) {
+          // Search over ALL repairs, not just the currently filtered subset
+          for (const repair of repairs) {
             if (results.length >= 10) break
             
             const customerName = repair.customer.name.toLowerCase()
             const device = repair.device.toLowerCase()
             const id = repair.id.toLowerCase()
+            const ticket = (repair.ticketNumber || '').toLowerCase()
             
-            if (customerName.includes(q) || device.includes(q) || id.includes(q)) {
+            if (customerName.includes(q) || device.includes(q) || id.includes(q) || ticket.includes(q)) {
               results.push({
                 title: `${repair.customer.name} • ${repair.device}`,
-                subtitle: `${repair.id} • ${repair.status}`,
+                subtitle: `${repair.ticketNumber || repair.id.slice(0, 8)} • ${repair.status}`,
                 href: `/dashboard/repairs?search=${encodeURIComponent(repair.id)}`
               })
             }
           }
           
           return results
-        }, [uiFiltered])}
+        }, [repairs])}
       />
 
       <RepairDetailDialog
@@ -653,6 +663,17 @@ function RepairsPageContent() {
         open={!!deleteId}
         onOpenChange={(open) => !open && setDeleteId(null)}
         onConfirm={handleConfirmDelete}
+        repairContext={deleteId ? (() => {
+          const r = repairs.find(r => r.id === deleteId)
+          return { ticketNumber: r?.ticketNumber, customerName: r?.customer.name }
+        })() : undefined}
+      />
+
+      <RepairDeliveryDialog
+        open={!!deliverTarget}
+        repair={deliverTarget}
+        onOpenChange={(open) => !open && setDeliverTarget(null)}
+        onConfirm={async (id, outcome, note) => { await deliverRepair(id, outcome, note) }}
       />
     </div>
   )

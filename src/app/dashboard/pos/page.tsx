@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useMemo, useCallback, useEffect, memo, useRef } from 'react'
 import Link from 'next/link'
@@ -25,12 +25,20 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 
 import { toast } from 'sonner'
 import { showAddToCartToast } from '@/lib/pos-toasts'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
 import { createReceiptData, printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
-// Limpieza: se retiran componentes de debug/diagnóstico del POS
+// Limpieza: se retiran componentes de debug/diagnÃ³stico del POS
 import { VirtualizedProductGrid } from './components/VirtualizedProductList'
 import { formatStockStatus } from '@/lib/inventory-manager'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
@@ -75,7 +83,7 @@ const getErrorMessage = (e: unknown) => {
   try { return JSON.stringify(e) } catch { return String(e) }
 }
 
-// Utilidades de código de barras (EAN-8/13)
+// Utilidades de cÃ³digo de barras (EAN-8/13)
 const normalizeBarcode = (raw: string) => raw.replace(/\D+/g, '').trim()
 const eanChecksum = (digits: string) => {
   const len = digits.length
@@ -183,8 +191,8 @@ export default function POSPage() {
       if (!err) return 'Error desconocido'
       const msg = typeof err === 'string' ? err : (err.message || err.error_description || err.details || err.hint || 'Error desconocido')
       const lower = (msg || '').toLowerCase()
-      if (lower.includes('network') || lower.includes('fetch')) return 'Error de red: verifique la conexión.'
-      if (lower.includes('permission') || lower.includes('auth') || lower.includes('jwt')) return 'Permisos insuficientes o sesión inválida.'
+      if (lower.includes('network') || lower.includes('fetch')) return 'Error de red: verifique la conexiÃ³n.'
+      if (lower.includes('permission') || lower.includes('auth') || lower.includes('jwt')) return 'Permisos insuficientes o sesiÃ³n invÃ¡lida.'
       if (lower.includes('duplicate key') || lower.includes('unique constraint')) return 'Registro duplicado.'
       if (lower.includes('timeout')) return 'Tiempo de espera agotado.'
       if (lower.includes('not null')) return 'Faltan datos requeridos.'
@@ -201,21 +209,23 @@ export default function POSPage() {
     }
   }, [isCheckoutOpen, setPaymentError, setPaymentStatus])
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  // Opciones de vinculación de reparación
+  // Opciones de vinculaciÃ³n de reparaciÃ³n
   const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
+  const [deliveryOutcome, setDeliveryOutcome] = useState<'repaired' | 'withdrawn' | 'unrepairable'>('repaired')
   const [finalCostFromSale, setFinalCostFromSale] = useState(false)
   const selectedRepairs = useMemo(() => customerRepairs.filter((r: any) => selectedRepairIds.includes(r.id)), [customerRepairs, selectedRepairIds])
   const supabaseStatusToLabel: Record<string, string> = {
     recibido: 'Recibido',
-    diagnostico: 'En diagnóstico',
-    reparacion: 'En reparación',
+    diagnostico: 'En diagnÃ³stico',
+    reparacion: 'En reparaciÃ³n',
     listo: 'Listo para entrega',
     entregado: 'Entregado',
   }
   useEffect(() => {
-    // Resetear toggles al cerrar checkout o al cambiar de reparación
+    // Resetear toggles al cerrar checkout o al cambiar de reparaciÃ³n
     if (!isCheckoutOpen) {
       setMarkRepairDelivered(false)
+      setDeliveryOutcome('repaired')
       setFinalCostFromSale(false)
     }
   }, [isCheckoutOpen, selectedRepairIds])
@@ -242,7 +252,7 @@ export default function POSPage() {
   const { applyPromotionByCode, calculateCartSummary } = usePromotionEngine()
   const { allPromotions } = usePromotions()
 
-  // Descuento automático para clientes VIP
+  // Descuento automÃ¡tico para clientes VIP
   const VIP_DISCOUNT_RATE = 10
   const [vipAutoApplied, setVipAutoApplied] = useState(false)
 
@@ -255,9 +265,7 @@ export default function POSPage() {
     activeRegisterId, 
     setActiveRegisterId, 
     getCurrentRegister,
-    updateActiveRegister,
     registerState,
-    setRegisterState,
     addMovement,
     openRegister,
     registerSale
@@ -299,8 +307,8 @@ export default function POSPage() {
   const [movementAmount, setMovementAmount] = useState('')
   const [movementNote, setMovementNote] = useState('')
 
-  // Estados para múltiples métodos de pago
-  // Eliminados estados locales que ahora están en CheckoutContext
+  // Estados para mÃºltiples mÃ©todos de pago
+  // Eliminados estados locales que ahora estÃ¡n en CheckoutContext
 
   // Estados para sistema de tickets
   const [showReceiptModal, setShowReceiptModal] = useState(false)
@@ -342,7 +350,7 @@ export default function POSPage() {
     checkAvailability: checkCartAvailability
   } = useOptimizedCart(inventoryProducts, {
     taxRate: getTaxConfig().rate,
-    pricesIncludeTax: getTaxConfig().pricesIncludeTax
+    pricesIncludeTax: (getTaxConfig() as any).pricesIncludeTax
   })
 
   const handleWholesaleToggle = useCallback((value: boolean) => {
@@ -354,7 +362,7 @@ export default function POSPage() {
   
   const WHOLESALE_DISCOUNT_RATE = 10
 
-  // Función para verificar disponibilidad de stock
+  // FunciÃ³n para verificar disponibilidad de stock
   const checkAvailability = useCallback((productId: string, quantity: number) => {
     const product = inventoryProducts.find(p => p.id === productId)
     return product ? product.stock_quantity >= quantity : false
@@ -404,8 +412,8 @@ export default function POSPage() {
       return processInventorySale(saleData)
     },
     subscribe: (callback: (products: any[]) => void) => {
-      // Para compatibilidad, retornamos una función de desuscripción vacía
-      // ya que los productos se actualizan automáticamente con el hook
+      // Para compatibilidad, retornamos una funciÃ³n de desuscripciÃ³n vacÃ­a
+      // ya que los productos se actualizan automÃ¡ticamente con el hook
       return () => { }
     },
     importData: (data: { products: any[] }) => {
@@ -440,9 +448,28 @@ export default function POSPage() {
     })
 
     const loadInitial = async (): Promise<boolean> => {
-      const { data, error } = await supabase
+      // Filter out restricted roles
+      let restrictedIds: string[] = []
+      try {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id')
+          .in('role', ['admin', 'technician', 'vendedor'])
+        if (profiles) restrictedIds = profiles.map(p => p.id)
+      } catch (e) {
+        console.warn('Error loading restricted profiles', e)
+      }
+
+      let query = supabase
         .from('customers')
-        .select('id,first_name,last_name,phone,email,customer_type,updated_at,address,city,last_visit,loyalty_points,total_purchases,total_repairs,current_balance,credit_limit')
+        .select('id,first_name,last_name,phone,email,customer_type,updated_at,address,city,last_visit,loyalty_points,total_purchases,total_repairs,current_balance,credit_limit,profile_id')
+
+      if (restrictedIds.length > 0) {
+         const idsParam = `(${restrictedIds.join(',')})`
+         query = query.or(`profile_id.is.null,profile_id.not.in.${idsParam}`)
+      }
+
+      const { data, error } = await query
 
       if (error) {
         console.warn('Error cargando clientes:', error.message)
@@ -515,7 +542,7 @@ export default function POSPage() {
         const msg = error.message || ''
         const missingTable = msg.includes("Could not find the table 'public.repairs'") || msg.includes('relation "repairs" does not exist')
         if (missingTable) {
-          console.warn('Tabla repairs no encontrada en Supabase; usando lista vacía para el cliente.')
+          console.warn('Tabla repairs no encontrada en Supabase; usando lista vacÃ­a para el cliente.')
           canSubscribe = false
           setCustomerRepairs([])
         } else {
@@ -678,9 +705,9 @@ export default function POSPage() {
               const missingCreditsTables = msg.includes('relation \"customer_credits\" does not exist')
                 || msg.includes('relation \"credit_installments\" does not exist')
               if (missingCreditsTables) {
-                console.warn('Supabase: tablas de créditos no encontradas. Omitiendo creación de crédito.')
+                console.warn('Supabase: tablas de crÃ©ditos no encontradas. Omitiendo creaciÃ³n de crÃ©dito.')
               } else {
-                console.error('Error creando crédito desde POS:', msg)
+                console.error('Error creando crÃ©dito desde POS:', msg)
               }
             }
           }
@@ -718,11 +745,13 @@ export default function POSPage() {
                 
                 if (markRepairDelivered) {
                   updatePayload.status = 'entregado'
-                  updatePayload.delivered_at = new Date().toISOString()
+                  updatePayload.picked_up_at = new Date().toISOString()
+                  updatePayload.delivery_outcome = deliveryOutcome
+                  updatePayload.completed_at = new Date().toISOString()
                 }
                 
                 if (finalCostFromSale) {
-                  // Si hay múltiples reparaciones, dividimos el costo total equitativamente
+                  // Si hay mÃºltiples reparaciones, dividimos el costo total equitativamente
                   // Si es solo una, asignamos el total
                   updatePayload.final_cost = selectedRepairIds.length > 1 
                     ? (totalValue / selectedRepairIds.length) 
@@ -761,36 +790,31 @@ export default function POSPage() {
         throw err
       }
     },
-    [selectedCustomer, selectedRepairIds, finalCostFromSale, markRepairDelivered]
+    [selectedCustomer, selectedRepairIds, finalCostFromSale, markRepairDelivered, deliveryOutcome]
   )
 
-  // Estados para búsqueda avanzada
+  // Estados para bÃºsqueda avanzada
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'stock' | 'category'>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: 1000000 })
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
-  // Estados para paginación
+  // Estados para paginaciÃ³n
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(24) // 24 items por página por defecto
+  const [itemsPerPage, setItemsPerPage] = useState(24) // 24 items por pÃ¡gina por defecto
 
-  // Resetear página al cambiar filtros
+  // Resetear pÃ¡gina al cambiar filtros
   useEffect(() => {
     setCurrentPage(1)
   }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy])
 
 
-  // Persistencia en localStorage: restaurar al cargar
+  // Persistencia en localStorage: restaurar preferencias (el carrito se maneja en el hook)
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      const savedCart = localStorage.getItem('pos.cart')
       const savedPrefs = localStorage.getItem('pos.prefs')
-      if (savedCart) {
-        const parsed = JSON.parse(savedCart)
-        if (Array.isArray(parsed)) setCart(parsed)
-      }
       if (savedPrefs) {
         const prefs = JSON.parse(savedPrefs)
         if (prefs.selectedCategory) setSelectedCategory(prefs.selectedCategory)
@@ -807,18 +831,7 @@ export default function POSPage() {
     } catch (e) {
       console.warn('No se pudo restaurar localStorage POS', e)
     }
-     
   }, [])
-
-  // Guardar cambios significativos en localStorage
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem('pos.cart', JSON.stringify(cart))
-    } catch (e) {
-      console.error('Error saving cart to localStorage:', e)
-    }
-  }, [cart])
 
   // Estados para autocompletado (using smart search suggestions)
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -828,7 +841,7 @@ export default function POSPage() {
   // Use smart search suggestions instead of local ones
   const searchSuggestions = smartSearchSuggestions.map(s => s.text)
 
-  // Guardar cambios de preferencias (después de declarar recentSearches)
+  // Guardar cambios de preferencias (despuÃ©s de declarar recentSearches)
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
@@ -850,7 +863,7 @@ export default function POSPage() {
     }
   }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, recentSearches, sidebarCollapsed, itemsPerPage])
 
-  // Medidas del viewport para virtualización dinámica
+  // Medidas del viewport para virtualizaciÃ³n dinÃ¡mica
   const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 1024)
   const [viewportHeight, setViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 768)
 
@@ -866,11 +879,11 @@ export default function POSPage() {
 
   const virtualizationThreshold = 100
 
-  // Efecto de debouncing para búsqueda optimizada
+  // Efecto de debouncing para bÃºsqueda optimizada
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm)
-    }, 300) // 300ms de delay para evitar búsquedas excesivas
+    }, 300) // 300ms de delay para evitar bÃºsquedas excesivas
 
     return () => clearTimeout(timer)
   }, [searchTerm])
@@ -881,7 +894,7 @@ export default function POSPage() {
   const triggerHandlerById = useCallback((id: string) => {
     const el = document.getElementById(id) as HTMLElement | null
     if (!el) return
-    // Intentar ejecutar handler directo si existiera como propiedad (poco común en React)
+    // Intentar ejecutar handler directo si existiera como propiedad (poco comÃºn en React)
     const anyEl = el as any
     const handler = anyEl?.onclick
     if (typeof handler === 'function') {
@@ -892,7 +905,7 @@ export default function POSPage() {
     el.click()
   }, [])
 
-  // Categorías únicas (usar nombre de categoría)
+  // CategorÃ­as Ãºnicas (usar nombre de categorÃ­a)
   const categories = useMemo(() => {
     const names = inventoryProducts
       .map(p => (typeof p.category === 'object' ? p.category?.name : p.category))
@@ -901,7 +914,7 @@ export default function POSPage() {
     return ['all', ...uniqueNames]
   }, [inventoryProducts])
 
-  // Rango de precios dinámico
+  // Rango de precios dinÃ¡mico
   const priceRangeLimits = useMemo(() => {
     const prices = inventoryProducts.map(p => p.sale_price)
     return {
@@ -910,14 +923,14 @@ export default function POSPage() {
     }
   }, [inventoryProducts])
 
-  // Generar sugerencias de búsqueda (now using smart search)
+  // Generar sugerencias de bÃºsqueda (now using smart search)
   const generateSearchSuggestions = useCallback((term: string) => {
     // Smart search handles suggestions automatically
     // Just update the show state
     setShowSuggestions(term.length > 0)
   }, [])
 
-  // Manejar cambios en búsqueda
+  // Manejar cambios en bÃºsqueda
   const handleSearchChange = useCallback((value: string) => {
     setSearchTerm(value)
     setSmartSearchQuery(value) // Update smart search query
@@ -939,7 +952,7 @@ export default function POSPage() {
     }
   }, [recentSearches])
 
-  // Navegación por teclado en sugerencias
+  // NavegaciÃ³n por teclado en sugerencias
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!showSuggestions || searchSuggestions.length === 0) return
 
@@ -987,7 +1000,7 @@ export default function POSPage() {
         (product.barcode && product.barcode.includes(debouncedSearchTerm))
 
       const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory
-      const matchesFeatured = !showFeatured || (product as any).featured === true  // CORREGIDO: verificación explícita
+      const matchesFeatured = !showFeatured || (product as any).featured === true  // CORREGIDO: verificaciÃ³n explÃ­cita
       const matchesPrice = product.sale_price >= priceRange.min && product.sale_price <= priceRange.max
 
       let matchesStock = true
@@ -1006,7 +1019,7 @@ export default function POSPage() {
       return matchesSearch && matchesCategory && matchesFeatured && matchesPrice && matchesStock
     })
 
-    // Registrar métrica de búsqueda
+    // Registrar mÃ©trica de bÃºsqueda
     // const endTime = performance.now()
     // const searchTime = endTime - startTime
     // if (searchTime > 0) {
@@ -1067,10 +1080,11 @@ export default function POSPage() {
       
       // Usar hook optimizado
       addToCartHook(product)
+      showAddToCartToast({ name: product.name })
     })
   }, [getProductWithVariants, measureCartOperation, addToCartHook])
 
-  // Función para agregar variante al carrito
+  // FunciÃ³n para agregar variante al carrito
   const addVariantToCart = useCallback((variant: ProductVariant, quantity: number) => {
     const cartItemWithVariant = convertVariantToCartItem(variant, quantity)
 
@@ -1085,7 +1099,7 @@ export default function POSPage() {
 
   // updateQuantity is now provided by useOptimizedCart
 
-  // Utilidad común para redondear a 2 decimales
+  // Utilidad comÃºn para redondear a 2 decimales
   const roundToTwo = useCallback((num: number) => Math.round((num + Number.EPSILON) * 100) / 100, [])
 
   // Unified Cart + Repairs Calculations
@@ -1135,7 +1149,11 @@ export default function POSPage() {
       
       // Flags
       hasDiscount: totalSavings > 0,
-      isValidPayment: paymentMethod === 'cash' ? cashReceived >= finalTotal : true
+      isValidPayment: paymentMethod === 'cash' ? cashReceived >= finalTotal : true,
+      
+      // Missing properties for backward compatibility
+      totalDiscount: totalSavings,
+      averageItemPrice: totalItemCount > 0 ? subtotalApplied / totalItemCount : 0
     }
   }, [
     selectedRepairs, 
@@ -1173,13 +1191,17 @@ export default function POSPage() {
     change: cashReceived - unifiedCalculations.total,
     remaining: roundToTwo(unifiedCalculations.total - getTotalPaid()),
     discount: unifiedCalculations.totalSavings,
+    totalDiscount: unifiedCalculations.totalSavings,
+    hasDiscount: unifiedCalculations.totalSavings > 0,
+    totalSavings: unifiedCalculations.totalSavings,
+    averageItemPrice: (unifiedCalculations as any).averageItemPrice,
     repairCost: unifiedCalculations.repairCost,
     repairSubtotal: unifiedCalculations.repairSubtotal,
     repairTax: unifiedCalculations.repairTax,
     totalItemCount: unifiedCalculations.totalItemCount
   }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid])
 
-  // Aplicación automática de descuento VIP después de cálculos del carrito
+  // AplicaciÃ³n automÃ¡tica de descuento VIP despuÃ©s de cÃ¡lculos del carrito
   useEffect(() => {
     try {
       const activeCustomer = customers.find(c => c.id === selectedCustomer)
@@ -1206,7 +1228,7 @@ export default function POSPage() {
   const combinedCartItems = useMemo(() => {
     const repairItems: CartItem[] = selectedRepairs.map(repair => ({
       id: repair.id,
-      name: `Reparación: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
+      name: `ReparaciÃ³n: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
       price: repair.final_cost || repair.estimated_cost || 0,
       quantity: 1,
       isService: true,
@@ -1215,7 +1237,8 @@ export default function POSPage() {
       subtotal: repair.final_cost || repair.estimated_cost || 0,
       category: 'service',
       // Prevent wholesale discount application in SaleSummary by setting wholesalePrice = price
-      wholesalePrice: repair.final_cost || repair.estimated_cost || 0
+      wholesalePrice: repair.final_cost || repair.estimated_cost || 0,
+      sku: 'SERVICE'
     }))
 
     return [...cart, ...repairItems]
@@ -1226,7 +1249,7 @@ export default function POSPage() {
     // Check if it's a repair
     if (selectedRepairIds.includes(id)) {
       setSelectedRepairIds(prev => prev.filter(repairId => repairId !== id))
-      toast.info('Reparación removida del cobro')
+      toast.info('ReparaciÃ³n removida del cobro')
     } else {
       // It's a product
       removeFromCart(id)
@@ -1248,7 +1271,7 @@ export default function POSPage() {
       }))
 
     if (cartItems.length === 0) {
-      toast.error('No hay ítems en el carrito para aplicar promoción')
+      toast.error('No hay Ã­tems en el carrito para aplicar promociÃ³n')
       return false
     }
 
@@ -1256,14 +1279,14 @@ export default function POSPage() {
     const result = applyPromotionByCode(code, cartItems as any, allPromotions)
 
     if (!result.applied) {
-      toast.error(result.reason || 'Código promocional inválido')
+      toast.error(result.reason || 'CÃ³digo promocional invÃ¡lido')
       return false
     }
 
-    // Aplicación por item: solo a productos elegibles
+    // AplicaciÃ³n por item: solo a productos elegibles
     const promotion = allPromotions.find(p => p.code.toLowerCase() === code.toLowerCase())
     if (!promotion) {
-      toast.error('Promoción no encontrada en la base de datos')
+      toast.error('PromociÃ³n no encontrada en la base de datos')
       return false
     }
 
@@ -1275,11 +1298,11 @@ export default function POSPage() {
 
     const eligibleItems = cartItems.filter(isEligible)
     if (eligibleItems.length === 0) {
-      toast.error('No hay ítems elegibles para este código')
+      toast.error('No hay Ã­tems elegibles para este cÃ³digo')
       return false
     }
 
-    // Base de línea según modo mayorista
+    // Base de lÃ­nea segÃºn modo mayorista
     const lineBase = (item: any) => {
       const unitNonWholesale = item.unit_price
       const existingItem = combinedCartItems.find(ci => ci.id === item.id)
@@ -1294,7 +1317,7 @@ export default function POSPage() {
     setVipAutoApplied(false)
 
     if (promotion.type === 'percentage') {
-      // Aplicar porcentaje directo a ítems elegibles
+      // Aplicar porcentaje directo a Ã­tems elegibles
       eligibleItems.forEach(it => {
         const existingItem = combinedCartItems.find(ci => ci.id === it.id)
         const currentDiscount = (existingItem as any)?.discount || 0
@@ -1302,11 +1325,11 @@ export default function POSPage() {
         updateItemDiscount(it.id, Math.min(100, Math.max(0, newDiscount)))
         updateItemPromoCode(it.id, code)
       })
-      toast.success(`Código aplicado: ${promotion.value}% en ítems elegibles`)
+      toast.success(`CÃ³digo aplicado: ${promotion.value}% en Ã­tems elegibles`)
     } else {
       // Distribuir monto fijo proporcionalmente
       if (totalApplicable <= 0) {
-        toast.error('Subtotal aplicable inválido para distribuir descuento')
+        toast.error('Subtotal aplicable invÃ¡lido para distribuir descuento')
         return false
       }
       eligibleItems.forEach(it => {
@@ -1319,7 +1342,7 @@ export default function POSPage() {
         updateItemDiscount(it.id, newDiscount)
         updateItemPromoCode(it.id, code)
       })
-      toast.success(`Código aplicado: ahorro ${formatCurrency(result.discount_amount)} distribuido en ítems elegibles`)
+      toast.success(`CÃ³digo aplicado: ahorro ${formatCurrency(result.discount_amount)} distribuido en Ã­tems elegibles`)
     }
 
     return true
@@ -1329,7 +1352,7 @@ export default function POSPage() {
     // 1 punto por cada $10 gastados
     const basePoints = Math.floor(total / 10)
 
-    // Bonificación por monto alto
+    // BonificaciÃ³n por monto alto
     const bonusMultiplier = total >= 500 ? 2 : total >= 200 ? 1.5 : 1
 
     return Math.floor(basePoints * bonusMultiplier)
@@ -1339,12 +1362,12 @@ export default function POSPage() {
   const processSale = useCallback(async () => {
     return measureSaleProcessing(async () => {
       if (!getCurrentRegister.isOpen) {
-        toast.error('La caja está cerrada. No se pueden procesar ventas.')
+        toast.error('La caja estÃ¡ cerrada. No se pueden procesar ventas.')
         return
       }
 
       if (combinedCartItems.length === 0) {
-        const msg = 'El carrito está vacío'
+        const msg = 'El carrito estÃ¡ vacÃ­o'
         toast.error(msg)
         setPaymentStatus('failed')
         setPaymentError(msg)
@@ -1375,7 +1398,7 @@ export default function POSPage() {
       }
 
       if (!paymentMethod) {
-        const msg = 'Seleccione un método de pago'
+        const msg = 'Seleccione un mÃ©todo de pago'
         toast.error(msg)
         setPaymentStatus('failed')
         setPaymentError(msg)
@@ -1410,7 +1433,7 @@ export default function POSPage() {
         'Cajero Principal'
       )
 
-      // Guardar datos de la última venta
+      // Guardar datos de la Ãºltima venta
       setLastSaleData(receiptData)
       setCurrentReceipt(receiptData)
 
@@ -1431,10 +1454,13 @@ export default function POSPage() {
               price: item.price,
               quantity: item.quantity,
               stock: item.stock,
+              discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
               subtotal: item.price * item.quantity
             })),
             total: (cartCalculations as any).total,
-            payment_method: paymentMethod as 'cash' | 'card' | 'transfer'
+            payment_method: paymentMethod as 'cash' | 'card' | 'transfer',
+            customer_id: selectedCustomer || undefined,
+            notes: notes || undefined
           })
         }
 
@@ -1480,7 +1506,7 @@ export default function POSPage() {
       setSelectedRepairIds([])
       resetCheckoutState()
       
-      // Cerrar luego de una breve confirmación visual
+      // Cerrar luego de una breve confirmaciÃ³n visual
       setTimeout(() => {
         setIsCheckoutOpen(false)
         setPaymentStatus('idle')
@@ -1492,7 +1518,7 @@ export default function POSPage() {
 
   const processMixedPayment = useCallback(async () => {
     if (!getCurrentRegister.isOpen) {
-      toast.error('La caja está cerrada. No se pueden procesar ventas.')
+      toast.error('La caja estÃ¡ cerrada. No se pueden procesar ventas.')
       return
     }
     const totalPaid = getTotalPaid()
@@ -1517,7 +1543,7 @@ export default function POSPage() {
         return
       }
       if (split.method === 'card' && (!split.cardLast4 || split.cardLast4.length < 4)) {
-        const msg = 'Ingrese los últimos 4 dígitos de la tarjeta'
+        const msg = 'Ingrese los Ãºltimos 4 dÃ­gitos de la tarjeta'
         toast.error(msg)
         setPaymentStatus('failed')
         setPaymentError(msg)
@@ -1563,7 +1589,7 @@ export default function POSPage() {
       'Cajero Principal'
     )
 
-    // Guardar datos de la última venta
+    // Guardar datos de la Ãºltima venta
     setLastSaleData(receiptData)
     setCurrentReceipt(receiptData)
 
@@ -1585,10 +1611,13 @@ export default function POSPage() {
             price: item.price,
             quantity: item.quantity,
             stock: item.stock,
+            discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
             subtotal: item.price * item.quantity
           })),
           total: (cartCalculations as any).total,
-          payment_method: (paymentSplit && paymentSplit.length > 0 ? paymentSplit[0].method : 'cash') as 'cash' | 'card' | 'transfer'
+          payment_method: (paymentSplit && paymentSplit.length > 0 ? paymentSplit[0].method : 'cash') as 'cash' | 'card' | 'transfer',
+          customer_id: selectedCustomer || undefined,
+          notes: notes || undefined
         })
       }
       
@@ -1602,7 +1631,7 @@ export default function POSPage() {
         (saleResult && (saleResult as any).saleId) ? (saleResult as any).saleId : undefined
       )
       setPaymentStatus('success')
-      toast.success('Venta procesada con múltiples métodos de pago')
+      toast.success('Venta procesada con mÃºltiples mÃ©todos de pago')
       addPaymentAttempt({ status: 'success', method: 'mixed', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
       if (markRepairDelivered && selectedRepairIds.length > 0) {
         setCustomerRepairs(prev => prev.map(r => (
@@ -1643,7 +1672,7 @@ export default function POSPage() {
     setDiscount(0)
     setNotes('')
     setCashReceived(0)
-    // Cerrar luego de una breve confirmación visual
+    // Cerrar luego de una breve confirmaciÃ³n visual
     setTimeout(() => {
       setIsCheckoutOpen(false)
       setPaymentStatus('idle')
@@ -1668,7 +1697,7 @@ export default function POSPage() {
   // Atajos de teclado mejorados
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Evitar atajos cuando se está escribiendo en inputs
+      // Evitar atajos cuando se estÃ¡ escribiendo en inputs
       const activeElement = document.activeElement
       const isInputFocused = activeElement?.tagName === 'INPUT' ||
         activeElement?.tagName === 'TEXTAREA' ||
@@ -1680,41 +1709,41 @@ export default function POSPage() {
           case 'f':
             e.preventDefault()
             document.getElementById('search-input')?.focus()
-            toast.info('🔍 Campo de búsqueda enfocado')
+            toast.info('ðŸ” Campo de bÃºsqueda enfocado')
             break
           case 'Enter':
             e.preventDefault()
             if (combinedCartItems.length > 0) {
               setIsCheckoutOpen(true)
-              toast.info('💳 Abriendo checkout')
+              toast.info('ðŸ’³ Abriendo checkout')
             } else {
-              toast.error('Carrito vacío y sin reparaciones')
+              toast.error('Carrito vacÃ­o y sin reparaciones')
             }
             break
           case 'Backspace':
             e.preventDefault()
             if (cart.length > 0) {
               clearCart()
-              toast.success('🗑️ Carrito vaciado correctamente')
+              toast.success('ðŸ—‘ï¸ Carrito vaciado correctamente')
             }
             break
           case 'n':
             e.preventDefault()
             clearCart()
             setSelectedCustomer('')
-            toast.success('🆕 Nueva venta iniciada')
+            toast.success('ðŸ†• Nueva venta iniciada')
             break
           case 'p':
             e.preventDefault()
             if (combinedCartItems.length > 0) {
               setIsCheckoutOpen(true)
-              toast.info('💳 Procesando pago')
+              toast.info('ðŸ’³ Procesando pago')
             }
             break
           case 'g':
             e.preventDefault()
             setViewMode(viewMode === 'grid' ? 'list' : 'grid')
-            toast.info(`📋 Vista cambiada a ${viewMode === 'grid' ? 'lista' : 'grilla'}`)
+            toast.info(`ðŸ“‹ Vista cambiada a ${viewMode === 'grid' ? 'lista' : 'grilla'}`)
             break
           case 'h':
             e.preventDefault()
@@ -1733,28 +1762,28 @@ export default function POSPage() {
           case 'F2':
             e.preventDefault()
             setShowAdvancedFilters(!showAdvancedFilters)
-            toast.info(`🔧 Filtros ${showAdvancedFilters ? 'ocultos' : 'mostrados'}`)
+            toast.info(`ðŸ”§ Filtros ${showAdvancedFilters ? 'ocultos' : 'mostrados'}`)
             break
           case 'F3':
             e.preventDefault()
             setShowAccessibilitySettings(true)
-            toast.info('♿ Configuración de accesibilidad abierta')
+            toast.info('â™¿ ConfiguraciÃ³n de accesibilidad abierta')
             break
           case 'F5':
             e.preventDefault()
             setShowFeatured(!showFeatured)
-            toast.info(`⭐ ${showFeatured ? 'Todos los productos' : 'Solo destacados'}`)
+            toast.info(`â­ ${showFeatured ? 'Todos los productos' : 'Solo destacados'}`)
             break
           case 'F4':
             e.preventDefault()
             setIsFullscreen(!isFullscreen)
-            toast.info(`📺 Modo ${isFullscreen ? 'ventana' : 'pantalla completa'}`)
+            toast.info(`ðŸ“º Modo ${isFullscreen ? 'ventana' : 'pantalla completa'}`)
             break
           case 'Escape':
             e.preventDefault()
             if (isCheckoutOpen) {
               setIsCheckoutOpen(false)
-              toast.info('❌ Checkout cancelado')
+              toast.info('âŒ Checkout cancelado')
             } else if (showKeyboardShortcuts) {
               setShowKeyboardShortcuts(false)
             } else if (showAccessibilitySettings) {
@@ -1771,13 +1800,12 @@ export default function POSPage() {
             e.preventDefault()
             if (filteredProducts.length > 0) {
               addToCart(filteredProducts[0])
-              showAddToCartToast({ name: filteredProducts[0].name })
             }
             break
         }
       }
 
-      // Navegación por números (1-9 para agregar productos rápidamente)
+      // NavegaciÃ³n por nÃºmeros (1-9 para agregar productos rÃ¡pidamente)
       if (!isInputFocused && /^[1-9]$/.test(e.key)) {
         const index = parseInt(e.key) - 1
         if (filteredProducts[index]) {
@@ -1790,13 +1818,13 @@ export default function POSPage() {
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [cart.length, clearCart, viewMode, showAdvancedFilters, showFeatured, isFullscreen, isCheckoutOpen, showKeyboardShortcuts, showAccessibilitySettings, filteredProducts, addToCart])
 
-  // Búsqueda por código de barras
+  // BÃºsqueda por cÃ³digo de barras
   useEffect(() => {
     const normalized = normalizeBarcode(barcodeInput)
     if (normalized.length === 8 || normalized.length === 13) {
       const valid = isValidEan(normalized)
       if (!valid) {
-        toast.error('Código de barras inválido')
+        toast.error('CÃ³digo de barras invÃ¡lido')
         setBarcodeInput('')
         return
       }
@@ -1808,7 +1836,6 @@ export default function POSPage() {
       if (product) {
         addToCart(product)
         setBarcodeInput('')
-        showAddToCartToast({ name: product.name })
       } else {
         toast.error('Producto no encontrado')
         setBarcodeInput('')
@@ -1817,15 +1844,15 @@ export default function POSPage() {
   }, [barcodeInput, addToCart, inventoryProducts])
 
   return (
-    <div className={`h-screen flex flex-col bg-background ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-      {/* Header móvil compactado */}
+    <div className={`pos-theme pos-shell min-h-dvh flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
+      {/* Header mÃ³vil compactado */}
       <div className="lg:hidden pos-header-gradient shadow-sm border-b shrink-0">
         {/* Header principal */}
         <div className="p-2 sm:p-3">
           <div className="flex items-center justify-between mb-2">
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold text-foreground truncate">4G POS</h1>
-              <p className="text-xs text-muted-foreground truncate">Sistema de punto de venta avanzado</p>
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">4G POS</h1>
+              <p className="text-xs text-white/80 truncate">Sistema de punto de venta avanzado</p>
             </div>
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               <ThemeToggleSimple />
@@ -1833,7 +1860,7 @@ export default function POSPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 sm:h-9 px-2 sm:px-3"
+                  className="h-8 sm:h-9 px-2 sm:px-3 pos-header-action"
                   aria-label="Ir al dashboard"
                 >
                   <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
@@ -1843,7 +1870,7 @@ export default function POSPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 sm:h-9 px-2 sm:px-3"
+                className="h-8 sm:h-9 px-2 sm:px-3 pos-header-action"
                 onClick={() => setIsFullscreen(!isFullscreen)}
                 aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
               >
@@ -1852,7 +1879,7 @@ export default function POSPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 sm:h-9 px-2 sm:px-3"
+                className="h-8 sm:h-9 px-2 sm:px-3 pos-header-action"
                 onClick={() => setShowKeyboardShortcuts(true)}
                 aria-label="Mostrar atajos de teclado"
               >
@@ -1861,22 +1888,22 @@ export default function POSPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 sm:h-9 px-2 sm:px-3"
+                className="h-8 sm:h-9 px-2 sm:px-3 pos-header-action"
                 onClick={() => setShowAccessibilitySettings(true)}
-                aria-label="Configuración de accesibilidad"
+                aria-label="ConfiguraciÃ³n de accesibilidad"
               >
                 <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
               </Button>
             </div>
           </div>
 
-          {/* Alertas de inventario móvil */}
+          {/* Alertas de inventario mÃ³vil */}
           <div className="mb-3">
             
           </div>
 
-          {/* Resumen del carrito móvil mejorado */}
-          <div className="bg-secondary rounded-lg p-3 border border-border">
+          {/* Resumen del carrito mÃ³vil mejorado */}
+          <div className="pos-card-accent rounded-lg p-3 border border-border/40 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <div className="bg-accent rounded-full p-1.5">
@@ -1884,10 +1911,10 @@ export default function POSPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground truncate">
-                    {cartCalculations.totalItemCount} {cartCalculations.totalItemCount === 1 ? 'artículo' : 'artículos'}
+                    {cartCalculations.totalItemCount} {cartCalculations.totalItemCount === 1 ? 'artÃ­culo' : 'artÃ­culos'}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {cart.length > 0 ? `Promedio: ${formatCurrency(cartCalculations.averageItemPrice)}` : (selectedRepairIds.length > 0 ? 'Reparación vinculada' : 'Carrito vacío')}
+                    {cart.length > 0 ? `Promedio: ${formatCurrency(cartCalculations.averageItemPrice)}` : (selectedRepairIds.length > 0 ? 'ReparaciÃ³n vinculada' : 'Carrito vacÃ­o')}
                   </p>
                 </div>
               </div>
@@ -1904,19 +1931,19 @@ export default function POSPage() {
               </div>
             </div>
 
-            {/* Indicador de descuentos en móvil */}
+            {/* Indicador de descuentos en mÃ³vil */}
             {cartCalculations.hasDiscount && (
               <div className="mt-2 pt-2 border-t border-border">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="pos-savings-chip text-primary font-medium">💰 Ahorros:</span>
-                  <span className="pos-savings-chip text-primary font-bold">{formatCurrency(cartCalculations.totalSavings)}</span>
+                  <span className="pos-savings-chip font-medium">ðŸ’° Ahorros:</span>
+                  <span className="pos-savings-chip font-bold">{formatCurrency(cartCalculations.totalSavings)}</span>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Barra de acciones rápidas móvil */}
+        {/* Barra de acciones rÃ¡pidas mÃ³vil */}
         <div className="bg-muted border-t border-border px-3 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1965,12 +1992,12 @@ export default function POSPage() {
         </div>
       </div>
 
-      <div className="flex h-screen">
+      <div className="flex flex-1 min-h-0">
         {/* Contenido principal */}
         <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
           {/* Header desktop optimizado */}
   <POSHeader
-    className="hidden lg:flex items-center justify-between bg-card/50 backdrop-blur-md border-b border-border/60 px-6 py-2 sticky top-0 z-20"
+    className="hidden lg:flex items-center justify-between bg-card/70 backdrop-blur-md border-b border-border/60 px-6 py-2 sticky top-0 z-20 shadow-sm"
     registers={registers}
     activeRegisterId={activeRegisterId}
     onRegisterChange={handleRegisterChange}
@@ -2012,7 +2039,7 @@ export default function POSPage() {
 
 
 
-          {/* Header móvil con acción principal del carrito */}
+          {/* Header mÃ³vil con acciÃ³n principal del carrito */}
   <POSHeader
     className="flex lg:hidden items-center justify-between bg-card border-b border-border px-4 py-2 sticky top-0 z-20"
     registers={registers}
@@ -2040,35 +2067,78 @@ export default function POSPage() {
             </div>
           </POSHeader>
 
-  {/* Cart Overview Dialog */}
+    {/* Cart Overview Dialog */}
   <Dialog open={showCartDialog} onOpenChange={setShowCartDialog}>
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Productos en el carrito</DialogTitle>
+    <DialogContent className="max-w-2xl p-0 overflow-hidden">
+      <DialogHeader className="px-5 py-4 border-b bg-muted/30">
+        <DialogTitle className="flex items-center gap-2">
+          <ShoppingCart className="h-4 w-4 text-primary" />
+          Productos en el carrito
+        </DialogTitle>
         <DialogDescription>
-          Revisa rápidamente los productos agregados antes de cobrar.
+          Revisa cantidades y montos antes de finalizar la venta.
         </DialogDescription>
       </DialogHeader>
-      <div className="max-h-[50vh] overflow-y-auto pr-1">
+
+      <div className="px-5 py-3 border-b bg-background/80">
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-lg border bg-muted/20 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">Items</p>
+            <p className="font-semibold">{combinedCartItems.length}</p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 px-3 py-2 text-right">
+            <p className="text-[11px] text-muted-foreground">Total</p>
+            <p className="font-semibold text-primary">{formatCurrency(cartCalculations.total)}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-h-[52vh] overflow-y-auto">
         {combinedCartItems.length === 0 ? (
-          <div className="text-muted-foreground text-sm">No hay productos en el carrito.</div>
+          <div className="py-12 text-center">
+            <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-muted/40 flex items-center justify-center">
+              <ShoppingCart className="h-6 w-6 text-muted-foreground/60" />
+            </div>
+            <p className="text-sm font-medium">Carrito vacio</p>
+            <p className="text-xs text-muted-foreground">Agrega productos para continuar</p>
+          </div>
         ) : (
-          <div className="space-y-2">
+          <div className="divide-y">
             {combinedCartItems.map((item) => (
-              <div key={item.id} className="flex items-center justify-between border rounded-md px-3 py-2">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{item.name}</div>
-                  <div className="text-xs text-muted-foreground">{item.quantity} × {formatCurrency(item.price)}</div>
+              <div key={item.id} className="px-5 py-3 flex items-start justify-between gap-3 hover:bg-muted/20 transition-colors">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium truncate">{item.name}</p>
+                    {item.isService && (
+                      <Badge variant="secondary" className="h-5 text-[10px]">Servicio</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {item.quantity} x {formatCurrency(item.price)}
+                  </p>
                 </div>
-                <div className="text-sm font-semibold">{formatCurrency((item.price ?? 0) * (item.quantity ?? 1))}</div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-semibold">{formatCurrency((item.price ?? 0) * (item.quantity ?? 1))}</p>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
-      <DialogFooter>
-        <Button variant="outline" onClick={() => setShowCartDialog(false)}>Cerrar</Button>
-        <Button onClick={() => { setShowCartDialog(false); setIsCheckoutOpen(true) }}>Cobrar</Button>
+
+      <DialogFooter className="px-5 py-4 border-t bg-background/95">
+        <div className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="text-sm">
+            <span className="text-muted-foreground">Total a cobrar: </span>
+            <span className="font-bold text-base text-primary">{formatCurrency(cartCalculations.total)}</span>
+          </div>
+          <div className="flex gap-2 sm:justify-end">
+            <Button variant="outline" onClick={() => setShowCartDialog(false)}>Cerrar</Button>
+            <Button className="pos-button-primary pos-button-confirm-sale" onClick={() => { setShowCartDialog(false); setIsCheckoutOpen(true) }}>
+              Cobrar
+            </Button>
+          </div>
+        </div>
       </DialogFooter>
     </DialogContent>
   </Dialog>
@@ -2080,16 +2150,16 @@ export default function POSPage() {
             
           </div>
 
-          {/* Barra de búsqueda y filtros */}
+          {/* Barra de bÃºsqueda y filtros */}
           <div className="bg-card border-b border-border p-4 lg:p-6">
             <div className="flex flex-col lg:flex-row gap-4">
-              {/* Búsqueda con autocompletado */}
+              {/* BÃºsqueda con autocompletado */}
               <div className="flex-1 relative" id="search-container">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
                     id="search-input"
-                    placeholder="Buscar productos por nombre, SKU o código de barras..."
+                    placeholder="Buscar productos por nombre, SKU o cÃ³digo de barras..."
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
@@ -2117,16 +2187,16 @@ export default function POSPage() {
                 )}
               </div>
 
-              {/* Filtros rápidos */}
+              {/* Filtros rÃ¡pidos */}
               <div className="flex flex-wrap gap-2">
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                   <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Categoría" />
+                    <SelectValue placeholder="CategorÃ­a" />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map(category => (
                       <SelectItem key={category} value={category}>
-                        {category === 'all' ? 'Todas las categorías' : category}
+                        {category === 'all' ? 'Todas las categorÃ­as' : category}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2176,7 +2246,7 @@ export default function POSPage() {
                           <SelectItem value="name">Nombre</SelectItem>
                           <SelectItem value="price">Precio</SelectItem>
                           <SelectItem value="stock">Stock</SelectItem>
-                          <SelectItem value="category">Categoría</SelectItem>
+                          <SelectItem value="category">CategorÃ­a</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -2240,12 +2310,12 @@ export default function POSPage() {
           </div>
 
           {/* Contenido principal con productos y carrito */}
-          <div className="flex-1 flex overflow-hidden bg-muted/5">
+          <div className="flex-1 min-h-0 flex overflow-hidden bg-muted/5">
             {/* Lista de productos */}
-            <div className="flex-1 p-3 sm:p-4 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
+            <div className="flex-1 min-h-0 p-3 sm:p-4 md:p-5 overflow-y-auto pb-24 md:pb-4" role="main" aria-label="Lista de productos">
               <div className="mb-4 space-y-4">
-                <div className="flex items-center justify-between bg-card p-3 rounded-lg border border-border/60 shadow-sm">
-                  <h2 className="text-lg font-semibold text-foreground flex items-center gap-2" id="products-heading">
+                <div className="pos-panel flex items-center justify-between p-3 rounded-xl">
+                  <h2 className="pos-heading text-lg md:text-xl font-semibold text-foreground flex items-center gap-2" id="products-heading">
                     <Package className="h-5 w-5 text-primary" />
                     Productos <span className="text-muted-foreground font-normal text-sm">({filteredProducts.length})</span>
                   </h2>
@@ -2263,7 +2333,7 @@ export default function POSPage() {
                   </div>
                 </div>
 
-                {/* Escáner de códigos de barras */}
+                {/* EscÃ¡ner de cÃ³digos de barras */}
                 {getFeatureFlag('enableBarcodeScanner') && (
                   <POSBarcodeScanner
                     onProductFound={async (barcode) => {
@@ -2273,13 +2343,11 @@ export default function POSPage() {
                       )
                       if (localProduct) {
                         addToCart(localProduct)
-                        showAddToCartToast({ name: localProduct.name })
                         return
                       }
                       const remoteProduct = await findProductByBarcode(normalized)
                       if (remoteProduct) {
                         addToCart(remoteProduct)
-                        showAddToCartToast({ name: remoteProduct.name })
                       } else {
                         toast.error('Producto no encontrado')
                       }
@@ -2291,8 +2359,8 @@ export default function POSPage() {
 
               {/* Estados de carga y error */}
               {productsLoading && (
-                <div className="text-center py-16 bg-card rounded-xl border border-dashed border-border shadow-sm">
-                  <div className="bg-muted/30 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                <div className="pos-state-card text-center py-16 rounded-xl border border-dashed shadow-sm">
+                  <div className="pos-state-icon p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
                     <Loader2 className="h-10 w-10 text-muted-foreground/50 animate-spin" />
                   </div>
                   <h3 className="text-lg font-medium text-foreground mb-1">Cargando productos...</h3>
@@ -2319,8 +2387,8 @@ export default function POSPage() {
               )}
 
               {!productsLoading && !productsError && inventoryProducts.length === 0 && (
-                <div className="text-center py-16 bg-card rounded-xl border border-dashed border-border shadow-sm">
-                  <div className="bg-muted/30 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                <div className="pos-state-card text-center py-16 rounded-xl border border-dashed shadow-sm">
+                  <div className="pos-state-icon p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
                     <Package className="h-10 w-10 text-muted-foreground/50" />
                   </div>
                   <h3 className="text-lg font-medium text-foreground mb-1">No hay productos</h3>
@@ -2335,7 +2403,7 @@ export default function POSPage() {
               )}
 
               {!productsLoading && !productsError && inventoryProducts.length > 0 && filteredProducts.length > virtualizationThreshold ? (
-                <div className="rounded-xl overflow-hidden border border-border/50 shadow-sm bg-card">
+                <div className="pos-panel rounded-xl overflow-hidden">
                   <VirtualizedProductGrid
                     products={filteredProducts}
                     viewMode={viewMode}
@@ -2376,18 +2444,18 @@ export default function POSPage() {
               ) : null}
 
               {!productsLoading && !productsError && inventoryProducts.length > 0 && filteredProducts.length === 0 && (
-                <div className="text-center py-16 bg-card rounded-xl border border-dashed border-border shadow-sm">
-                  <div className="bg-muted/30 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
+                <div className="pos-state-card text-center py-16 rounded-xl border border-dashed shadow-sm">
+                  <div className="pos-state-icon p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4">
                     <Package className="h-10 w-10 text-muted-foreground/50" />
                   </div>
                   <h3 className="text-lg font-medium text-foreground mb-1">No se encontraron productos</h3>
-                  <p className="text-muted-foreground text-sm max-w-xs mx-auto">Intenta ajustar los términos de búsqueda o los filtros seleccionados</p>
+                  <p className="text-muted-foreground text-sm max-w-xs mx-auto">Intenta ajustar los tÃ©rminos de bÃºsqueda o los filtros seleccionados</p>
                 </div>
               )}
 
-              {/* Controles de paginación */}
+              {/* Controles de paginaciÃ³n */}
               {!productsLoading && !productsError && filteredProducts.length > 0 && filteredProducts.length <= virtualizationThreshold && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 py-4 border-t border-border/50">
+                <div className="pos-panel flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 py-4 px-3 rounded-xl">
                   <div className="flex items-center gap-2 order-2 sm:order-1">
                     <span className="text-sm text-muted-foreground">Mostrar:</span>
                     <Select
@@ -2445,7 +2513,7 @@ export default function POSPage() {
             </div>
 
             {/* Carrito lateral mejorado - responsive */}
-            <div className="hidden md:flex flex-col w-[22rem] lg:w-96 xl:w-[26rem] h-full transition-all duration-300 z-20 p-2">
+            <div className="hidden md:flex min-h-0 flex-col w-[22rem] lg:w-96 xl:w-[26rem] h-full transition-all duration-300 z-20 p-2">
               <POSCart
                 items={combinedCartItems}
                 onUpdateQuantity={updateQuantity}
@@ -2474,14 +2542,50 @@ export default function POSPage() {
       </div>
 
       {/* Mobile Cart Bottom Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t p-4 shadow-lg z-50">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex flex-col">
-             <span className="text-xs text-muted-foreground">{cartCalculations.totalItemCount} items</span>
-             <span className="font-bold text-lg">{formatCurrency(cartCalculations.total)}</span>
-          </div>
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t p-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-lg z-50">
+        <div className="grid grid-cols-1 gap-2">
+          <div className="flex items-center justify-between gap-3">
+          <Sheet>
+            <SheetTrigger asChild>
+              <div className="flex-1 flex flex-col cursor-pointer hover:bg-muted/50 p-1 rounded-md transition-colors">
+                 <span className="text-xs text-muted-foreground">{unifiedCalculations.totalItemCount} items</span>
+                 <span className="font-bold text-lg">{formatCurrency(unifiedCalculations.total)}</span>
+              </div>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="h-[80vh] p-0 flex flex-col overflow-hidden">
+              <SheetHeader className="p-4 border-b">
+                <SheetTitle>Carrito de Compras</SheetTitle>
+              </SheetHeader>
+              <div className="flex-1 overflow-hidden">
+                <POSCart
+                  items={combinedCartItems}
+                  onUpdateQuantity={updateQuantity}
+                  onRemoveItem={handleRemoveItem}
+                  onApplyDiscount={updateItemDiscount}
+                  onCheckout={() => {
+                    setIsCheckoutOpen(true)
+                  }}
+                  onClearCart={() => clearCart()}
+                  onApplyPromoCode={applyPromoCode}
+                  isWholesale={isWholesale}
+                  onToggleWholesale={handleWholesaleToggle}
+                  discount={generalDiscount}
+                  onUpdateDiscount={setGeneralDiscount}
+                  subtotalApplied={unifiedCalculations.subtotalApplied}
+                  subtotalNonWholesale={unifiedCalculations.subtotalNonWholesale}
+                  generalDiscountAmount={unifiedCalculations.generalDiscountAmount}
+                  wholesaleDiscountAmount={unifiedCalculations.wholesaleDiscountAmount}
+                  totalSavings={unifiedCalculations.totalSavings}
+                  cartTax={unifiedCalculations.tax}
+                  cartTotal={unifiedCalculations.total}
+                  cartItemCount={unifiedCalculations.totalItemCount}
+                  taxRate={getTaxConfig().rate}
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
           
-          {/* Botón de limpiar carrito en móvil */}
+          {/* BotÃ³n de limpiar carrito en mÃ³vil */}
           {cart.length > 0 && (
             <Button
               variant="outline"
@@ -2494,14 +2598,16 @@ export default function POSPage() {
               <span className="ml-1 text-xs">Limpiar</span>
             </Button>
           )}
-          
-          <Button 
-            className="flex-1 h-12 text-lg"
+
+          </div>
+
+          <Button
+            className="pos-button-primary w-full h-12 text-base font-semibold"
             onClick={() => setIsCheckoutOpen(true)}
             disabled={cart.length === 0 && selectedRepairIds.length === 0}
           >
             <CreditCard className="mr-2 h-5 w-5" />
-            Pagar
+            Cobrar
           </Button>
         </div>
       </div>
@@ -2513,6 +2619,8 @@ export default function POSPage() {
         customerRepairs={customerRepairs}
         markRepairDelivered={markRepairDelivered}
         setMarkRepairDelivered={setMarkRepairDelivered}
+        deliveryOutcome={deliveryOutcome}
+        setDeliveryOutcome={setDeliveryOutcome}
         finalCostFromSale={finalCostFromSale}
         setFinalCostFromSale={setFinalCostFromSale}
         selectedRepairs={selectedRepairs}
@@ -2535,7 +2643,7 @@ export default function POSPage() {
         }}
       />
 
-      {/* Diálogo para abrir caja */}
+      {/* DiÃ¡logo para abrir caja */}
       <Dialog open={isOpenRegisterDialogOpen} onOpenChange={setIsOpenRegisterDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -2560,7 +2668,7 @@ export default function POSPage() {
                 id="note"
                 value={openingNote}
                 onChange={(e) => setOpeningNote(e.target.value)}
-                placeholder="Ej. Turno mañana"
+                placeholder="Ej. Turno maÃ±ana"
               />
             </div>
           </div>
@@ -2577,7 +2685,7 @@ export default function POSPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo de Gestión de Cajas */}
+      {/* DiÃ¡logo de GestiÃ³n de Cajas */}
       <Dialog open={isRegisterManagerOpen} onOpenChange={setIsRegisterManagerOpen}>
         <DialogContent className="max-w-xl dark:bg-gray-900">
           <DialogHeader>
@@ -2667,11 +2775,8 @@ export default function POSPage() {
                               variant="destructive"
                               onClick={async () => {
                                 const nextRegs = registers.filter(r => r.id !== reg.id)
-                                setRegisters(nextRegs.length ? nextRegs : [{ id: 'principal', name: 'Caja Principal' }])
-                                setRegisterState(prev => {
-                                  const { [reg.id]: _removed, ...rest } = prev
-                                  return nextRegs.length ? rest : { principal: { isOpen: false, balance: 0, movements: [] } }
-                                })
+                                setRegisters(nextRegs.length ? nextRegs : [{ id: 'principal', name: 'Caja Principal', isActive: false }])
+                                
                                 if (activeRegisterId === reg.id) {
                                   setActiveRegisterId(nextRegs.length ? nextRegs[0].id : 'principal')
                                 }
@@ -2739,11 +2844,7 @@ export default function POSPage() {
                         console.error('Error creating register in Supabase:', e)
                       }
                     }
-                    setRegisters([...registers, { id: newId, name }])
-                    setRegisterState(prev => ({
-                      ...prev,
-                      [newId]: { isOpen: false, balance: 0, movements: [] }
-                    }))
+                    setRegisters([...registers, { id: newId, name, isActive: false }])
                     setNewRegisterName('')
                     toast.success('Caja creada')
                   }}
@@ -2786,7 +2887,7 @@ export default function POSPage() {
               </div>
               <div>
                 <strong>F3</strong>
-                <p className="text-muted-foreground">Configuración de accesibilidad</p>
+                <p className="text-muted-foreground">ConfiguraciÃ³n de accesibilidad</p>
               </div>
               <div>
                 <strong>F4</strong>
@@ -2867,7 +2968,7 @@ export default function POSPage() {
           )}
         </DialogContent>
       </Dialog>
-      {/* Diálogo de configuración de accesibilidad */}
+      {/* DiÃ¡logo de configuraciÃ³n de accesibilidad */}
       
 
       {/* Selector de variantes */}
@@ -2883,7 +2984,7 @@ export default function POSPage() {
         />
       )}
 
-      {/* Diálogo de Registro de Movimiento */}
+      {/* DiÃ¡logo de Registro de Movimiento */}
       <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -2943,7 +3044,7 @@ export default function POSPage() {
               onClick={() => {
                 const amount = parseFloat(movementAmount)
                 if (!amount || amount <= 0) {
-                  toast.error('Ingrese un monto válido')
+                  toast.error('Ingrese un monto vÃ¡lido')
                   return
                 }
                 addMovement(movementType, amount, movementNote)
@@ -2961,3 +3062,4 @@ export default function POSPage() {
     </div>
   )
 }
+

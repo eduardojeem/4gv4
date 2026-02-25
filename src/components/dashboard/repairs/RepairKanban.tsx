@@ -64,6 +64,27 @@ export function RepairKanban({ repairs, onStatusChange, onEdit, onView }: Repair
         return initial
     })
 
+    // Sync kanbanOrder when repairs prop changes externally (refresh, real-time updates)
+    // Only re-sync when no drag is active to avoid interrupting the user
+    React.useEffect(() => {
+        if (activeId !== null) return // Don't sync during drag
+        const synced: Record<RepairStatus, string[]> = {
+            recibido: [],
+            diagnostico: [],
+            reparacion: [],
+            pausado: [],
+            listo: [],
+            entregado: [],
+            cancelado: []
+        }
+        repairs.forEach(r => {
+            if (synced[r.status]) {
+                synced[r.status].push(r.id)
+            }
+        })
+        setKanbanOrder(synced)
+    }, [repairs, activeId])
+
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {

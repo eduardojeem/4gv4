@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuLabel
 } from '@/components/ui/dropdown-menu'
-import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle } from 'lucide-react'
+import { MoreHorizontal, Edit, Trash2, Phone, Clock, Image as ImageIcon, Eye, Printer, MessageCircle, Send, CheckCircle, PackageCheck } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
@@ -29,6 +29,7 @@ import { printRepairReceipt, RepairPrintPayload } from '@/lib/repair-receipt'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
 
 interface RepairRowProps {
   repair: Repair
@@ -36,10 +37,11 @@ interface RepairRowProps {
   onEdit: (repair: Repair) => void
   onView?: (repair: Repair) => void
   onDelete?: (id: string) => void
+  onDeliver?: (repair: Repair) => void
 }
 
 export const RepairRow = memo<RepairRowProps>(
-  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete }) {
+  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver }) {
     const StatusIcon = statusConfig[repair.status].icon
     const priority = priorityConfig[repair.priority]
     const { settings } = useSharedSettings()
@@ -56,7 +58,7 @@ export const RepairRow = memo<RepairRowProps>(
           locale: es
         })
       } catch (error) {
-        console.warn('Error formatting date for repair:', repair.id, error)
+        logger.warn('Error formatting date for repair', { repairId: repair.id, error })
         return 'Fecha no disponible'
       }
     })()
@@ -322,6 +324,19 @@ export const RepairRow = memo<RepairRowProps>(
                   <Send className="mr-2 h-4 w-4 text-amber-600" />
                   Recordatorio de Pago
                 </DropdownMenuItem>
+              )}
+              {/* Quick delivery action */}
+              {repair.status !== 'entregado' && repair.status !== 'cancelado' && onDeliver && (
+                <>
+                  <DropdownMenuSeparator className="dark:bg-muted/50" />
+                  <DropdownMenuItem
+                    onClick={() => onDeliver(repair)}
+                    className="text-emerald-600 dark:text-emerald-400 focus:text-emerald-700 dark:focus:text-emerald-300 focus:bg-emerald-50 dark:focus:bg-emerald-950/40"
+                  >
+                    <PackageCheck className="mr-2 h-4 w-4" />
+                    Marcar como Entregado
+                  </DropdownMenuItem>
+                </>
               )}
               <DropdownMenuSeparator className="dark:bg-muted/50" />
               <DropdownMenuLabel className="text-xs text-muted-foreground dark:text-muted-foreground/80">

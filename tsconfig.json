@@ -20,7 +20,8 @@
       ]
     },
     "allowJs": true,
-    "incremental": false,
+    "incremental": true,
+    "tsBuildInfoFile": ".next/cache/tsconfig.tsbuildinfo",
     "esModuleInterop": true,
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": false,

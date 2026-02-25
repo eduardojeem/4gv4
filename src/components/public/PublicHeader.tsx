@@ -132,7 +132,6 @@ export function PublicHeader() {
     { href: '/inicio', label: 'Inicio', icon: null },
     { href: '/productos', label: 'Productos', icon: Package },
     { href: '/mis-reparaciones', label: 'Rastrear reparaciones', icon: Wrench },
-    { href: '/perfil', label: 'Perfil', icon: User },
   ]
 
   const isActive = (href: string) => {
@@ -221,6 +220,15 @@ export function PublicHeader() {
               </Link>
             )
           })}
+          {mounted && !user && (
+            <Link
+              href="/login"
+              className="relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/50"
+            >
+              <User className="h-4 w-4" />
+              Iniciar sesión
+            </Link>
+          )}
         </nav>
 
         {/* Right side: Theme toggle + CTA + User */}
@@ -329,7 +337,7 @@ export function PublicHeader() {
             >
               <Link href="/login" className="flex items-center gap-2">
                 <User className="h-4 w-4" />
-                Mi cuenta
+                Iniciar sesión
               </Link>
             </Button>
           )}
@@ -436,7 +444,7 @@ export function PublicHeader() {
               >
                 <Link href="/login" className="flex items-center gap-2">
                   <User className="h-4 w-4" />
-                  Mi cuenta
+                  Iniciar sesión
                 </Link>
               </Button>
             )}

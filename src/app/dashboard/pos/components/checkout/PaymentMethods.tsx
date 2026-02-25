@@ -13,6 +13,37 @@ import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
 import { useCheckout } from '../../contexts/CheckoutContext'
 import { CreditStatusPanel } from './CreditStatusPanel'
 
+/**
+ * Genera sugerencias inteligentes de billetes basadas en el monto total
+ */
+function getSmartSuggestions(amount: number): number[] {
+  if (amount <= 0) return []
+  
+  const suggestions = new Set<number>()
+  suggestions.add(amount) // Monto exacto
+  
+  // Redondeo al próximo 1.000
+  suggestions.add(Math.ceil(amount / 1000) * 1000)
+  
+  // Billetes comunes (PYG)
+  const bills = [5000, 10000, 20000, 50000, 100000]
+  bills.forEach(bill => {
+    if (bill > amount) {
+      suggestions.add(bill)
+    }
+    // También sugerir múltiplos si el monto es grande
+    const nextMultiple = Math.ceil(amount / bill) * bill
+    if (nextMultiple > amount) {
+      suggestions.add(nextMultiple)
+    }
+  })
+  
+  return Array.from(suggestions)
+    .filter(s => s >= amount)
+    .sort((a, b) => a - b)
+    .slice(0, 5) // Limitar a 5 sugerencias
+}
+
 interface PaymentMethodsProps {
   // Cálculos
   cartTotal: number
@@ -52,6 +83,23 @@ export function PaymentMethods({
     removePaymentSplit
   } = useCheckout()
 
+  // Estado local para el input de efectivo para permitir borrarlo fácilmente (evita que el 0 se quede "pegado")
+  const [localCashInput, setLocalCashInput] = React.useState(cashReceived === 0 ? '' : cashReceived.toString())
+  const [localSplitInput, setLocalSplitInput] = React.useState(splitAmount === 0 ? '' : splitAmount.toString())
+
+  // Sincronizar de global a local cuando cambia externamente (ej: reset)
+  React.useEffect(() => {
+    if (Number(localCashInput) !== cashReceived) {
+      setLocalCashInput(cashReceived === 0 ? '' : cashReceived.toString())
+    }
+  }, [cashReceived])
+
+  React.useEffect(() => {
+    if (Number(localSplitInput) !== splitAmount) {
+      setLocalSplitInput(splitAmount === 0 ? '' : splitAmount.toString())
+    }
+  }, [splitAmount])
+
   // Calcular totales locales usando el contexto
   const getTotalPaid = useCallback(() => {
     return paymentSplit.reduce((total, split) => total + split.amount, 0)
@@ -61,6 +109,18 @@ export function PaymentMethods({
     // Redondear a 2 decimales para evitar problemas de punto flotante
     return Math.round((cartTotal - getTotalPaid()) * 100) / 100
   }, [cartTotal, getTotalPaid])
+
+  // Lógica de auto-completar: si selecciona efectivo y el monto recibido es 0, proponer el total de la venta
+  React.useEffect(() => {
+    if (paymentMethod === 'cash' && !isMixedPayment && cashReceived === 0) {
+      setCashReceived(cartTotal)
+    }
+    
+    // En pago mixto, proponer el restante al seleccionar un método si el monto es 0
+    if (isMixedPayment && paymentMethod && splitAmount === 0) {
+      setSplitAmount(getRemainingAmount())
+    }
+  }, [paymentMethod, isMixedPayment, cartTotal, getRemainingAmount])
 
   // Cálculos para pago en efectivo simple
   const cashChange = Math.max(0, cashReceived - cartTotal)
@@ -269,10 +329,34 @@ export function PaymentMethods({
           <label className="text-sm font-medium mb-2 block">Efectivo recibido</label>
           <Input
             type="number"
-            value={cashReceived}
-            onChange={(e) => setCashReceived(Number(e.target.value))}
+            value={localCashInput}
+            onChange={(e) => {
+              const val = e.target.value
+              setLocalCashInput(val)
+              setCashReceived(val === '' ? 0 : Number(val))
+            }}
+            onFocus={(e) => e.target.select()}
             placeholder="0"
           />
+          
+          {/* Sugerencias inteligentes */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {getSmartSuggestions(cartTotal).map((suggestion) => (
+              <Button
+                key={suggestion}
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-[10px] bg-background/50 hover:bg-primary hover:text-primary-foreground transition-all duration-200 border-dashed"
+                onClick={() => {
+                  setLocalCashInput(suggestion.toString())
+                  setCashReceived(suggestion)
+                }}
+              >
+                {formatCurrency(suggestion)}
+              </Button>
+            ))}
+          </div>
+
           {cashRemaining > 0 && (
             <p className="text-sm text-destructive mt-2">
               Restante: {formatCurrency(cashRemaining)}
@@ -321,9 +405,32 @@ export function PaymentMethods({
               placeholder={`Máximo: ${formatCurrency(getRemainingAmount())}`}
               min={0}
               max={getRemainingAmount()}
-              value={Number.isFinite(splitAmount) ? splitAmount : 0}
-              onChange={(e) => setSplitAmount(Number(e.target.value))}
+              value={localSplitInput}
+              onChange={(e) => {
+                const val = e.target.value
+                setLocalSplitInput(val)
+                setSplitAmount(val === '' ? 0 : Number(val))
+              }}
+              onFocus={(e) => e.target.select()}
             />
+          </div>
+
+          {/* Sugerencias inteligentes para pago mixto */}
+          <div className="flex flex-wrap gap-1.5">
+            {getSmartSuggestions(getRemainingAmount()).map((suggestion) => (
+              <Button
+                key={suggestion}
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-[10px] bg-background/50 hover:bg-primary hover:text-primary-foreground transition-all duration-200 border-dashed"
+                onClick={() => {
+                  setLocalSplitInput(suggestion.toString())
+                  setSplitAmount(suggestion)
+                }}
+              >
+                {formatCurrency(suggestion)}
+              </Button>
+            ))}
           </div>
 
           {paymentMethod === 'card' && (

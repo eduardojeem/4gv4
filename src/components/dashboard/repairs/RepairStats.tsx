@@ -29,6 +29,7 @@ export const RepairStats = memo(function RepairStats({ repairs }: RepairStatsPro
                 case 'diagnostico':
                 case 'reparacion':
                 case 'pausado':
+                case 'listo': // Ready for pickup - still active, not yet completed
                     inProgress++
                     break
                 case 'entregado':
