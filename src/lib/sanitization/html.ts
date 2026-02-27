@@ -34,35 +34,40 @@ export function sanitizeText(text: string): string {
 }
 
 /**
- * Sanitiza un objeto recursivamente
+ * Sanitiza recursivamente cualquier valor (objeto, array o primitivo)
+ */
+export function sanitizeValue(value: any): any {
+  if (typeof value === 'string') {
+    return sanitizeText(value)
+  }
+  
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizeValue(item))
+  }
+  
+  if (typeof value === 'object' && value !== null) {
+    const sanitized: Record<string, any> = {}
+    for (const [k, v] of Object.entries(value)) {
+      sanitized[k] = sanitizeValue(v)
+    }
+    return sanitized
+  }
+  
+  return value
+}
+
+/**
+ * Sanitiza un objeto recursivamente (Mantenida por compatibilidad)
  */
 export function sanitizeObject<T extends Record<string, any>>(obj: T): T {
-  const sanitized = {} as T
-
-  for (const [key, value] of Object.entries(obj)) {
-    if (typeof value === 'string') {
-      sanitized[key as keyof T] = sanitizeText(value) as T[keyof T]
-    } else if (Array.isArray(value)) {
-      sanitized[key as keyof T] = value.map(item => 
-        typeof item === 'string' ? sanitizeText(item) : 
-        typeof item === 'object' ? sanitizeObject(item) : 
-        item
-      ) as T[keyof T]
-    } else if (typeof value === 'object' && value !== null) {
-      sanitized[key as keyof T] = sanitizeObject(value) as T[keyof T]
-    } else {
-      sanitized[key as keyof T] = value
-    }
-  }
-
-  return sanitized
+  return sanitizeValue(obj) as T
 }
 
 /**
  * Sanitiza configuración del sitio web
  */
 export function sanitizeWebsiteSettings(settings: any): any {
-  return sanitizeObject(settings)
+  return sanitizeValue(settings)
 }
 
 /**

@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
-import { Loader2, Save, Plus, Trash2, Star, Check, GripVertical } from 'lucide-react'
+import { Loader2, Save, Plus, Trash2, Star, Check, GripVertical, Eye, EyeOff } from 'lucide-react'
 import { Testimonial } from '@/types/website-settings'
 
 export function TestimonialsManager() {
@@ -71,7 +72,8 @@ export function TestimonialsManager() {
       id: Date.now().toString(),
       name: '',
       rating: 5,
-      comment: ''
+      comment: '',
+      active: true
     }
     setTestimonials([...(testimonials || []), newTestimonial])
     setHasChanges(true)
@@ -89,7 +91,7 @@ export function TestimonialsManager() {
     setHasChanges(true)
   }
 
-  const handleUpdate = (id: string, field: keyof Testimonial, value: string | number) => {
+  const handleUpdate = (id: string, field: keyof Testimonial, value: string | number | boolean) => {
     if (!testimonials) return
     
     // Validar rating
@@ -149,28 +151,42 @@ export function TestimonialsManager() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {testimonials.map((testimonial, index) => (
-          <Card key={testimonial.id} className="border-none shadow-lg hover:shadow-xl transition-all duration-300 group">
-            <CardHeader className="bg-gradient-to-r from-orange-50/50 to-red-50/50 dark:from-orange-950/10 dark:to-red-950/10 p-4 pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <GripVertical className="h-4 w-4 text-gray-400 shrink-0" />
-                  <span className="text-sm font-medium text-gray-500">Testimonio #{index + 1}</span>
+        {testimonials.map((testimonial, index) => {
+          const isActive = testimonial.active !== false
+          return (
+            <Card key={testimonial.id} className={`border-none shadow-lg hover:shadow-xl transition-all duration-300 group ${!isActive ? 'opacity-60 grayscale' : ''}`}>
+              <CardHeader className="bg-gradient-to-r from-orange-50/50 to-red-50/50 dark:from-orange-950/10 dark:to-red-950/10 p-4 pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="h-4 w-4 text-gray-400 shrink-0" />
+                    <span className="text-sm font-medium text-gray-500">Testimonio #{index + 1}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleUpdate(testimonial.id, 'active', !isActive)}
+                      className={`h-8 w-8 p-0 md:h-9 md:w-auto md:px-3 ${isActive ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
+                      title={isActive ? "Desactivar testimonio" : "Activar testimonio"}
+                    >
+                      {isActive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                      <span className="hidden md:inline ml-2">{isActive ? 'Visible' : 'Oculto'}</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(testimonial.id)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 h-8 w-8 p-0 md:h-9 md:w-auto md:px-3"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="hidden md:inline ml-2">Eliminar</span>
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDelete(testimonial.id)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 h-8 w-8 p-0 md:h-9 md:w-auto md:px-3"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span className="hidden md:inline ml-2">Eliminar</span>
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 md:p-6 space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
+              </CardHeader>
+              <CardContent className="p-4 md:p-6 space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
                   <Label htmlFor={`name-${testimonial.id}`} className="text-sm font-medium">Nombre del Cliente</Label>
                   <Input
                     id={`name-${testimonial.id}`}
@@ -224,7 +240,7 @@ export function TestimonialsManager() {
               </div>
             </CardContent>
           </Card>
-        ))}
+        )})}
       </div>
 
       {testimonials.length === 0 && (

@@ -34,6 +34,7 @@ export interface Service {
   icon: string
   color: string
   benefits: string[]
+  active?: boolean
 }
 
 export interface Testimonial {
@@ -41,6 +42,7 @@ export interface Testimonial {
   name: string
   rating: number
   comment: string
+  active?: boolean
 }
 
 export interface MaintenanceMode {

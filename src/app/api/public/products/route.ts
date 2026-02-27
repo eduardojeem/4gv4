@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     const minPrice = parseFloat(searchParams.get('min_price') || '0')
     const maxPrice = parseFloat(searchParams.get('max_price') || '999999')
     const inStock = searchParams.get('in_stock') === 'true'
+    const hasOffer = searchParams.get('has_offer') === 'true'
     const page = parseInt(searchParams.get('page') || '1')
     const perPage = Math.min(parseInt(searchParams.get('per_page') || '20'), 50)
     const sort = searchParams.get('sort') || 'name'
@@ -47,8 +48,8 @@ export async function GET(request: NextRequest) {
 
     // Build query - only active products, never select wholesale_price for non-wholesale
     const selectFields = isWholesale
-      ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
-      : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
 
     let queryBuilder = supabase
       .from('products')
@@ -77,6 +78,12 @@ export async function GET(request: NextRequest) {
 
     if (inStock) {
       queryBuilder = queryBuilder.gt('stock_quantity', 0)
+    }
+
+    if (hasOffer) {
+      queryBuilder = queryBuilder
+        .eq('has_offer', true)
+        .gt('offer_price', 0)
     }
 
     // Apply sorting
@@ -122,6 +129,8 @@ export async function GET(request: NextRequest) {
         stock_quantity: (p.stock_quantity as number) > 0 ? 1 : 0,
         is_active: p.is_active as boolean,
         featured: (p.featured as boolean) || false,
+        has_offer: Boolean(p.has_offer),
+        offer_price: typeof p.offer_price === 'number' ? (p.offer_price as number) : null,
         image: (p.image_url as string | null) || (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
         images: p.images as string[] | null,
         unit_measure: p.unit_measure as string,

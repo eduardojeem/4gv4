@@ -1,8 +1,9 @@
 'use client'
 
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowRight, Package, Wrench, Shield, Clock, Star, CheckCircle, Phone, Mail, MapPin, Loader2, MessageCircle, Smartphone, Monitor, Battery, Cpu, Zap, Headset, Laptop, Sparkles, Droplet, Camera } from 'lucide-react'
+import { ArrowRight, Package, Wrench, Shield, Clock, Star, CheckCircle, Phone, Mail, MapPin, Loader2, MessageCircle, Smartphone, Monitor, Battery, Cpu, Zap, Headset, Laptop, Sparkles, Droplet, Camera, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
@@ -42,28 +43,102 @@ const colorMap = {
 
 export default function HomePage() {
   const { settings, isLoading, error } = useWebsiteSettings()
-
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    )
+  const [offersLoading, setOffersLoading] = useState(true)
+  const [offersFetchFailed, setOffersFetchFailed] = useState(false)
+  const [offerCards, setOfferCards] = useState<Array<{
+    id: string
+    title: string
+    description: string
+    priceLabel: string
+    originalPriceLabel?: string
+    tag: string
+    ctaHref: string
+    image: string | null
+    brand: string | null
+    inStock: boolean
+  }>>([])
+  const [activeOfferIndex, setActiveOfferIndex] = useState(0)
+  const [isOfferCarouselPaused, setIsOfferCarouselPaused] = useState(false)
+  const [isOffersSectionVisible, setIsOffersSectionVisible] = useState(true)
+  const [isDocumentVisible, setIsDocumentVisible] = useState(true)
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  const offersTrackRef = useRef<HTMLDivElement | null>(null)
+  const offersSectionRef = useRef<HTMLElement | null>(null)
+  const company_info = settings?.company_info ?? {
+    name: '4G Movil',
+    phone: '',
+    email: '',
+    address: '',
+    hours: { weekdays: '', saturday: '', sunday: '' },
+    brandColor: 'blue' as const,
   }
-
-  if (error || !settings) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <p className="text-muted-foreground">Error al cargar el contenido</p>
-        </div>
-      </div>
-    )
+  const hero_stats = settings?.hero_stats ?? {
+    repairs: '0+',
+    satisfaction: '0%',
+    avgTime: '24h',
   }
+  const hero_content = settings?.hero_content ?? {
+    badge: 'Servicio tecnico',
+    title: 'Reparacion y venta de tecnologia',
+    subtitle: 'Atencion experta para mantener tus equipos en su mejor estado.',
+  }
+  const safeServices = useMemo(() => Array.isArray(settings?.services) ? settings.services.filter(s => s.active !== false) : [], [settings?.services])
+  const safeTestimonials = useMemo(() => Array.isArray(settings?.testimonials) ? settings.testimonials.filter(t => t.active !== false) : [], [settings?.testimonials])
+  const fallbackOffers = useMemo(() => {
+    const serviceCards = safeServices.slice(0, 8).map((service, index) => ({
+      id: `service-${service.id || index}`,
+      title: service.title,
+      description: service.description || 'Servicio tecnico profesional',
+      priceLabel: 'Consulta precio',
+      originalPriceLabel: undefined,
+      tag: 'Servicio',
+      ctaHref: '/inicio#contacto',
+      image: null,
+      brand: company_info?.name || null,
+      inStock: true,
+    }))
 
-  const { company_info, hero_stats, hero_content, services, testimonials } = settings
-  const safeServices = Array.isArray(services) ? services : []
-  const safeTestimonials = Array.isArray(testimonials) ? testimonials : []
+    if (serviceCards.length > 0) return serviceCards
+
+    return [
+      {
+        id: 'fallback-1',
+        title: 'Cambio de pantalla',
+        description: 'Repuestos de calidad con garantia escrita.',
+        priceLabel: 'Desde $49.990',
+        originalPriceLabel: undefined,
+        tag: 'Oferta',
+        ctaHref: '/inicio#contacto',
+        image: null,
+        brand: company_info?.name || null,
+        inStock: true,
+      },
+      {
+        id: 'fallback-2',
+        title: 'Bateria nueva',
+        description: 'Recupera autonomia y rendimiento de carga.',
+        priceLabel: 'Desde $29.990',
+        originalPriceLabel: undefined,
+        tag: 'Top venta',
+        ctaHref: '/inicio#contacto',
+        image: null,
+        brand: company_info?.name || null,
+        inStock: true,
+      },
+      {
+        id: 'fallback-3',
+        title: 'Limpieza interna',
+        description: 'Mantenimiento preventivo y optimizacion.',
+        priceLabel: 'Desde $19.990',
+        originalPriceLabel: undefined,
+        tag: 'Promo',
+        ctaHref: '/inicio#contacto',
+        image: null,
+        brand: company_info?.name || null,
+        inStock: true,
+      },
+    ]
+  }, [safeServices, company_info?.name])
   const phoneClean = (company_info?.phone || '').replace(/\D/g, '')
   const emailSafe = company_info?.email || ''
   const contactHref = phoneClean
@@ -88,6 +163,171 @@ export default function HomePage() {
     sky: { hero: 'from-sky-500 via-blue-500 to-indigo-600', text200: 'text-sky-100', text300: 'text-sky-200', cta: 'from-sky-500 to-blue-700' }
   }
   const brand = brandMap[brandColor] ?? brandMap.blue
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const update = () => setPrefersReducedMotion(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadOffers() {
+      try {
+        setOffersLoading(true)
+        const response = await fetch('/api/public/products?per_page=50&sort=newest&has_offer=true', { signal: controller.signal })
+        const body = await response.json().catch(() => null)
+        const products = body?.data?.products
+
+        if (!response.ok || !Array.isArray(products)) {
+          setOffersFetchFailed(true)
+          setOfferCards(fallbackOffers)
+          return
+        }
+
+        const selected = [...products]
+          .filter((product) => {
+            const salePrice = Number(product?.sale_price || 0)
+            const offerPrice = Number(product?.offer_price || 0)
+            return Boolean(product?.has_offer) && offerPrice > 0 && salePrice > 0 && offerPrice < salePrice
+          })
+          .sort((a, b) => Number(Boolean(b?.featured)) - Number(Boolean(a?.featured)))
+          .slice(0, 8)
+          .map((product) => ({
+            id: String(product.id),
+            title: String(product.name || 'Producto destacado'),
+            description: String(product.description || 'Disponible para entrega inmediata y retiro en tienda.'),
+            priceLabel: typeof product.offer_price === 'number' ? `$${product.offer_price.toLocaleString('es-CL')}` : 'Consultar precio',
+            originalPriceLabel: typeof product.sale_price === 'number' ? `$${product.sale_price.toLocaleString('es-CL')}` : undefined,
+            tag: 'Oferta activa',
+            ctaHref: product.id ? `/productos/${product.id}` : '/productos',
+            image: product.image || (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null),
+            brand: product.brand || null,
+            inStock: Number(product.stock_quantity || 0) > 0,
+          }))
+
+        setOffersFetchFailed(false)
+        setOfferCards(selected)
+      } catch {
+        if (!controller.signal.aborted) {
+          setOffersFetchFailed(true)
+          setOfferCards(fallbackOffers)
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setOffersLoading(false)
+        }
+      }
+    }
+
+    loadOffers()
+    return () => controller.abort()
+  }, [fallbackOffers])
+
+  useEffect(() => {
+    if (offerCards.length === 0) {
+      setActiveOfferIndex(0)
+      return
+    }
+    setActiveOfferIndex((prev) => Math.min(prev, offerCards.length - 1))
+  }, [offerCards.length])
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      setIsDocumentVisible(document.visibilityState === 'visible')
+    }
+    handleVisibility()
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
+  useEffect(() => {
+    if (!offersSectionRef.current || typeof IntersectionObserver === 'undefined') return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        setIsOffersSectionVisible(Boolean(entry?.isIntersecting))
+      },
+      { threshold: 0.2 }
+    )
+
+    observer.observe(offersSectionRef.current)
+    return () => observer.disconnect()
+  }, [offersLoading])
+
+  const findNearestOfferIndex = () => {
+    const track = offersTrackRef.current
+    if (!track) return 0
+    const children = Array.from(track.children) as HTMLElement[]
+    if (children.length === 0) return 0
+
+    const left = track.scrollLeft
+    let nearest = 0
+    let minDistance = Number.POSITIVE_INFINITY
+    children.forEach((child, idx) => {
+      const distance = Math.abs(child.offsetLeft - left)
+      if (distance < minDistance) {
+        minDistance = distance
+        nearest = idx
+      }
+    })
+
+    return nearest
+  }
+
+  useEffect(() => {
+    if (isOfferCarouselPaused || offerCards.length <= 1 || !isOffersSectionVisible || !isDocumentVisible) return
+
+    const interval = window.setInterval(() => {
+      setActiveOfferIndex((prev) => {
+        const next = (prev + 1) % offerCards.length
+        const node = offersTrackRef.current?.children?.item(next) as HTMLElement | null
+        node?.scrollIntoView({
+          behavior: prefersReducedMotion ? 'auto' : 'smooth',
+          inline: 'start',
+          block: 'nearest',
+        })
+        return next
+      })
+    }, 5000)
+
+    return () => window.clearInterval(interval)
+  }, [offerCards.length, isOfferCarouselPaused, isOffersSectionVisible, isDocumentVisible, prefersReducedMotion])
+
+  const goToOffer = (index: number) => {
+    if (offerCards.length === 0) return
+    const normalized = (index + offerCards.length) % offerCards.length
+    setActiveOfferIndex(normalized)
+    const node = offersTrackRef.current?.children?.item(normalized) as HTMLElement | null
+    node?.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      inline: 'start',
+      block: 'nearest',
+    })
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (error || !settings) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Error al cargar el contenido</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col">
@@ -141,6 +381,152 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Ofertas y productos destacados */}
+      <section ref={offersSectionRef} className="border-t bg-background py-14 md:py-20">
+        <div className="container">
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm font-medium uppercase tracking-[0.16em] text-muted-foreground">Tienda</p>
+              <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Ofertas y productos destacados</h2>
+              <p className="mt-3 max-w-2xl text-muted-foreground">
+                Precios actualizados, servicios populares y equipos recomendados por nuestros tecnicos.
+              </p>
+            </div>
+            <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Link href="/productos">
+                Ver catalogo completo
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+
+          {offersLoading ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, idx) => (
+                <div key={idx} className="h-64 animate-pulse rounded-2xl border bg-muted/40" />
+              ))}
+            </div>
+          ) : !offersFetchFailed && offerCards.length === 0 ? (
+            <div className="rounded-2xl border border-dashed bg-muted/20 p-8 text-center">
+              <p className="text-base font-semibold">No hay ofertas activas en este momento</p>
+              <p className="mt-2 text-sm text-muted-foreground">Cuando actives productos con precio en oferta, apareceran aqui automaticamente.</p>
+            </div>
+          ) : (
+            <div
+              className="relative"
+              onMouseEnter={() => setIsOfferCarouselPaused(true)}
+              onMouseLeave={() => setIsOfferCarouselPaused(false)}
+            >
+              <div
+                ref={offersTrackRef}
+                className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                tabIndex={0}
+                role="region"
+                aria-label="Carrusel de ofertas destacadas"
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowLeft') {
+                    event.preventDefault()
+                    goToOffer(activeOfferIndex - 1)
+                  } else if (event.key === 'ArrowRight') {
+                    event.preventDefault()
+                    goToOffer(activeOfferIndex + 1)
+                  }
+                }}
+                onScroll={(event) => {
+                  const next = findNearestOfferIndex()
+                  setActiveOfferIndex(Math.max(0, Math.min(offerCards.length - 1, next)))
+                }}
+              >
+                {offerCards.map((offer) => (
+                  <article
+                    key={offer.id}
+                    className="min-w-[88%] snap-start overflow-hidden rounded-2xl border bg-card sm:min-w-[62%] lg:min-w-[36%]"
+                  >
+                    <div className="relative h-40 overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200">
+                      {offer.image ? (
+                        <Image
+                          src={offer.image}
+                          alt={offer.title}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 768px) 88vw, (max-width: 1200px) 62vw, 36vw"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center">
+                          <Package className="h-12 w-12 text-slate-500/60" />
+                        </div>
+                      )}
+                      <span className="absolute left-3 top-3 rounded-full bg-black/75 px-3 py-1 text-xs font-semibold text-white">
+                        {offer.tag}
+                      </span>
+                    </div>
+                    <div className="space-y-3 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="line-clamp-1 text-lg font-semibold">{offer.title}</h3>
+                          <p className="text-xs text-muted-foreground">{offer.brand || company_info.name || '4G Movil'}</p>
+                        </div>
+                        <div className="text-right">
+                          {offer.originalPriceLabel && (
+                            <p className="text-xs text-muted-foreground line-through">{offer.originalPriceLabel}</p>
+                          )}
+                          <p className="text-lg font-bold text-primary">{offer.priceLabel}</p>
+                        </div>
+                      </div>
+                      <p className="line-clamp-2 text-sm text-muted-foreground">{offer.description}</p>
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-medium ${offer.inStock ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {offer.inStock ? 'Disponible' : 'Sin stock'}
+                        </span>
+                        <Button asChild size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700">
+                          <Link href={offer.ctaHref}>Ver detalle</Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              {offerCards.length > 1 && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="absolute left-2 top-1/2 hidden -translate-y-1/2 bg-background/90 sm:flex"
+                    onClick={() => goToOffer(activeOfferIndex - 1)}
+                    aria-label="Oferta anterior"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="absolute right-2 top-1/2 hidden -translate-y-1/2 bg-background/90 sm:flex"
+                    onClick={() => goToOffer(activeOfferIndex + 1)}
+                    aria-label="Siguiente oferta"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <div className="mt-3 flex justify-center gap-2">
+                    {offerCards.map((offer, idx) => (
+                      <button
+                        key={offer.id}
+                        type="button"
+                        onClick={() => goToOffer(idx)}
+                        className={`h-2.5 rounded-full transition-all ${idx === activeOfferIndex ? 'w-8 bg-primary' : 'w-2.5 bg-muted-foreground/30'}`}
+                        aria-label={`Ir a oferta ${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

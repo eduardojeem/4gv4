@@ -1,6 +1,6 @@
-'use client'
+﻿'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,62 +23,95 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Loader2
+  Loader2,
+  FilterX,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { useSecurityLogs, type SecurityLog } from '@/hooks/use-security-logs'
 import { useToast } from '@/components/ui/use-toast'
 
 interface SecurityPanelProps {
-  // Props opcionales para compatibilidad hacia atrás
+  // Props opcionales para compatibilidad hacia atrÃ¡s
 }
 
 export function SecurityPanel({}: SecurityPanelProps) {
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [severityFilter, setSeverityFilter] = useState<string>('all')
   const [timeFilter, setTimeFilter] = useState<string>('24h')
   const [userFilter, setUserFilter] = useState<string>('all')
   const [locationFilter, setLocationFilter] = useState<string>('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 25
 
   const { 
     logs: securityLogs, 
     stats, 
     isLoading, 
     error, 
-    fetchSecurityLogs, 
-    exportLogsToCSV,
-    refreshLogs 
+    fetchSecurityLogs
   } = useSecurityLogs()
   
   const { toast } = useToast()
 
-  // Refrescar logs cuando cambien los filtros
   useEffect(() => {
-    const filters = {
-      timeRange: timeFilter,
-      severity: severityFilter !== 'all' ? severityFilter : undefined,
-      limit: 100
-    }
-    fetchSecurityLogs(filters)
-  }, [timeFilter, severityFilter, fetchSecurityLogs])
+    const timer = window.setTimeout(() => setDebouncedSearchTerm(searchTerm), 250)
+    return () => window.clearTimeout(timer)
+  }, [searchTerm])
+
+  const requestFilters = useMemo(() => ({
+    timeRange: timeFilter,
+    severity: severityFilter !== 'all' ? severityFilter : undefined,
+    limit: 200
+  }), [timeFilter, severityFilter])
+
+  // Refrescar logs cuando cambien los filtros de servidor
+  useEffect(() => {
+    fetchSecurityLogs(requestFilters)
+  }, [fetchSecurityLogs, requestFilters])
 
   // Opciones derivadas para filtros avanzados
-  const uniqueUsers = Array.from(new Set(securityLogs.map(l => l.user))).sort()
-  const uniqueLocations = Array.from(new Set(securityLogs.map(l => l.ip).filter(ip => ip !== 'N/A'))).sort()
+  const uniqueUsers = useMemo(
+    () => Array.from(new Set(securityLogs.map(l => l.user))).sort(),
+    [securityLogs]
+  )
+  const uniqueLocations = useMemo(
+    () => Array.from(new Set(securityLogs.map(l => l.ip).filter(ip => ip !== 'N/A'))).sort(),
+    [securityLogs]
+  )
 
-  const filteredLogs = securityLogs.filter(log => {
-    const matchesSearch = log.event.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         log.ip.includes(searchTerm) ||
-                         (log.details && log.details.toLowerCase().includes(searchTerm.toLowerCase()))
-    const matchesUser = userFilter === 'all' || log.user === userFilter
-    const matchesLocation = locationFilter === 'all' || log.ip === locationFilter
-    
-    return matchesSearch && matchesUser && matchesLocation
-  })
+  const filteredLogs = useMemo(() => {
+    const term = debouncedSearchTerm.trim().toLowerCase()
+    return securityLogs.filter(log => {
+      const matchesSearch = !term ||
+        log.event.toLowerCase().includes(term) ||
+        log.user.toLowerCase().includes(term) ||
+        log.ip.toLowerCase().includes(term) ||
+        (log.details && log.details.toLowerCase().includes(term))
+      const matchesUser = userFilter === 'all' || log.user === userFilter
+      const matchesLocation = locationFilter === 'all' || log.ip === locationFilter
+      return matchesSearch && matchesUser && matchesLocation
+    })
+  }, [securityLogs, debouncedSearchTerm, userFilter, locationFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE))
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return filteredLogs.slice(start, start + PAGE_SIZE)
+  }, [filteredLogs, currentPage, PAGE_SIZE])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearchTerm, userFilter, locationFilter, timeFilter, severityFilter])
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages)
+  }, [currentPage, totalPages])
 
   const handleRefresh = async () => {
     try {
-      await refreshLogs()
+      await fetchSecurityLogs(requestFilters)
       toast({
         title: "Logs actualizados",
         description: "Los logs de seguridad se han actualizado correctamente.",
@@ -94,18 +127,58 @@ export function SecurityPanel({}: SecurityPanelProps) {
 
   const handleExport = () => {
     try {
-      exportLogsToCSV()
+      if (filteredLogs.length === 0) {
+        toast({
+          title: "Sin datos",
+          description: "No hay registros para exportar con los filtros actuales.",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const headers = ['ID', 'Evento', 'Usuario', 'Fecha/Hora', 'IP', 'Severidad', 'Detalles']
+      const csvContent = [
+        headers.join(','),
+        ...filteredLogs.map(log => [
+          log.id,
+          `"${log.event}"`,
+          `"${log.user}"`,
+          log.timestamp,
+          log.ip,
+          log.severity,
+          `"${log.details || ''}"`
+        ].join(','))
+      ].join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `security-logs-filtered-${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
       toast({
-        title: "Exportación exitosa",
-        description: "Los logs se han exportado correctamente.",
+        title: "ExportaciÃ³n exitosa",
+        description: "Los logs filtrados se han exportado correctamente.",
       })
     } catch (error) {
       toast({
-        title: "Error de exportación",
+        title: "Error de exportaciÃ³n",
         description: "No se pudieron exportar los logs.",
         variant: "destructive"
       })
     }
+  }
+
+  const resetFilters = () => {
+    setSearchTerm('')
+    setDebouncedSearchTerm('')
+    setSeverityFilter('all')
+    setTimeFilter('24h')
+    setUserFilter('all')
+    setLocationFilter('all')
   }
 
   const getSeverityColor = (severity: SecurityLog['severity']) => {
@@ -132,7 +205,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
     if (event.includes('inicio') || event.includes('login') || event.includes('exitoso')) return <Unlock className="h-4 w-4 text-green-600 dark:text-green-400" />
     if (event.includes('fallido') || event.includes('failed') || event.includes('denegado')) return <Lock className="h-4 w-4 text-red-600 dark:text-red-400" />
     if (event.includes('bloqueado') || event.includes('blocked')) return <Ban className="h-4 w-4 text-red-600 dark:text-red-400" />
-    if (event.includes('contraseña') || event.includes('password')) return <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+    if (event.includes('contraseÃ±a') || event.includes('password')) return <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
     return <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
   }
 
@@ -171,17 +244,17 @@ export function SecurityPanel({}: SecurityPanelProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+      <div className="rounded-xl border bg-gradient-to-r from-red-50 to-orange-50 p-4 dark:from-red-950/30 dark:to-orange-950/20">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-red-700 dark:text-red-400 flex items-center">
-              <Shield className="h-6 w-6 mr-2 text-red-700 dark:text-red-400" />
+            <h2 className="text-2xl font-bold text-red-700 dark:text-red-300 flex items-center">
+              <Shield className="h-6 w-6 mr-2 text-red-700 dark:text-red-300" />
               Panel de Seguridad
             </h2>
-            <p className="text-red-700 dark:text-red-400 mt-1">Monitoreo y auditoría de eventos de seguridad</p>
+            <p className="text-red-700/90 dark:text-red-300/90 mt-1">Monitoreo y auditorÃ­a de eventos de seguridad</p>
           </div>
           
-          <div className="flex space-x-2">
+          <div className="flex flex-wrap gap-2">
             <Button 
               variant="outline" 
               onClick={handleRefresh}
@@ -203,11 +276,19 @@ export function SecurityPanel({}: SecurityPanelProps) {
               <Download className="h-4 w-4 mr-2" />
               Exportar
             </Button>
+            <Button
+              variant="outline"
+              onClick={resetFilters}
+              disabled={isLoading}
+            >
+              <FilterX className="h-4 w-4 mr-2" />
+              Limpiar filtros
+            </Button>
           </div>
         </div>
       </div>
 
-      {/* Estadísticas de Seguridad */}
+      {/* EstadÃ­sticas de Seguridad */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800 shadow dark:shadow-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -217,19 +298,19 @@ export function SecurityPanel({}: SecurityPanelProps) {
             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
               {isLoading ? '-' : stats.totalEvents}
             </div>
-            <p className="text-xs text-blue-600 dark:text-blue-400">Período seleccionado</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400">PerÃ­odo seleccionado</p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-800 shadow dark:shadow-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-red-700 dark:text-red-400">Eventos Críticos</CardTitle>
+            <CardTitle className="text-sm font-medium text-red-700 dark:text-red-400">Eventos CrÃ­ticos</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600 dark:text-red-400">
               {isLoading ? '-' : stats.criticalEvents}
             </div>
-            <p className="text-xs text-red-600 dark:text-red-400">Requieren atención inmediata</p>
+            <p className="text-xs text-red-600 dark:text-red-400">Requieren atenciÃ³n inmediata</p>
           </CardContent>
         </Card>
 
@@ -301,7 +382,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
                 <SelectItem value="critical">
                   <div className="flex items-center">
                     <XCircle className="h-4 w-4 text-red-600 mr-2" />
-                    Crítica
+                    CrÃ­tica
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -309,13 +390,13 @@ export function SecurityPanel({}: SecurityPanelProps) {
             
             <Select value={timeFilter} onValueChange={setTimeFilter}>
               <SelectTrigger className="w-full sm:w-40 border-purple-200 focus:border-purple-500 focus:ring-purple-500 dark:bg-gray-900 dark:border-purple-900">
-                <SelectValue placeholder="Período" />
+                <SelectValue placeholder="PerÃ­odo" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1h">Última hora</SelectItem>
-                <SelectItem value="24h">Últimas 24 horas</SelectItem>
-                <SelectItem value="7d">Últimos 7 días</SelectItem>
-                <SelectItem value="30d">Últimos 30 días</SelectItem>
+                <SelectItem value="1h">Ãšltima hora</SelectItem>
+                <SelectItem value="24h">Ãšltimas 24 horas</SelectItem>
+                <SelectItem value="7d">Ãšltimos 7 dÃ­as</SelectItem>
+                <SelectItem value="30d">Ãšltimos 30 dÃ­as</SelectItem>
               </SelectContent>
             </Select>
 
@@ -334,11 +415,11 @@ export function SecurityPanel({}: SecurityPanelProps) {
               </Select>
             )}
 
-            {/* Filtros avanzados: Ubicación/IP */}
+            {/* Filtros avanzados: UbicaciÃ³n/IP */}
             {uniqueLocations.length > 0 && (
               <Select value={locationFilter} onValueChange={setLocationFilter}>
                 <SelectTrigger className="w-full sm:w-48 border-teal-200 focus:border-teal-500 focus:ring-teal-500 dark:bg-gray-900 dark:border-teal-900">
-                  <SelectValue placeholder="Ubicación/IP" />
+                  <SelectValue placeholder="UbicaciÃ³n/IP" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas las ubicaciones</SelectItem>
@@ -355,8 +436,13 @@ export function SecurityPanel({}: SecurityPanelProps) {
       {/* Tabla de Logs de Seguridad */}
       <Card className="dark:bg-gray-800 dark:border-gray-700">
         <CardHeader>
-          <CardTitle className="dark:text-gray-100">
-            Registro de Eventos ({isLoading ? '...' : filteredLogs.length})
+          <CardTitle className="dark:text-gray-100 flex items-center justify-between gap-2">
+            <span>Registro de Eventos ({isLoading ? '...' : filteredLogs.length})</span>
+            {!isLoading && filteredLogs.length > 0 && (
+              <Badge variant="secondary">
+                PÃ¡gina {currentPage} de {totalPages}
+              </Badge>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -366,18 +452,19 @@ export function SecurityPanel({}: SecurityPanelProps) {
               <span className="ml-2 text-gray-600 dark:text-gray-400">Cargando logs de seguridad...</span>
             </div>
           ) : (
+            <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow className="dark:border-gray-700 hover:bg-transparent">
                   <TableHead className="dark:text-gray-400">Evento</TableHead>
                   <TableHead className="dark:text-gray-400">Usuario</TableHead>
-                  <TableHead className="dark:text-gray-400">Ubicación</TableHead>
+                  <TableHead className="dark:text-gray-400">UbicaciÃ³n</TableHead>
                   <TableHead className="dark:text-gray-400">Severidad</TableHead>
                   <TableHead className="dark:text-gray-400">Fecha/Hora</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLogs.map((log) => {
+                {paginatedLogs.map((log) => {
                   const { date, time } = formatTimestamp(log.timestamp)
                   return (
                     <TableRow key={log.id} className="dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -426,6 +513,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
                 })}
               </TableBody>
             </Table>
+            </div>
           )}
           
           {!isLoading && filteredLogs.length === 0 && (
@@ -434,8 +522,36 @@ export function SecurityPanel({}: SecurityPanelProps) {
               <p>No se encontraron eventos de seguridad con los filtros aplicados</p>
             </div>
           )}
+          {!isLoading && filteredLogs.length > PAGE_SIZE && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {(currentPage - 1) * PAGE_SIZE + 1} - {Math.min(currentPage * PAGE_SIZE, filteredLogs.length)} de {filteredLogs.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  Siguiente
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
   )
 }
+

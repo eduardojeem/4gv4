@@ -31,6 +31,8 @@ export interface PublicProduct {
   stock_quantity: number
   is_active: boolean
   featured: boolean
+  has_offer?: boolean
+  offer_price?: number | null
   image: string | null
   images: string[] | null
   unit_measure: string

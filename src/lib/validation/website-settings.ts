@@ -91,7 +91,10 @@ export const ServiceSchema = z.object({
     'headset',
     'laptop',
     'clock',
-    'sparkles'
+    'sparkles',
+    'droplet',
+    'camera',
+    'microchip'
   ] as const, { error: 'Icono inválido' }),
   color: z.enum([
     'blue',
@@ -100,7 +103,14 @@ export const ServiceSchema = z.object({
     'orange',
     'red',
     'indigo',
-    'teal'
+    'teal',
+    'yellow',
+    'cyan',
+    'pink',
+    'rose',
+    'amber',
+    'emerald',
+    'sky'
   ] as const, { error: 'Color inválido' }),
   benefits: z.array(
     z.string()
@@ -111,7 +121,8 @@ export const ServiceSchema = z.object({
     .refine(
       (benefits) => benefits.every(b => b.trim().length > 0),
       'Los beneficios no pueden estar vacíos'
-    )
+    ),
+  active: z.boolean().optional().default(true)
 })
 
 // Esquema para array de servicios
@@ -131,7 +142,8 @@ export const TestimonialSchema = z.object({
     .max(5, 'Rating máximo es 5'),
   comment: z.string()
     .min(10, 'Comentario debe tener al menos 10 caracteres')
-    .max(500, 'Comentario no puede exceder 500 caracteres')
+    .max(500, 'Comentario no puede exceder 500 caracteres'),
+  active: z.boolean().optional().default(true)
 })
 
 // Esquema para array de testimonios

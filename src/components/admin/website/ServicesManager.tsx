@@ -8,10 +8,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { Switch } from '@/components/ui/switch'
 import { 
   Loader2, Save, Briefcase, Wrench, Shield, Package, Check, Plus, Trash2, 
   Smartphone, Monitor, Battery, Cpu, Zap, Headset, ArrowUp, ArrowDown, 
-  Settings, Clock, Sparkles, TrendingUp, Laptop, Edit3, X, Droplet, Camera
+  Settings, Clock, Sparkles, TrendingUp, Laptop, Edit3, X, Droplet, Camera,
+  Eye, EyeOff
 } from 'lucide-react'
 import { Service } from '@/types/website-settings'
 import {
@@ -49,6 +51,13 @@ const COLOR_OPTIONS = [
   { value: 'red', label: 'Rojo', class: 'bg-red-100 text-red-600 border-red-200 hover:bg-red-200' },
   { value: 'indigo', label: 'Indigo', class: 'bg-indigo-100 text-indigo-600 border-indigo-200 hover:bg-indigo-200' },
   { value: 'teal', label: 'Teal', class: 'bg-teal-100 text-teal-600 border-teal-200 hover:bg-teal-200' },
+  { value: 'yellow', label: 'Amarillo', class: 'bg-yellow-100 text-yellow-600 border-yellow-200 hover:bg-yellow-200' },
+  { value: 'cyan', label: 'Cyan', class: 'bg-cyan-100 text-cyan-600 border-cyan-200 hover:bg-cyan-200' },
+  { value: 'pink', label: 'Rosa', class: 'bg-pink-100 text-pink-600 border-pink-200 hover:bg-pink-200' },
+  { value: 'rose', label: 'Rose', class: 'bg-rose-100 text-rose-600 border-rose-200 hover:bg-rose-200' },
+  { value: 'amber', label: 'Ambar', class: 'bg-amber-100 text-amber-600 border-amber-200 hover:bg-amber-200' },
+  { value: 'emerald', label: 'Esmeralda', class: 'bg-emerald-100 text-emerald-600 border-emerald-200 hover:bg-emerald-200' },
+  { value: 'sky', label: 'Cielo', class: 'bg-sky-100 text-sky-600 border-sky-200 hover:bg-sky-200' },
 ]
 
 const COLOR_GRADIENTS: Record<string, string> = {
@@ -59,6 +68,13 @@ const COLOR_GRADIENTS: Record<string, string> = {
   red: 'from-red-50 to-rose-50 dark:from-red-900/10 dark:to-rose-900/10',
   indigo: 'from-indigo-50 to-blue-50 dark:from-indigo-900/10 dark:to-blue-900/10',
   teal: 'from-teal-50 to-emerald-50 dark:from-teal-900/10 dark:to-emerald-900/10',
+  yellow: 'from-yellow-50 to-amber-50 dark:from-yellow-900/10 dark:to-amber-900/10',
+  cyan: 'from-cyan-50 to-sky-50 dark:from-cyan-900/10 dark:to-sky-900/10',
+  pink: 'from-pink-50 to-rose-50 dark:from-pink-900/10 dark:to-rose-900/10',
+  rose: 'from-rose-50 to-red-50 dark:from-rose-900/10 dark:to-red-900/10',
+  amber: 'from-amber-50 to-yellow-50 dark:from-amber-900/10 dark:to-yellow-900/10',
+  emerald: 'from-emerald-50 to-green-50 dark:from-emerald-900/10 dark:to-green-900/10',
+  sky: 'from-sky-50 to-blue-50 dark:from-sky-900/10 dark:to-blue-900/10',
 }
 
 export function ServicesManager() {
@@ -102,7 +118,8 @@ export function ServicesManager() {
       description: '',
       icon: 'smartphone',
       color: 'blue',
-      benefits: ['']
+      benefits: [''],
+      active: true
     }
     setEditingService(newService)
     setEditingIndex(null) // null indica que es uno nuevo
@@ -164,6 +181,14 @@ export function ServicesManager() {
     }
   }
 
+  const handleToggleActive = (index: number) => {
+    if (!services) return
+    const updated = [...services]
+    updated[index] = { ...updated[index], active: !updated[index].active }
+    setServices(updated)
+    setHasChanges(true)
+  }
+
   if (isLoading) return <div className="p-8 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></div>
   if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>
   if (!services) return null
@@ -190,9 +215,10 @@ export function ServicesManager() {
           const IconComp = ICON_OPTIONS.find(o => o.value === service.icon)?.icon || Smartphone
           const colorClass = COLOR_OPTIONS.find(o => o.value === service.color)?.class || COLOR_OPTIONS[0].class
           const gradient = COLOR_GRADIENTS[service.color] || COLOR_GRADIENTS.blue
+          const isActive = service.active !== false // Default to true if undefined
 
           return (
-            <Card key={service.id} className="group overflow-hidden border-none shadow-sm hover:shadow-xl transition-all duration-300 bg-white dark:bg-gray-800 rounded-2xl">
+            <Card key={service.id} className={`group overflow-hidden border-none shadow-sm hover:shadow-xl transition-all duration-300 bg-white dark:bg-gray-800 rounded-2xl ${!isActive ? 'opacity-60 grayscale' : ''}`}>
               <CardHeader className={`bg-linear-to-br ${gradient} p-5 relative overflow-hidden`}>
                 {/* Fondo decorativo sutil */}
                 <div className="absolute -right-4 -top-4 opacity-5 pointer-events-none">
@@ -204,6 +230,15 @@ export function ServicesManager() {
                     <IconComp className="h-7 w-7" />
                   </div>
                   <div className="flex gap-1.5 translate-x-1 group-hover:translate-x-0 transition-transform">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-8 w-8 rounded-full bg-white/50 hover:bg-white backdrop-blur-sm ${isActive ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
+                      onClick={() => handleToggleActive(index)}
+                      title={isActive ? "Desactivar servicio" : "Activar servicio"}
+                    >
+                      {isActive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -307,6 +342,18 @@ export function ServicesManager() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                 {/* Columna Izquierda: Identidad */}
                 <div className="space-y-6">
+                  <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-xl border border-gray-100">
+                    <Label className="text-sm font-medium flex items-center gap-2 cursor-pointer" htmlFor="active-switch">
+                      {editingService.active !== false ? <Eye className="h-4 w-4 text-green-500" /> : <EyeOff className="h-4 w-4 text-gray-400" />}
+                      {editingService.active !== false ? 'Servicio Visible' : 'Servicio Oculto'}
+                    </Label>
+                    <Switch
+                      id="active-switch"
+                      checked={editingService.active !== false}
+                      onCheckedChange={(checked) => setEditingService({ ...editingService, active: checked })}
+                    />
+                  </div>
+
                   <div className="space-y-2">
                     <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Título del Servicio</Label>
                     <Input
@@ -360,9 +407,11 @@ export function ServicesManager() {
                               key={opt.value}
                               type="button"
                               onClick={() => setEditingService({ ...editingService, color: opt.value as any })}
-                              className={`h-6 md:h-7 rounded-lg border-2 transition-all ${opt.class} ${editingService.color === opt.value ? 'ring-2 ring-blue-500 ring-offset-2' : 'opacity-40 hover:opacity-100'}`}
+                              className={`h-6 md:h-7 rounded-lg border-2 transition-all flex items-center justify-center ${opt.class} ${editingService.color === opt.value ? 'ring-2 ring-blue-500 ring-offset-2' : 'opacity-40 hover:opacity-100'}`}
                               title={opt.label}
-                            />
+                            >
+                              {editingService.color === opt.value && <Check className="h-3 w-3 md:h-4 md:w-4" />}
+                            </button>
                           ))}
                         </div>
                       </div>

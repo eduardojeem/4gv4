@@ -138,6 +138,8 @@ export interface Database {
           purchase_price: number
           sale_price: number
           wholesale_price: number | null
+          offer_price: number | null
+          has_offer: boolean | null
           stock_quantity: number
           min_stock: number
           unit_measure: string
@@ -165,6 +167,8 @@ export interface Database {
           purchase_price: number
           sale_price: number
           wholesale_price?: number | null
+          offer_price?: number | null
+          has_offer?: boolean | null
           stock_quantity?: number
           min_stock?: number
           unit_measure?: string
@@ -192,6 +196,8 @@ export interface Database {
           purchase_price?: number
           sale_price?: number
           wholesale_price?: number | null
+          offer_price?: number | null
+          has_offer?: boolean | null
           stock_quantity?: number
           min_stock?: number
           unit_measure?: string
