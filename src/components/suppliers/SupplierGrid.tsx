@@ -119,7 +119,7 @@ export function SupplierCard({ supplier, onEdit, onDelete, selected, onSelect }:
                                 {supplier.name}
                             </h3>
                             <p className="text-sm text-muted-foreground truncate">
-                                {supplier.contact_person}
+                                {supplier.contact_name}
                             </p>
                         </div>
                     </div>

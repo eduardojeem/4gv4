@@ -8,7 +8,7 @@ export const supplierSchema = z.object({
     .max(100, "El nombre no puede exceder 100 caracteres")
     .trim(),
   
-  contact_person: z.string()
+  contact_name: z.string()
     .min(2, "El nombre del contacto debe tener al menos 2 caracteres")
     .max(100, "El nombre del contacto no puede exceder 100 caracteres")
     .trim(),

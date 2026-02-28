@@ -90,7 +90,7 @@ const SupplierManagement: React.FC = () => {
 
   const filteredSuppliers = suppliers.filter(supplier => {
     const matchesSearch = supplier.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (supplier.contact_person || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (supplier.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (supplier.email || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = filterStatus === 'all' || supplier.status === filterStatus
     const matchesCategory = filterCategory === 'all' || supplier.category === filterCategory
@@ -323,7 +323,7 @@ const SupplierManagement: React.FC = () => {
                   </Avatar>
                   <div>
                     <CardTitle className="text-lg dark:text-white">{supplier.name}</CardTitle>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{supplier.contact_person}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{supplier.contact_name}</p>
                   </div>
                 </div>
                 <Badge className={getStatusColor(supplier.status)}>
@@ -426,8 +426,8 @@ const SupplierManagement: React.FC = () => {
             <div className="space-y-2">
               <Label>Persona de Contacto</Label>
               <Input
-                value={newSupplier.contact_person || ''}
-                onChange={(e) => setNewSupplier(prev => ({ ...prev, contact_person: e.target.value }))}
+                value={newSupplier.contact_name || ''}
+                onChange={(e) => setNewSupplier(prev => ({ ...prev, contact_name: e.target.value }))}
                 placeholder="Ej: John Smith"
                 className="dark:bg-gray-700 dark:border-gray-600"
               />
@@ -562,8 +562,8 @@ const SupplierManagement: React.FC = () => {
             <div className="space-y-2">
               <Label>Persona de Contacto</Label>
               <Input
-                value={editingSupplier.contact_person || ''}
-                onChange={(e) => setEditingSupplier(prev => ({ ...prev, contact_person: e.target.value }))}
+                value={editingSupplier.contact_name || ''}
+                onChange={(e) => setEditingSupplier(prev => ({ ...prev, contact_name: e.target.value }))}
                 className="dark:bg-gray-700 dark:border-gray-600"
               />
             </div>

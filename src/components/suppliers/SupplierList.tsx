@@ -173,7 +173,7 @@ export function SupplierList({ suppliers, onEdit, onDelete, loading, selectedIds
                                                     <ChevronRight className="h-4 w-4 text-gray-400" />
                                                 )}
                                             </div>
-                                            <div className="text-sm text-gray-500">{supplier.contact_person}</div>
+                                            <div className="text-sm text-gray-500">{supplier.contact_name}</div>
                                         </div>
                                     </div>
                                 </TableCell>

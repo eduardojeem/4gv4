@@ -49,7 +49,7 @@ export default function SupplierDetailPage() {
                 const mappedSupplier: UISupplier = {
                     id: s.id,
                     name: s.name,
-                    contact_person: s.contact_person || '',
+                    contact_name: s.contact_name || '',
                     email: s.email || '',
                     phone: s.phone || '',
                     address: s.address || '',
@@ -138,7 +138,7 @@ export default function SupplierDetailPage() {
                     </Button>
                     <div>
                         <h1 className="text-3xl font-bold">{supplier.name}</h1>
-                        <p className="text-gray-500">{supplier.contact_person}</p>
+                        <p className="text-gray-500">{supplier.contact_name}</p>
                     </div>
                 </div>
                 <Badge className={getStatusColor(supplier.status)}>

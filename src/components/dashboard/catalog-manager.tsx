@@ -313,7 +313,7 @@ export function CatalogManager({
       if (supplierModal.mode === 'add') {
         const res = await createSupplier({
           name: supplier.name,
-          contact_name: supplier.contact_person,
+          contact_name: supplier.contact_name || supplier.contact_person,
           contact_email: supplier.email,
           phone: supplier.phone,
           address: supplier.address,
@@ -329,7 +329,7 @@ export function CatalogManager({
       } else {
         const res = await updateSupplier(supplier.id, {
           name: supplier.name,
-          contact_name: supplier.contact_person,
+          contact_name: supplier.contact_name || supplier.contact_person,
           contact_email: supplier.email,
           phone: supplier.phone,
           address: supplier.address,

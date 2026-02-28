@@ -92,9 +92,29 @@ export async function uploadFile(
       .upload(filePath, file, options)
     
     if (uploadError) {
+      // Fallback: server-side upload route with admin client (avoids client-side RLS failures)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('bucket', bucketName)
+      formData.append('path', filePath)
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        return {
+          success: true,
+          url: result?.url || getPublicUrl(bucketName, filePath),
+        }
+      }
+
+      const apiError = await response.json().catch(() => ({}))
       return {
         success: false,
-        error: uploadError.message
+        error: apiError?.error || uploadError.message,
       }
     }
     

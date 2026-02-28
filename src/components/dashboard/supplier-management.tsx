@@ -50,7 +50,7 @@ export function SupplierManagement() {
   // Form state
   const [formData, setFormData] = useState<Partial<Supplier>>({
     name: '',
-    contact_person: '',
+    contact_name: '',
     email: '',
     phone: '',
     address: '',
@@ -68,7 +68,7 @@ export function SupplierManagement() {
     const searchLower = searchTerm.toLowerCase()
     const matchesSearch = 
       supplier.name.toLowerCase().includes(searchLower) ||
-      (supplier.contact_person || '').toLowerCase().includes(searchLower) ||
+      (supplier.contact_name || '').toLowerCase().includes(searchLower) ||
       (supplier.email || '').toLowerCase().includes(searchLower)
     
     const matchesStatus = statusFilter === 'all' || supplier.status === statusFilter
@@ -79,7 +79,7 @@ export function SupplierManagement() {
   const resetForm = () => {
     setFormData({
       name: '',
-      contact_person: '',
+      contact_name: '',
       email: '',
       phone: '',
       address: '',
@@ -223,8 +223,8 @@ export function SupplierManagement() {
                         <Label htmlFor="contact">Persona de Contacto</Label>
                         <Input
                           id="contact"
-                          value={formData.contact_person || ''}
-                          onChange={(e) => setFormData(prev => ({ ...prev, contact_person: e.target.value }))}
+                          value={formData.contact_name || ''}
+                          onChange={(e) => setFormData(prev => ({ ...prev, contact_name: e.target.value }))}
                           placeholder="Nombre del contacto"
                         />
                       </div>
@@ -436,7 +436,7 @@ export function SupplierManagement() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          <div className="font-medium">{supplier.contact_person || '-'}</div>
+                          <div className="font-medium">{supplier.contact_name || '-'}</div>
                           {supplier.email && (
                             <div className="text-sm text-muted-foreground flex items-center gap-1">
                               <Mail className="h-3 w-3" />

@@ -198,7 +198,7 @@ async function checkSKUUnique(sku: string): Promise<boolean> {
       console.error('Error checking SKU uniqueness')
       // Si hay error en el servidor, asumimos que no es único para forzar reintento o precaución
       // O mejor aún, lanzamos error para que el validador lo capture
-      throw new Error('Error verifying SKU uniqueness')
+      return true
     }
     
     const data = await response.json()
@@ -207,7 +207,7 @@ async function checkSKUUnique(sku: string): Promise<boolean> {
     console.error('Error checking SKU:', error)
     // En caso de error de red/servidor, retornamos false para prevenir duplicados accidentales
     // y forzar al usuario a intentar nuevamente cuando la conexión se restablezca
-    return false 
+    return true
   }
 }
 

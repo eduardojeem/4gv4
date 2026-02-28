@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion  } from '../ui/motion'
-import { X, Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Scan, Plus } from 'lucide-react'
+import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import {
   Dialog,
@@ -13,7 +12,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
@@ -26,12 +24,22 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from '@/components/ui/form'
 import type { Product, Category, Supplier, Brand, ProductFormData } from '@/types/products'
 import type { Category as UICategory } from '@/lib/types/catalog'
 import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
-import { validateProductForm, generateEAN13 } from '@/lib/validations/product-validation'
+import { generateEAN13 } from '@/lib/validations/product-validation'
+import { productSchema, ProductFormValues } from '@/lib/validations/product-schema'
 import { CategoryModal } from './category-modal'
 import { SupplierModal } from './supplier-modal'
 import { BrandModal } from '@/components/dashboard/brands/BrandModal'
@@ -40,7 +48,8 @@ import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { uploadFile } from '@/lib/supabase-storage'
-import { createClient } from '@/lib/supabase/client'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 
 interface ProductModalProps {
   product: Product | null
@@ -61,35 +70,11 @@ export function ProductModal({
   brands,
   suppliers
 }: ProductModalProps) {
-  const [formData, setFormData] = useState<ProductFormData>({
-    sku: '',
-    name: '',
-    description: '',
-    category_id: '',
-    brand: '',
-    brand_id: '',
-    supplier_id: '',
-    purchase_price: 0,
-    sale_price: 0,
-    wholesale_price: 0,
-    offer_price: 0,
-    has_offer: false,
-    stock_quantity: 0,
-    min_stock: 0,
-    max_stock: 0,
-    unit_measure: '',
-    barcode: '',
-    is_active: true,
-    images: []
-  })
-
-  const [loading, setSaving] = useState(false)
-  const [errors, setErrors] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState('basic')
-
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false)
   const [isBrandModalOpen, setIsBrandModalOpen] = useState(false)
+  
   const { createCategory } = useCategories()
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
@@ -98,6 +83,47 @@ export function ProductModal({
   const [localCategories, setLocalCategories] = useState<Category[]>(categories ?? [])
   const [localBrands, setLocalBrands] = useState<Brand[]>(brands ?? [])
   const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers ?? [])
+
+  // Form definition
+  const form = useForm<ProductFormValues>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      sku: '',
+      name: '',
+      description: '',
+      category_id: '',
+      brand: '',
+      brand_id: '',
+      supplier_id: '',
+      purchase_price: 0,
+      sale_price: 0,
+      wholesale_price: 0,
+      offer_price: 0,
+      has_offer: false,
+      stock_quantity: 0,
+      min_stock: 0,
+      max_stock: 0,
+      unit_measure: '',
+      barcode: '',
+      is_active: true,
+      images: []
+    }
+  })
+
+  const { formState: { isSubmitting, errors }, setValue, watch } = form
+  
+  // Watch values for calculations
+  const purchasePrice = watch('purchase_price')
+  const salePrice = watch('sale_price')
+  const wholesalePrice = watch('wholesale_price')
+  const offerPrice = watch('offer_price')
+  const hasOffer = watch('has_offer')
+  const stockQuantity = watch('stock_quantity')
+  const minStock = watch('min_stock')
+  const maxStock = watch('max_stock')
+  const unitMeasure = watch('unit_measure')
+  const sku = watch('sku')
+  const barcode = watch('barcode')
 
   useEffect(() => {
     setLocalCategories(categories ?? [])
@@ -111,87 +137,16 @@ export function ProductModal({
     setLocalSuppliers(suppliers ?? [])
   }, [suppliers])
 
-  const handleSaveCategory = async (categoryData: any) => {
-    // Transform UI category data to DB payload
-    const payload = {
-      name: categoryData.name,
-      description: categoryData.description,
-      parent_id: categoryData.parentId || null,
-      is_active: true
-    }
-    
-    const result = await createCategory(payload)
-    if (result.success && result.data) {
-       toast.success('Categoría creada')
-       const newCategory = result.data as unknown as Category
-       setLocalCategories(prev => [...prev, newCategory])
-       handleInputChange('category_id', newCategory.id)
-       setIsCategoryModalOpen(false)
-    } else {
-       toast.error(result.error || 'Error al crear categoría')
-    }
-  }
-
-  // Convert DB categories to UI categories for the modal
-  const uiCategories: UICategory[] = localCategories.map(cat => ({
-    id: cat.id,
-    name: cat.name,
-    description: cat.description || '',
-    subcategories: [],
-    color: '#3B82F6',
-    isActive: cat.is_active,
-    productCount: 0,
-    createdAt: cat.created_at,
-    updatedAt: cat.updated_at,
-    parentId: cat.parent_id || undefined,
-    icon: 'Tag'
-  }))
-
-  const handleSaveSupplier = async (supplierData: Partial<UISupplier>) => {
-    const result = await createSupplier(supplierData as any)
-    if (result.success && result.data) {
-       toast.success('Proveedor creado')
-       const newSupplier = result.data as unknown as Supplier
-       setLocalSuppliers(prev => [...prev, newSupplier])
-       handleInputChange('supplier_id', newSupplier.id)
-       setIsSupplierModalOpen(false)
-    } else {
-       toast.error(result.error || 'Error al crear proveedor')
-    }
-  }
-
-  const handleSaveBrand = async (brandData: any) => {
-    const result = await createBrand(brandData)
-    if (result.success && result.data) {
-       toast.success('Marca creada')
-       const newBrand = result.data as unknown as Brand
-       setLocalBrands(prev => [...prev, newBrand])
-       handleInputChange('brand_id', newBrand.id)
-       handleInputChange('brand', newBrand.name) // Legacy support
-       setIsBrandModalOpen(false)
-       return { success: true }
-    } else {
-       toast.error(result.error || 'Error al crear marca')
-       return { success: false, error: result.error }
-    }
-  }
-
-  // Generar SKU automático
-  const generateSKU = () => {
-    const timestamp = Date.now().toString(36).toUpperCase()
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase()
-    return `PROD-${timestamp}-${random}`
-  }
-
-  // Inicializar formulario cuando cambia el producto
+  // Reset form when product changes
   useEffect(() => {
     if (product) {
-      setFormData({
+      form.reset({
         sku: product.sku || '',
         name: product.name || '',
         description: product.description || '',
         category_id: product.category_id || '',
         brand: product.brand || '',
+        brand_id: (product as any).brand_id || '',
         supplier_id: product.supplier_id || '',
         purchase_price: product.purchase_price || 0,
         sale_price: product.sale_price || 0,
@@ -207,8 +162,7 @@ export function ProductModal({
         images: product.images || []
       })
     } else {
-      // Resetear formulario para nuevo producto
-      setFormData({
+      form.reset({
         sku: '',
         name: '',
         description: '',
@@ -230,109 +184,158 @@ export function ProductModal({
         images: []
       })
     }
-    setErrors({})
-  }, [product])
+  }, [product, form])
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    // Validar formulario con el sistema de validaciones mejorado
-    const validation = await validateProductForm(formData, !!product)
-    
-    if (!validation.isValid) {
-      setErrors(validation.errors)
-      toast.error('Por favor corrige los errores en el formulario', {
-        description: 'Revisa los campos marcados en rojo'
-      })
-      return
+  const handleSaveCategory = async (categoryData: any) => {
+    const payload = {
+      name: categoryData.name,
+      description: categoryData.description,
+      parent_id: categoryData.parentId || null,
+      is_active: true
     }
+    
+    const result = await createCategory(payload)
+    if (result.success && result.data) {
+       toast.success('Categoría creada')
+       const newCategory = result.data as unknown as Category
+       setLocalCategories(prev => [...prev, newCategory])
+       setValue('category_id', newCategory.id)
+       setIsCategoryModalOpen(false)
+    } else {
+       toast.error(result.error || 'Error al crear categoría')
+    }
+  }
 
-    setSaving(true)
-    let retries = 0
+  // Convert DB categories to UI categories
+  const uiCategories: UICategory[] = localCategories.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    description: cat.description || '',
+    subcategories: [],
+    color: '#3B82F6',
+    isActive: cat.is_active,
+    productCount: 0,
+    createdAt: cat.created_at,
+    updatedAt: cat.updated_at,
+    parentId: cat.parent_id || undefined,
+    icon: 'Tag'
+  }))
+
+  const handleSaveSupplier = async (supplierData: Partial<UISupplier>) => {
+    const result = await createSupplier(supplierData as any)
+    if (result.success && result.data) {
+       toast.success('Proveedor creado')
+       const newSupplier = result.data as unknown as Supplier
+       setLocalSuppliers(prev => [...prev, newSupplier])
+       setValue('supplier_id', newSupplier.id)
+       setIsSupplierModalOpen(false)
+    } else {
+       toast.error(result.error || 'Error al crear proveedor')
+    }
+  }
+
+  const handleSaveBrand = async (brandData: any) => {
+    const result = await createBrand(brandData)
+    if (result.success && result.data) {
+       toast.success('Marca creada')
+       const newBrand = result.data as unknown as Brand
+       setLocalBrands(prev => [...prev, newBrand])
+       setValue('brand_id', newBrand.id)
+       setValue('brand', newBrand.name)
+       setIsBrandModalOpen(false)
+       return { success: true }
+    } else {
+       toast.error(result.error || 'Error al crear marca')
+       return { success: false, error: result.error }
+    }
+  }
+
+  const generateSKU = () => {
+    const timestamp = Date.now().toString(36).toUpperCase()
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+    return `PROD-${timestamp}-${random}`
+  }
+
+  const onSubmit = async (values: ProductFormValues) => {
     const maxRetries = 3
 
-    const attemptSave = async (): Promise<boolean> => {
-      try {
-        await onSave(formData)
-        toast.success(
-          product ? 'Producto actualizado exitosamente' : 'Producto creado exitosamente',
-          {
-            description: `SKU: ${formData.sku}`,
-            duration: 5000
-          }
-        )
-        onClose()
-        return true
-      } catch (error) {
-        retries++
-        
-        if (error instanceof Error) {
-          // Errores específicos del servidor
-          if (error.message.includes('duplicate') || error.message.includes('unique')) {
-            toast.error('SKU duplicado', {
-              description: 'Este código ya existe en el sistema'
-            })
-            setErrors({ sku: 'Este SKU ya existe' })
-            return false
-          }
+    try {
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          // Race condition with timeout to prevent hanging
+          const savePromise = onSave(values as ProductFormData)
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('La operación ha excedido el tiempo de espera (15s). Por favor verifica tu conexión.')), 15000)
+          )
           
-          if (error.message.includes('network') || error.message.includes('fetch')) {
-            if (retries < maxRetries) {
-              toast.warning(`Error de conexión. Reintentando... (${retries}/${maxRetries})`)
-              await new Promise(resolve => setTimeout(resolve, 1000 * retries))
-              return attemptSave()
-            } else {
-              toast.error('Error de conexión', {
-                description: 'No se pudo conectar con el servidor. Verifica tu conexión.',
-                action: {
-                  label: 'Reintentar',
-                  onClick: () => handleSubmit(e)
-                }
-              })
+          await Promise.race([savePromise, timeoutPromise])
+          toast.success(
+            product ? 'Producto actualizado exitosamente' : 'Producto creado exitosamente',
+            {
+              description: `SKU: ${values.sku}`,
+              duration: 5000
             }
+          )
+          onClose()
+          return
+        } catch (error) {
+          if (error instanceof Error) {
+            const message = error.message.toLowerCase()
+
+            if (message.includes('duplicate') || message.includes('unique')) {
+              toast.error('SKU duplicado', {
+                description: 'Este codigo ya existe en el sistema'
+              })
+              form.setError('sku', { message: 'Este SKU ya existe' })
+              return
+            }
+
+            const isNetworkError = message.includes('network') || message.includes('fetch')
+            if (isNetworkError) {
+              if (attempt < maxRetries) {
+                toast.warning(`Error de conexion. Reintentando... (${attempt}/${maxRetries})`)
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+                continue
+              }
+              toast.error('Error de conexion', {
+                description: 'No se pudo conectar con el servidor. Verifica tu conexion.'
+              })
+              return
+            }
+
+            toast.error('Error al guardar', {
+              description: error.message
+            })
+          } else {
+            toast.error('Error desconocido', {
+              description: 'Ocurrio un error inesperado. Por favor intenta nuevamente.'
+            })
           }
-          
-          toast.error('Error al guardar', {
-            description: error.message
-          })
-        } else {
-          toast.error('Error desconocido', {
-            description: 'Ocurrió un error inesperado. Por favor intenta nuevamente.'
-          })
+
+          console.error('Error saving product:', error)
+          return
         }
-        
-        console.error('Error saving product:', error)
-        return false
-      } finally {
-        setSaving(false)
       }
-    }
-
-    await attemptSave()
-  }
-
-  const handleInputChange = (field: keyof ProductFormData, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-    // Limpiar error del campo cuando el usuario empiece a escribir
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }))
+    } catch (error) {
+       console.error("Critical error in form submission", error)
     }
   }
 
-  const calculateMargin = () => {
-    if (formData.purchase_price > 0 && formData.sale_price > 0) {
-      return ((formData.sale_price - formData.purchase_price) / formData.sale_price * 100).toFixed(1)
+  const calculateMarginValue = () => {
+    const pPrice = Number(purchasePrice)
+    const sPrice = Number(salePrice)
+    if (pPrice > 0 && sPrice > 0) {
+      return ((sPrice - pPrice) / sPrice * 100).toFixed(1)
     }
     return '0'
   }
-
 
   const handleUploadFiles = async (files: File[]): Promise<string[]> => {
     const uploadedUrls: string[] = []
     
     for (const file of files) {
       try {
-        const fileExt = file.name.split('.').pop()
+        const fileExt = file.name.split('.').pop() || 'jpg'
         const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`
         const filePath = `products/${fileName}`
         
@@ -357,7 +360,7 @@ export function ProductModal({
     <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[95vw] w-full lg:max-w-6xl h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-900 border-none">
-        {/* Modern Header with Gradient */}
+        {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-900 dark:via-indigo-900 dark:to-purple-900 px-8 py-6 text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -381,652 +384,642 @@ export function ProductModal({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col md:flex-row flex-1 overflow-hidden">
-          {/* Sidebar Navigation */}
-          <div className="md:w-56 bg-gray-50 dark:bg-slate-900/50 border-r border-gray-200 dark:border-gray-800 p-4 overflow-y-auto">
-            <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="w-full">
-              <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 text-gray-500 dark:text-gray-400">
-                <TabsTrigger
-                  value="basic"
-                  className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
-                >
-                  <Tag className="h-4 w-4" />
-                  <span className="hidden md:inline">Información Básica</span>
-                  <span className="md:hidden">Básica</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="pricing"
-                  className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
-                >
-                  <GSIcon className="h-4 w-4" />
-                  <span className="hidden md:inline">Precios y Ofertas</span>
-                  <span className="md:hidden">Precios</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="inventory"
-                  className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
-                >
-                  <Warehouse className="h-4 w-4" />
-                  <span className="hidden md:inline">Inventario</span>
-                  <span className="md:hidden">Stock</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="images"
-                  className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
-                >
-                  <Upload className="h-4 w-4" />
-                  <span className="hidden md:inline">Imágenes</span>
-                  <span className="md:hidden">Fotos</span>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+        <Form {...form}>
+          <form id="product-form" onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col md:flex-row flex-1 overflow-hidden">
+            {/* Sidebar */}
+            <div className="md:w-56 bg-gray-50 dark:bg-slate-900/50 border-r border-gray-200 dark:border-gray-800 p-4 overflow-y-auto">
+              <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="w-full">
+                <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 text-gray-500 dark:text-gray-400">
+                  <TabsTrigger
+                    value="basic"
+                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
+                  >
+                    <Tag className="h-4 w-4" />
+                    <span className="hidden md:inline">Información Básica</span>
+                    <span className="md:hidden">Básica</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="pricing"
+                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
+                  >
+                    <GSIcon className="h-4 w-4" />
+                    <span className="hidden md:inline">Precios y Ofertas</span>
+                    <span className="md:hidden">Precios</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="inventory"
+                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
+                  >
+                    <Warehouse className="h-4 w-4" />
+                    <span className="hidden md:inline">Inventario</span>
+                    <span className="md:hidden">Stock</span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="images"
+                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
+                  >
+                    <Upload className="h-4 w-4" />
+                    <span className="hidden md:inline">Imágenes</span>
+                    <span className="md:hidden">Fotos</span>
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
 
-            {/* Quick Info Sidebar */}
-            {product && (
-              <div className="mt-6 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-sm space-y-3 border border-gray-100 dark:border-gray-700">
-                <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Vista Rápida</h4>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Stock</p>
-                    <p className="font-semibold text-gray-900 dark:text-gray-100">{formData.stock_quantity} unidades</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Precio Venta</p>
-                    <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(formData.sale_price)}</p>
-                  </div>
-                  {formData.has_offer && (
+              {/* Quick Info Sidebar */}
+              {product && (
+                <div className="mt-6 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-sm space-y-3 border border-gray-100 dark:border-gray-700">
+                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Vista Rápida</h4>
+                  <div className="space-y-2 text-sm">
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Precio Oferta</p>
-                      <p className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(formData.offer_price || 0)}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Stock</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{stockQuantity} unidades</p>
                     </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Main Content Area */}
-          <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" orientation="vertical">
-
-              <TabsContent value="basic" className="space-y-6 py-4">
-                <Card className="border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-800 dark:to-slate-800/50">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                      <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      Información del Producto
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="sku" className="text-sm font-medium text-gray-700 dark:text-gray-300">SKU / Código *</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="sku"
-                            value={formData.sku}
-                            onChange={(e) => handleInputChange('sku', e.target.value)}
-                            placeholder="Ej: PROD-001"
-                            className={`bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 ${errors.sku ? 'border-red-500' : ''}`}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={() => handleInputChange('sku', generateSKU())}
-                            title="Generar código automáticamente"
-                            className="shrink-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800"
-                          >
-                            <Sparkles className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        {errors.sku && <p className="text-sm text-red-500">{errors.sku}</p>}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="name" className="text-sm font-medium text-gray-700 dark:text-gray-300">Nombre del Producto *</Label>
-                        <Input
-                          id="name"
-                          value={formData.name}
-                          onChange={(e) => handleInputChange('name', e.target.value)}
-                          placeholder="Ej: iPhone 14 Pro"
-                          className={`bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 ${errors.name ? 'border-red-500' : ''}`}
-                        />
-                        {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="brand" className="text-sm font-medium text-gray-700 dark:text-gray-300">Marca</Label>
-                        <div className="flex gap-2">
-                          <Select
-                            value={formData.brand_id || ''}
-                            onValueChange={(value) => {
-                              const selectedBrand = localBrands.find(b => b.id === value)
-                              handleInputChange('brand_id', value)
-                              if (selectedBrand) {
-                                handleInputChange('brand', selectedBrand.name)
-                              }
-                            }}
-                          >
-                            <SelectTrigger className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 w-full">
-                              <SelectValue placeholder="Seleccionar marca" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700">
-                              {localBrands.map((brand) => (
-                                <SelectItem key={brand.id} value={brand.id} className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">
-                                  {brand.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={() => setIsBrandModalOpen(true)}
-                            title="Agregar nueva marca"
-                            className="shrink-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800"
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="unit" className="text-sm font-medium text-gray-700 dark:text-gray-300">Unidad de Medida</Label>
-                        <Select
-                          value={formData.unit_measure || ''}
-                          onValueChange={(value) => handleInputChange('unit_measure', value)}
-                        >
-                          <SelectTrigger className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-                            <SelectValue placeholder="Seleccionar unidad" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700">
-                            <SelectItem value="unidad" className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">Unidad</SelectItem>
-                            <SelectItem value="kg" className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">Kilogramo</SelectItem>
-                            <SelectItem value="g" className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">Gramo</SelectItem>
-                            <SelectItem value="l" className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">Litro</SelectItem>
-                            <SelectItem value="ml" className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">Mililitro</SelectItem>
-                            <SelectItem value="m" className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">Metro</SelectItem>
-                            <SelectItem value="cm" className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">Centímetro</SelectItem>
-                            <SelectItem value="caja" className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">Caja</SelectItem>
-                            <SelectItem value="paquete" className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">Paquete</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2 md:col-span-2">
-                        <Label htmlFor="barcode" className="text-sm font-medium text-gray-700 dark:text-gray-300">Código de Barras</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="barcode"
-                            value={formData.barcode || ''}
-                            onChange={(e) => handleInputChange('barcode', e.target.value)}
-                            placeholder="Ej: 7501234567890"
-                            pattern="[0-9]{8,13}"
-                            className={`bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 ${errors.barcode ? 'border-red-500' : ''}`}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={() => handleInputChange('barcode', generateEAN13())}
-                            title="Generar código automáticamente"
-                            className="shrink-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800"
-                          >
-                            <Sparkles className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        {errors.barcode && <p className="text-sm text-red-500">{errors.barcode}</p>}
-                        {formData.barcode && !errors.barcode && (
-                          <p className="text-xs text-green-600 dark:text-green-400">✓ Código de barras válido</p>
-                        )}
-                      </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Precio Venta</p>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(salePrice)}</p>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="description" className="text-sm font-medium text-gray-700 dark:text-gray-300">Descripción</Label>
-                      <Textarea
-                        id="description"
-                        value={formData.description || ''}
-                        onChange={(e) => handleInputChange('description', e.target.value)}
-                        placeholder="Descripción detallada del producto..."
-                        rows={3}
-                        className="resize-none bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-purple-100 dark:border-purple-900/50 bg-gradient-to-br from-white to-purple-50/30 dark:from-slate-800 dark:to-slate-800/50">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                      <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      Categorización
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="category" className="text-sm font-medium text-gray-700 dark:text-gray-300">Categoría</Label>
-                        <div className="flex gap-2">
-                          <Select
-                            value={formData.category_id || ''}
-                            onValueChange={(value) => handleInputChange('category_id', value)}
-                          >
-                            <SelectTrigger className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 w-full">
-                              <SelectValue placeholder="Seleccionar categoría" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700">
-                              {localCategories.map((category) => (
-                                <SelectItem key={category.id} value={category.id} className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">
-                                  {category.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={() => setIsCategoryModalOpen(true)}
-                            title="Agregar nueva categoría"
-                            className="shrink-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800"
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
+                    {hasOffer && (
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Precio Oferta</p>
+                        <p className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(offerPrice || 0)}</p>
                       </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="supplier" className="text-sm font-medium text-gray-700 dark:text-gray-300">Proveedor</Label>
-                        <div className="flex gap-2">
-                          <Select
-                            value={formData.supplier_id || ''}
-                            onValueChange={(value) => handleInputChange('supplier_id', value)}
-                          >
-                            <SelectTrigger className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 w-full">
-                              <SelectValue placeholder="Seleccionar proveedor" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white dark:bg-slate-900 border-gray-200 dark:border-gray-700">
-                              {localSuppliers.map((supplier) => (
-                                <SelectItem key={supplier.id} value={supplier.id} className="text-gray-900 dark:text-gray-100 focus:bg-gray-100 dark:focus:bg-slate-800">
-                                  {supplier.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={() => setIsSupplierModalOpen(true)}
-                            title="Agregar nuevo proveedor"
-                            className="shrink-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-slate-800"
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2 pt-2">
-                      <Switch
-                        id="active"
-                        checked={formData.is_active}
-                        onCheckedChange={(checked) => handleInputChange('is_active', checked)}
-                      />
-                      <Label htmlFor="active" className="text-sm font-medium cursor-pointer text-gray-700 dark:text-gray-300">
-                        Producto activo
-                      </Label>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="pricing" className="space-y-6 py-4">
-                {/* Precios Base */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="h-8 w-1 bg-blue-500 rounded-full" />
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Precios Base</h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Precio de Compra */}
-                    <div className="space-y-2">
-                      <Label htmlFor="purchase_price" className="text-sm font-medium flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                        <GSIcon className="h-4 w-4" />
-                        Precio de Compra (Costo)
-                      </Label>
-                      <Input
-                        id="purchase_price"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={formData.purchase_price}
-                        onChange={(e) => handleInputChange('purchase_price', parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                        className={`text-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-white ${errors.purchase_price ? 'border-red-500' : 'border-orange-200 dark:border-orange-900 focus:border-orange-500'}`}
-                      />
-                      {errors.purchase_price && <p className="text-sm text-red-500">{errors.purchase_price}</p>}
-                    </div>
-
-                    {/* Precio de Venta */}
-                    <div className="space-y-2">
-                      <Label htmlFor="sale_price" className="text-sm font-medium flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                        <Tag className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        Precio de Venta al Público *
-                      </Label>
-                      <Input
-                        id="sale_price"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={formData.sale_price}
-                        onChange={(e) => handleInputChange('sale_price', parseFloat(e.target.value) || 0)}
-                        placeholder="0.00"
-                        className={`text-lg font-semibold bg-white dark:bg-slate-900 text-gray-900 dark:text-white ${errors.sale_price ? 'border-red-500' : 'border-green-200 dark:border-green-900 focus:border-green-500'}`}
-                      />
-                      {errors.sale_price && <p className="text-sm text-red-500">{errors.sale_price}</p>}
-                      {formData.purchase_price > 0 && formData.sale_price > 0 && (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-600 dark:text-gray-400">Margen:</span>
-                          <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                            {calculateMargin()}%
-                          </Badge>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
+              )}
+            </div>
 
-                {/* Precios Especiales */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="h-8 w-1 bg-purple-500 rounded-full" />
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Precios Especiales</h3>
+            {/* Main Content */}
+            <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" orientation="vertical">
+                
+                {/* Basic Info */}
+                <TabsContent value="basic" className="space-y-6 py-4">
+                  <Card className="border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-800 dark:to-slate-800/50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                        <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        Información del Producto
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="sku"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>SKU / Código *</FormLabel>
+                              <div className="flex gap-2">
+                                <FormControl>
+                                  <Input placeholder="Ej: PROD-001" {...field} />
+                                </FormControl>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => setValue('sku', generateSKU())}
+                                  title="Generar código automáticamente"
+                                >
+                                  <Sparkles className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nombre del Producto *</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Ej: iPhone 14 Pro" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="brand_id"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Marca</FormLabel>
+                              <div className="flex gap-2">
+                                <Select 
+                                  onValueChange={(value) => {
+                                    field.onChange(value)
+                                    const selectedBrand = localBrands.find(b => b.id === value)
+                                    if (selectedBrand) {
+                                      setValue('brand', selectedBrand.name)
+                                    }
+                                  }} 
+                                  value={field.value || ""}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar marca" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {localBrands.map((brand) => (
+                                      <SelectItem key={brand.id} value={brand.id}>
+                                        {brand.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => setIsBrandModalOpen(true)}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="unit_measure"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Unidad de Medida</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value || ""}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Seleccionar unidad" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="unidad">Unidad</SelectItem>
+                                  <SelectItem value="kg">Kilogramo</SelectItem>
+                                  <SelectItem value="g">Gramo</SelectItem>
+                                  <SelectItem value="l">Litro</SelectItem>
+                                  <SelectItem value="ml">Mililitro</SelectItem>
+                                  <SelectItem value="m">Metro</SelectItem>
+                                  <SelectItem value="cm">Centímetro</SelectItem>
+                                  <SelectItem value="caja">Caja</SelectItem>
+                                  <SelectItem value="paquete">Paquete</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <div className="md:col-span-2">
+                          <FormField
+                            control={form.control}
+                            name="barcode"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Código de Barras</FormLabel>
+                                <div className="flex gap-2">
+                                  <FormControl>
+                                    <Input 
+                                      placeholder="Ej: 7501234567890" 
+                                      {...field} 
+                                      value={field.value || ""}
+                                    />
+                                  </FormControl>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => setValue('barcode', generateEAN13())}
+                                    title="Generar código automáticamente"
+                                  >
+                                    <Sparkles className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                                <FormMessage />
+                                {field.value && !errors.barcode && (
+                                  <FormDescription className="text-green-600 dark:text-green-400">
+                                    Código de barras válido
+                                  </FormDescription>
+                                )}
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Descripción</FormLabel>
+                            <FormControl>
+                              <Textarea 
+                                placeholder="Descripción detallada del producto..." 
+                                className="resize-none" 
+                                rows={3}
+                                {...field} 
+                                value={field.value || ""}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-purple-100 dark:border-purple-900/50 bg-gradient-to-br from-white to-purple-50/30 dark:from-slate-800 dark:to-slate-800/50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                        <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        Categorización
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="category_id"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Categoría</FormLabel>
+                              <div className="flex gap-2">
+                                <Select onValueChange={field.onChange} value={field.value || ""}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar categoría" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {localCategories.map((category) => (
+                                      <SelectItem key={category.id} value={category.id}>
+                                        {category.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => setIsCategoryModalOpen(true)}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="supplier_id"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Proveedor</FormLabel>
+                              <div className="flex gap-2">
+                                <Select onValueChange={field.onChange} value={field.value || ""}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar proveedor" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {localSuppliers.map((supplier) => (
+                                      <SelectItem key={supplier.id} value={supplier.id}>
+                                        {supplier.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => setIsSupplierModalOpen(true)}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="is_active"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <FormLabel className="font-normal cursor-pointer">
+                              Producto activo
+                            </FormLabel>
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                {/* Pricing */}
+                <TabsContent value="pricing" className="space-y-6 py-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-8 w-1 bg-blue-500 rounded-full" />
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Precios Base</h3>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="purchase_price"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-2">
+                              <GSIcon className="h-4 w-4" />
+                              Precio de Compra (Costo)
+                            </FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                step="0.01" 
+                                className="text-lg"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="sale_price"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-2">
+                              <Tag className="h-4 w-4 text-green-600 dark:text-green-400" />
+                              Precio de Venta al Público *
+                            </FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                step="0.01" 
+                                className="text-lg font-semibold"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                            {purchasePrice > 0 && salePrice > 0 && (
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-600 dark:text-gray-400">Margen:</span>
+                                <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                  {calculateMarginValue()}%
+                                </Badge>
+                              </div>
+                            )}
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Precio Mayorista */}
-                    <Card className="border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-900/10 dark:to-slate-900">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                          <Users className="h-4 w-4" />
-                          Precio Mayorista
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.wholesale_price || 0}
-                          onChange={(e) => handleInputChange('wholesale_price', parseFloat(e.target.value) || 0)}
-                          placeholder="0.00"
-                          className="text-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-white border-blue-200 dark:border-blue-800"
-                        />
-                        {formData.wholesale_price && formData.wholesale_price > 0 && formData.sale_price > 0 && (
-                          <div className="text-xs text-blue-600 dark:text-blue-400">
-                            Descuento: {((1 - formData.wholesale_price / formData.sale_price) * 100).toFixed(1)}% del precio público
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                  {/* Special Prices */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="h-8 w-1 bg-purple-500 rounded-full" />
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Precios Especiales</h3>
+                    </div>
 
-                    {/* Precio Oferta */}
-                    <Card className={`border-2 transition-all ${formData.has_offer
-                      ? 'border-red-400 dark:border-red-800 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/10 dark:to-pink-900/10 shadow-lg shadow-red-100 dark:shadow-none'
-                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900'
-                      }`}>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className={`text-sm font-medium flex items-center gap-2 ${formData.has_offer ? 'text-red-700 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'
-                            }`}>
-                            <Tag className="h-4 w-4" />
-                            Precio en Oferta
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card className="border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-900/10 dark:to-slate-900">
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                            <Users className="h-4 w-4" />
+                            Precio Mayorista
                           </CardTitle>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-600 dark:text-gray-400">
-                              {formData.has_offer ? 'Activa' : 'Inactiva'}
-                            </span>
-                            <Switch
-                              checked={formData.has_offer}
-                              onCheckedChange={(checked) => handleInputChange('has_offer', checked)}
-                              className="data-[state=checked]:bg-red-500"
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <FormField
+                            control={form.control}
+                            name="wholesale_price"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    step="0.01"
+                                    className="text-lg"
+                                    {...field}
+                                    value={field.value ?? ""}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </CardContent>
+                      </Card>
+
+                      <Card className={`border-2 transition-all ${hasOffer
+                        ? 'border-red-400 dark:border-red-800 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/10 dark:to-pink-900/10 shadow-lg shadow-red-100 dark:shadow-none'
+                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900'
+                        }`}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className={`text-sm font-medium flex items-center gap-2 ${hasOffer ? 'text-red-700 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                              <Tag className="h-4 w-4" />
+                              Precio en Oferta
+                            </CardTitle>
+                            <FormField
+                              control={form.control}
+                              name="has_offer"
+                              render={({ field }) => (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                                    {field.value ? 'Activa' : 'Inactiva'}
+                                  </span>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    className="data-[state=checked]:bg-red-500"
+                                  />
+                                </div>
+                              )}
                             />
                           </div>
-                        </div>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          <FormField
+                            control={form.control}
+                            name="offer_price"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    step="0.01"
+                                    disabled={!hasOffer}
+                                    className={`text-lg ${!hasOffer ? 'opacity-50 cursor-not-allowed' : 'font-semibold text-red-600'}`}
+                                    {...field}
+                                    value={field.value ?? ""}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* Inventory */}
+                <TabsContent value="inventory" className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                          <Warehouse className="h-4 w-4" />
+                          Stock Actual
+                        </CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={formData.offer_price}
-                          onChange={(e) => handleInputChange('offer_price', parseFloat(e.target.value) || 0)}
-                          placeholder="0.00"
-                          disabled={!formData.has_offer}
-                          className={`text-lg bg-white dark:bg-slate-900 ${!formData.has_offer ? 'opacity-50 cursor-not-allowed border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white' : 'font-semibold text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'}`}
+                      <CardContent>
+                        <FormField
+                          control={form.control}
+                          name="stock_quantity"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  {...field}
+                                  value={field.value ?? ""}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
-                        {formData.has_offer && (formData.offer_price ?? 0) > 0 && formData.sale_price > 0 && (
-                          <div className="flex items-center justify-between p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                            <span className="text-xs font-medium text-red-700 dark:text-red-400">Ahorro:</span>
-                            <div className="text-right">
-                              <div className="text-sm font-bold text-red-700 dark:text-red-400">
-                                {formatCurrency(formData.sale_price - (formData.offer_price ?? 0))}
-                              </div>
-                              <div className="text-xs text-red-600 dark:text-red-300">
-                                ({((1 - (formData.offer_price ?? 0) / formData.sale_price) * 100).toFixed(0)}% desc.)
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                          <Package className="h-4 w-4" />
+                          Stock Mínimo
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <FormField
+                          control={form.control}
+                          name="min_stock"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  {...field}
+                                  value={field.value ?? ""}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Se generará una alerta cuando el stock esté por debajo de este valor
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                          <Warehouse className="h-4 w-4 text-amber-600" />
+                          Stock Máximo
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <FormField
+                          control={form.control}
+                          name="max_stock"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input 
+                                  type="number" 
+                                  {...field}
+                                    value={field.value ?? ""}
+                                  />
+                              </FormControl>
+                              <FormDescription>
+                                Límite superior recomendado para este producto
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       </CardContent>
                     </Card>
                   </div>
-                </div>
+                </TabsContent>
 
-                {/* Resumen de Rentabilidad */}
-                {formData.purchase_price > 0 && formData.sale_price > 0 && (
-                  <Card className="border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/10 dark:to-green-900/10">
+                {/* Images */}
+                <TabsContent value="images" className="space-y-4 py-4">
+                  <Card>
                     <CardHeader>
-                      <CardTitle className="text-base flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                        <BarChart3 className="h-5 w-5" />
-                        Análisis de Rentabilidad
+                      <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                        <Upload className="h-4 w-4" />
+                        Imágenes del Producto
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {/* Ganancia Normal */}
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-emerald-100 dark:border-emerald-800">
-                          <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Ganancia Normal</div>
-                          <div className="text-lg font-bold text-green-700 dark:text-green-400">
-                            {formatCurrency(formData.sale_price - formData.purchase_price)}
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{calculateMargin()}% margen</div>
-                        </div>
-
-                        {/* Ganancia Mayorista */}
-                        {(formData.wholesale_price ?? 0) > 0 && (
-                          <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-blue-100 dark:border-blue-800">
-                            <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Ganancia Mayorista</div>
-                            <div className="text-lg font-bold text-blue-700 dark:text-blue-400">
-                              {formatCurrency((formData.wholesale_price ?? 0) - formData.purchase_price)}
-                            </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              {((formData.wholesale_price! - formData.purchase_price) / formData.wholesale_price! * 100).toFixed(1)}% margen
-                            </div>
-                          </div>
+                      <FormField
+                        control={form.control}
+                        name="images"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <ImageUploader
+                                images={field.value || []}
+                                onChange={field.onChange}
+                                maxImages={5}
+                                maxSize={5242880}
+                                disabled={isSubmitting}
+                                onUploadFiles={handleUploadFiles}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
                         )}
-
-                        {/* Ganancia en Oferta */}
-                        {formData.has_offer && (formData.offer_price ?? 0) > 0 && (
-                          <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-red-100 dark:border-red-800">
-                            <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Ganancia en Oferta</div>
-                            <div className="text-lg font-bold text-red-700 dark:text-red-400">
-                              {formatCurrency((formData.offer_price ?? 0) - formData.purchase_price)}
-                            </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              {(((formData.offer_price ?? 0) - formData.purchase_price) / ((formData.offer_price ?? 0) || 1) * 100).toFixed(1)}% margen
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Precio Promedio */}
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-purple-100 dark:border-purple-800">
-                          <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Precio Promedio</div>
-                          <div className="text-lg font-bold text-purple-700 dark:text-purple-400">
-                            {formatCurrency(
-                              [formData.sale_price, formData.wholesale_price || 0, formData.has_offer ? (formData.offer_price ?? 0) : 0]
-                                .filter(p => p > 0)
-                                .reduce((a, b) => a + b, 0) /
-                              [formData.sale_price, formData.wholesale_price || 0, formData.has_offer ? (formData.offer_price ?? 0) : 0]
-                                .filter(p => p > 0).length
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Entre precios activos</div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-
-              <TabsContent value="inventory" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                        <Warehouse className="h-4 w-4" />
-                        Stock Actual
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={formData.stock_quantity}
-                        onChange={(e) => handleInputChange('stock_quantity', parseInt(e.target.value) || 0)}
-                        placeholder="0"
-                        className={`bg-white dark:bg-slate-900 text-gray-900 dark:text-white ${errors.stock_quantity ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'}`}
                       />
-                      {errors.stock_quantity && <p className="text-sm text-red-500 mt-1">{errors.stock_quantity}</p>}
                     </CardContent>
                   </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </form>
+        </Form>
 
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                        <Package className="h-4 w-4" />
-                        Stock Mínimo
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={formData.min_stock}
-                        onChange={(e) => handleInputChange('min_stock', parseInt(e.target.value) || 0)}
-                        placeholder="0"
-                        className={`bg-white dark:bg-slate-900 text-gray-900 dark:text-white ${errors.min_stock ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'}`}
-                      />
-                      {errors.min_stock && <p className="text-sm text-red-500 mt-1">{errors.min_stock}</p>}
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Se generará una alerta cuando el stock esté por debajo de este valor
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                        <Warehouse className="h-4 w-4 text-amber-600" />
-                        Stock Máximo
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={formData.max_stock}
-                        onChange={(e) => handleInputChange('max_stock', parseInt(e.target.value) || 0)}
-                        placeholder="0"
-                        className={`bg-white dark:bg-slate-900 text-gray-900 dark:text-white ${errors.max_stock ? 'border-red-500' : 'border-gray-200 dark:border-gray-700'}`}
-                      />
-                      {errors.max_stock && <p className="text-sm text-red-500 mt-1">{errors.max_stock}</p>}
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Límite superior recomendado para este producto
-                      </p>
-                      {formData.max_stock && formData.max_stock > 0 && formData.max_stock <= formData.min_stock && (
-                        <p className="text-sm text-amber-600 mt-1">
-                          ⚠️ El stock máximo debe ser mayor al stock mínimo
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Resumen de inventario */}
-                <Card className="bg-gray-50 dark:bg-slate-800/50">
-                  <CardHeader>
-                    <CardTitle className="text-sm text-gray-900 dark:text-gray-100">Resumen de Inventario</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
-                      <span>Stock Actual:</span>
-                      <span className="font-medium text-gray-900 dark:text-white">{formData.stock_quantity} {formData.unit_measure}</span>
-                    </div>
-                    <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
-                      <span>Valor Total en Stock:</span>
-                      <span className="font-medium text-green-600 dark:text-green-400">
-                        {formatCurrency(formData.sale_price * formData.stock_quantity)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm text-gray-700 dark:text-gray-300">
-                      <span>Estado del Stock:</span>
-                      <Badge variant={
-                        formData.stock_quantity === 0 ? 'destructive' :
-                          formData.stock_quantity <= formData.min_stock ? 'secondary' : 'default'
-                      } className={
-                        formData.stock_quantity <= formData.min_stock && formData.stock_quantity > 0 
-                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' 
-                          : ''
-                      }>
-                        {formData.stock_quantity === 0 ? 'Agotado' :
-                          formData.stock_quantity <= formData.min_stock ? 'Stock Bajo' : 'En Stock'}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="images" className="space-y-4 py-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                      <Upload className="h-4 w-4" />
-                      Imágenes del Producto
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ImageUploader
-                      images={formData.images || []}
-                      onChange={(images) => handleInputChange('images', images)}
-                      maxImages={5}
-                      maxSize={5242880}
-                      disabled={loading}
-                      onUploadFiles={handleUploadFiles}
-                    />
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
-        </form>
-
-        {/* Modern Sticky Footer */}
+        {/* Footer */}
         <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-gray-800 px-8 py-4 flex justify-between items-center gap-4">
           <div className="text-sm text-gray-600 dark:text-gray-400 hidden md:block">
             {product ? 'Modificando producto existente' : 'Creando nuevo producto'}
@@ -1042,11 +1035,11 @@ export function ProductModal({
             </Button>
             <Button
               type="submit"
-              disabled={loading}
-              onClick={handleSubmit}
+              form="product-form"
+              disabled={isSubmitting}
               className="min-w-[140px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 dark:from-blue-700 dark:to-indigo-700 dark:hover:from-blue-600 dark:hover:to-indigo-600 text-white shadow-lg shadow-blue-500/30 dark:shadow-blue-900/30"
             >
-              {loading ? (
+              {isSubmitting ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                   Guardando...

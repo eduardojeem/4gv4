@@ -110,7 +110,7 @@ export function useSuppliers() {
 
             if (params?.search && params.search.trim()) {
                 const q = params.search.trim()
-                query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,contact_person.ilike.%${q}%`)
+                query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,contact_name.ilike.%${q}%`)
             }
             if (params?.status && params.status !== 'all') {
                 query = query.eq('status', params.status)
@@ -138,7 +138,7 @@ export function useSuppliers() {
             const list: Supplier[] = dbSuppliers.map((s: any) => ({
                 id: s.id,
                 name: s.name,
-                contact_person: s.contact_name || s.contact_person || '',
+                contact_name: s.contact_name || s.contact_person || '',
                 email: s.email || '',
                 phone: s.phone || '',
                 address: s.address || '',
@@ -187,12 +187,6 @@ export function useSuppliers() {
         const payload: any = {
             ...supplierData,
             updated_at: new Date().toISOString()
-        }
-        
-        // Map contact_person to contact_name
-        if (supplierData.contact_person) {
-            payload.contact_name = supplierData.contact_person
-            delete payload.contact_person
         }
         
         // Remove non-existent fields or fields managed by DB

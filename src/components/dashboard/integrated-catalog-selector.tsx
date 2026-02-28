@@ -130,7 +130,7 @@ export function IntegratedCatalogSelector({
     const newSupplier: Supplier = {
       id: crypto.randomUUID(),
       name: supplierData.name || '',
-      contact_person: supplierData.contact_person || '',
+      contact_person: supplierData.contact_name || (supplierData as any).contact_person || '',
       email: supplierData.email || '',
       phone: supplierData.phone || '',
       address: supplierData.address || '',

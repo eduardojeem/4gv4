@@ -1,7 +1,7 @@
 export interface Supplier {
   id: string
   name: string
-  contact_person: string
+  contact_name: string
   email: string
   phone: string
   address: string

@@ -1,27 +1,33 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import {
-  Building2, Mail, Phone, MapPin, Globe, Star,
-  Package, Truck, User, Sparkles, Tag, AlertCircle
-} from 'lucide-react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { Building2, User, Star, Tag, AlertCircle } from 'lucide-react'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogDescription,
+  DialogHeader,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { validateSupplier, formatValidationErrors, businessTypeLabels, statusLabels, type SupplierFormData } from '@/lib/validations/supplier'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { supplierSchema, type SupplierFormData } from '@/lib/validations/supplier'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 
 interface SupplierModalProps {
@@ -38,387 +44,440 @@ const BUSINESS_TYPES = [
   { value: 'distributor', label: 'Distribuidor' },
   { value: 'wholesaler', label: 'Mayorista' },
   { value: 'service_provider', label: 'Proveedor de Servicios' },
-  { value: 'retailer', label: 'Minorista' }
+  { value: 'retailer', label: 'Minorista' },
 ]
 
 export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading = false }: SupplierModalProps) {
   const [activeTab, setActiveTab] = useState('basic')
-  const [formData, setFormData] = useState<SupplierFormData>({
-    name: '',
-    contact_person: '',
-    email: '',
-    phone: '',
-    address: '',
-    city: '',
-    country: '',
-    postal_code: '',
-    website: '',
-    business_type: 'manufacturer',
-    status: 'pending',
-    rating: 0,
-    notes: ''
+  const [generalError, setGeneralError] = useState<string | null>(null)
+
+  const form = useForm<SupplierFormData>({
+    resolver: zodResolver(supplierSchema),
+    defaultValues: {
+      name: supplier?.name || '',
+      contact_name: supplier?.contact_name || '',
+      email: supplier?.email || '',
+      phone: supplier?.phone || '',
+      address: supplier?.address || '',
+      city: supplier?.city || '',
+      country: supplier?.country || '',
+      postal_code: supplier?.postal_code || '',
+      website: supplier?.website || '',
+      business_type: (supplier?.business_type as any) || 'manufacturer',
+      status: (supplier?.status as any) || 'pending',
+      rating: supplier?.rating || 0,
+      notes: supplier?.notes || '',
+    },
   })
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Reset form when modal opens or supplier changes
   useEffect(() => {
-    if (supplier && mode === 'edit') {
-      setFormData({
-        name: supplier.name || '',
-        contact_person: supplier.contact_person || '',
-        email: supplier.email || '',
-        phone: supplier.phone || '',
-        address: supplier.address || '',
-        city: supplier.city || '',
-        country: supplier.country || '',
-        postal_code: supplier.postal_code || '',
-        website: supplier.website || '',
-        business_type: supplier.business_type || 'manufacturer',
-        status: supplier.status || 'pending',
-        rating: supplier.rating || 0,
-        notes: supplier.notes || ''
-      })
-    } else {
-      setFormData({
-        name: '',
-        contact_person: '',
-        email: '',
-        phone: '',
-        address: '',
-        city: '',
-        country: '',
-        postal_code: '',
-        website: '',
-        business_type: 'manufacturer',
-        status: 'pending',
-        rating: 0,
-        notes: ''
-      })
-    }
-    setErrors({})
-    setActiveTab('basic')
-  }, [supplier, mode, isOpen])
-
-  const handleInputChange = (field: keyof SupplierFormData, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }))
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    // Validate form data
-    const validation = validateSupplier(formData)
-    
-    if (!validation.success) {
-      const formattedErrors = formatValidationErrors(validation.errors)
-      setErrors(formattedErrors)
+    if (isOpen) {
+      setGeneralError(null)
+      setActiveTab('basic')
       
-      // Switch to the tab with the first error
-      const firstErrorField = Object.keys(formattedErrors)[0]
-      if (['name', 'contact_person', 'email', 'phone'].includes(firstErrorField)) {
-        setActiveTab('basic')
-      } else if (['address', 'city', 'country', 'postal_code', 'website'].includes(firstErrorField)) {
-        setActiveTab('contact')
-      } else {
-        setActiveTab('business')
+      const values: SupplierFormData = {
+        name: supplier?.name || '',
+        contact_name: supplier?.contact_name || '',
+        email: supplier?.email || '',
+        phone: supplier?.phone || '',
+        address: supplier?.address || '',
+        city: supplier?.city || '',
+        country: supplier?.country || '',
+        postal_code: supplier?.postal_code || '',
+        website: supplier?.website || '',
+        business_type: (supplier?.business_type as any) || 'manufacturer',
+        status: (supplier?.status as any) || 'pending',
+        rating: supplier?.rating || 0,
+        notes: supplier?.notes || '',
       }
-      
-      return
+      form.reset(values)
     }
+  }, [isOpen, supplier, mode, form])
 
+  const onSubmit = async (data: SupplierFormData) => {
+    setGeneralError(null)
     try {
-      setIsSubmitting(true)
-      await onSave(validation.data)
+      await onSave(data)
       onClose()
     } catch (error) {
       console.error('Error saving supplier:', error)
-      // Handle specific database errors
       if (error instanceof Error) {
-        if (error.message.includes('duplicate key') || error.message.includes('23505')) {
-          setErrors({ email: 'Ya existe un proveedor con este email' })
-          setActiveTab('basic')
+        // Handle specific Supabase/Hook errors
+        if (error.message.includes('duplicate key') || error.message.includes('23505') || error.message.includes('Ya existe')) {
+          form.setError('email', { 
+            type: 'manual', 
+            message: 'Ya existe un proveedor con este email o nombre.' 
+          })
+          setGeneralError('Ya existe un proveedor con estos datos. Por favor verifica el email.')
+          setActiveTab('contact')
         } else {
-          setErrors({ general: 'Error al guardar el proveedor. Intenta nuevamente.' })
+          setGeneralError(error.message || 'Error al guardar el proveedor. Intenta nuevamente.')
         }
+      } else {
+        setGeneralError('Error desconocido al guardar el proveedor.')
       }
-    } finally {
-      setIsSubmitting(false)
+    }
+  }
+
+  // Handle form validation errors to switch tabs
+  const onError = (errors: any) => {
+    const errorFields = Object.keys(errors)
+    if (errorFields.length > 0) {
+      const firstErrorField = errorFields[0]
+      if (['name', 'business_type', 'status', 'rating'].includes(firstErrorField)) {
+        setActiveTab('basic')
+      } else if (['contact_name', 'email', 'phone', 'address', 'city', 'country', 'postal_code', 'website'].includes(firstErrorField)) {
+        setActiveTab('contact')
+      } else if (['notes'].includes(firstErrorField)) {
+        setActiveTab('additional')
+      }
     }
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-        <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center gap-4 pb-6 border-b">
-            <div className="p-3 bg-primary/10 rounded-lg">
-              <Building2 className="h-6 w-6 text-primary" />
-            </div>
-            <div className="flex-1">
-              <DialogTitle className="text-2xl font-bold">
-                {mode === 'add' ? 'Nuevo Proveedor' : 'Editar Proveedor'}
-              </DialogTitle>
-              <DialogDescription>
-                {mode === 'add' ? 'Agregar un nuevo proveedor al sistema' : `Editar: ${supplier?.name}`}
-              </DialogDescription>
-            </div>
+    <Dialog open={isOpen} onOpenChange={(open) => !loading && !form.formState.isSubmitting && onClose()}>
+      <DialogContent className="max-w-4xl w-[95vw] h-[90vh] p-0 overflow-hidden gap-0">
+        <DialogHeader className="px-6 py-5 border-b shrink-0 flex flex-row items-center space-y-0 gap-4">
+          <div className="p-3 bg-primary/10 rounded-lg">
+            <Building2 className="h-6 w-6 text-primary" />
           </div>
+          <div className="flex-1">
+            <DialogTitle className="text-2xl font-bold">
+              {mode === 'add' ? 'Nuevo Proveedor' : 'Editar Proveedor'}
+            </DialogTitle>
+            <DialogDescription>
+              {mode === 'add' ? 'Agregar un nuevo proveedor al sistema' : `Editar: ${supplier?.name}`}
+            </DialogDescription>
+          </div>
+        </DialogHeader>
 
-          {/* General Error Alert */}
-          {errors.general && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{errors.general}</AlertDescription>
-            </Alert>
-          )}
+        {generalError && (
+          <Alert variant="destructive" className="mx-6 mt-4 shrink-0">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{generalError}</AlertDescription>
+          </Alert>
+        )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="flex-1 overflow-hidden">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="basic" className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Básico
-                  {(errors.name || errors.business_type || errors.status) && (
-                    <span className="w-2 h-2 rounded-full bg-red-500" />
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="contact" className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Contacto
-                  {(errors.contact_person || errors.email || errors.phone) && (
-                    <span className="w-2 h-2 rounded-full bg-red-500" />
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="additional" className="flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
-                  Adicional
-                </TabsTrigger>
-              </TabsList>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit, onError)} className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-hidden px-6 pt-2">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-full min-h-0 flex-col">
+                <TabsList className="grid w-full grid-cols-3 shrink-0 mb-2">
+                  <TabsTrigger value="basic" className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Básico
+                    {form.formState.errors.name || form.formState.errors.business_type || form.formState.errors.status ? (
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                    ) : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="contact" className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Contacto
+                    {form.formState.errors.contact_name || form.formState.errors.email || form.formState.errors.phone ? (
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                    ) : null}
+                  </TabsTrigger>
+                  <TabsTrigger value="additional" className="flex items-center gap-2">
+                    <Tag className="h-4 w-4" />
+                    Adicional
+                  </TabsTrigger>
+                </TabsList>
 
-              <div className="flex-1 overflow-y-auto py-6">
-                {/* Basic Information */}
-                <TabsContent value="basic" className="space-y-6 mt-0">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Nombre del Proveedor *</Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => handleInputChange('name', e.target.value)}
-                        placeholder="Ej: Distribuidora ABC"
-                        className={errors.name ? 'border-red-500' : ''}
-                      />
-                      {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
-                    </div>
+                <div className="flex-1 min-h-0 overflow-hidden py-4">
+                  <TabsContent value="basic" className="h-full mt-0 data-[state=active]:flex flex-col">
+                    <ScrollArea className="h-full pr-4">
+                      <div className="space-y-6 pb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <FormField
+                            control={form.control}
+                            name="name"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Nombre del Proveedor *</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Ej: Distribuidora ABC" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2">
-                      <Label htmlFor="business_type">Tipo de Negocio</Label>
-                      <Select
-                        value={formData.business_type}
-                        onValueChange={(value) => handleInputChange('business_type', value as any)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {BUSINESS_TYPES.map(type => (
-                            <SelectItem key={type.value} value={type.value}>
-                              {type.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                          <FormField
+                            control={form.control}
+                            name="business_type"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Tipo de Negocio *</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Selecciona un tipo" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {BUSINESS_TYPES.map((type) => (
+                                      <SelectItem key={type.value} value={type.value}>
+                                        {type.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2">
-                      <Label htmlFor="status">Estado</Label>
-                      <Select
-                        value={formData.status}
-                        onValueChange={(value) => handleInputChange('status', value as any)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="active">Activo</SelectItem>
-                          <SelectItem value="inactive">Inactivo</SelectItem>
-                          <SelectItem value="pending">Pendiente</SelectItem>
-                          <SelectItem value="suspended">Suspendido</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                          <FormField
+                            control={form.control}
+                            name="status"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Estado</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Selecciona un estado" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="active">Activo</SelectItem>
+                                    <SelectItem value="inactive">Inactivo</SelectItem>
+                                    <SelectItem value="pending">Pendiente</SelectItem>
+                                    <SelectItem value="suspended">Suspendido</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2">
-                      <Label>Calificación</Label>
-                      <div className="flex items-center gap-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button
-                            key={star}
-                            type="button"
-                            onClick={() => handleInputChange('rating', star)}
-                            className="focus:outline-none"
-                          >
-                            <Star
-                              className={`h-5 w-5 ${
-                                star <= formData.rating
-                                  ? 'fill-yellow-400 text-yellow-400'
-                                  : 'text-gray-300 hover:text-yellow-400'
-                              }`}
-                            />
-                          </button>
-                        ))}
-                        <span className="ml-2 text-sm text-muted-foreground">{formData.rating}/5</span>
+                          <FormField
+                            control={form.control}
+                            name="rating"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Calificación</FormLabel>
+                                <FormControl>
+                                  <div className="flex items-center gap-1">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                      <button
+                                        key={star}
+                                        type="button"
+                                        onClick={() => field.onChange(star)}
+                                        className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                                      >
+                                        <Star
+                                          className={`h-5 w-5 ${
+                                            star <= field.value
+                                              ? 'fill-yellow-400 text-yellow-400'
+                                              : 'text-gray-300 hover:text-yellow-400'
+                                          }`}
+                                        />
+                                      </button>
+                                    ))}
+                                    <span className="ml-2 text-sm text-muted-foreground">{field.value}/5</span>
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </TabsContent>
+                    </ScrollArea>
+                  </TabsContent>
 
-                {/* Contact Information */}
-                <TabsContent value="contact" className="space-y-6 mt-0">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="contact_person">Nombre del Contacto *</Label>
-                      <Input
-                        id="contact_person"
-                        value={formData.contact_person}
-                        onChange={(e) => handleInputChange('contact_person', e.target.value)}
-                        placeholder="Juan Pérez"
-                        className={errors.contact_person ? 'border-red-500' : ''}
-                      />
-                      {errors.contact_person && <p className="text-sm text-red-500">{errors.contact_person}</p>}
-                    </div>
+                  <TabsContent value="contact" className="h-full mt-0 data-[state=active]:flex flex-col">
+                    <ScrollArea className="h-full pr-4">
+                      <div className="space-y-6 pb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <FormField
+                            control={form.control}
+                            name="contact_name"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Nombre del Contacto *</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Juan Pérez" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email *</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => handleInputChange('email', e.target.value)}
-                        placeholder="contacto@empresa.com"
-                        className={errors.email ? 'border-red-500' : ''}
-                      />
-                      {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
-                    </div>
+                          <FormField
+                            control={form.control}
+                            name="email"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Email *</FormLabel>
+                                <FormControl>
+                                  <Input type="email" placeholder="contacto@empresa.com" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Teléfono *</Label>
-                      <Input
-                        id="phone"
-                        value={formData.phone}
-                        onChange={(e) => handleInputChange('phone', e.target.value)}
-                        placeholder="+1 234 567 8900"
-                        className={errors.phone ? 'border-red-500' : ''}
-                      />
-                      {errors.phone && <p className="text-sm text-red-500">{errors.phone}</p>}
-                    </div>
+                          <FormField
+                            control={form.control}
+                            name="phone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Teléfono *</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="+1 234 567 8900" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2">
-                      <Label htmlFor="website">Sitio Web</Label>
-                      <Input
-                        id="website"
-                        value={formData.website}
-                        onChange={(e) => handleInputChange('website', e.target.value)}
-                        placeholder="https://www.empresa.com"
-                        className={errors.website ? 'border-red-500' : ''}
-                      />
-                      {errors.website && <p className="text-sm text-red-500">{errors.website}</p>}
-                    </div>
+                          <FormField
+                            control={form.control}
+                            name="website"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Sitio Web</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="https://www.empresa.com" {...field} value={field.value || ''} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="address">Dirección</Label>
-                      <Input
-                        id="address"
-                        value={formData.address}
-                        onChange={(e) => handleInputChange('address', e.target.value)}
-                        placeholder="Calle Principal 123"
-                      />
-                    </div>
+                          <FormField
+                            control={form.control}
+                            name="address"
+                            render={({ field }) => (
+                              <FormItem className="md:col-span-2">
+                                <FormLabel>Dirección</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Calle Principal 123" {...field} value={field.value || ''} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2">
-                      <Label htmlFor="city">Ciudad</Label>
-                      <Input
-                        id="city"
-                        value={formData.city}
-                        onChange={(e) => handleInputChange('city', e.target.value)}
-                        placeholder="Ciudad"
-                      />
-                    </div>
+                          <FormField
+                            control={form.control}
+                            name="city"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Ciudad</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Ciudad" {...field} value={field.value || ''} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2">
-                      <Label htmlFor="country">País</Label>
-                      <Input
-                        id="country"
-                        value={formData.country}
-                        onChange={(e) => handleInputChange('country', e.target.value)}
-                        placeholder="País"
-                      />
-                    </div>
+                          <FormField
+                            control={form.control}
+                            name="country"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>País</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="País" {...field} value={field.value || ''} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                    <div className="space-y-2">
-                      <Label htmlFor="postal_code">Código Postal</Label>
-                      <Input
-                        id="postal_code"
-                        value={formData.postal_code}
-                        onChange={(e) => handleInputChange('postal_code', e.target.value)}
-                        placeholder="12345"
-                      />
-                    </div>
-                  </div>
-                </TabsContent>
+                          <FormField
+                            control={form.control}
+                            name="postal_code"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Código Postal</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="12345" {...field} value={field.value || ''} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
 
-                {/* Additional Information */}
-                <TabsContent value="additional" className="space-y-6 mt-0">
-                  <div className="space-y-2">
-                    <Label htmlFor="notes">Notas Internas</Label>
-                    <Textarea
-                      id="notes"
-                      value={formData.notes}
-                      onChange={(e) => handleInputChange('notes', e.target.value)}
-                      placeholder="Escribe aquí cualquier nota relevante sobre este proveedor..."
-                      rows={6}
-                      className="resize-none"
-                    />
-                    {errors.notes && <p className="text-sm text-red-500">{errors.notes}</p>}
-                  </div>
-                </TabsContent>
-              </div>
-            </Tabs>
+                  <TabsContent value="additional" className="h-full mt-0 data-[state=active]:flex flex-col">
+                    <ScrollArea className="h-full pr-4">
+                      <div className="space-y-6 pb-6">
+                        <FormField
+                          control={form.control}
+                          name="notes"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Notas Internas</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="Escribe aquí cualquier nota relevante sobre este proveedor..."
+                                  rows={6}
+                                  className="resize-none"
+                                  {...field}
+                                  value={field.value || ''}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="status"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center justify-between border rounded-lg p-4">
+                              <div className="space-y-0.5">
+                                <FormLabel className="text-base">Proveedor activo</FormLabel>
+                                <DialogDescription>
+                                  Habilita o deshabilita este proveedor en el sistema
+                                </DialogDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value === 'active'}
+                                  onCheckedChange={(checked) => field.onChange(checked ? 'active' : 'inactive')}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                </div>
+              </Tabs>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 border-t shrink-0 bg-background">
+              <Button type="button" variant="outline" onClick={onClose} disabled={loading || form.formState.isSubmitting}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={loading || form.formState.isSubmitting}>
+                {loading || form.formState.isSubmitting ? (
+                  <>
+                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Building2 className="h-4 w-4 mr-2" />
+                    {mode === 'add' ? 'Crear Proveedor' : 'Actualizar Proveedor'}
+                  </>
+                )}
+              </Button>
+            </div>
           </form>
-
-          {/* Footer */}
-          <div className="flex justify-end gap-3 pt-6 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={loading || isSubmitting}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              onClick={handleSubmit}
-              disabled={loading || isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="animate-spin mr-2">⏳</span> Guardando...
-                </>
-              ) : (
-                <>
-                  <Building2 className="h-4 w-4 mr-2" />
-                  {mode === 'add' ? 'Crear Proveedor' : 'Actualizar Proveedor'}
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
+        </Form>
       </DialogContent>
     </Dialog>
   )

@@ -3,7 +3,7 @@ import type { Supplier as DomainSupplier } from '@/lib/types/supplier'
 export type UISupplier = Pick<DomainSupplier,
   | 'id'
   | 'name'
-  | 'contact_person'
+  | 'contact_name'
   | 'email'
   | 'phone'
   | 'address'

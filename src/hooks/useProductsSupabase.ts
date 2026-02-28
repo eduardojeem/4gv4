@@ -441,11 +441,11 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       if (error) throw error
 
-      // Refrescar datos
-      await Promise.all([
+      // Refrescar datos en segundo plano
+      Promise.all([
         fetchProducts(),
         fetchDashboardStats()
-      ])
+      ]).catch(err => console.error('Error refreshing data after create:', err))
 
       return { success: true, data }
     } catch (err) {
@@ -472,11 +472,11 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       if (error) throw error
 
-      // Refrescar datos
-      await Promise.all([
+      // Refrescar datos en segundo plano
+      Promise.all([
         fetchProducts(),
         fetchDashboardStats()
-      ])
+      ]).catch(err => console.error('Error refreshing data after update:', err))
 
       return { success: true, data }
     } catch (err) {
@@ -502,11 +502,11 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       if (error) throw error
 
-      // Refrescar datos
-      await Promise.all([
+      // Refrescar datos en segundo plano
+      Promise.all([
         fetchProducts(),
         fetchDashboardStats()
-      ])
+      ]).catch(err => console.error('Error refreshing data after delete:', err))
 
       return { success: true }
     } catch (err) {

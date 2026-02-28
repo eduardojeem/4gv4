@@ -424,19 +424,34 @@ export default function ProductsPage() {
           brands={brands as any}
           suppliers={suppliers as any}
           onSave={async (data) => {
+            const normalizedData = {
+              ...data,
+              category_id: data.category_id || null,
+              brand_id: data.brand_id || null,
+              supplier_id: data.supplier_id || null,
+              brand: data.brand?.trim() ? data.brand.trim() : null,
+              description: data.description?.trim() ? data.description.trim() : null,
+              barcode: data.barcode?.trim() ? data.barcode.trim() : null,
+              unit_measure: data.unit_measure?.trim() ? data.unit_measure.trim() : 'unidad',
+              wholesale_price: (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
+              has_offer: Boolean(data.has_offer),
+              offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
+              images: Array.isArray(data.images) ? data.images.filter(Boolean) : []
+            }
+
             // Transform dimensions to ensure compatibility
             const transformedData = {
-              ...data,
-              dimensions: data.dimensions && typeof data.dimensions === 'object' 
-                ? JSON.stringify(data.dimensions)
-                : data.dimensions
+              ...normalizedData,
+              dimensions: normalizedData.dimensions && typeof normalizedData.dimensions === 'object' 
+                ? JSON.stringify(normalizedData.dimensions)
+                : normalizedData.dimensions
             }
             
             if (editingProduct) {
               // Convertir ProductFormData a formato compatible con Supabase
               const updateData: Database['public']['Tables']['products']['Update'] = {
-                ...data,
-                dimensions: data.dimensions ? JSON.stringify(data.dimensions) : null
+                ...transformedData,
+                dimensions: transformedData.dimensions ? transformedData.dimensions : null
               }
               const result = await updateProduct(editingProduct.id, updateData)
               if (result.success) {
@@ -448,9 +463,9 @@ export default function ProductsPage() {
               }
             } else {
               const insertData: Database['public']['Tables']['products']['Insert'] = {
-                ...data,
-                dimensions: data.dimensions ? JSON.stringify(data.dimensions) : null,
-                sku: data.sku // Ensure SKU is present
+                ...transformedData,
+                dimensions: transformedData.dimensions ? transformedData.dimensions : null,
+                sku: normalizedData.sku // Ensure SKU is present
               }
               const result = await createProduct(insertData)
               if (result.success) {
