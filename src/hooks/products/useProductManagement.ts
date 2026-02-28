@@ -470,7 +470,13 @@ export function useProductManagement(
 
   // Filtros avanzados
   const applyAdvancedFilters = useCallback((newFilters: ProductFilters) => {
-    setFilters(newFilters)
+    const normalizedFilters = {
+      ...newFilters,
+      stockStatus: Array.isArray(newFilters.stockStatus)
+        ? (newFilters.stockStatus[0] as 'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | undefined) ?? 'all'
+        : newFilters.stockStatus
+    }
+    setFilters(normalizedFilters)
     setPagination(prev => ({ ...prev, page: 1 })) // Reset a primera página
   }, [setFilters, setPagination])
 

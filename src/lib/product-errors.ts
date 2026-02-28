@@ -4,6 +4,7 @@
  */
 
 import { NotificationError, ErrorType, createError } from './error-handling';
+import { useCallback } from 'react';
 
 // Códigos de error específicos para productos
 export const PRODUCT_ERROR_CODES = {
@@ -434,7 +435,7 @@ Error Summary:
 
 // Hook específico para manejo de errores de productos
 export const useProductErrorHandler = () => {
-  const handleProductError = (error: unknown, context?: string): ProductError => {
+  const handleProductError = useCallback((error: unknown, context?: string): ProductError => {
     if (error instanceof ProductError) {
       return error;
     }
@@ -474,7 +475,7 @@ export const useProductErrorHandler = () => {
         retryable: false,
       }
     );
-  };
+  }, []);
 
   return {
     handleProductError,

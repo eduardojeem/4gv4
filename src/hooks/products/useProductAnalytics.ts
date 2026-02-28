@@ -93,12 +93,13 @@ export function useProductAnalytics(
   const supabase = createClient() as SupabaseClient<Database>
   const { handleProductError } = useProductErrorHandler()
 
-  // Cargar movimientos y alertas si están configurados
-  useEffect(() => {
-    if (config.includeMovements || config.includeAlerts) {
-      loadAnalyticsData()
-    }
-  }, [config.includeMovements, config.includeAlerts, config.dateRange, loadAnalyticsData])
+  // Stabilize config to prevent infinite loops
+  const stableConfig = useMemo(() => config, [
+    config.includeMovements,
+    config.includeAlerts,
+    config.dateRange?.start?.getTime(),
+    config.dateRange?.end?.getTime()
+  ])
 
   // Validar configuración de análisis
   const validateAnalyticsConfig = useCallback((config: AnalyticsConfig): boolean => {
@@ -137,12 +138,12 @@ export function useProductAnalytics(
       setLastError(null)
 
       // Validar configuración de análisis
-      if (!validateAnalyticsConfig(config)) {
+      if (!validateAnalyticsConfig(stableConfig)) {
         return
       }
 
       // Después de validación, dateRange está garantizado de existir
-      const dateRange = config.dateRange!
+      const dateRange = stableConfig.dateRange!
 
       // Validar productos
       if (!Array.isArray(products)) {
@@ -160,7 +161,7 @@ export function useProductAnalytics(
       const promises = []
 
       // Cargar movimientos si está habilitado
-      if (config.includeMovements) {
+      if (stableConfig.includeMovements) {
         const movementsQuery = supabase
           .from('product_movements')
           .select('*')
@@ -180,7 +181,7 @@ export function useProductAnalytics(
       }
 
       // Cargar alertas si está habilitado
-      if (config.includeAlerts) {
+      if (stableConfig.includeAlerts) {
         const alertsQuery = supabase
           .from('product_alerts')
           .select('*')
@@ -235,7 +236,14 @@ export function useProductAnalytics(
     } finally {
       setLoading(false)
     }
-  }, [products, config, supabase, handleProductError, recordMetric, validateAnalyticsConfig])
+  }, [products, stableConfig, supabase, handleProductError, recordMetric, validateAnalyticsConfig])
+
+  // Cargar movimientos y alertas si están configurados
+  useEffect(() => {
+    if (stableConfig.includeMovements || stableConfig.includeAlerts) {
+      loadAnalyticsData()
+    }
+  }, [stableConfig.includeMovements, stableConfig.includeAlerts, stableConfig.dateRange, loadAnalyticsData])
 
   // Estadísticas básicas del dashboard con optimización
   const dashboardStats: DashboardStats = useAdvancedMemoization(() => {

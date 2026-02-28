@@ -5,8 +5,6 @@ import { useDebounce } from '@/hooks/use-debounce'
 import { useProductErrorHandler, createProductError, ProductError } from '@/lib/product-errors'
 import {
   usePerformanceMetrics,
-  useAdvancedMemoization,
-  useOptimizedDebounce,
   PerformanceUtils,
   DEFAULT_PERFORMANCE_CONFIG,
   type PerformanceConfig
@@ -32,6 +30,7 @@ export function useProductFiltering(
     () => (Array.isArray(arg1) ? arg1 : (arg1?.products ?? [])),
     [arg1]
   )
+  
   const onFiltersChange = Array.isArray(arg1) ? undefined : arg1?.onFiltersChange
   const [filters, setFilters] = useState<ProductFilters>({
     search: initialFilters.search ?? '',
@@ -48,12 +47,8 @@ export function useProductFiltering(
 
   // Hooks de rendimiento
   const { recordMetric, getMetrics, clearMetrics } = usePerformanceMetrics()
-  // useAdvancedMemoization returns the memoized function directly, not an object with memoize/clear
-  // We'll use a ref to store the clear function if needed, or just rely on the hook's internal behavior
-  // For now, removing the destructuring that caused the error
   const clearMemoization = useCallback(() => {
-    // Implementation would depend on exposing clear from the hook, which we added to the returned function
-    // But for now, let's just leave it empty or use the property we added to the function
+    // Placeholder for API compatibility
   }, [])
 
   const { handleProductError } = useProductErrorHandler()
@@ -170,232 +165,191 @@ export function useProductFiltering(
     }
   }, [handleProductError])
 
-  // Aplicar filtros de búsqueda con memoización avanzada
-  const searchFilteredProducts = useAdvancedMemoization(
-    (productsArg: any, searchTerm: string, config: SearchConfig = { fields: ['name', 'sku', 'description'], minLength: 2, debounceMs: 300 }) => {
-      const startTime = performance.now()
-      const products = productsArg as Product[]
+  // Aplicar filtros de búsqueda con useMemo
+  const searchFilteredProducts = useMemo(() => {
+    const startTime = performance.now()
+    const config: SearchConfig = { fields: ['name', 'sku', 'description'], minLength: 2, debounceMs: 300 }
+    
+    try {
+      setLastError(null)
 
-      try {
-        setLastError(null)
-
-        // Validar configuración de búsqueda
-        validateSearchConfig(config)
-
-        // Validar productos
-        if (!Array.isArray(products)) {
-          throw createProductError.invalidProductData({ products }, ['all'])
-        }
-
-        if (!searchTerm || searchTerm.length < (config.minLength ?? 2)) {
-          recordMetric({
-            operationName: 'search_filtering',
-            duration: performance.now() - startTime,
-            timestamp: Date.now(),
-            itemCount: products.length
-          })
-          return products
-        }
-
-        let results
-        if (products.length > (performanceConfig.optimization?.largeDatasetThreshold || 1000)) {
-          // Para datasets grandes, usar procesamiento en chunks
-          results = PerformanceUtils.processArrayAsync(
-            products,
-            (product) => {
-              // Process individual product
-              const matches = config.fields.some(field => {
-                const value = product[field as keyof Product]
-                if (typeof value === 'string') {
-                  return fuzzyMatch(value.toLowerCase(), searchTerm.toLowerCase())
-                }
-                return false
-              })
-              return matches ? product : null
-            },
-            performanceConfig.optimization?.chunkSize || 100
-          ).then(items => items.filter((item): item is Product => item !== null))
-        } else {
-          results = products.filter(product =>
-            config.fields.some(field => {
-              const value = product[field as keyof Product]
-              if (typeof value === 'string') {
-                return fuzzyMatch(value.toLowerCase(), searchTerm.toLowerCase())
-              }
-              return false
-            })
-          )
-        }
-
-        const duration = performance.now() - startTime
-        recordMetric({
-          operationName: 'search_filtering',
-          duration,
-          timestamp: Date.now(),
-          itemCount: products.length
-        })
-
-        if (duration > (performanceConfig.optimization?.slowOperationThreshold || 100)) {
-          console.warn(`Búsqueda lenta: ${duration}ms para ${products.length} productos`)
-        }
-
-        return results
-      } catch (error) {
-        const productError = createProductError.filterParseError(
-          { searchTerm, config },
-          error instanceof Error ? error.message : 'Unknown error'
-        )
-
-        handleProductError(productError)
-        setLastError(productError)
-        return products
-      }
-    },
-    [handleProductError],
-    { ttl: performanceConfig.memoization?.ttl }
-  )(productsStable, debouncedSearch, { fields: ['name', 'sku', 'description'], minLength: 2, debounceMs: 300 })
-
-  // Aplicar filtros básicos con memoización optimizada
-  const basicFilteredProducts = useAdvancedMemoization(
-    () => {
-      const startTime = performance.now()
-      let result = searchFilteredProducts
-
-      if (filters.category) {
-        result = result.filter((product: Product) => product.category === filters.category)
+      if (!Array.isArray(productsStable)) {
+        throw createProductError.invalidProductData({ products: productsStable }, ['all'])
       }
 
-      if (filters.supplier) {
-        result = result.filter((product: Product) => product.supplier === filters.supplier)
+      if (!debouncedSearch || debouncedSearch.length < (config.minLength ?? 2)) {
+        console.log('Returning productsStable because no search:', productsStable.length)
+        return productsStable
       }
 
-      if (filters.stockStatus && filters.stockStatus !== 'all') {
-        result = result.filter((product: Product) => {
-          const checkStatus = (status: string) => {
-            switch (status) {
-              case 'in_stock':
-                return product.stock_quantity > 0
-              case 'low_stock':
-                return product.stock_quantity > 0 && product.stock_quantity <= (product.min_stock || 10)
-              case 'out_of_stock':
-                return product.stock_quantity === 0
-              default:
-                return true
-            }
+      const results = productsStable.filter(product =>
+        config.fields.some(field => {
+          const value = product[field as keyof Product]
+          if (typeof value === 'string') {
+            return fuzzyMatch(value.toLowerCase(), debouncedSearch.toLowerCase())
           }
-
-          if (Array.isArray(filters.stockStatus)) {
-            if (filters.stockStatus.length === 0) return true
-            return filters.stockStatus.some(checkStatus)
-          }
-
-          return checkStatus(filters.stockStatus as string)
+          return false
         })
-      }
-
-      if (filters.marginStatus && filters.marginStatus.length > 0) {
-        result = result.filter((product: Product) => {
-          const margin = product.margin_percentage || ((product.sale_price - product.purchase_price) / product.sale_price) * 100 || 0
-          return filters.marginStatus!.some(status => {
-            switch (status) {
-              case 'low': return margin < 10
-              case 'medium': return margin >= 10 && margin < 20
-              case 'good': return margin >= 20 && margin < 50
-              case 'high': return margin >= 50
-              default: return false
-            }
-          })
-        })
-      }
-
-      if (typeof filters.isActive === 'boolean') {
-        result = result.filter((product: Product) => product.is_active === filters.isActive)
-      }
-
-      if (typeof filters.featured === 'boolean') {
-        result = result.filter((product: Product) => product.featured === filters.featured)
-      }
-
-      if (filters.priceRange) {
-        result = result.filter((product: Product) =>
-          product.sale_price >= filters.priceRange!.min &&
-          product.sale_price <= filters.priceRange!.max
-        )
-      }
+      )
 
       const duration = performance.now() - startTime
       recordMetric({
-        operationName: 'basic_filtering',
+        operationName: 'search_filtering',
         duration,
         timestamp: Date.now(),
-        itemCount: result.length
+        itemCount: productsStable.length
       })
 
-      return result
-    },
-    [searchFilteredProducts, filters],
-    { ttl: performanceConfig.memoization?.ttl }
-  )
+      return results
+    } catch (error) {
+      const productError = createProductError.filterParseError(
+        { searchTerm: debouncedSearch, config },
+        error instanceof Error ? error.message : 'Unknown error'
+      )
 
-  // Aplicar filtros avanzados con memoización optimizada
-  const filteredProducts = useAdvancedMemoization(
-    () => {
-      const startTime = performance.now()
-      let result = basicFilteredProducts
+      handleProductError(productError)
+      setLastError(productError)
+      return productsStable
+    }
+  }, [productsStable, debouncedSearch, fuzzyMatch, handleProductError, recordMetric])
 
-      // Filtros de rango de precio avanzados
-      if (advancedFilters.priceRange) {
-        result = result.filter((product: Product) =>
-          product.sale_price >= advancedFilters.priceRange!.min &&
-          product.sale_price <= advancedFilters.priceRange!.max
-        )
-      }
+  // Aplicar filtros básicos con useMemo
+  const basicFilteredProducts = useMemo(() => {
+    const startTime = performance.now()
+    let result = searchFilteredProducts
 
-      // Filtros de stock
-      if (advancedFilters.stockRange) {
-        result = result.filter((product: Product) =>
-          product.stock_quantity >= advancedFilters.stockRange!.min &&
-          product.stock_quantity <= advancedFilters.stockRange!.max
-        )
-      }
+    if (filters.category) {
+      result = result.filter((product: Product) => 
+        (product as any).category_id === filters.category || 
+        (product.category && product.category.id === filters.category) ||
+        (product as any).category === filters.category
+      )
+    }
 
-      // Filtros de margen
-      if (advancedFilters.marginRange) {
-        result = result.filter((product: Product) => {
-          const margin = ((product.sale_price - product.purchase_price) / product.sale_price) * 100
-          return margin >= advancedFilters.marginRange!.min &&
-            margin <= advancedFilters.marginRange!.max
-        })
-      }
+    if (filters.supplier) {
+      result = result.filter((product: Product) => 
+        (product as any).supplier_id === filters.supplier ||
+        (product.supplier && product.supplier.id === filters.supplier) ||
+        (product as any).supplier === filters.supplier
+      )
+    }
 
-      // Filtros de fecha
-      if (advancedFilters.dateRange) {
-        result = result.filter((product: Product) => {
-          const productDate = new Date(product.created_at)
-          const start = advancedFilters.dateRange?.start
-          const end = advancedFilters.dateRange?.end
-          return (start ? productDate >= start : true) &&
-            (end ? productDate <= end : true)
-        })
-      }
+    if (filters.stockStatus && filters.stockStatus !== 'all') {
+      result = result.filter((product: Product) => {
+        const checkStatus = (status: string) => {
+          switch (status) {
+            case 'in_stock':
+              return product.stock_quantity > 0
+            case 'low_stock':
+              return product.stock_quantity > 0 && product.stock_quantity <= (product.min_stock || 10)
+            case 'out_of_stock':
+              return product.stock_quantity === 0
+            default:
+              return true
+          }
+        }
 
-      const duration = performance.now() - startTime
-      recordMetric({
-        operationName: 'advanced_filtering',
-        duration,
-        timestamp: Date.now(),
-        itemCount: result.length
+        if (Array.isArray(filters.stockStatus)) {
+          if (filters.stockStatus.length === 0) return true
+          return filters.stockStatus.some(checkStatus)
+        }
+
+        return checkStatus(filters.stockStatus as string)
       })
+    }
 
-      if (duration > (performanceConfig.optimization?.slowOperationThreshold || 100)) {
-        console.warn(`Filtrado avanzado lento: ${duration}ms para ${basicFilteredProducts.length} productos`)
-      }
+    if (filters.marginStatus && filters.marginStatus.length > 0) {
+      result = result.filter((product: Product) => {
+        const margin = product.margin_percentage || ((product.sale_price - product.purchase_price) / product.sale_price) * 100 || 0
+        return filters.marginStatus!.some(status => {
+          switch (status) {
+            case 'low': return margin < 10
+            case 'medium': return margin >= 10 && margin < 20
+            case 'good': return margin >= 20 && margin < 50
+            case 'high': return margin >= 50
+            default: return false
+          }
+        })
+      })
+    }
 
-      return result
-    },
-    [basicFilteredProducts, advancedFilters],
-    { ttl: performanceConfig.memoization?.ttl }
-  )
+    if (typeof filters.isActive === 'boolean') {
+      result = result.filter((product: Product) => product.is_active === filters.isActive)
+    }
+
+    if (typeof filters.featured === 'boolean') {
+      result = result.filter((product: Product) => product.featured === filters.featured)
+    }
+
+    if (filters.priceRange) {
+      result = result.filter((product: Product) =>
+        product.sale_price >= filters.priceRange!.min &&
+        product.sale_price <= filters.priceRange!.max
+      )
+    }
+
+    const duration = performance.now() - startTime
+    recordMetric({
+      operationName: 'basic_filtering',
+      duration,
+      timestamp: Date.now(),
+      itemCount: result.length
+    })
+
+    return result
+  }, [searchFilteredProducts, filters, recordMetric])
+
+  // Aplicar filtros avanzados con useMemo
+  const filteredProducts = useMemo(() => {
+    const startTime = performance.now()
+    let result = basicFilteredProducts
+
+    // Filtros de rango de precio avanzados
+    if (advancedFilters.priceRange && advancedFilters.priceRange.max > 0) {
+      result = result.filter((product: Product) =>
+        product.sale_price >= advancedFilters.priceRange!.min &&
+        product.sale_price <= advancedFilters.priceRange!.max
+      )
+    }
+
+    // Filtros de stock
+    if (advancedFilters.stockRange && advancedFilters.stockRange.max > 0) {
+      result = result.filter((product: Product) =>
+        product.stock_quantity >= advancedFilters.stockRange!.min &&
+        product.stock_quantity <= advancedFilters.stockRange!.max
+      )
+    }
+
+    // Filtros de margen
+    if (advancedFilters.marginRange && advancedFilters.marginRange.max > 0) {
+      result = result.filter((product: Product) => {
+        const margin = ((product.sale_price - product.purchase_price) / product.sale_price) * 100
+        return margin >= advancedFilters.marginRange!.min &&
+          margin <= advancedFilters.marginRange!.max
+      })
+    }
+
+    // Filtros de fecha
+    if (advancedFilters.dateRange) {
+      result = result.filter((product: Product) => {
+        const productDate = new Date(product.created_at)
+        const start = advancedFilters.dateRange?.start
+        const end = advancedFilters.dateRange?.end
+        return (start ? productDate >= start : true) &&
+          (end ? productDate <= end : true)
+      })
+    }
+
+    const duration = performance.now() - startTime
+    recordMetric({
+      operationName: 'advanced_filtering',
+      duration,
+      timestamp: Date.now(),
+      itemCount: result.length
+    })
+
+    return result
+  }, [basicFilteredProducts, advancedFilters, recordMetric])
 
   // Estadísticas de filtros
   const filterStats = useMemo(() => {

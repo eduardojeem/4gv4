@@ -103,13 +103,11 @@ export default function InventoryManagement() {
     return { color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300', text: 'Normal', icon: CheckCircle }
   }
 
-  const getStatusBadge = (status: string) => {
-    const colors = {
-      active: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-      inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300',
-      discontinued: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
-    }
-    return colors[status as keyof typeof colors] || colors.active
+  const getStatusBadge = (product: Product) => {
+    const isActive = (product as any).is_active !== false
+    return isActive 
+      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
   }
 
   // KPIs calculados sobre la página actual (idealmente deberían venir del backend para total global)
@@ -382,7 +380,9 @@ export default function InventoryManagement() {
                             </div>
                           </td>
                           <td className="p-4">
-                            <Badge className={getStatusBadge(product.status)}>{product.status === 'active' ? 'Activo' : 'Inactivo'}</Badge>
+                            <Badge className={getStatusBadge(product)}>
+                              {(product as any).is_active !== false ? 'Activo' : 'Inactivo'}
+                            </Badge>
                           </td>
                           <td className="p-4 text-right">
                             <div className="flex justify-end gap-2">

@@ -42,7 +42,58 @@ export const DEFAULT_PERFORMANCE_CONFIG: PerformanceConfig = {
   }
 }
 
-// ... (PerformanceMetrics and TTLCache remain the same)
+export interface PerformanceMetrics {
+  operationName: string
+  duration: number
+  timestamp: number
+  memoryUsage?: number
+  itemCount?: number
+}
+
+export class TTLCache<T> {
+  private cache: Map<string, { value: T; timestamp: number }> = new Map()
+  private ttl: number
+  private maxSize: number
+
+  constructor(ttl: number = 5 * 60 * 1000, maxSize: number = 50) {
+    this.ttl = ttl
+    this.maxSize = maxSize
+  }
+
+  set(key: string, value: T): void {
+    // Eviction policy: LRU-ish (delete first inserted if full)
+    // Map iterates in insertion order, so keys().next() gives the oldest.
+    if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
+      const firstKey = this.cache.keys().next().value
+      if (firstKey) this.cache.delete(firstKey)
+    }
+
+    this.cache.set(key, {
+      value,
+      timestamp: Date.now()
+    })
+  }
+
+  get(key: string): T | undefined {
+    const item = this.cache.get(key)
+    if (!item) return undefined
+
+    if (Date.now() - item.timestamp > this.ttl) {
+      this.cache.delete(key)
+      return undefined
+    }
+
+    return item.value
+  }
+
+  clear(): void {
+    this.cache.clear()
+  }
+
+  has(key: string): boolean {
+    return this.get(key) !== undefined
+  }
+}
 
 // Hook para métricas de rendimiento
 export function usePerformanceMetrics() {
@@ -56,7 +107,7 @@ export function usePerformanceMetrics() {
       metricsRef.current = metricsRef.current.slice(-100)
     }
 
-    setMetrics([...metricsRef.current])
+    // setMetrics([...metricsRef.current]) // Disabled to prevent re-render loops
   }, [])
 
   const getMetrics = useCallback(() => metricsRef.current, [])
@@ -135,17 +186,22 @@ export function usePerformanceMetrics() {
 export function useAdvancedMemoization<T extends (...args: unknown[]) => unknown>(
   factoryOrFn: T | (() => ReturnType<T>),
   deps: React.DependencyList,
-  config: { ttl?: number; key?: string } = {}
+  config: { ttl?: number; key?: string; keyGenerator?: (...args: any[]) => string } = {}
 ) {
-  const cacheRef = useRef<TTLCache<ReturnType<T>>>(new TTLCache(config.ttl))
+  const cacheRef = useRef<TTLCache<ReturnType<T>> | null>(null)
+  
+  if (!cacheRef.current) {
+    cacheRef.current = new TTLCache(config.ttl)
+  }
+
   const depsRef = useRef<React.DependencyList | undefined>(undefined)
 
   // Support for "memoize" and "clear" return pattern if used as a utility hook
   // But primarily acts as useMemo/useCallback hybrid
 
   const memoizedFn = useCallback((...args: Parameters<T>): ReturnType<T> => {
-    const key = config.key || JSON.stringify(args)
-    const cached = cacheRef.current.get(key)
+    const key = config.key || (config.keyGenerator ? config.keyGenerator(...args) : JSON.stringify(args))
+    const cached = cacheRef.current?.get(key)
     if (cached !== undefined) return cached
 
     // If factoryOrFn is a function that takes args, call it
@@ -153,12 +209,12 @@ export function useAdvancedMemoization<T extends (...args: unknown[]) => unknown
     // Assuming usage as a memoized callback wrapper based on useProductFiltering.ts
 
     const result = (factoryOrFn as any)(...args)
-    cacheRef.current.set(key, result)
+    cacheRef.current?.set(key, result)
     return result
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
 
   const clear = useCallback(() => {
-    cacheRef.current.clear()
+    cacheRef.current?.clear()
   }, [])
 
   // If used as `const { memoize, clear } = useAdvancedMemoization(...)`
@@ -369,7 +425,6 @@ export function useLazyLoading<T>(
 
 // Utilidades de optimización
 export const PerformanceUtils = {
-  // ... (createMemoizedFunction, chunkArray remain the same)
   createMemoizedFunction: <Args extends any[], Return>(
     fn: (...args: Args) => Return,
     keyGenerator?: (...args: Args) => string,

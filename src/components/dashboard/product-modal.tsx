@@ -265,7 +265,7 @@ export function ProductModal({
           // Race condition with timeout to prevent hanging
           const savePromise = onSave(values as ProductFormData)
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('La operación ha excedido el tiempo de espera (15s). Por favor verifica tu conexión.')), 15000)
+            setTimeout(() => reject(new Error('TIMEOUT_ERROR')), 50000)
           )
           
           await Promise.race([savePromise, timeoutPromise])
@@ -290,15 +290,26 @@ export function ProductModal({
               return
             }
 
-            const isNetworkError = message.includes('network') || message.includes('fetch')
+            const isTimeout = message.includes('timeout')
+            const isNetworkError = message.includes('network') || message.includes('fetch') || isTimeout
+
             if (isNetworkError) {
               if (attempt < maxRetries) {
-                toast.warning(`Error de conexion. Reintentando... (${attempt}/${maxRetries})`)
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+                const retryMessage = isTimeout 
+                  ? `La conexión está lenta. Reintentando... (${attempt}/${maxRetries})`
+                  : `Error de red. Reintentando... (${attempt}/${maxRetries})`
+                
+                toast.warning(retryMessage)
+                await new Promise(resolve => setTimeout(resolve, 2000 * attempt))
                 continue
               }
-              toast.error('Error de conexion', {
-                description: 'No se pudo conectar con el servidor. Verifica tu conexion.'
+              
+              const finalErrorMessage = isTimeout
+                ? 'No pudimos completar la operación a tiempo. Por favor, verifica tu conexión a internet o intenta más tarde.'
+                : 'Error de conexión persistente. Por favor verifica tu internet.'
+
+              toast.error('Error de comunicación', {
+                description: finalErrorMessage
               })
               return
             }

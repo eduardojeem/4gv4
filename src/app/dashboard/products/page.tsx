@@ -3,18 +3,18 @@
  * Redesigned products management interface
  */
 
-'use client'
+"use client";
 
-import React, { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { Plus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-import { useProductsSupabase } from '@/hooks/useProductsSupabase'
-import { useProductsDashboard } from '@/hooks/useProductsDashboard'
-import { ProductModal } from '@/components/dashboard/product-modal'
-import { toast } from 'sonner'
-import type { Product } from '@/types/product-unified'
+import React, { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { useProductsSupabase } from "@/hooks/useProductsSupabase";
+import { useProductsDashboard } from "@/hooks/useProductsDashboard";
+import { ProductModal } from "@/components/dashboard/product-modal";
+import { toast } from "sonner";
+import type { Product } from "@/types/product-unified";
 import {
   MetricsGrid,
   SearchAndActionsBar,
@@ -22,8 +22,8 @@ import {
   FilterPanel,
   ProductGrid,
   ProductTable,
-  BulkActionsToolbar
-} from '@/components/dashboard/products-modern'
+  BulkActionsToolbar,
+} from "@/components/dashboard/products-modern";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,14 +33,17 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Pagination } from '@/components/ui/pagination'
-import { exportProductsToCSV, downloadCSV } from '@/lib/products-dashboard-utils'
-import type { Database } from '@/lib/supabase/types'
-type Json = Database['public']['Tables']['products']['Row']['dimensions']
+} from "@/components/ui/alert-dialog";
+import { Pagination } from "@/components/ui/pagination";
+import {
+  exportProductsToCSV,
+  downloadCSV,
+} from "@/lib/products-dashboard-utils";
+import type { Database } from "@/lib/supabase/types";
+type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
 export default function ProductsPage() {
-  const router = useRouter()
+  const router = useRouter();
   const {
     products,
     categories,
@@ -52,7 +55,7 @@ export default function ProductsPage() {
     updateProduct,
     deleteProduct,
     refreshData,
-  } = useProductsSupabase()
+  } = useProductsSupabase();
 
   const {
     displayedProducts,
@@ -79,210 +82,248 @@ export default function ProductsPage() {
     handleSort,
     handleSelectProduct,
     clearFilters,
-    clearSelection
+    clearSelection,
   } = useProductsDashboard({
     products,
     categories,
     suppliers,
-    alerts
-  })
+    alerts,
+  });
 
-  const [isPending, startTransition] = useTransition()
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [createModalOpen, setCreateModalOpen] = useState(false)
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [productToDelete, setProductToDelete] = useState<Product | null>(null)
+  const [isPending, startTransition] = useTransition();
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   const handleSelectAllOnPage = (selected: boolean) => {
-    const pageIds = paginatedProducts.map(product => product.id)
+    const pageIds = paginatedProducts.map((product) => product.id);
 
     if (selected) {
-      setSelectedProductIds(Array.from(new Set([...selectedProductIds, ...pageIds])))
-      return
+      setSelectedProductIds(
+        Array.from(new Set([...selectedProductIds, ...pageIds])),
+      );
+      return;
     }
 
-    setSelectedProductIds(selectedProductIds.filter(id => !pageIds.includes(id)))
-  }
+    setSelectedProductIds(
+      selectedProductIds.filter((id) => !pageIds.includes(id)),
+    );
+  };
 
   // Handle product actions
   const handleProductEdit = (product: Product) => {
-    setEditingProduct(product)
-  }
+    setEditingProduct(product);
+  };
 
   const handleProductDelete = (product: Product) => {
-    setProductToDelete(product)
-    setDeleteDialogOpen(true)
-  }
+    setProductToDelete(product);
+    setDeleteDialogOpen(true);
+  };
 
   const confirmDelete = async () => {
-    if (!productToDelete) return
+    if (!productToDelete) return;
 
-    const result = await deleteProduct(productToDelete.id)
+    const result = await deleteProduct(productToDelete.id);
     if (result.success) {
-      toast.success('Producto eliminado')
-      clearSelection()
+      toast.success("Producto eliminado");
+      clearSelection();
     } else {
-      toast.error(result.error || 'Error al eliminar')
+      toast.error(result.error || "Error al eliminar");
     }
-    setDeleteDialogOpen(false)
-    setProductToDelete(null)
-  }
+    setDeleteDialogOpen(false);
+    setProductToDelete(null);
+  };
 
   const handleProductDuplicate = async (product: Product) => {
     // Exclude system fields and relations that shouldn't be duplicated
-     
-    const { id, created_at, updated_at, category, supplier, ...rest } = product as any
+
+    const { id, created_at, updated_at, category, supplier, ...rest } =
+      product as any;
 
     const duplicatedData = {
       ...rest,
       sku: `DUP-${product.sku}-${Math.floor(Math.random() * 1000)}`,
       name: `${product.name} (Copia)`,
-      dimensions: typeof product.dimensions === 'string' 
-        ? JSON.parse(product.dimensions) 
-        : product.dimensions
-    }
-    
-    const result = await createProduct(duplicatedData)
+      dimensions:
+        typeof product.dimensions === "string"
+          ? JSON.parse(product.dimensions)
+          : product.dimensions,
+    };
+
+    const result = await createProduct(duplicatedData);
     if (result.success) {
-      toast.success('Producto duplicado')
+      toast.success("Producto duplicado");
     } else {
-      toast.error(result.error || 'Error al duplicar')
+      toast.error(result.error || "Error al duplicar");
     }
-  }
+  };
 
   const handleProductViewDetails = (product: Product) => {
-    router.push(`/dashboard/products/${product.id}`)
-  }
+    router.push(`/dashboard/products/${product.id}`);
+  };
 
   // Handle export
   const handleExport = () => {
     startTransition(() => {
-      const csv = exportProductsToCSV(displayedProducts)
+      const csv = exportProductsToCSV(displayedProducts);
       if (csv) {
-        downloadCSV(csv, `productos-${new Date().toISOString().split('T')[0]}.csv`)
-        toast.success(`${displayedProducts.length} productos exportados`)
+        downloadCSV(
+          csv,
+          `productos-${new Date().toISOString().split("T")[0]}.csv`,
+        );
+        toast.success(`${displayedProducts.length} productos exportados`);
       } else {
-        toast.error('No hay productos para exportar')
+        toast.error("No hay productos para exportar");
       }
-    })
-  }
+    });
+  };
 
   // Handle refresh
   const handleRefresh = async () => {
-    await refreshData()
-    toast.success('Datos actualizados')
-  }
+    await refreshData();
+    toast.success("Datos actualizados");
+  };
 
   // Handle bulk operations
   const handleBulkDelete = async () => {
-    const selectedProducts = products.filter(p => selectedProductIds.includes(p.id))
-    
-    let successCount = 0
-    let errorCount = 0
+    const selectedProducts = products.filter((p) =>
+      selectedProductIds.includes(p.id),
+    );
+
+    let successCount = 0;
+    let errorCount = 0;
 
     for (const product of selectedProducts) {
-      const result = await deleteProduct(product.id)
+      const result = await deleteProduct(product.id);
       if (result.success) {
-        successCount++
+        successCount++;
       } else {
-        errorCount++
+        errorCount++;
       }
     }
 
     if (successCount > 0) {
-      toast.success(`${successCount} ${successCount === 1 ? 'producto eliminado' : 'productos eliminados'}`)
+      toast.success(
+        `${successCount} ${successCount === 1 ? "producto eliminado" : "productos eliminados"}`,
+      );
     }
     if (errorCount > 0) {
-      toast.error(`Error al eliminar ${errorCount} ${errorCount === 1 ? 'producto' : 'productos'}`)
+      toast.error(
+        `Error al eliminar ${errorCount} ${errorCount === 1 ? "producto" : "productos"}`,
+      );
     }
 
-    clearSelection()
-  }
+    clearSelection();
+  };
 
   const handleBulkActivate = async () => {
-    const selectedProducts = products.filter(p => selectedProductIds.includes(p.id))
-    
-    let successCount = 0
-    let errorCount = 0
+    const selectedProducts = products.filter((p) =>
+      selectedProductIds.includes(p.id),
+    );
+
+    let successCount = 0;
+    let errorCount = 0;
 
     for (const product of selectedProducts) {
-      const result = await updateProduct(product.id, { is_active: true } as Database['public']['Tables']['products']['Update'])
+      const result = await updateProduct(product.id, {
+        is_active: true,
+      } as Database["public"]["Tables"]["products"]["Update"]);
       if (result.success) {
-        successCount++
+        successCount++;
       } else {
-        errorCount++
+        errorCount++;
       }
     }
 
     if (successCount > 0) {
-      toast.success(`${successCount} ${successCount === 1 ? 'producto activado' : 'productos activados'}`)
+      toast.success(
+        `${successCount} ${successCount === 1 ? "producto activado" : "productos activados"}`,
+      );
     }
     if (errorCount > 0) {
-      toast.error(`Error al activar ${errorCount} ${errorCount === 1 ? 'producto' : 'productos'}`)
+      toast.error(
+        `Error al activar ${errorCount} ${errorCount === 1 ? "producto" : "productos"}`,
+      );
     }
 
-    clearSelection()
-  }
+    clearSelection();
+  };
 
   const handleBulkDeactivate = async () => {
-    const selectedProducts = products.filter(p => selectedProductIds.includes(p.id))
-    
-    let successCount = 0
-    let errorCount = 0
+    const selectedProducts = products.filter((p) =>
+      selectedProductIds.includes(p.id),
+    );
+
+    let successCount = 0;
+    let errorCount = 0;
 
     for (const product of selectedProducts) {
-      const result = await updateProduct(product.id, { is_active: false } as Database['public']['Tables']['products']['Update'])
+      const result = await updateProduct(product.id, {
+        is_active: false,
+      } as Database["public"]["Tables"]["products"]["Update"]);
       if (result.success) {
-        successCount++
+        successCount++;
       } else {
-        errorCount++
+        errorCount++;
       }
     }
 
     if (successCount > 0) {
-      toast.success(`${successCount} ${successCount === 1 ? 'producto desactivado' : 'productos desactivados'}`)
+      toast.success(
+        `${successCount} ${successCount === 1 ? "producto desactivado" : "productos desactivados"}`,
+      );
     }
     if (errorCount > 0) {
-      toast.error(`Error al desactivar ${errorCount} ${errorCount === 1 ? 'producto' : 'productos'}`)
+      toast.error(
+        `Error al desactivar ${errorCount} ${errorCount === 1 ? "producto" : "productos"}`,
+      );
     }
 
-    clearSelection()
-  }
+    clearSelection();
+  };
 
   const handleBulkExport = () => {
-    const selectedProducts = products.filter(p => selectedProductIds.includes(p.id))
+    const selectedProducts = products.filter((p) =>
+      selectedProductIds.includes(p.id),
+    );
     startTransition(() => {
-      const csv = exportProductsToCSV(selectedProducts)
+      const csv = exportProductsToCSV(selectedProducts);
       if (csv) {
-        downloadCSV(csv, `productos-seleccionados-${new Date().toISOString().split('T')[0]}.csv`)
-        toast.success(`${selectedProducts.length} productos exportados`)
+        downloadCSV(
+          csv,
+          `productos-seleccionados-${new Date().toISOString().split("T")[0]}.csv`,
+        );
+        toast.success(`${selectedProducts.length} productos exportados`);
       } else {
-        toast.error('No hay productos para exportar')
+        toast.error("No hay productos para exportar");
       }
-    })
-  }
+    });
+  };
 
   // Handle metric click
-  const handleMetricClick = (metric: 'all' | 'low_stock' | 'out_of_stock' | 'value') => {
+  const handleMetricClick = (
+    metric: "all" | "low_stock" | "out_of_stock" | "value",
+  ) => {
     switch (metric) {
-      case 'all':
-        handleQuickFilter('all')
-        toast.info(`Mostrando todos los productos (${products.length})`)
-        break
-      case 'low_stock':
-        handleQuickFilter('low_stock')
-        toast.info(`Mostrando productos con bajo stock`)
-        break
-      case 'out_of_stock':
-        handleQuickFilter('out_of_stock')
-        toast.warning(`Mostrando productos agotados`)
-        break
-      case 'value':
-        handleQuickFilter('all')
-        toast.info('Mostrando valor total del inventario')
-        break
+      case "all":
+        handleQuickFilter("all");
+        toast.info(`Mostrando todos los productos (${products.length})`);
+        break;
+      case "low_stock":
+        handleQuickFilter("low_stock");
+        toast.info(`Mostrando productos con bajo stock`);
+        break;
+      case "out_of_stock":
+        handleQuickFilter("out_of_stock");
+        toast.warning(`Mostrando productos agotados`);
+        break;
+      case "value":
+        handleQuickFilter("all");
+        toast.info("Mostrando valor total del inventario");
+        break;
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50/50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 p-4 sm:p-6 lg:p-8 transition-colors duration-300">
@@ -297,7 +338,7 @@ export default function ProductsPage() {
               Dashboard moderno y funcional
             </p>
           </div>
-          
+
           <Button
             size="lg"
             onClick={() => setCreateModalOpen(true)}
@@ -309,10 +350,7 @@ export default function ProductsPage() {
         </div>
 
         {/* Metrics Grid */}
-        <MetricsGrid
-          metrics={metrics}
-          onMetricClick={handleMetricClick}
-        />
+        <MetricsGrid metrics={metrics} onMetricClick={handleMetricClick} />
 
         {/* Search and Actions Bar */}
         <SearchAndActionsBar
@@ -354,7 +392,7 @@ export default function ProductsPage() {
         {/* Products Display */}
         <Card className="border-0 shadow-md">
           <div className="p-6">
-            {viewMode === 'grid' ? (
+            {viewMode === "grid" ? (
               <ProductGrid
                 products={paginatedProducts}
                 selectedProductIds={selectedProductIds}
@@ -378,7 +416,7 @@ export default function ProductsPage() {
                 onDuplicate={handleProductDuplicate}
                 onViewDetails={handleProductViewDetails}
                 loading={loading || isPending}
-                viewMode={viewMode === 'compact' ? 'compact' : 'table'}
+                viewMode={viewMode === "compact" ? "compact" : "table"}
               />
             )}
 
@@ -416,68 +454,87 @@ export default function ProductsPage() {
         <ProductModal
           isOpen={true}
           onClose={() => {
-            setEditingProduct(null)
-            setCreateModalOpen(false)
+            setEditingProduct(null);
+            setCreateModalOpen(false);
           }}
           product={editingProduct}
           categories={categories as any}
           brands={brands as any}
           suppliers={suppliers as any}
           onSave={async (data) => {
-            const normalizedData = {
-              ...data,
-              category_id: data.category_id || null,
-              brand_id: data.brand_id || null,
-              supplier_id: data.supplier_id || null,
-              brand: data.brand?.trim() ? data.brand.trim() : null,
-              description: data.description?.trim() ? data.description.trim() : null,
-              barcode: data.barcode?.trim() ? data.barcode.trim() : null,
-              unit_measure: data.unit_measure?.trim() ? data.unit_measure.trim() : 'unidad',
-              wholesale_price: (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
-              has_offer: Boolean(data.has_offer),
-              offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
-              images: Array.isArray(data.images) ? data.images.filter(Boolean) : []
-            }
+            try {
+              const normalizedData = {
+                ...data,
+                category_id: data.category_id || null,
+                brand_id: data.brand_id || null,
+                supplier_id: data.supplier_id || null,
+                brand: data.brand?.trim() ? data.brand.trim() : null,
+                description: data.description?.trim()
+                  ? data.description.trim()
+                  : null,
+                barcode: data.barcode?.trim() ? data.barcode.trim() : null,
+                unit_measure: data.unit_measure?.trim()
+                  ? data.unit_measure.trim()
+                  : "unidad",
+                wholesale_price:
+                  (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
+                has_offer: Boolean(data.has_offer),
+                offer_price:
+                  data.has_offer && (data.offer_price ?? 0) > 0
+                    ? data.offer_price
+                    : null,
+                images: Array.isArray(data.images)
+                  ? data.images.filter(Boolean)
+                  : [],
+              };
 
-            // Transform dimensions to ensure compatibility
-            const transformedData = {
-              ...normalizedData,
-              dimensions: normalizedData.dimensions && typeof normalizedData.dimensions === 'object' 
-                ? JSON.stringify(normalizedData.dimensions)
-                : normalizedData.dimensions
-            }
-            
-            if (editingProduct) {
-              // Convertir ProductFormData a formato compatible con Supabase
-              const updateData: Database['public']['Tables']['products']['Update'] = {
-                ...transformedData,
-                dimensions: transformedData.dimensions ? transformedData.dimensions : null
-              }
-              const result = await updateProduct(editingProduct.id, updateData)
-              if (result.success) {
-                toast.success('Producto actualizado')
+              // Transform dimensions to ensure compatibility with Supabase JSONB
+              const dimensions =
+                data.dimensions && typeof data.dimensions === "object"
+                  ? data.dimensions
+                  : null;
+
+              if (editingProduct) {
+                const updateData: Database["public"]["Tables"]["products"]["Update"] =
+                  {
+                    ...normalizedData,
+                    dimensions: dimensions as any,
+                  };
+                const result = await updateProduct(
+                  editingProduct.id,
+                  updateData,
+                );
+                if (result.success) {
+                  toast.success("Producto actualizado");
+                  setEditingProduct(null);
+                  setCreateModalOpen(false);
+                } else {
+                  console.error("Error updating product:", result.error);
+                  toast.error(result.error || "Error al actualizar");
+                  throw new Error(result.error);
+                }
               } else {
-                console.error('Error updating product:', result.error)
-                // Throw error to let the modal handle it
-                throw new Error(result.error || 'Error al actualizar')
+                const insertData: Database["public"]["Tables"]["products"]["Insert"] =
+                  {
+                    ...normalizedData,
+                    dimensions: dimensions as any,
+                    sku: normalizedData.sku, // Ensure SKU is present
+                  };
+                const result = await createProduct(insertData);
+                if (result.success) {
+                  toast.success("Producto creado");
+                  setEditingProduct(null);
+                  setCreateModalOpen(false);
+                } else {
+                  console.error("Error creating product:", result.error);
+                  toast.error(result.error || "Error al crear");
+                  throw new Error(result.error);
+                }
               }
-            } else {
-              const insertData: Database['public']['Tables']['products']['Insert'] = {
-                ...transformedData,
-                dimensions: transformedData.dimensions ? transformedData.dimensions : null,
-                sku: normalizedData.sku // Ensure SKU is present
-              }
-              const result = await createProduct(insertData)
-              if (result.success) {
-                toast.success('Producto creado')
-              } else {
-                console.error('Error creating product:', result.error)
-                // Throw error to let the modal handle it
-                throw new Error(result.error || 'Error al crear')
-              }
+            } catch (error: any) {
+              // Re-throw to be caught by the modal's internal handling if necessary
+              throw error;
             }
-            setEditingProduct(null)
-            setCreateModalOpen(false)
           }}
         />
       )}
@@ -487,19 +544,24 @@ export default function ProductsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar producto?</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro de que quieres eliminar <span className="font-semibold">"{productToDelete?.name}"</span>?
+              ¿Estás seguro de que quieres eliminar{" "}
+              <span className="font-semibold">"{productToDelete?.name}"</span>?
               <br className="my-2" />
-              Esta acción no se puede deshacer y eliminará permanentemente el producto de la base de datos.
+              Esta acción no se puede deshacer y eliminará permanentemente el
+              producto de la base de datos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700 text-white">
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
               Eliminar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
+  );
 }

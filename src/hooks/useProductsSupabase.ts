@@ -448,11 +448,19 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       ]).catch(err => console.error('Error refreshing data after create:', err))
 
       return { success: true, data }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating product:', err)
+      let errorMessage = 'Error al crear el producto'
+      
+      if (err.code === '23505') { // Unique constraint violation
+        errorMessage = 'Ya existe un producto con este SKU'
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : (typeof err === 'object' ? JSON.stringify(err) : 'Error desconocido')
+        error: errorMessage
       }
     }
   }, [supabase, fetchProducts, fetchDashboardStats])
@@ -479,15 +487,19 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       ]).catch(err => console.error('Error refreshing data after update:', err))
 
       return { success: true, data }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating product:', err)
-      // Intento de obtener más detalles del error si es un objeto
-      if (typeof err === 'object' && err !== null) {
-          console.error('Detalles del error:', JSON.stringify(err, null, 2))
+      let errorMessage = 'Error al actualizar el producto'
+      
+      if (err.code === '23505') {
+        errorMessage = 'Ya existe un producto con este SKU'
+      } else if (err.message) {
+        errorMessage = err.message
       }
+      
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Error desconocido' 
+        error: errorMessage
       }
     }
   }, [supabase, fetchProducts, fetchDashboardStats])

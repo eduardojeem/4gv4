@@ -32,6 +32,7 @@ export default function ModernProductsPage() {
     products,
     categories,
     suppliers,
+    brands,
     alerts,
     loading,
     createProduct,
@@ -364,38 +365,66 @@ export default function ModernProductsPage() {
           }}
           product={editingProduct}
           categories={categories as any}
+          brands={brands as any}
           suppliers={suppliers as any}
           onSave={async (data) => {
-            // Transform dimensions to ensure compatibility
-            const transformedData = {
-              ...data,
-              dimensions: data.dimensions && typeof data.dimensions === 'object' 
-                ? data.dimensions as any
-                : data.dimensions
-            }
-            
-            if (editingProduct) {
-              // Convertir ProductFormData a formato compatible con Supabase
-              const transformedData: Database['public']['Tables']['products']['Update'] = {
+            try {
+              // Standardized normalization logic
+              const normalizedData = {
                 ...data,
-                dimensions: data.dimensions as Json | null
+                category_id: data.category_id || null,
+                brand_id: data.brand_id || null,
+                supplier_id: data.supplier_id || null,
+                brand: data.brand?.trim() ? data.brand.trim() : null,
+                description: data.description?.trim() ? data.description.trim() : null,
+                barcode: data.barcode?.trim() ? data.barcode.trim() : null,
+                unit_measure: data.unit_measure?.trim() ? data.unit_measure.trim() : 'unidad',
+                wholesale_price: (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
+                has_offer: Boolean(data.has_offer),
+                offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
+                images: Array.isArray(data.images) ? data.images.filter(Boolean) : []
               }
-              const result = await updateProduct(editingProduct.id, transformedData)
-              if (result.success) {
-                toast.success('Producto actualizado')
+
+              // Transform dimensions to ensure compatibility with Supabase JSONB
+              const dimensions = data.dimensions && typeof data.dimensions === 'object' 
+                ? data.dimensions 
+                : null
+              
+              if (editingProduct) {
+                const updateData: Database['public']['Tables']['products']['Update'] = {
+                  ...normalizedData,
+                  dimensions: dimensions as any
+                }
+                const result = await updateProduct(editingProduct.id, updateData)
+                if (result.success) {
+                  toast.success('Producto actualizado')
+                  setEditingProduct(null)
+                  setCreateModalOpen(false)
+                } else {
+                  console.error('Error updating product:', result.error)
+                  toast.error(result.error || 'Error al actualizar')
+                  throw new Error(result.error)
+                }
               } else {
-                toast.error(result.error || 'Error al actualizar')
+                const insertData: Database['public']['Tables']['products']['Insert'] = {
+                  ...normalizedData,
+                  dimensions: dimensions as any,
+                  sku: normalizedData.sku
+                }
+                const result = await createProduct(insertData)
+                if (result.success) {
+                  toast.success('Producto creado')
+                  setEditingProduct(null)
+                  setCreateModalOpen(false)
+                } else {
+                  console.error('Error creating product:', result.error)
+                  toast.error(result.error || 'Error al crear')
+                  throw new Error(result.error)
+                }
               }
-            } else {
-              const result = await createProduct(transformedData)
-              if (result.success) {
-                toast.success('Producto creado')
-              } else {
-                toast.error(result.error || 'Error al crear')
-              }
+            } catch (error: any) {
+              throw error
             }
-            setEditingProduct(null)
-            setCreateModalOpen(false)
           }}
         />
       )}
