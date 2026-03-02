@@ -36,7 +36,7 @@ import {
   DEFAULT_BRANDS
 } from '@/lib/types/catalog'
 import { CategoryModal } from './category-modal'
-import { BrandModal } from './brand-modal'
+import { BrandModal } from './brands/BrandModal'
 import { SupplierModal } from './supplier-modal'
 import { Supplier } from '@/lib/types/supplier'
 
@@ -104,7 +104,7 @@ export function CatalogManager({
     return dbSuppliers.map(s => ({
       id: s.id,
       name: s.name,
-      contact_person: s.contact_name || '',
+      contact_name: s.contact_name || '',
       email: s.contact_email || '',
       phone: s.phone || '',
       address: s.address || '',
@@ -276,9 +276,22 @@ export function CatalogManager({
     toast.success('Estado de marca actualizado')
   }
 
-  const handleBrandSave = (brand: Brand) => {
+  const handleBrandSave = async (brandData: any) => {
     let updatedBrands: Brand[]
     
+    const brand: Brand = {
+      id: brandModal.brand?.id || crypto.randomUUID(),
+      name: brandData.name,
+      description: brandData.description || '',
+      website: brandData.website || '',
+      isActive: brandData.is_active ?? true,
+      productCount: 0,
+      country: brandData.country || '',
+      foundedYear: brandData.founded_year,
+      createdAt: brandModal.brand?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
     if (brandModal.mode === 'add') {
       updatedBrands = [...brands, brand]
     } else {
@@ -288,6 +301,7 @@ export function CatalogManager({
     setBrands(updatedBrands)
     onBrandChange?.(updatedBrands)
     setBrandModal({ isOpen: false, mode: 'add' })
+    return { success: true }
   }
 
   // Funciones para manejar proveedores
@@ -621,10 +635,8 @@ export function CatalogManager({
       <BrandModal
         isOpen={brandModal.isOpen}
         onClose={() => setBrandModal({ isOpen: false, mode: 'add' })}
-        mode={brandModal.mode}
-        brand={brandModal.brand}
+        brand={brandModal.brand as any}
         onSave={handleBrandSave}
-        existingBrands={brands}
       />
 
       <SupplierModal

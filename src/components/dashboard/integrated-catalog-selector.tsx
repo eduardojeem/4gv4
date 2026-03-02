@@ -29,7 +29,7 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { useCatalogSync } from '@/hooks/use-catalog-sync'
 import { CategoryModal } from './category-modal'
-import { BrandModal } from './brand-modal'
+import { BrandModal } from './brands/BrandModal'
 import { SupplierModal } from './supplier-modal'
 import { Category, Brand, ModalMode } from '@/lib/types/catalog'
 import { Supplier } from '@/lib/types/supplier'
@@ -119,10 +119,28 @@ export function IntegratedCatalogSelector({
     onCategoryChange?.(category.id)
   }
 
-  const handleBrandSave = (brand: Brand) => {
-    addBrand(brand)
-    setBrandModal({ isOpen: false, mode: 'add' })
-    onBrandChange?.(brand.id)
+  const handleBrandSave = async (brandData: any) => {
+    try {
+      // Map back to our local type if needed, or just add it
+      const newBrand: Brand = {
+        id: crypto.randomUUID(),
+        name: brandData.name,
+        description: brandData.description || '',
+        website: brandData.website || '',
+        isActive: brandData.is_active ?? true,
+        productCount: 0,
+        country: brandData.country || '',
+        foundedYear: brandData.founded_year,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      addBrand(newBrand)
+      setBrandModal({ isOpen: false, mode: 'add' })
+      onBrandChange?.(newBrand.id)
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: 'Error al guardar localmente' }
+    }
   }
 
   const handleSupplierSave = (supplierData: Partial<UISupplier>) => {
@@ -130,7 +148,7 @@ export function IntegratedCatalogSelector({
     const newSupplier: Supplier = {
       id: crypto.randomUUID(),
       name: supplierData.name || '',
-      contact_person: supplierData.contact_name || (supplierData as any).contact_person || '',
+      contact_name: supplierData.contact_name || (supplierData as any).contact_person || '',
       email: supplierData.email || '',
       phone: supplierData.phone || '',
       address: supplierData.address || '',
@@ -191,6 +209,10 @@ export function IntegratedCatalogSelector({
     addSupplier(newSupplier)
     setSupplierModal({ isOpen: false, mode: 'add' })
     onSupplierChange?.(newSupplier.id)
+  }
+
+  const handleSupplierSaveAsync = async (supplierData: Partial<UISupplier>) => {
+    handleSupplierSave(supplierData)
   }
 
   if (compact) {
@@ -512,16 +534,15 @@ export function IntegratedCatalogSelector({
       <BrandModal
         isOpen={brandModal.isOpen}
         onClose={() => setBrandModal({ isOpen: false, mode: 'add' })}
-        mode={brandModal.mode}
+        brand={brands.find(b => b.id === selectedBrand) as any}
         onSave={handleBrandSave}
-        existingBrands={brands}
       />
 
       <SupplierModal
         isOpen={supplierModal.isOpen}
         onClose={() => setSupplierModal({ isOpen: false, mode: 'add' })}
         mode={supplierModal.mode}
-        onSave={handleSupplierSave}
+        onSave={handleSupplierSaveAsync}
       />
     </div>
   )
