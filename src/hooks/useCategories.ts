@@ -66,29 +66,35 @@ export function useCategories() {
       
       query = query.order('name', { ascending: true })
       
-      // 2. Fetch Stats (in parallel)
-      const [categoriesRes, statsRes] = await Promise.all([
-        query,
-        supabase.rpc('get_category_stats')
-      ])
-
+      const categoriesRes = await query
       if (categoriesRes.error) throw categoriesRes.error
-      // Note: statsRes might fail if function doesn't exist or permission denied, handle gracefully
+
+      // Fetch stats separately — si la función RPC no existe en Supabase, no bloquea las categorías
       const statsMap = new Map<string, any>()
-      if (statsRes.data) {
-        statsRes.data.forEach((s: any) => {
-          statsMap.set(s.category_id, s)
-        })
+      try {
+        const statsRes = await supabase.rpc('get_category_stats')
+        if (!statsRes.error && statsRes.data) {
+          statsRes.data.forEach((s: any) => {
+            statsMap.set(s.category_id, s)
+          })
+        }
+      } catch {
+        // RPC get_category_stats no disponible — se cargan las categorías sin estadísticas
       }
 
-      const mergedData = (categoriesRes.data ?? []).map((cat: any) => ({
-        ...cat,
-        stats: statsMap.get(cat.id) || {
+      const mergedData = (categoriesRes.data ?? []).map((cat: any) => {
+        const stats = statsMap.get(cat.id) || {
           product_count: 0,
           total_stock_value: 0,
           avg_margin_percentage: 0
         }
-      }))
+        return {
+          ...cat,
+          stats,
+          // Map to the field used by CategoryCard/CategoryListView
+          products_count: stats.product_count ?? 0
+        }
+      })
 
       setCategories(mergedData as Category[])
     } catch (err) {

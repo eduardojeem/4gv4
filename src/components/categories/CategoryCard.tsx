@@ -1,10 +1,10 @@
 'use client'
 
 import React from 'react'
-import { motion  } from '../ui/motion'
+import { motion } from '../ui/motion'
 import {
     Tag, Edit, Trash2, MoreVertical, Package,
-    ChevronRight, ToggleLeft, ToggleRight
+    ChevronRight, ToggleLeft, ToggleRight, Plus, FolderOpen
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -27,14 +27,31 @@ interface CategoryCardProps {
     onEdit?: (category: Category) => void
     onDelete?: (id: string) => void
     onToggleActive?: (id: string, isActive: boolean) => void
+    onAddChild?: (parentId: string) => void
     selected?: boolean
     onSelect?: (id: string) => void
     parentName?: string
 }
 
-const statusColors = {
-    active: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300',
-    inactive: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-950 dark:text-gray-300'
+// Generate a consistent color from a string
+function stringToColor(str: string): { bg: string; text: string; border: string; dot: string } {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    const colors = [
+        { bg: 'bg-violet-50 dark:bg-violet-950/30', text: 'text-violet-600 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', dot: 'bg-violet-500' },
+        { bg: 'bg-blue-50 dark:bg-blue-950/30', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800', dot: 'bg-blue-500' },
+        { bg: 'bg-emerald-50 dark:bg-emerald-950/30', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500' },
+        { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800', dot: 'bg-amber-500' },
+        { bg: 'bg-rose-50 dark:bg-rose-950/30', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-200 dark:border-rose-800', dot: 'bg-rose-500' },
+        { bg: 'bg-cyan-50 dark:bg-cyan-950/30', text: 'text-cyan-600 dark:text-cyan-400', border: 'border-cyan-200 dark:border-cyan-800', dot: 'bg-cyan-500' },
+        { bg: 'bg-orange-50 dark:bg-orange-950/30', text: 'text-orange-600 dark:text-orange-400', border: 'border-orange-200 dark:border-orange-800', dot: 'bg-orange-500' },
+        { bg: 'bg-pink-50 dark:bg-pink-950/30', text: 'text-pink-600 dark:text-pink-400', border: 'border-pink-200 dark:border-pink-800', dot: 'bg-pink-500' },
+        { bg: 'bg-indigo-50 dark:bg-indigo-950/30', text: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-200 dark:border-indigo-800', dot: 'bg-indigo-500' },
+        { bg: 'bg-teal-50 dark:bg-teal-950/30', text: 'text-teal-600 dark:text-teal-400', border: 'border-teal-200 dark:border-teal-800', dot: 'bg-teal-500' },
+    ]
+    return colors[Math.abs(hash) % colors.length]
 }
 
 export function CategoryCard({
@@ -42,26 +59,32 @@ export function CategoryCard({
     onEdit,
     onDelete,
     onToggleActive,
+    onAddChild,
     selected,
     onSelect,
     parentName
 }: CategoryCardProps) {
-    const hasActions = onEdit || onDelete || onToggleActive
+    const hasActions = onEdit || onDelete || onToggleActive || onAddChild
+    const color = stringToColor(category.name)
+    const productCount = category.products_count ?? category.stats?.product_count ?? 0
 
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            whileHover={{ y: -4 }}
-            transition={{ duration: 0.2 }}
+            whileHover={{ y: -3 }}
+            transition={{ duration: 0.18 }}
             className={cn(
-                "group relative overflow-hidden rounded-xl border-2 bg-card transition-all duration-300",
+                "group relative overflow-hidden rounded-2xl border bg-card transition-all duration-300 cursor-default",
                 selected
-                    ? "border-primary shadow-lg shadow-primary/20 ring-4 ring-primary/10"
-                    : "border-border hover:border-primary/50 hover:shadow-lg"
+                    ? "border-primary shadow-lg shadow-primary/20 ring-2 ring-primary/20"
+                    : "border-border hover:border-primary/40 hover:shadow-md"
             )}
         >
+            {/* Color accent top bar */}
+            <div className={cn("h-1.5 w-full", color.dot)} />
+
             {/* Selection Checkbox */}
             {onSelect && (
                 <div className="absolute top-4 left-4 z-10">
@@ -69,47 +92,47 @@ export function CategoryCard({
                         type="checkbox"
                         checked={selected}
                         onChange={() => onSelect(category.id)}
-                        className="h-5 w-5 rounded border-2 border-border bg-background checked:bg-primary checked:border-primary transition-all cursor-pointer"
+                        className="h-4 w-4 rounded border-2 border-border bg-background checked:bg-primary checked:border-primary transition-all cursor-pointer"
                     />
                 </div>
             )}
 
             {/* Actions Menu */}
             {hasActions && (
-                <div className="absolute top-4 right-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-all duration-200">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 bg-background/80 backdrop-blur-sm">
-                                <MoreVertical className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 bg-background/90 backdrop-blur-sm border border-border/50 shadow-sm">
+                                <MoreVertical className="h-3.5 w-3.5" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent align="end" className="w-44">
                             {onEdit && (
                                 <DropdownMenuItem onClick={() => onEdit(category)}>
                                     <Edit className="h-4 w-4 mr-2" />
                                     Editar
                                 </DropdownMenuItem>
                             )}
+                            {onAddChild && (
+                                <DropdownMenuItem onClick={() => onAddChild(category.id)}>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Añadir subcategoría
+                                </DropdownMenuItem>
+                            )}
                             {onToggleActive && (
                                 <DropdownMenuItem onClick={() => onToggleActive(category.id, category.is_active)}>
                                     {category.is_active ? (
-                                        <>
-                                            <ToggleLeft className="h-4 w-4 mr-2" />
-                                            Desactivar
-                                        </>
+                                        <><ToggleLeft className="h-4 w-4 mr-2" />Desactivar</>
                                     ) : (
-                                        <>
-                                            <ToggleRight className="h-4 w-4 mr-2" />
-                                            Activar
-                                        </>
+                                        <><ToggleRight className="h-4 w-4 mr-2" />Activar</>
                                     )}
                                 </DropdownMenuItem>
                             )}
-                            {(onEdit || onToggleActive) && onDelete && <DropdownMenuSeparator />}
+                            {(onEdit || onAddChild || onToggleActive) && onDelete && <DropdownMenuSeparator />}
                             {onDelete && (
                                 <DropdownMenuItem
                                     onClick={() => onDelete(category.id)}
-                                    className="text-red-600 dark:text-red-400"
+                                    className="text-red-600 dark:text-red-400 focus:text-red-600"
                                 >
                                     <Trash2 className="h-4 w-4 mr-2" />
                                     Eliminar
@@ -121,56 +144,63 @@ export function CategoryCard({
             )}
 
             {/* Card Content */}
-            <div className="p-6">
-                {/* Header */}
-                <div className="mb-4">
-                    <div className="flex items-start gap-3 mb-3">
-                        <div className="rounded-lg bg-primary/10 p-3">
-                            <Tag className="h-6 w-6 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h3 className="text-lg font-bold text-foreground truncate mb-1">
-                                {category.name}
-                            </h3>
-                            <p className="text-sm text-muted-foreground line-clamp-2">
-                                {category.description || 'Sin descripción'}
-                            </p>
-                        </div>
+            <div className="p-5">
+                {/* Icon + Name */}
+                <div className="flex items-start gap-3 mb-3">
+                    <div className={cn("rounded-xl p-2.5 shrink-0", color.bg)}>
+                        <FolderOpen className={cn("h-5 w-5", color.text)} />
                     </div>
-
-                    {/* Badges */}
-                    <div className="flex flex-wrap gap-2">
-                        <Badge
-                            variant="outline"
-                            className={statusColors[category.is_active ? 'active' : 'inactive']}
-                        >
-                            {category.is_active ? 'Activa' : 'Inactiva'}
-                        </Badge>
-                        {parentName && (
-                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300">
-                                <ChevronRight className="h-3 w-3 mr-1" />
-                                {parentName}
-                            </Badge>
-                        )}
+                    <div className="flex-1 min-w-0 pt-0.5">
+                        <h3 className={cn(
+                            "font-semibold text-base leading-tight truncate",
+                            !category.is_active && "text-muted-foreground"
+                        )}>
+                            {category.name}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {category.description || 'Sin descripción'}
+                        </p>
                     </div>
                 </div>
 
-                {/* Stats */}
-                <div className="pt-4 border-t border-border">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Package className="h-4 w-4" />
-                            <span>{category.products_count || 0} productos</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                            {new Date(category.created_at).toLocaleDateString()}
-                        </div>
+                {/* Parent badge */}
+                {parentName && (
+                    <div className="mb-3">
+                        <Badge variant="outline" className="text-xs bg-muted/50 border-border gap-1">
+                            <ChevronRight className="h-2.5 w-2.5" />
+                            {parentName}
+                        </Badge>
                     </div>
+                )}
+
+                {/* Footer */}
+                <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Package className="h-3.5 w-3.5" />
+                        <span className="font-medium text-foreground">{productCount}</span>
+                        <span>productos</span>
+                    </div>
+
+                    <Badge
+                        variant="outline"
+                        className={cn(
+                            "text-xs px-2 py-0",
+                            category.is_active
+                                ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/50 dark:text-green-400 dark:border-green-800"
+                                : "bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-900 dark:text-gray-500 dark:border-gray-700"
+                        )}
+                    >
+                        <span className={cn("mr-1 h-1.5 w-1.5 rounded-full inline-block", category.is_active ? "bg-green-500" : "bg-gray-400")} />
+                        {category.is_active ? 'Activa' : 'Inactiva'}
+                    </Badge>
                 </div>
             </div>
 
-            {/* Hover Gradient Overlay */}
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 bg-gradient-to-br from-primary via-purple-500 to-pink-500 pointer-events-none" />
+            {/* Subtle hover overlay */}
+            <div className={cn(
+                "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none",
+                "bg-gradient-to-br from-transparent to-black/[0.02] dark:to-white/[0.02]"
+            )} />
         </motion.div>
     )
 }
@@ -180,6 +210,7 @@ interface CategoryGridProps {
     onEdit?: (category: Category) => void
     onDelete?: (id: string) => void
     onToggleActive?: (id: string, isActive: boolean) => void
+    onAddChild?: (parentId: string) => void
     selectedIds?: string[]
     onSelectionChange?: (ids: string[]) => void
     getCategoryName?: (id: string) => string
@@ -191,6 +222,7 @@ export function CategoryGrid({
     onEdit,
     onDelete,
     onToggleActive,
+    onAddChild,
     selectedIds = [],
     onSelectionChange,
     getCategoryName,
@@ -198,7 +230,6 @@ export function CategoryGrid({
 }: CategoryGridProps) {
     const handleSelect = (id: string) => {
         if (!onSelectionChange) return
-
         if (selectedIds.includes(id)) {
             onSelectionChange(selectedIds.filter(cid => cid !== id))
         } else {
@@ -208,7 +239,7 @@ export function CategoryGrid({
 
     return (
         <div className={cn(
-            "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6",
+            "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4",
             className
         )}>
             {categories.map((category) => (
@@ -218,6 +249,7 @@ export function CategoryGrid({
                     onEdit={onEdit}
                     onDelete={onDelete}
                     onToggleActive={onToggleActive}
+                    onAddChild={onAddChild}
                     selected={selectedIds.includes(category.id)}
                     onSelect={onSelectionChange ? handleSelect : undefined}
                     parentName={category.parent_id && getCategoryName ? getCategoryName(category.parent_id) : undefined}

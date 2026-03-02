@@ -48,7 +48,7 @@ export function useProducts() {
         .select(`
           *,
           category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, email, phone)
+          supplier:suppliers(id, name, contact_name, phone)
         `)
 
       // Aplicar filtros
@@ -151,7 +151,7 @@ export function useProducts() {
         .select(`
           *,
           category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, email, phone)
+          supplier:suppliers(id, name, contact_name, phone)
         `)
         .eq('id', id)
         .single()
@@ -200,7 +200,7 @@ export function useProducts() {
         .select(`
           *,
           category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, email, phone)
+          supplier:suppliers(id, name, contact_name, phone)
         `)
         .single()
 
@@ -257,7 +257,7 @@ export function useProducts() {
         .select(`
           *,
           category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, email, phone)
+          supplier:suppliers(id, name, contact_name, phone)
         `)
         .single()
 

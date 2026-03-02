@@ -239,11 +239,13 @@ export function ProductTable({
                 >
                   {/* Checkbox */}
                   <TableCell className={cn(isCompact && "py-1")}>
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={() => onSelect(product.id)}
-                      className="border-gray-400 dark:border-gray-500"
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => onSelect(product.id)}
+                        className="border-gray-400 dark:border-gray-500"
+                      />
+                    </div>
                   </TableCell>
 
                   {/* Image */}

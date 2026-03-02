@@ -78,8 +78,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
   // Build query - only active products, never select wholesale_price for non-wholesale
   const selectFields = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
-    : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+    ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
 
   let queryBuilder = supabase
     .from('products')
@@ -153,7 +153,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       name: p.name as string,
       sku: p.sku as string,
       description: p.description as string | null,
-      brand: p.brand as string | null,
+      brand: p.brand_details?.name || p.brand as string | null,
       category: cat ? { id: cat.id, name: cat.name } : undefined,
       sale_price: p.sale_price as number,
       wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
@@ -161,7 +161,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       stock_quantity: p.stock_quantity as number,
       is_active: p.is_active as boolean,
       featured: (p.featured as boolean) || false,
-      image: (p.image_url as string | null) || (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
+      image: Array.isArray(p.images)
+        ? (p.images.length > 0 ? p.images[0] : null)
+        : (p.image_url as string | null),
       images: p.images as string[] | null,
       unit_measure: p.unit_measure as string,
       barcode: p.barcode as string | null,
@@ -169,15 +171,21 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   })
 
   // Fetch brands for filter sidebar
-  const { data: brandsData } = await supabase
+  // Priority: 1. brands relation, 2. brand text field
+  const { data: productsData } = await supabase
     .from('products')
-    .select('brand')
+    .select('brand, brand_details:brands(name)')
     .eq('is_active', true)
-    .not('brand', 'is', null)
     // Also apply visibility filter to brands query to show relevant brands only
     .or(isWholesale ? 'visibility.in.(public,wholesale)' : 'visibility.eq.public')
 
-  const brands = Array.from(new Set(brandsData?.map((p: any) => p.brand) || [])).sort() as string[]
+  const uniqueBrands = new Set<string>()
+  productsData?.forEach((p: any) => {
+    const brandName = p.brand_details?.name || p.brand
+    if (brandName) uniqueBrands.add(brandName)
+  })
+
+  const brands = Array.from(uniqueBrands).sort()
 
   // Fetch price range meta — use the appropriate price column for the user type
   const priceCol = isWholesale ? 'wholesale_price' : 'sale_price'
@@ -249,8 +257,8 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
   }
 
   const selectFields = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
-    : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+    ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
 
   let queryBuilder = supabase
     .from('products')
@@ -283,7 +291,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     name: p.name,
     sku: p.sku,
     description: p.description,
-    brand: p.brand,
+    brand: p.brand_details?.name || p.brand,
     category: cat ? { id: cat.id, name: cat.name } : undefined,
     sale_price: p.sale_price,
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
@@ -291,7 +299,9 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     stock_quantity: p.stock_quantity as number,
     is_active: p.is_active,
     featured: p.featured || false,
-    image: p.image_url || (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
+    image: Array.isArray(p.images)
+      ? (p.images.length > 0 ? p.images[0] : null)
+      : (p.image_url as string | null),
     images: p.images,
     unit_measure: p.unit_measure,
     barcode: p.barcode,

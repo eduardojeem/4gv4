@@ -162,7 +162,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         .select(`
           *,
           category:categories(id, name, description),
-          supplier:suppliers(id, name, email, phone, address)
+          supplier:suppliers(id, name, contact_name, phone, address)
         `, { count: 'exact' })
 
       // Aplicar filtros
@@ -297,24 +297,14 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   const fetchSuppliers = useCallback(async () => {
     if (!enabled) return
     try {
-      // Intento 1: esquema con is_active
-      let res = await supabase
+      // La tabla suppliers no tiene columna is_active — traer todos y filtrar si es necesario
+      const { data, error } = await supabase
         .from('suppliers')
         .select('*')
-        .eq('is_active', true)
         .order('name')
 
-      if (res.error && (res.error as { code?: string }).code === '42703') {
-        // Intento 2: esquema alternativo con status
-        res = await supabase
-          .from('suppliers')
-          .select('*')
-          .eq('status', 'active')
-          .order('name')
-      }
-
-      if (res.error) throw res.error
-      setSuppliers((res.data || []) as unknown as Supplier[])
+      if (error) throw error
+      setSuppliers((data || []) as unknown as Supplier[])
     } catch (err) {
       const msg = err instanceof Error ? err.message : JSON.stringify(err)
       console.error('Error fetching suppliers:', msg)
@@ -436,20 +426,41 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       const { data, error } = await supabase
         .from('products')
         .insert(productData)
-        .select()
+        .select(`
+          *,
+          category:categories(id, name, description),
+          supplier:suppliers(id, name, contact_name, phone, address)
+        `)
         .single()
 
       if (error) throw error
 
-      // Refrescar datos en segundo plano
-      Promise.all([
-        fetchProducts(),
-        fetchDashboardStats()
-      ]).catch(err => console.error('Error refreshing data after create:', err))
+      // Actualizar estado local inmediatamente
+      const newProduct = data as unknown as Product
+      
+      // Ensure local state update happens with functional update to avoid stale closures
+      setProducts(prev => {
+        // Check if product already exists to avoid duplicates
+        const exists = prev.some(p => p.id === newProduct.id)
+        if (exists) return prev
+        
+        const updated = [newProduct, ...prev]
+        return updated
+      })
+      setTotalCount(prev => prev + 1)
+
+      // Refrescar estadísticas en segundo plano
+      fetchDashboardStats().catch(err => console.error('Error refreshing data after create:', err))
+      
+      // Force refresh of product list to ensure sync with DB triggers/defaults
+      fetchProducts().catch(err => console.error('Error refreshing products after create:', err))
 
       return { success: true, data }
     } catch (err: any) {
       console.error('Error creating product:', err)
+      if (typeof err === 'object' && err !== null) {
+        console.error('Error details:', JSON.stringify(err, null, 2))
+      }
       let errorMessage = 'Error al crear el producto'
       
       if (err.code === '23505') { // Unique constraint violation
@@ -463,7 +474,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         error: errorMessage
       }
     }
-  }, [supabase, fetchProducts, fetchDashboardStats])
+  }, [supabase, fetchDashboardStats, fetchProducts])
 
   // Función para actualizar producto
   const updateProduct = useCallback(async (
@@ -475,20 +486,28 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         .from('products')
         .update(productData)
         .eq('id', id)
-        .select()
+        .select(`
+          *,
+          category:categories(id, name, description),
+          supplier:suppliers(id, name, contact_name, phone, address)
+        `)
         .single()
 
       if (error) throw error
 
-      // Refrescar datos en segundo plano
-      Promise.all([
-        fetchProducts(),
-        fetchDashboardStats()
-      ]).catch(err => console.error('Error refreshing data after update:', err))
+      // Actualizar estado local inmediatamente
+      const updatedProduct = data as unknown as Product
+      setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p))
+
+      // Refrescar estadísticas en segundo plano
+      fetchDashboardStats().catch(err => console.error('Error refreshing data after update:', err))
 
       return { success: true, data }
     } catch (err: any) {
       console.error('Error updating product:', err)
+      if (typeof err === 'object' && err !== null) {
+        console.error('Error details:', JSON.stringify(err, null, 2))
+      }
       let errorMessage = 'Error al actualizar el producto'
       
       if (err.code === '23505') {
@@ -502,7 +521,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         error: errorMessage
       }
     }
-  }, [supabase, fetchProducts, fetchDashboardStats])
+  }, [supabase, fetchDashboardStats])
 
   // Función para eliminar producto
   const deleteProduct = useCallback(async (id: string) => {
@@ -686,7 +705,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         .select(`
           *,
           category:categories(id, name, description),
-          supplier:suppliers(id, name, email, phone, address)
+          supplier:suppliers(id, name, contact_name, phone, address)
         `)
 
       // Aplicar los mismos filtros que en fetchProducts

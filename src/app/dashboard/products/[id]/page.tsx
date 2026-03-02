@@ -1,6 +1,6 @@
-'use client'
+﻿'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion  } from '../../../../components/ui/motion'
 import { 
@@ -37,6 +37,7 @@ import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import type { Database } from '@/lib/supabase/types'
+import type { Product } from '@/types/product-unified'
 type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { ProductModal } from '@/components/dashboard/product-modal'
 import Image from 'next/image'
@@ -69,6 +70,7 @@ export default function ProductDetailPage() {
   const {
     categories,
     suppliers,
+    brands,
     updateProduct,
     deleteProduct
   } = useProductsSupabase()
@@ -81,37 +83,38 @@ export default function ProductDetailPage() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
   const [activeTab, setActiveTab] = useState('overview')
 
+  const loadProduct = useCallback(async () => {
+    setLoadingProduct(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(id, name, description),
+          supplier:suppliers(id, name, contact_name, phone, address)
+        `)
+        .eq('id', productId)
+        .single()
+
+      if (error) throw error
+      setProduct(data as unknown as Product)
+    } catch (e) {
+      logger.error('Error loading product', { error: e })
+      toast({
+        title: "Error",
+        description: "No se pudo cargar la información del producto.",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingProduct(false)
+    }
+  }, [productId, toast])
+
   // Cargar el producto individualmente
   useEffect(() => {
-    const loadProduct = async () => {
-      setLoadingProduct(true)
-      try {
-        const supabase = createClient()
-        const { data, error } = await supabase
-          .from('products')
-          .select(`
-            *,
-            category:categories(id, name, description),
-            supplier:suppliers(id, name, email, phone, address)
-          `)
-          .eq('id', productId)
-          .single()
-        
-        if (error) throw error
-        setProduct(data as unknown as Product)
-      } catch (e) {
-        logger.error('Error loading product', { error: e })
-        toast({
-          title: "Error",
-          description: "No se pudo cargar la información del producto.",
-          variant: "destructive"
-        })
-      } finally {
-        setLoadingProduct(false)
-      }
-    }
     loadProduct()
-  }, [productId, toast])
+  }, [loadProduct])
 
   const normalizedCategories = useMemo(() => {
     return (categories || []).map(c => ({
@@ -140,6 +143,21 @@ export default function ProductDetailPage() {
     }))
   }, [suppliers])
 
+  const normalizedBrands = useMemo(() => {
+    return (brands || []).map(b => ({
+      id: b.id,
+      name: b.name,
+      description: b.description || null,
+      website: b.website || null,
+      country: b.country || null,
+      founded_year: b.founded_year || null,
+      logo_url: b.logo_url || null,
+      is_active: b.is_active,
+      created_at: b.created_at,
+      updated_at: b.updated_at
+    }))
+  }, [brands])
+
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
   type PriceHistoryEntry = {
     id: string
@@ -152,7 +170,7 @@ export default function ProductDetailPage() {
   }
   const [priceHistory, setPriceHistory] = useState<PriceHistoryEntry[]>([])
 
-  // Imágenes mock del producto
+  // Imágenes del producto
   const productImages: ProductImage[] = useMemo(() => {
     const urls = (product?.images || []).filter(Boolean) as string[]
     const uniq = Array.from(new Set(urls))
@@ -287,6 +305,14 @@ export default function ProductDetailPage() {
   }
 
   const normalizedBarcode = (product?.barcode || '').trim()
+  const calculatedStockStatus = useMemo(() => {
+    const stock = product?.stock_quantity ?? 0
+    const minStock = product?.min_stock ?? 0
+
+    if (stock <= 0) return 'out_of_stock'
+    if (stock <= Math.max(minStock, 0)) return 'low_stock'
+    return 'in_stock'
+  }, [product?.stock_quantity, product?.min_stock])
 
   const handleCopyBarcode = () => {
     if (!normalizedBarcode) return
@@ -703,8 +729,8 @@ export default function ProductDetailPage() {
                           <div className="space-y-3">
                             <div className="flex justify-between items-center">
                               <span className="text-sm text-gray-500 dark:text-gray-400">Estado</span>
-                              <Badge className={getStockStatusColor(product.stock_status || '')}>
-                                {getStockStatusLabel(product.stock_status || '')}
+                              <Badge className={getStockStatusColor(calculatedStockStatus)}>
+                                {getStockStatusLabel(calculatedStockStatus)}
                               </Badge>
                             </div>
                             <div className="flex justify-between items-center">
@@ -758,8 +784,8 @@ export default function ProductDetailPage() {
                   <Separator className="dark:bg-gray-700" />
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Stock Status</span>
-                    <Badge className={getStockStatusColor(product.stock_status || '')}>
-                      {getStockStatusLabel(product.stock_status || '')}
+                    <Badge className={getStockStatusColor(calculatedStockStatus)}>
+                      {getStockStatusLabel(calculatedStockStatus)}
                     </Badge>
                   </div>
                 </CardContent>
@@ -849,26 +875,34 @@ export default function ProductDetailPage() {
             onClose={() => setEditModalOpen(false)}
             product={product ? ({ ...product, images: product.images ?? [] } as unknown as import('@/types/products').Product) : null}
             categories={normalizedCategories}
+            brands={normalizedBrands}
             suppliers={normalizedSuppliers}
             onSave={async (data) => {
               try {
-                // Convertir ProductFormData a formato compatible con Supabase
-                const supabaseData: Database['public']['Tables']['products']['Update'] = {
+                const normalizedData = {
                   ...data,
-                  dimensions: data.dimensions ? JSON.stringify(data.dimensions) : null
+                  category_id: data.category_id || null,
+                  brand_id: data.brand_id || null,
+                  supplier_id: data.supplier_id || null,
+                  brand: data.brand?.trim() ? data.brand.trim() : null,
+                  description: data.description?.trim() ? data.description.trim() : null,
+                  barcode: data.barcode?.trim() ? data.barcode.trim() : null,
+                  unit_measure: data.unit_measure?.trim() ? data.unit_measure.trim() : 'unidad',
+                  wholesale_price: (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
+                  has_offer: Boolean(data.has_offer),
+                  offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
+                  images: Array.isArray(data.images) ? data.images.filter(Boolean) : []
                 }
-                await updateProduct(product.id, supabaseData)
-                setEditModalOpen(false)
-                toast({
-                  title: "Producto actualizado",
-                  description: "Los cambios han sido guardados exitosamente."
-                })
-              } catch (error) {
-                toast({
-                  title: "Error",
-                  description: "No se pudo actualizar el producto.",
-                  variant: "destructive"
-                })
+                const result = await updateProduct(product.id, normalizedData as any)
+                 
+                if (result.success) {
+                  await loadProduct()
+                  setEditModalOpen(false)
+                } else {
+                  throw new Error(result.error || 'Error al actualizar el producto')
+                }
+              } catch (error: any) {
+                throw error
               }
             }}
           />
@@ -917,3 +951,4 @@ export default function ProductDetailPage() {
     </div>
   )
 }
+

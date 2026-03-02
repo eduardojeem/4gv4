@@ -164,6 +164,8 @@ export default function HomePage() {
   }
   const brand = brandMap[brandColor] ?? brandMap.blue
 
+  const displayedOffers = offersFetchFailed ? fallbackOffers : offerCards
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -185,7 +187,6 @@ export default function HomePage() {
 
         if (!response.ok || !Array.isArray(products)) {
           setOffersFetchFailed(true)
-          setOfferCards(fallbackOffers)
           return
         }
 
@@ -215,7 +216,6 @@ export default function HomePage() {
       } catch {
         if (!controller.signal.aborted) {
           setOffersFetchFailed(true)
-          setOfferCards(fallbackOffers)
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -226,15 +226,15 @@ export default function HomePage() {
 
     loadOffers()
     return () => controller.abort()
-  }, [fallbackOffers])
+  }, [])
 
   useEffect(() => {
-    if (offerCards.length === 0) {
+    if (displayedOffers.length === 0) {
       setActiveOfferIndex(0)
       return
     }
-    setActiveOfferIndex((prev) => Math.min(prev, offerCards.length - 1))
-  }, [offerCards.length])
+    setActiveOfferIndex((prev) => Math.min(prev, displayedOffers.length - 1))
+  }, [displayedOffers.length])
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -281,11 +281,11 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    if (isOfferCarouselPaused || offerCards.length <= 1 || !isOffersSectionVisible || !isDocumentVisible) return
+    if (isOfferCarouselPaused || displayedOffers.length <= 1 || !isOffersSectionVisible || !isDocumentVisible) return
 
     const interval = window.setInterval(() => {
       setActiveOfferIndex((prev) => {
-        const next = (prev + 1) % offerCards.length
+        const next = (prev + 1) % displayedOffers.length
         const node = offersTrackRef.current?.children?.item(next) as HTMLElement | null
         node?.scrollIntoView({
           behavior: prefersReducedMotion ? 'auto' : 'smooth',
@@ -297,11 +297,11 @@ export default function HomePage() {
     }, 5000)
 
     return () => window.clearInterval(interval)
-  }, [offerCards.length, isOfferCarouselPaused, isOffersSectionVisible, isDocumentVisible, prefersReducedMotion])
+  }, [displayedOffers.length, isOfferCarouselPaused, isOffersSectionVisible, isDocumentVisible, prefersReducedMotion])
 
   const goToOffer = (index: number) => {
-    if (offerCards.length === 0) return
-    const normalized = (index + offerCards.length) % offerCards.length
+    if (displayedOffers.length === 0) return
+    const normalized = (index + displayedOffers.length) % displayedOffers.length
     setActiveOfferIndex(normalized)
     const node = offersTrackRef.current?.children?.item(normalized) as HTMLElement | null
     node?.scrollIntoView({
@@ -409,7 +409,7 @@ export default function HomePage() {
                 <div key={idx} className="h-64 animate-pulse rounded-2xl border bg-muted/40" />
               ))}
             </div>
-          ) : !offersFetchFailed && offerCards.length === 0 ? (
+          ) : !offersFetchFailed && displayedOffers.length === 0 ? (
             <div className="rounded-2xl border border-dashed bg-muted/20 p-8 text-center">
               <p className="text-base font-semibold">No hay ofertas activas en este momento</p>
               <p className="mt-2 text-sm text-muted-foreground">Cuando actives productos con precio en oferta, apareceran aqui automaticamente.</p>
@@ -437,10 +437,10 @@ export default function HomePage() {
                 }}
                 onScroll={(event) => {
                   const next = findNearestOfferIndex()
-                  setActiveOfferIndex(Math.max(0, Math.min(offerCards.length - 1, next)))
+                  setActiveOfferIndex(Math.max(0, Math.min(displayedOffers.length - 1, next)))
                 }}
               >
-                {offerCards.map((offer) => (
+                {displayedOffers.map((offer) => (
                   <article
                     key={offer.id}
                     className="min-w-[88%] snap-start overflow-hidden rounded-2xl border bg-card sm:min-w-[62%] lg:min-w-[36%]"
@@ -490,7 +490,7 @@ export default function HomePage() {
                 ))}
               </div>
 
-              {offerCards.length > 1 && (
+              {displayedOffers.length > 1 && (
                 <>
                   <Button
                     type="button"
@@ -513,7 +513,7 @@ export default function HomePage() {
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                   <div className="mt-3 flex justify-center gap-2">
-                    {offerCards.map((offer, idx) => (
+                    {displayedOffers.map((offer, idx) => (
                       <button
                         key={offer.id}
                         type="button"

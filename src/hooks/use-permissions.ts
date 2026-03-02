@@ -15,7 +15,6 @@ export interface PermissionCheck {
   getPermissionsByResource: (resource: string) => Permission[]
   isAuthorized: (requirements: PermissionRequirement) => boolean
 }
-
 export interface PermissionRequirement {
   permissions?: string[]
   roles?: UserRole[]
@@ -55,9 +54,8 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionRequirement> = {
     requireAll: false
   },
   '/dashboard/categories': {
-    permissions: ['products.read', 'products.manage'],
-    roles: ['admin', 'vendedor', 'manager'],
-    requireAll: false
+    permissions: ['products.manage'],
+    requireAll: true
   },
   '/dashboard/promotions': {
     permissions: ['promotions.read'],
@@ -128,31 +126,37 @@ export function usePermissions(): PermissionCheck {
     if (!user?.role) return false
 
     const { permissions = [], roles = [], requireAll = false, resource, action } = requirements
+    const hasResourceRequirement = Boolean(resource && action)
+    const hasAnyRequirement = roles.length > 0 || permissions.length > 0 || hasResourceRequirement
+
+    if (!hasAnyRequirement) return true
+
+    if (requireAll) {
+      if (roles.length > 0 && !roles.includes(user.role)) return false
+      if (permissions.length > 0 && !hasAllPermissions(permissions)) return false
+      if (hasResourceRequirement && !hasResourceAccess(resource!, action!)) return false
+      return true
+    }
 
     // Verificar roles si se especifican
     if (roles.length > 0) {
       const hasRole = roles.includes(user.role)
-      if (requireAll && !hasRole) return false
-      if (!requireAll && hasRole) return true
+      if (hasRole) return true
     }
 
     // Verificar permisos si se especifican
     if (permissions.length > 0) {
-      const permissionCheck = requireAll
-        ? hasAllPermissions(permissions)
-        : hasAnyPermission(permissions)
+      const permissionCheck = hasAnyPermission(permissions)
 
-      if (requireAll && !permissionCheck) return false
-      if (!requireAll && permissionCheck) return true
+      if (permissionCheck) return true
     }
 
     // Verificar acceso a recurso específico
-    if (resource && action) {
+    if (hasResourceRequirement) {
       return hasResourceAccess(resource, action)
     }
 
-    // Si no hay requisitos específicos o se cumplieron parcialmente
-    return roles.length === 0 && permissions.length === 0
+    return false
   }, [user?.role, hasAllPermissions, hasAnyPermission, hasResourceAccess])
 
   return {
@@ -189,3 +193,4 @@ export function usePermissionList(permissionIds: string[]) {
     }, {} as Record<string, boolean>)
   }, [permissionIds, hasPermission])
 }
+

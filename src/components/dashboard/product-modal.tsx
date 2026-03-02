@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import {
   Dialog,
@@ -85,8 +85,11 @@ export function ProductModal({
   const [localSuppliers, setLocalSuppliers] = useState<Supplier[]>(suppliers ?? [])
 
   // Form definition
+  // Nota: `as any` en zodResolver es necesario por incompatibilidad de tipos entre
+  // @hookform/resolvers@v5 y zod@v4 (input vs output types en z.coerce.*)
+  // No afecta el comportamiento en runtime.
   const form = useForm<ProductFormValues>({
-    resolver: zodResolver(productSchema),
+    resolver: zodResolver(productSchema) as any,
     defaultValues: {
       sku: '',
       name: '',
@@ -123,6 +126,30 @@ export function ProductModal({
   const maxStock = watch('max_stock')
   const unitMeasure = watch('unit_measure')
   const sku = watch('sku')
+
+  // Fix #1: Detectar qué tabs contienen errores de validación
+  const tabErrorMap = useMemo(() => {
+    const basicFields = ['sku', 'name', 'description', 'category_id', 'brand_id', 'brand', 'supplier_id', 'barcode', 'unit_measure', 'is_active']
+    const pricingFields = ['purchase_price', 'sale_price', 'wholesale_price', 'offer_price', 'has_offer']
+    const inventoryFields = ['stock_quantity', 'min_stock', 'max_stock']
+    const imagesFields = ['images']
+    const errorKeys = Object.keys(errors)
+    return {
+      basic: errorKeys.some(k => basicFields.includes(k)),
+      pricing: errorKeys.some(k => pricingFields.includes(k)),
+      inventory: errorKeys.some(k => inventoryFields.includes(k)),
+      images: errorKeys.some(k => imagesFields.includes(k)),
+    }
+  }, [errors])
+
+  // Auto-navegar al primer tab con error al fallar el submit
+  useEffect(() => {
+    if (Object.keys(errors).length === 0) return
+    if (tabErrorMap.basic) { setActiveTab('basic'); return }
+    if (tabErrorMap.pricing) { setActiveTab('pricing'); return }
+    if (tabErrorMap.inventory) { setActiveTab('inventory'); return }
+    if (tabErrorMap.images) setActiveTab('images')
+  }, [errors, tabErrorMap])
   const barcode = watch('barcode')
 
   useEffect(() => {
@@ -256,79 +283,77 @@ export function ProductModal({
     return `PROD-${timestamp}-${random}`
   }
 
+  const cleanProductData = (data: ProductFormValues) => {
+    // Remove max_stock: no existe en la BD, es solo referencia visual
+    const { max_stock, ...rest } = data;
+    
+    // Si no hay producto (creación), no enviamos ID
+    if (!product) {
+       delete (rest as any).id
+    }
+
+    // Fix #5: derivar nombre de marca desde brand_id si brand está vacío
+    let brandName = data.brand?.trim() || null
+    if (!brandName && data.brand_id) {
+      const found = localBrands.find(b => b.id === data.brand_id)
+      if (found) brandName = found.name
+    }
+    
+    const images = Array.isArray(data.images) ? data.images.filter(Boolean) : []
+    
+    return {
+      ...rest,
+      category_id: data.category_id || null,
+      brand_id: data.brand_id || null,
+      supplier_id: data.supplier_id || null,
+      brand: brandName,
+      description: data.description?.trim() || null,
+      barcode: data.barcode?.trim() || null,
+      unit_measure: data.unit_measure?.trim() || 'unidad',
+      wholesale_price: (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
+      offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
+      images: images,
+      // Sync legacy image_url field with the first image of the array
+      image_url: images.length > 0 ? images[0] : null,
+      // Asegurar tipos numéricos
+      purchase_price: Number(data.purchase_price),
+      sale_price: Number(data.sale_price),
+      stock_quantity: Number(data.stock_quantity),
+      min_stock: Number(data.min_stock),
+      is_active: data.is_active ?? true,
+      has_offer: data.has_offer ?? false,
+    }
+  }
+
   const onSubmit = async (values: ProductFormValues) => {
-    const maxRetries = 3
-
     try {
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          // Race condition with timeout to prevent hanging
-          const savePromise = onSave(values as ProductFormData)
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('TIMEOUT_ERROR')), 50000)
-          )
-          
-          await Promise.race([savePromise, timeoutPromise])
-          toast.success(
-            product ? 'Producto actualizado exitosamente' : 'Producto creado exitosamente',
-            {
-              description: `SKU: ${values.sku}`,
-              duration: 5000
-            }
-          )
-          onClose()
-          return
-        } catch (error) {
-          if (error instanceof Error) {
-            const message = error.message.toLowerCase()
-
-            if (message.includes('duplicate') || message.includes('unique')) {
-              toast.error('SKU duplicado', {
-                description: 'Este codigo ya existe en el sistema'
-              })
-              form.setError('sku', { message: 'Este SKU ya existe' })
-              return
-            }
-
-            const isTimeout = message.includes('timeout')
-            const isNetworkError = message.includes('network') || message.includes('fetch') || isTimeout
-
-            if (isNetworkError) {
-              if (attempt < maxRetries) {
-                const retryMessage = isTimeout 
-                  ? `La conexión está lenta. Reintentando... (${attempt}/${maxRetries})`
-                  : `Error de red. Reintentando... (${attempt}/${maxRetries})`
-                
-                toast.warning(retryMessage)
-                await new Promise(resolve => setTimeout(resolve, 2000 * attempt))
-                continue
-              }
-              
-              const finalErrorMessage = isTimeout
-                ? 'No pudimos completar la operación a tiempo. Por favor, verifica tu conexión a internet o intenta más tarde.'
-                : 'Error de conexión persistente. Por favor verifica tu internet.'
-
-              toast.error('Error de comunicación', {
-                description: finalErrorMessage
-              })
-              return
-            }
-
-            toast.error('Error al guardar', {
-              description: error.message
-            })
-          } else {
-            toast.error('Error desconocido', {
-              description: 'Ocurrio un error inesperado. Por favor intenta nuevamente.'
-            })
-          }
-
-          console.error('Error saving product:', error)
-          return
-        }
+      const cleanedData = cleanProductData(values)
+      
+      // Ensure we're not sending an ID for new products
+      if (!product && 'id' in cleanedData) {
+        delete (cleanedData as any).id
       }
+
+      console.log('Sending product data:', cleanedData)
+      await onSave(cleanedData as unknown as ProductFormData)
+      
+      toast.success(
+        product ? 'Producto actualizado exitosamente' : 'Producto creado exitosamente',
+        {
+          description: `SKU: ${values.sku}`,
+          duration: 3000
+        }
+      )
+      onClose()
     } catch (error) {
-       console.error("Critical error in form submission", error)
+      console.error('Error saving product:', error)
+      if (error instanceof Error) {
+        toast.error('Error al guardar', {
+          description: error.message
+        })
+      } else {
+        toast.error('Error desconocido')
+      }
     }
   }
 
@@ -408,6 +433,9 @@ export function ProductModal({
                     <Tag className="h-4 w-4" />
                     <span className="hidden md:inline">Información Básica</span>
                     <span className="md:hidden">Básica</span>
+                    {tabErrorMap.basic && (
+                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                    )}
                   </TabsTrigger>
                   <TabsTrigger
                     value="pricing"
@@ -416,6 +444,9 @@ export function ProductModal({
                     <GSIcon className="h-4 w-4" />
                     <span className="hidden md:inline">Precios y Ofertas</span>
                     <span className="md:hidden">Precios</span>
+                    {tabErrorMap.pricing && (
+                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                    )}
                   </TabsTrigger>
                   <TabsTrigger
                     value="inventory"
@@ -424,6 +455,9 @@ export function ProductModal({
                     <Warehouse className="h-4 w-4" />
                     <span className="hidden md:inline">Inventario</span>
                     <span className="md:hidden">Stock</span>
+                    {tabErrorMap.inventory && (
+                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                    )}
                   </TabsTrigger>
                   <TabsTrigger
                     value="images"
@@ -432,6 +466,9 @@ export function ProductModal({
                     <Upload className="h-4 w-4" />
                     <span className="hidden md:inline">Imágenes</span>
                     <span className="md:hidden">Fotos</span>
+                    {tabErrorMap.images && (
+                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                    )}
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -634,11 +671,14 @@ export function ProductModal({
                               <Textarea 
                                 placeholder="Descripción detallada del producto..." 
                                 className="resize-none" 
-                                rows={3}
+                                rows={6}
                                 {...field} 
                                 value={field.value || ""}
                               />
                             </FormControl>
+                            <FormDescription>
+                              Máximo 2000 caracteres.
+                            </FormDescription>
                             <FormMessage />
                           </FormItem>
                         )}

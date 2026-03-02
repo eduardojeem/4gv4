@@ -34,10 +34,10 @@ interface CategoryNode extends Category {
 
 interface CategoryTreeNodeProps {
     node: CategoryNode
-    onEdit: (category: Category) => void
-    onDelete: (id: string) => void
-    onToggleActive: (id: string, isActive: boolean) => void
-    onAddChild: (parentId: string) => void
+    onEdit?: (category: Category) => void
+    onDelete?: (id: string) => void
+    onToggleActive?: (id: string, isActive: boolean) => void
+    onAddChild?: (parentId: string) => void
     selectedIds?: string[]
     onSelectionChange?: (ids: string[]) => void
     expandedIds: Set<string>
@@ -67,9 +67,10 @@ function CategoryTreeNode({
         
         const regex = new RegExp(`(${searchTerm})`, 'gi')
         const parts = text.split(regex)
+        const normalizedSearch = searchTerm.toLowerCase()
         
         return parts.map((part, index) => 
-            regex.test(part) ? (
+            part.toLowerCase() === normalizedSearch ? (
                 <mark key={index} className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">
                     {part}
                 </mark>
@@ -108,8 +109,7 @@ function CategoryTreeNode({
                 className={cn(
                     "group relative flex items-center gap-2 py-2 px-3 rounded-lg transition-all duration-200",
                     "hover:bg-muted/50",
-                    isSelected && "bg-primary/10 border border-primary/20",
-                    node.level > 0 && `ml-${node.level * 6}`
+                    isSelected && "bg-primary/10 border border-primary/20"
                 )}
                 style={{ marginLeft: `${node.level * 24}px` }}
             >
@@ -338,10 +338,10 @@ function CategoryTreeNode({
 
 interface CategoryTreeViewImprovedProps {
     categories: Category[]
-    onEdit: (category: Category) => void
-    onDelete: (id: string) => void
-    onToggleActive: (id: string, isActive: boolean) => void
-    onAddChild: (parentId: string) => void
+    onEdit?: (category: Category) => void
+    onDelete?: (id: string) => void
+    onToggleActive?: (id: string, isActive: boolean) => void
+    onAddChild?: (parentId: string) => void
     selectedIds?: string[]
     onSelectionChange?: (ids: string[]) => void
     className?: string
@@ -557,3 +557,4 @@ export function CategoryTreeViewImproved({
         </div>
     )
 }
+

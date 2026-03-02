@@ -13,6 +13,10 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import { ProductGallery, ProductActions } from './client-components'
 
+// Force dynamic rendering and disable caching to ensure fresh data
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 interface Props {
   params: Promise<{ id: string }>
 }

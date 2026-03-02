@@ -463,76 +463,25 @@ export default function ProductsPage() {
           suppliers={suppliers as any}
           onSave={async (data) => {
             try {
-              const normalizedData = {
-                ...data,
-                category_id: data.category_id || null,
-                brand_id: data.brand_id || null,
-                supplier_id: data.supplier_id || null,
-                brand: data.brand?.trim() ? data.brand.trim() : null,
-                description: data.description?.trim()
-                  ? data.description.trim()
-                  : null,
-                barcode: data.barcode?.trim() ? data.barcode.trim() : null,
-                unit_measure: data.unit_measure?.trim()
-                  ? data.unit_measure.trim()
-                  : "unidad",
-                wholesale_price:
-                  (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
-                has_offer: Boolean(data.has_offer),
-                offer_price:
-                  data.has_offer && (data.offer_price ?? 0) > 0
-                    ? data.offer_price
-                    : null,
-                images: Array.isArray(data.images)
-                  ? data.images.filter(Boolean)
-                  : [],
-              };
-
-              // Transform dimensions to ensure compatibility with Supabase JSONB
-              const dimensions =
-                data.dimensions && typeof data.dimensions === "object"
-                  ? data.dimensions
-                  : null;
-
               if (editingProduct) {
-                const updateData: Database["public"]["Tables"]["products"]["Update"] =
-                  {
-                    ...normalizedData,
-                    dimensions: dimensions as any,
-                  };
-                const result = await updateProduct(
-                  editingProduct.id,
-                  updateData,
-                );
+                const result = await updateProduct(editingProduct.id, data as any);
                 if (result.success) {
-                  toast.success("Producto actualizado");
-                  setEditingProduct(null);
-                  setCreateModalOpen(false);
+                  // Modal handles success toast and closing
                 } else {
                   console.error("Error updating product:", result.error);
-                  toast.error(result.error || "Error al actualizar");
                   throw new Error(result.error);
                 }
               } else {
-                const insertData: Database["public"]["Tables"]["products"]["Insert"] =
-                  {
-                    ...normalizedData,
-                    dimensions: dimensions as any,
-                    sku: normalizedData.sku, // Ensure SKU is present
-                  };
-                const result = await createProduct(insertData);
+                const result = await createProduct(data as any);
                 if (result.success) {
-                  toast.success("Producto creado");
-                  setEditingProduct(null);
-                  setCreateModalOpen(false);
+                  // Modal handles success toast and closing
                 } else {
                   console.error("Error creating product:", result.error);
-                  toast.error(result.error || "Error al crear");
                   throw new Error(result.error);
                 }
               }
             } catch (error: any) {
-              // Re-throw to be caught by the modal's internal handling if necessary
+              // Re-throw to be caught by the modal's internal handling
               throw error;
             }
           }}

@@ -15,6 +15,10 @@ import {
 } from './components'
 import { Search } from 'lucide-react'
 
+// Force dynamic rendering and disable caching to ensure fresh data
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export const metadata: Metadata = {
   title: 'Catálogo de Productos | 4G Celulares',
   description: 'Explora nuestra amplia gama de celulares, repuestos y accesorios. Encuentra las mejores marcas y precios.',
@@ -72,6 +76,9 @@ export default async function ProductsPage(props: {
     minPrice > 0 || maxPrice < MAX_PRICE,
   ].filter(Boolean).length
 
+  // State for sidebar collapse is managed by the client component, 
+  // but we can pass a handler if we need to adjust layout
+  
   return (
     <div className="min-h-screen bg-background">
       {/* Breadcrumb + title bar */}
@@ -108,18 +115,19 @@ export default async function ProductsPage(props: {
       <div className="container py-6 lg:py-8">
         <div className="flex gap-6 xl:gap-8">
           {/* Sidebar filters - Desktop */}
-          <aside className="hidden lg:block w-64 xl:w-72 shrink-0">
-            <div className="sticky top-24">
-              <div className="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm backdrop-blur-sm">
-                <Suspense fallback={<div className="h-96 w-full bg-muted animate-pulse rounded-lg" />}>
+          <aside className="hidden lg:block shrink-0 h-fit sticky top-24">
+             {/* The width is now controlled by the content within the ProductFilters component when it collapses/expands */}
+             <div className="rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition-all duration-300">
+               <div className="p-4">
+                <Suspense fallback={<div className="h-96 w-64 bg-muted animate-pulse rounded-lg" />}>
                   <ProductFilters
                     priceRange={priceRange}
                     categories={categories}
                     brands={brands}
                   />
                 </Suspense>
+               </div>
               </div>
-            </div>
           </aside>
 
           {/* Products area */}

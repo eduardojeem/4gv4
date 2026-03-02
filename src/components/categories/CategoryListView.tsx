@@ -34,9 +34,9 @@ interface Category extends BaseCategory {
 
 interface CategoryListViewProps {
     categories: Category[]
-    onEdit: (category: Category) => void
-    onDelete: (id: string) => void
-    onToggleActive: (id: string, isActive: boolean) => void
+    onEdit?: (category: Category) => void
+    onDelete?: (id: string) => void
+    onToggleActive?: (id: string, isActive: boolean) => void
     selectedIds?: string[]
     onSelectionChange?: (ids: string[]) => void
     getCategoryName?: (id: string) => string
@@ -60,6 +60,7 @@ export function CategoryListView({
 }: CategoryListViewProps) {
     const [sortField, setSortField] = useState<SortField>('name')
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+    const hasActions = Boolean(onEdit || onAddChild || onToggleActive || onDelete)
 
     const handleSort = (field: SortField) => {
         if (sortField === field) {
@@ -155,7 +156,7 @@ export function CategoryListView({
                         <TableHead>
                             <SortButton field="created_at">Creado</SortButton>
                         </TableHead>
-                        <TableHead className="w-12">Acciones</TableHead>
+                        {hasActions && <TableHead className="w-12">Acciones</TableHead>}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -266,6 +267,7 @@ export function CategoryListView({
                                 </div>
                             </TableCell>
 
+                            {hasActions && (
                             <TableCell>
                                 {(onEdit || onAddChild || onToggleActive || onDelete) && (
                                 <DropdownMenu>
@@ -320,6 +322,7 @@ export function CategoryListView({
                                 </DropdownMenu>
                                 )}
                             </TableCell>
+                            )}
                         </motion.tr>
                     ))}
                 </TableBody>
@@ -334,3 +337,4 @@ export function CategoryListView({
         </div>
     )
 }
+

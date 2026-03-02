@@ -4,7 +4,7 @@ export const productSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(3, "El nombre debe tener al menos 3 caracteres").max(200, "El nombre no puede exceder 200 caracteres"),
   sku: z.string().min(3, "El SKU debe tener al menos 3 caracteres").regex(/^[A-Z0-9-_]+$/i, "El SKU solo puede contener letras, números, guiones y guiones bajos"),
-  description: z.string().max(1000, "La descripción no puede exceder 1000 caracteres").optional().nullable(),
+  description: z.string().max(2000, "La descripción no puede exceder 2000 caracteres").optional().nullable(),
   category_id: z.string().min(1, "La categoría es requerida"),
   brand_id: z.string().optional().nullable(),
   brand: z.string().optional().nullable(),
@@ -20,6 +20,7 @@ export const productSchema = z.object({
   // Inventario
   stock_quantity: z.coerce.number().int().min(0, "El stock no puede ser negativo"),
   min_stock: z.coerce.number().int().min(0, "El stock mínimo no puede ser negativo"),
+  // max_stock no se guarda en BD — solo se usa como referencia visual en el UI
   max_stock: z.coerce.number().int().min(0, "El stock máximo no puede ser negativo").optional().nullable(),
   
   // Otros
@@ -83,7 +84,7 @@ export const productSchema = z.object({
     }
   }
 
-  // Validar stock máximo
+  // Validar stock máximo (solo referencia visual, no se guarda en BD)
   if (data.max_stock && data.max_stock > 0) {
     if (data.max_stock <= data.min_stock) {
       ctx.addIssue({
@@ -92,14 +93,10 @@ export const productSchema = z.object({
         path: ["max_stock"]
       })
     }
-    if (data.stock_quantity > data.max_stock) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `El stock actual excede el máximo permitido (${data.max_stock})`,
-        path: ["stock_quantity"]
-      })
-    }
   }
 })
 
-export type ProductFormValues = z.infer<typeof productSchema>
+// Output type (after parsing/coercion) — used for onSubmit handler
+export type ProductFormValues = z.output<typeof productSchema>
+// Input type (before parsing) — used for useForm generic with zodResolver v5 + zod v4
+export type ProductFormInput = z.input<typeof productSchema>
