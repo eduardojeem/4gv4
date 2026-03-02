@@ -57,6 +57,10 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionRequirement> = {
     permissions: ['products.manage'],
     requireAll: true
   },
+  '/dashboard/brands': {
+    permissions: ['products.manage'],
+    requireAll: true
+  },
   '/dashboard/promotions': {
     permissions: ['promotions.read'],
     roles: ['admin', 'vendedor', 'manager'],
@@ -73,7 +77,7 @@ export function usePermissions(): PermissionCheck {
     return ROLE_PERMISSIONS[user.role]?.permissions || []
   }, [user?.role])
 
-  // Verificar un permiso específico
+  // Verificar un permiso especÃ­fico
   const hasPermission = useCallback((permission: string): boolean => {
     return authHasPermission(permission)
   }, [authHasPermission])
@@ -88,7 +92,7 @@ export function usePermissions(): PermissionCheck {
     return permissions.every(permission => hasPermission(permission))
   }, [hasPermission])
 
-  // Verificar acceso a un recurso con una acción específica
+  // Verificar acceso a un recurso con una acciÃ³n especÃ­fica
   const hasResourceAccess = useCallback((resource: string, action: string): boolean => {
     if (!user?.role) return false
 
@@ -98,7 +102,7 @@ export function usePermissions(): PermissionCheck {
     )
   }, [user?.role])
 
-  // Verificar si puede acceder a una ruta específica
+  // Verificar si puede acceder a una ruta especÃ­fica
   const canAccessRoute = useCallback((route: string): boolean => {
     const requirement = ROUTE_PERMISSIONS[route]
     if (!requirement) return true // Si no hay requisitos, permitir acceso
@@ -121,7 +125,7 @@ export function usePermissions(): PermissionCheck {
     return userPermissions.filter(p => p.resource === resource)
   }, [userPermissions])
 
-  // Verificar autorización compleja
+  // Verificar autorizaciÃ³n compleja
   const isAuthorized = useCallback((requirements: PermissionRequirement): boolean => {
     if (!user?.role) return false
 
@@ -151,7 +155,7 @@ export function usePermissions(): PermissionCheck {
       if (permissionCheck) return true
     }
 
-    // Verificar acceso a recurso específico
+    // Verificar acceso a recurso especÃ­fico
     if (hasResourceRequirement) {
       return hasResourceAccess(resource, action)
     }
@@ -182,7 +186,7 @@ export function usePermissionGuard(requirements: PermissionRequirement) {
   }), [isAuthorized, requirements])
 }
 
-// Hook para obtener permisos de una lista específica
+// Hook para obtener permisos de una lista especÃ­fica
 export function usePermissionList(permissionIds: string[]) {
   const { hasPermission } = usePermissions()
 

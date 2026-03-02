@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/lib/supabase/types'
 
@@ -17,6 +17,10 @@ export type Brand = BrandRow & {
 interface BrandFilters {
   search?: string
   isActive?: boolean
+  page?: number
+  limit?: number
+  orderBy?: keyof BrandRow
+  orderDir?: 'asc' | 'desc'
 }
 
 export function validateBrandInput(input: Pick<BrandInsert, 'name' | 'description'>) {
@@ -32,18 +36,46 @@ export function validateBrandInput(input: Pick<BrandInsert, 'name' | 'descriptio
 export function useBrands() {
   const supabase = createClient()
   const [brands, setBrands] = useState<Brand[]>([])
+  const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [filters, setFilters] = useState<BrandFilters>({ isActive: undefined, search: '' })
+  
+  // Default filters
+  const [filters, setFilters] = useState<BrandFilters>({ 
+    isActive: undefined, 
+    search: '',
+    page: 1,
+    limit: 12,
+    orderBy: 'name',
+    orderDir: 'asc'
+  })
 
-  const fetchBrands = useCallback(async (override?: BrandFilters) => {
-    const active = override ?? filters
+  // Keep track of the abort controller to cancel pending requests
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  const fetchBrands = useCallback(async (override?: Partial<BrandFilters>) => {
+    // Merge current filters with override
+    const active = { ...filters, ...override }
+    
+    // Update state if override was provided (to keep UI in sync)
+    if (override) {
+      setFilters(prev => ({ ...prev, ...override }))
+    }
+
     setLoading(true)
     setError(null)
+
+    // Cancel previous request if it exists
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const requestController = new AbortController()
+    abortControllerRef.current = requestController
+
     try {
       let query = supabase
         .from('brands')
-        .select('*')
+        .select('*', { count: 'exact' })
       
       if (active.isActive !== undefined) {
         query = query.eq('is_active', active.isActive)
@@ -54,31 +86,53 @@ export function useBrands() {
         query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`)
       }
       
-      query = query.order('name', { ascending: true })
+      // Sorting
+      const orderBy = active.orderBy || 'name'
+      const orderDir = active.orderDir || 'asc'
+      query = query.order(orderBy, { ascending: orderDir === 'asc' })
+
+      // Pagination
+      const page = active.page || 1
+      const limit = active.limit || 12
+      const from = (page - 1) * limit
+      const to = from + limit - 1
       
-      const { data, error } = await query
+      query = query.range(from, to)
+      
+      // Execute query with abort signal
+      const { data, error, count } = await query.abortSignal(requestController.signal)
 
-      if (error) throw error
+      if (error) {
+        if (error.code !== '20') { // Ignore abort error (code 20 usually, strictly check if needed)
+           throw error
+        }
+        return // Aborted, do nothing
+      }
 
-      // For now, we won't fetch stats to keep it simple, or we could add a separate count query
-      // To get product count efficiently we might need an RPC or a separate query
-      // Let's do a simple separate query for counts if needed, but for now 0 is fine
+      // Add dummy stats for now (as per original code)
       const brandsWithStats = (data || []).map(brand => ({
         ...brand,
         stats: { product_count: 0 }
       }))
 
       setBrands(brandsWithStats)
-    } catch (err) {
+      if (count !== null) setTotalCount(count)
+      
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return
+      }
       console.error('Error fetching brands:', err)
       setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setLoading(false)
+      // Only set loading false if this is the latest request (not aborted)
+      if (abortControllerRef.current === requestController) {
+        setLoading(false)
+      }
     }
   }, [supabase, filters])
 
   const createBrand = useCallback(async (payload: BrandInsert) => {
-    console.log('Creating brand:', payload)
     const { valid, errors } = validateBrandInput({ name: payload.name, description: payload.description })
     
     if (!valid) {
@@ -88,14 +142,19 @@ export function useBrands() {
     
     try {
       const normalizedName = payload.name.trim()
+      
+      // Check for duplicates
       const { data: existing, error: checkError } = await supabase
         .from('brands')
-        .select('id,name')
+        .select('id')
         .ilike('name', normalizedName)
+        .limit(1)
         .maybeSingle()
       
-      if (checkError) throw checkError
-      
+      if (checkError) {
+          console.error('Error checking duplicate:', checkError)
+          throw checkError
+      }
       if (existing) {
         return { success: false as const, error: 'Ya existe una marca con este nombre' }
       }
@@ -103,80 +162,74 @@ export function useBrands() {
       const { data, error } = await supabase
         .from('brands')
         .insert({ ...payload, name: normalizedName })
-        .select('*')
+        .select()
         .single()
       
-      if (error) throw error
+      if (error) {
+          console.error('Supabase create error:', error)
+          throw error
+      }
       
-      await fetchBrands()
+      await fetchBrands() // Refresh list
       return { success: true as const, data }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error creating brand:', err)
-      return { success: false as const, error: err instanceof Error ? err.message : 'Error desconocido al crear marca' }
+      const message = err?.message || 'Error desconocido'
+      const code = err?.code ? ` (Code: ${err.code})` : ''
+      return { success: false as const, error: `${message}${code}` }
     }
   }, [supabase, fetchBrands])
 
   const updateBrand = useCallback(async (id: string, updates: BrandUpdate) => {
-    console.log('Updating brand:', id, updates)
     try {
       if (updates.name) {
         const { valid, errors } = validateBrandInput({ name: updates.name })
-        if (!valid) {
-            const errorMsg = Object.values(errors).join('. ')
-            return { success: false as const, error: errorMsg || 'Nombre inválido' }
-        }
+        if (!valid) return { success: false as const, error: Object.values(errors).join('. ') }
 
         const normalizedName = updates.name.trim()
+        
+        // Check duplicate name on update (excluding self)
         const { data: existing, error: checkError } = await supabase
           .from('brands')
-          .select('id,name')
+          .select('id')
           .ilike('name', normalizedName)
           .neq('id', id)
+          .limit(1)
           .maybeSingle()
         
-        if (checkError) {
-          console.error('Error checking duplicate name:', checkError)
-          throw checkError
-        }
+        if (checkError) throw checkError
+        if (existing) return { success: false as const, error: 'Ya existe otra marca con este nombre' }
         
-        if (existing) {
-          return { success: false as const, error: 'Ya existe otra marca con este nombre' }
-        }
         updates.name = normalizedName
       }
 
-      // Ensure updated_at is set
       const updateData = {
         ...updates,
         updated_at: new Date().toISOString()
       }
 
-      console.log('Sending update to Supabase:', updateData)
-
       const { data, error } = await supabase
         .from('brands')
         .update(updateData)
         .eq('id', id)
-        .select('*')
+        .select()
         .single()
       
-      if (error) {
-        console.error('Supabase update error:', error)
-        throw error
-      }
+      if (error) throw error
       
-      console.log('Update successful:', data)
-      await fetchBrands()
+      await fetchBrands() // Refresh list
       return { success: true as const, data }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating brand:', err)
-      return { success: false as const, error: err instanceof Error ? err.message : 'Error desconocido al actualizar' }
+      const message = err?.message || 'Error desconocido'
+      const code = err?.code ? ` (Code: ${err.code})` : ''
+      return { success: false as const, error: `${message}${code}` }
     }
   }, [supabase, fetchBrands])
 
   const deleteBrand = useCallback(async (id: string) => {
     try {
-      // Check for associated products
+      // Check associated products first
       const { count: productCount, error: productError } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
@@ -189,20 +242,28 @@ export function useBrands() {
       const { error } = await supabase.from('brands').delete().eq('id', id)
       if (error) throw error
       
-      await fetchBrands()
+      await fetchBrands() // Refresh list
       return { success: true as const }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting brand:', err)
-      return { success: false as const, error: err instanceof Error ? err.message : 'Error desconocido al eliminar' }
+      const message = err?.message || 'Error desconocido'
+      const code = err?.code ? ` (Code: ${err.code})` : ''
+      return { success: false as const, error: `${message}${code}` }
     }
   }, [supabase, fetchBrands])
 
+  // Initial fetch
   useEffect(() => {
     fetchBrands()
-  }, [fetchBrands])
+    return () => {
+      abortControllerRef.current?.abort()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) 
 
   return {
     brands,
+    totalCount,
     loading,
     error,
     filters,
@@ -213,3 +274,5 @@ export function useBrands() {
     deleteBrand
   }
 }
+
+

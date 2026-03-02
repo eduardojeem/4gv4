@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +17,9 @@ import {
 } from 'lucide-react'
 import { format, subDays, subHours, subMinutes } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { useSecurityLogs } from '@/hooks/use-security-logs'
+import { Loader2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface AuditLog {
   id: string
@@ -179,14 +182,50 @@ const mockSystemEvents: SystemEvent[] = [
 ]
 
 export default function AuditLogs() {
-  const [auditLogs] = useState<AuditLog[]>(generateMockAuditLogs())
-  const [securityEvents] = useState<SecurityEvent[]>(mockSecurityEvents)
-  const [systemEvents] = useState<SystemEvent[]>(mockSystemEvents)
+  const { logs: securityLogs, isLoading, fetchSecurityLogs } = useSecurityLogs()
   const [activeTab, setActiveTab] = useState('audit')
   const [searchTerm, setSearchTerm] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('all')
+  
+  // Mantener mock data para las otras pestañas por ahora
+  const securityEvents = mockSecurityEvents
+  const systemEvents = mockSystemEvents
+
+  // Mapear logs de seguridad al formato de AuditLog
+  const auditLogs = useMemo(() => {
+    return securityLogs.map(log => ({
+      id: log.id,
+      timestamp: new Date(log.timestamp),
+      level: (log.severity === 'low' ? 'info' : 
+              log.severity === 'medium' ? 'warning' : 
+              log.severity === 'high' ? 'error' : 'critical') as AuditLog['level'],
+      category: (log.resource === 'auth' ? 'auth' : 
+                 log.resource === 'user' ? 'user' : 
+                 log.resource === 'system' ? 'system' : 'data') as AuditLog['category'],
+      action: log.action || 'unknown',
+      description: log.event,
+      user: log.user ? {
+        id: log.user_id || '',
+        name: log.user.split('@')[0], // Fallback simple para nombre
+        email: log.user,
+        role: 'Unknown'
+      } : undefined,
+      resource: log.resource,
+      ip: log.ip,
+      userAgent: log.user_agent,
+      status: 'success' as const, // El audit_log asume éxito si se registró, o éxito parcial
+      details: log.details ? { info: log.details } : undefined
+    }))
+  }, [securityLogs])
+
+  useEffect(() => {
+    const timeRange = dateFilter === 'today' ? '24h' : 
+                     dateFilter === 'week' ? '7d' : 
+                     dateFilter === 'month' ? '30d' : '24h'
+    fetchSecurityLogs({ timeRange })
+  }, [fetchSecurityLogs, dateFilter])
 
   const filteredAuditLogs = auditLogs.filter(log => {
     const matchesSearch = log.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -309,21 +348,30 @@ export default function AuditLogs() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-slate-50 to-gray-50 p-6 rounded-lg border border-slate-200">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-slate-600 to-gray-600 bg-clip-text text-transparent flex items-center">
-              <FileText className="h-6 w-6 mr-2 text-slate-600" />
-              Logs y Auditoría
-            </h2>
-            <p className="text-slate-600 mt-1">Sistema completo de registro y auditoría de eventos</p>
+      {/* Header with Glassmorphism */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-card/60 backdrop-blur-md p-6 rounded-2xl border border-slate-200/60 shadow-sm relative overflow-hidden group"
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative z-10">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300">
+              <FileText className="h-7 w-7" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent italic">
+                Logs y Auditoría
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400 font-medium tracking-wide">Trazabilidad completa de eventos del sistema</p>
+            </div>
           </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             <Button 
               variant="outline" 
-              className="border-slate-300 text-slate-600 hover:bg-slate-50"
+              className="rounded-xl border-slate-300/50 text-slate-600 hover:bg-white/80 transition-all active:scale-95"
             >
               <Download className="h-4 w-4 mr-2" />
               Exportar
@@ -331,19 +379,19 @@ export default function AuditLogs() {
             
             <Button 
               variant="outline" 
-              className="border-slate-300 text-slate-600 hover:bg-slate-50"
+              className="rounded-xl border-slate-300/50 text-slate-600 hover:bg-white/80 transition-all active:scale-95"
             >
               <RefreshCw className="h-4 w-4 mr-2" />
               Actualizar
             </Button>
             
-            <Button className="bg-gradient-to-r from-slate-600 to-gray-600 hover:from-slate-700 hover:to-gray-700 text-white">
+            <Button className="rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-[0_4px_12px_rgba(15,23,42,0.15)] transition-all active:scale-95">
               <Settings className="h-4 w-4 mr-2" />
               Configurar
             </Button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Filtros */}
       <Card className="border-gray-200 shadow-lg">
@@ -508,81 +556,93 @@ export default function AuditLogs() {
         {/* Tab: Logs de Auditoría */}
         <TabsContent value="audit" className="space-y-4">
           <div className="space-y-4">
-            {filteredAuditLogs.map((log) => (
-              <Card key={log.id} className="border-gray-200 shadow-sm hover:shadow-md transition-all duration-300">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-4 flex-1">
-                      <div className="mt-1">
-                        {getActionIcon(log.action)}
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+                <Loader2 className="h-10 w-10 animate-spin mb-4 text-slate-400" />
+                <p>Cargando registros de auditoría...</p>
+              </div>
+            ) : filteredAuditLogs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground border-2 border-dashed rounded-xl bg-slate-50/50">
+                <FileX className="h-12 w-12 mb-4 opacity-20" />
+                <p>No se encontraron registros que coincidan con los filtros.</p>
+              </div>
+            ) : (
+              filteredAuditLogs.map((log) => (
+                <Card key={log.id} className="border-gray-200 shadow-sm hover:shadow-md transition-all duration-300">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-4 flex-1">
+                        <div className="mt-1">
+                          {getActionIcon(log.action)}
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <Badge className={getLevelColor(log.level)}>
+                              {getLevelIcon(log.level)}
+                              <span className="ml-1 capitalize">{log.level}</span>
+                            </Badge>
+                            
+                            <Badge className={getCategoryColor(log.category)}>
+                              {getCategoryIcon(log.category)}
+                              <span className="ml-1 capitalize">{log.category}</span>
+                            </Badge>
+                            
+                            <Badge className={getStatusColor(log.status)}>
+                              {getStatusIcon(log.status)}
+                              <span className="ml-1 capitalize">{log.status}</span>
+                            </Badge>
+                          </div>
+                          
+                          <h4 className="font-semibold text-gray-900 mb-1">{log.description}</h4>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-600">
+                            <div>
+                              <span className="font-medium">Fecha:</span>
+                              <p>{format(log.timestamp, 'dd/MM/yyyy HH:mm:ss', { locale: es })}</p>
+                            </div>
+                            
+                            {log.user && (
+                              <div>
+                                <span className="font-medium">Usuario:</span>
+                                <p>{log.user.name} ({log.user.role})</p>
+                              </div>
+                            )}
+                            
+                            {log.ip && (
+                              <div>
+                                <span className="font-medium">IP:</span>
+                                <p>{log.ip}</p>
+                              </div>
+                            )}
+                            
+                            {log.resource && (
+                              <div>
+                                <span className="font-medium">Recurso:</span>
+                                <p className="truncate">{log.resource}</p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {log.details && (
+                            <div className="mt-2 p-2 bg-gray-0 rounded text-xs">
+                              <span className="font-medium">Detalles:</span>
+                              <pre className="mt-1 text-gray-600">{JSON.stringify(log.details, null, 2)}</pre>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <Badge className={getLevelColor(log.level)}>
-                            {getLevelIcon(log.level)}
-                            <span className="ml-1 capitalize">{log.level}</span>
-                          </Badge>
-                          
-                          <Badge className={getCategoryColor(log.category)}>
-                            {getCategoryIcon(log.category)}
-                            <span className="ml-1 capitalize">{log.category}</span>
-                          </Badge>
-                          
-                          <Badge className={getStatusColor(log.status)}>
-                            {getStatusIcon(log.status)}
-                            <span className="ml-1 capitalize">{log.status}</span>
-                          </Badge>
-                        </div>
-                        
-                        <h4 className="font-semibold text-gray-900 mb-1">{log.description}</h4>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 text-sm text-gray-600">
-                          <div>
-                            <span className="font-medium">Fecha:</span>
-                            <p>{format(log.timestamp, 'dd/MM/yyyy HH:mm:ss', { locale: es })}</p>
-                          </div>
-                          
-                          {log.user && (
-                            <div>
-                              <span className="font-medium">Usuario:</span>
-                              <p>{log.user.name} ({log.user.role})</p>
-                            </div>
-                          )}
-                          
-                          {log.ip && (
-                            <div>
-                              <span className="font-medium">IP:</span>
-                              <p>{log.ip}</p>
-                            </div>
-                          )}
-                          
-                          {log.resource && (
-                            <div>
-                              <span className="font-medium">Recurso:</span>
-                              <p className="truncate">{log.resource}</p>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {log.details && (
-                          <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
-                            <span className="font-medium">Detalles:</span>
-                            <pre className="mt-1 text-gray-600">{JSON.stringify(log.details, null, 2)}</pre>
-                          </div>
-                        )}
+                      <div className="flex items-center space-x-2 ml-4">
+                        <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-800">
+                          <Eye className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center space-x-2 ml-4">
-                      <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-800">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </TabsContent>
 

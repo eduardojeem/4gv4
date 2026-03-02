@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+﻿import { Suspense } from 'react'
 import { SecurityPanel } from '@/components/admin/system/security-panel'
 import { Shield, Loader2 } from 'lucide-react'
 
@@ -29,3 +29,4 @@ export default function SecurityPage() {
     </div>
   )
 }
+

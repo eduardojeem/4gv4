@@ -48,7 +48,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { name: 'Clientes', href: '/dashboard/customers', icon: Users, roles: ['admin', 'vendedor'] },
       { name: 'Créditos', href: '/dashboard/credits', icon: CreditCard, roles: ['admin', 'vendedor'] },
       { name: 'Productos', href: '/dashboard/products', icon: Package, roles: ['admin', 'vendedor'] },
-      { name: 'Marcas', href: '/dashboard/brands', icon: Building2, roles: ['admin', 'vendedor'] },
+      { name: 'Marcas', href: '/dashboard/brands', icon: Building2, roles: ['admin'] },
       { name: 'Categorías', href: '/dashboard/categories', icon: Tag, roles: ['admin', 'vendedor'] },
       { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, roles: ['admin', 'vendedor'] },
       { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['admin'] },
@@ -241,3 +241,4 @@ export const Sidebar = memo(function Sidebar() {
   )
 })
 export default Sidebar
+

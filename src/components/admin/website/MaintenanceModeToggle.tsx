@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,10 +18,11 @@ export function MaintenanceModeToggle() {
   const [maintenanceMode, setMaintenanceMode] = useState<MaintenanceMode | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
 
-  // Inicializar con datos actuales
-  if (!maintenanceMode && settings?.maintenance_mode) {
-    setMaintenanceMode(settings.maintenance_mode)
-  }
+  useEffect(() => {
+    if (settings?.maintenance_mode) {
+      setMaintenanceMode(settings.maintenance_mode)
+    }
+  }, [settings?.maintenance_mode])
 
   const handleSave = async () => {
     if (!maintenanceMode) return

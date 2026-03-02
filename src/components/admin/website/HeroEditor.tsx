@@ -15,7 +15,8 @@ export function HeroEditor() {
   const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
   const [heroContent, setHeroContent] = useState<HeroContent | null>(null)
   const [heroStats, setHeroStats] = useState<HeroStats | null>(null)
-  const [hasChanges, setHasChanges] = useState(false)
+  const [hasContentChanges, setHasContentChanges] = useState(false)
+  const [hasStatsChanges, setHasStatsChanges] = useState(false)
 
   useEffect(() => {
     if (settings?.hero_content) {
@@ -38,7 +39,7 @@ export function HeroEditor() {
       toast.success('Contenido del Hero actualizado', {
         icon: <Check className="h-4 w-4" />
       })
-      setHasChanges(false)
+      setHasContentChanges(false)
     } else {
       toast.error(result.error || 'Error al guardar')
     }
@@ -53,7 +54,7 @@ export function HeroEditor() {
       toast.success('Estadísticas actualizadas', {
         icon: <Check className="h-4 w-4" />
       })
-      setHasChanges(false)
+      setHasStatsChanges(false)
     } else {
       toast.error(result.error || 'Error al guardar')
     }
@@ -108,7 +109,7 @@ export function HeroEditor() {
                 value={heroContent.badge}
                 onChange={(e) => {
                   setHeroContent({ ...heroContent, badge: e.target.value })
-                  setHasChanges(true)
+                  setHasContentChanges(true)
                 }}
                 placeholder="✨ Más de 10 años de experiencia"
                 maxLength={100}
@@ -123,7 +124,7 @@ export function HeroEditor() {
                 value={heroContent.title}
                 onChange={(e) => {
                   setHeroContent({ ...heroContent, title: e.target.value })
-                  setHasChanges(true)
+                  setHasContentChanges(true)
                 }}
                 placeholder="Reparación de celulares rápida y confiable"
                 maxLength={150}
@@ -138,7 +139,7 @@ export function HeroEditor() {
                 value={heroContent.subtitle}
                 onChange={(e) => {
                   setHeroContent({ ...heroContent, subtitle: e.target.value })
-                  setHasChanges(true)
+                  setHasContentChanges(true)
                 }}
                 placeholder="Diagnóstico gratuito • Garantía de 6 meses • Técnicos certificados"
                 rows={2}
@@ -149,7 +150,7 @@ export function HeroEditor() {
 
             <Button 
               type="submit" 
-              disabled={isSaving || !hasChanges}
+              disabled={isSaving || !hasContentChanges}
               className="w-full md:w-auto bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-11 px-8"
             >
               {isSaving ? (
@@ -191,7 +192,7 @@ export function HeroEditor() {
                   value={heroStats.repairs}
                   onChange={(e) => {
                     setHeroStats({ ...heroStats, repairs: e.target.value })
-                    setHasChanges(true)
+                    setHasStatsChanges(true)
                   }}
                   placeholder="10K+"
                   maxLength={20}
@@ -206,7 +207,7 @@ export function HeroEditor() {
                   value={heroStats.satisfaction}
                   onChange={(e) => {
                     setHeroStats({ ...heroStats, satisfaction: e.target.value })
-                    setHasChanges(true)
+                    setHasStatsChanges(true)
                   }}
                   placeholder="98%"
                   maxLength={20}
@@ -221,7 +222,7 @@ export function HeroEditor() {
                   value={heroStats.avgTime}
                   onChange={(e) => {
                     setHeroStats({ ...heroStats, avgTime: e.target.value })
-                    setHasChanges(true)
+                    setHasStatsChanges(true)
                   }}
                   placeholder="24-48h"
                   maxLength={20}
@@ -232,7 +233,7 @@ export function HeroEditor() {
 
             <Button 
               type="submit" 
-              disabled={isSaving || !hasChanges}
+              disabled={isSaving || !hasStatsChanges}
               className="w-full md:w-auto bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 h-11 px-8"
             >
               {isSaving ? (

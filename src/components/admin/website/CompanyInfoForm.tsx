@@ -186,7 +186,7 @@ export function CompanyInfoForm() {
         <CardContent className="pt-6">
           <div className="grid gap-6 md:grid-cols-3">
             {/* Nombre de la empresa */}
-            <div className="space-y-2 md:col-span-1">
+            <div className="space-y-2 md:col-span-2">
               <Label htmlFor="companyName" className="text-sm font-medium">Nombre de la empresa</Label>
               <Input
                 id="companyName"
@@ -196,32 +196,6 @@ export function CompanyInfoForm() {
                 maxLength={100}
                 className="border-gray-200 focus:border-indigo-500 focus:ring-indigo-500 h-11"
               />
-            </div>
-
-            {/* Color de marca */}
-            <div className="space-y-2 md:col-span-1">
-              <Label className="text-sm font-medium">Color de marca</Label>
-              <div className="flex flex-wrap gap-2">
-                {['blue','green','purple','orange','red','indigo','teal'].map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => handleChange('brandColor', c)}
-                    className={`h-8 w-8 rounded-full border-2 ${
-                      (formData.brandColor || 'blue') === c ? 'ring-2 ring-offset-2 ring-indigo-500' : ''
-                    } ${
-                      c === 'blue' ? 'bg-blue-500 border-blue-600' :
-                      c === 'green' ? 'bg-green-500 border-green-600' :
-                      c === 'purple' ? 'bg-purple-500 border-purple-600' :
-                      c === 'orange' ? 'bg-orange-500 border-orange-600' :
-                      c === 'red' ? 'bg-red-500 border-red-600' :
-                      c === 'indigo' ? 'bg-indigo-500 border-indigo-600' :
-                      'bg-teal-500 border-teal-600'
-                    }`}
-                    title={c}
-                  />
-                ))}
-              </div>
             </div>
 
             {/* Logo URL */}
@@ -302,7 +276,7 @@ export function CompanyInfoForm() {
                       <SelectValue placeholder="Seleccionar estilo" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="glass text-sm">Cristal (Moderno)</SelectItem>
+                      <SelectItem value="glass">Cristal (Moderno)</SelectItem>
                       <SelectItem value="solid">Sólido Blanco</SelectItem>
                       <SelectItem value="accent">Color de Marca</SelectItem>
                       <SelectItem value="dark">Negro Elegante</SelectItem>

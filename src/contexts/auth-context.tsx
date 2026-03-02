@@ -144,6 +144,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       if (error) {
+        // Registrar intento fallido
+        try {
+          const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
+          await supabase.rpc('log_auth_event', {
+            p_user_id: undefined, // No tenemos UUID si falló
+            p_action: 'login_failed',
+            p_success: false,
+            p_ip_address: undefined,
+            p_user_agent: userAgent,
+            p_details: { email, error: error.message }
+          })
+        } catch (logError) {
+          console.error('Error logging failed login:', logError)
+        }
         return { error: error.message }
       }
 
@@ -156,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             p_success: true,
             p_ip_address: undefined,
             p_user_agent: userAgent,
-            p_details: { email }
+            p_details: { email, method: 'password' }
           })
         } catch (logError) {
           console.error('Error logging auth event (login):', logError)

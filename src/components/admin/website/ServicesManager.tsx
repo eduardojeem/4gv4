@@ -219,7 +219,7 @@ export function ServicesManager() {
 
           return (
             <Card key={service.id} className={`group overflow-hidden border-none shadow-sm hover:shadow-xl transition-all duration-300 bg-white dark:bg-gray-800 rounded-2xl ${!isActive ? 'opacity-60 grayscale' : ''}`}>
-              <CardHeader className={`bg-linear-to-br ${gradient} p-5 relative overflow-hidden`}>
+              <CardHeader className={`bg-gradient-to-br ${gradient} p-5 relative overflow-hidden`}>
                 {/* Fondo decorativo sutil */}
                 <div className="absolute -right-4 -top-4 opacity-5 pointer-events-none">
                   <IconComp className="h-24 w-24" />
@@ -486,7 +486,7 @@ export function ServicesManager() {
           onClick={handleSaveAll} 
           disabled={isSaving || !hasChanges}
           size="lg"
-          className="shadow-2xl px-8 md:px-12 bg-linear-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 h-14 md:h-16 rounded-full md:rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 disabled:grayscale"
+          className="shadow-2xl px-8 md:px-12 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 h-14 md:h-16 rounded-full md:rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 disabled:grayscale"
         >
           {isSaving ? (
             <><Loader2 className="mr-3 h-5 w-5 md:h-6 md:w-6 animate-spin" /> <span className="hidden md:inline">Guardando...</span></>

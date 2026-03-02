@@ -7,6 +7,7 @@ export interface DatabaseMetrics {
   queryPerformance: QueryPerformance
   storageBreakdown: StorageBreakdown
   alerts: DatabaseAlert[]
+  isMockData?: boolean
 }
 
 export interface TableSize {
@@ -15,6 +16,7 @@ export interface TableSize {
   rowCount: number
   indexSize: number
   percentage: number
+  isMock?: boolean
 }
 
 export interface ConnectionStats {
@@ -22,6 +24,7 @@ export interface ConnectionStats {
   maxConnections: number
   connectionUsage: number
   avgConnectionTime: number
+  isMock?: boolean
 }
 
 export interface QueryPerformance {
@@ -29,6 +32,7 @@ export interface QueryPerformance {
   avgQueryTime: number
   queriesPerSecond: number
   cacheHitRatio: number
+  isMock?: boolean
 }
 
 export interface SlowQuery {
@@ -88,7 +92,8 @@ class DatabaseMonitoringService {
         connectionStats,
         queryPerformance,
         storageBreakdown,
-        alerts
+        alerts,
+        isMockData: totalSizeInfo.isMock || tablesSizes.some(t => t.isMock) || connectionStats.isMock || queryPerformance.isMock
       }
 
       return { success: true, data: metrics }
@@ -102,7 +107,7 @@ class DatabaseMonitoringService {
   }
 
   // Obtener información del tamaño total de la base de datos
-  private async getDatabaseSizeInfo(): Promise<{ totalSize: number; sizeGB: number; sizeMB: number }> {
+  private async getDatabaseSizeInfo(): Promise<{ totalSize: number; sizeGB: number; sizeMB: number; isMock?: boolean }> {
     try {
       const { data, error } = await this.supabase.rpc('get_database_size_info')
       
@@ -112,7 +117,8 @@ class DatabaseMonitoringService {
         return {
           totalSize: estimatedSize,
           sizeMB: 25,
-          sizeGB: 0.025
+          sizeGB: 0.025,
+          isMock: true
         }
       }
 
@@ -121,7 +127,8 @@ class DatabaseMonitoringService {
         return {
           totalSize: dbInfo.total_size_bytes || 0,
           sizeMB: dbInfo.total_size_mb || 0,
-          sizeGB: dbInfo.total_size_gb || 0
+          sizeGB: dbInfo.total_size_gb || 0,
+          isMock: false
         }
       }
 
@@ -130,7 +137,8 @@ class DatabaseMonitoringService {
       return {
         totalSize: estimatedSize,
         sizeMB: 25,
-        sizeGB: 0.025
+        sizeGB: 0.025,
+        isMock: true
       }
     } catch (error) {
       console.warn('Error obteniendo tamaño de BD:', error)
@@ -138,7 +146,8 @@ class DatabaseMonitoringService {
       return {
         totalSize: estimatedSize,
         sizeMB: 25,
-        sizeGB: 0.025
+        sizeGB: 0.025,
+        isMock: true
       }
     }
   }
@@ -184,7 +193,7 @@ class DatabaseMonitoringService {
       { name: 'suppliers', baseSize: 0.5, rows: 78 },
       { name: 'users', baseSize: 0.2, rows: 12 },
       { name: 'notifications', baseSize: 1.1, rows: 567 },
-      { name: 'audit_logs', baseSize: 5.8, rows: 3240 }
+      { name: 'audit_log', baseSize: 5.8, rows: 3240 }
     ]
 
     const totalSize = tables.reduce((sum, table) => sum + table.baseSize, 0)
@@ -194,7 +203,8 @@ class DatabaseMonitoringService {
       size: table.baseSize * 1024 * 1024, // Convertir a bytes
       rowCount: table.rows,
       indexSize: table.baseSize * 0.2 * 1024 * 1024, // 20% del tamaño para índices
-      percentage: (table.baseSize / totalSize) * 100
+      percentage: (table.baseSize / totalSize) * 100,
+      isMock: true
     })).sort((a, b) => b.size - a.size)
   }
 
@@ -235,7 +245,8 @@ class DatabaseMonitoringService {
       activeConnections: Math.floor(Math.random() * 15) + 5,
       maxConnections: 100,
       connectionUsage: Math.floor(Math.random() * 30) + 10,
-      avgConnectionTime: Math.floor(Math.random() * 200) + 50
+      avgConnectionTime: Math.floor(Math.random() * 200) + 50,
+      isMock: true
     }
   }
 
@@ -283,7 +294,8 @@ class DatabaseMonitoringService {
       slowQueries,
       avgQueryTime: Math.floor(Math.random() * 100) + 50,
       queriesPerSecond: Math.floor(Math.random() * 50) + 20,
-      cacheHitRatio: Math.floor(Math.random() * 20) + 75
+      cacheHitRatio: Math.floor(Math.random() * 20) + 75,
+      isMock: true
     }
   }
 
@@ -405,7 +417,7 @@ class DatabaseMonitoringService {
   async getOptimizationRecommendations(): Promise<string[]> {
     const recommendations = [
       'Considera crear índices en las columnas más consultadas de la tabla "repairs"',
-      'La tabla "audit_logs" está creciendo rápidamente. Implementa rotación de logs',
+      'La tabla "audit_log" está creciendo rápidamente. Implementa rotación de logs',
       'Optimiza las consultas que unen "products" y "product_movements"',
       'Revisa la configuración de cache para mejorar el hit ratio',
       'Considera archivar registros antiguos de "notifications" (>6 meses)',
@@ -484,18 +496,23 @@ class DatabaseMonitoringService {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  // Realizar tarea de mantenimiento
-  async performMaintenanceTask(task: 'reset_stats' | 'clear_logs'): Promise<{ success: boolean; message: string }> {
+  // Realizar tarea de mantenimiento (usa el API del servidor para mayor seguridad)
+  async performMaintenanceTask(task: 'reset_stats' | 'clear_logs' | 'rotate_logs', params?: any): Promise<{ success: boolean; message: string }> {
     try {
-      if (task === 'reset_stats') {
-        const { error } = await this.supabase.rpc('perform_maintenance_task', { task_name: 'reset_stats' })
-        if (error) throw error
-        return { success: true, message: 'Estadísticas reseteadas correctamente' }
-      }
+      const apiTask = task === 'rotate_logs' ? 'rotate_audit_logs' : task
       
-      // Simulamos otras tareas por ahora
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      return { success: true, message: 'Tarea completada correctamente' }
+      const response = await fetch('/api/admin/database/maintenance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: apiTask, params })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Error en el servidor')
+      }
+
+      return await response.json()
     } catch (error) {
       console.error('Error en tarea de mantenimiento:', error)
       return { 
@@ -503,6 +520,11 @@ class DatabaseMonitoringService {
         message: error instanceof Error ? error.message : 'Error al realizar el mantenimiento'
       }
     }
+  }
+
+  // Rotar logs de auditoría
+  async rotateAuditLogs(days: number): Promise<{ success: boolean; message: string }> {
+    return this.performMaintenanceTask('rotate_logs', { days })
   }
 }
 

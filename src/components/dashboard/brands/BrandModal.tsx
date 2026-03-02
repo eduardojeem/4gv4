@@ -1,7 +1,7 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Building2, Globe, MapPin, Calendar, Mail, Phone, Save, X, AlertCircle } from 'lucide-react'
+import { Building2, Globe, Save, X, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,6 +44,20 @@ const COUNTRIES = [
 ]
 
 const CURRENT_YEAR = new Date().getFullYear()
+
+function normalizeWebsite(website?: string | null): string | null {
+  const raw = (website || '').trim()
+  if (!raw) return null
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+
+  try {
+    const parsed = new URL(candidate)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
 
 export function BrandModal({
   isOpen,
@@ -96,8 +110,8 @@ export function BrandModal({
       newErrors.name = 'El nombre debe tener al menos 2 caracteres'
     }
 
-    if (formData.website && !formData.website.match(/^https?:\/\/.+/)) {
-      newErrors.website = 'El sitio web debe ser una URL válida (http:// o https://)'
+    if (formData.website && !normalizeWebsite(formData.website)) {
+      newErrors.website = 'El sitio web no tiene un formato válido'
     }
 
     if (formData.founded_year && (formData.founded_year < 1800 || formData.founded_year > CURRENT_YEAR)) {
@@ -130,13 +144,12 @@ export function BrandModal({
       const dataToSend: BrandInsert = {
         name: formData.name.trim(),
         description: formData.description?.trim() || null,
-        website: formData.website?.trim() || null,
+        website: normalizeWebsite(formData.website),
         country: formData.country || null,
         founded_year: formData.founded_year || null,
         is_active: formData.is_active ?? true
       }
 
-      console.log('Submitting brand data:', dataToSend)
       const result = await onSave(dataToSend)
       
       if (result.success) {
@@ -341,3 +354,5 @@ export function BrandModal({
     </Dialog>
   )
 }
+
+

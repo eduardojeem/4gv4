@@ -26,13 +26,15 @@ import {
   Loader2,
   FilterX,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Zap
 } from 'lucide-react'
 import { useSecurityLogs, type SecurityLog } from '@/hooks/use-security-logs'
 import { useToast } from '@/components/ui/use-toast'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface SecurityPanelProps {
-  // Props opcionales para compatibilidad hacia atrÃ¡s
+  // Props opcionales para compatibilidad hacia atrás
 }
 
 export function SecurityPanel({}: SecurityPanelProps) {
@@ -160,12 +162,12 @@ export function SecurityPanel({}: SecurityPanelProps) {
       link.click()
       document.body.removeChild(link)
       toast({
-        title: "ExportaciÃ³n exitosa",
+        title: "Exportación exitosa",
         description: "Los logs filtrados se han exportado correctamente.",
       })
     } catch (error) {
       toast({
-        title: "Error de exportaciÃ³n",
+        title: "Error de exportación",
         description: "No se pudieron exportar los logs.",
         variant: "destructive"
       })
@@ -205,7 +207,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
     if (event.includes('inicio') || event.includes('login') || event.includes('exitoso')) return <Unlock className="h-4 w-4 text-green-600 dark:text-green-400" />
     if (event.includes('fallido') || event.includes('failed') || event.includes('denegado')) return <Lock className="h-4 w-4 text-red-600 dark:text-red-400" />
     if (event.includes('bloqueado') || event.includes('blocked')) return <Ban className="h-4 w-4 text-red-600 dark:text-red-400" />
-    if (event.includes('contraseÃ±a') || event.includes('password')) return <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+    if (event.includes('contraseña') || event.includes('password')) return <Shield className="h-4 w-4 text-blue-600 dark:text-blue-400" />
     return <Eye className="h-4 w-4 text-gray-600 dark:text-gray-400" />
   }
 
@@ -243,15 +245,24 @@ export function SecurityPanel({}: SecurityPanelProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="rounded-xl border bg-gradient-to-r from-red-50 to-orange-50 p-4 dark:from-red-950/30 dark:to-orange-950/20">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-red-700 dark:text-red-300 flex items-center">
-              <Shield className="h-6 w-6 mr-2 text-red-700 dark:text-red-300" />
-              Panel de Seguridad
-            </h2>
-            <p className="text-red-700/90 dark:text-red-300/90 mt-1">Monitoreo y auditorÃ­a de eventos de seguridad</p>
+      {/* Header with Glassmorphism */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-xl border bg-card/60 backdrop-blur-md p-6 shadow-sm relative overflow-hidden group"
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative z-10">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-2xl bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 shadow-inner">
+              <Shield className="h-7 w-7" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-slate-50">
+                Panel de Seguridad
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400 font-medium">Monitoreo y auditoría de eventos en tiempo real</p>
+            </div>
           </div>
           
           <div className="flex flex-wrap gap-2">
@@ -286,57 +297,53 @@ export function SecurityPanel({}: SecurityPanelProps) {
             </Button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      {/* EstadÃ­sticas de Seguridad */}
+      {/* Estadísticas de Seguridad con Animaciones */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800 shadow dark:shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-400">Total de Eventos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {isLoading ? '-' : stats.totalEvents}
+        {[
+          { title: 'Total de Eventos', value: stats.totalEvents, subtitle: 'Período seleccionado', icon: Shield, color: 'blue' },
+          { title: 'Eventos Críticos', value: stats.criticalEvents, subtitle: 'Atención inmediata', icon: AlertTriangle, color: 'red' },
+          { title: 'Alto Riesgo', value: stats.highRiskEvents, subtitle: 'Alta prioridad', icon: Zap, color: 'orange' },
+          { title: 'Intentos Fallidos', value: stats.failedAttempts, subtitle: 'Accesos denegados', icon: Ban, color: 'rose' }
+        ].map((item, idx) => (
+          <motion.div
+            key={item.title}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.1 }}
+            whileHover={{ scale: 1.02, translateY: -4 }}
+            className={`
+              relative overflow-hidden rounded-2xl border p-5 transition-shadow hover:shadow-lg
+              ${item.color === 'blue' ? 'bg-blue-50/50 border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/50' : ''}
+              ${item.color === 'red' ? 'bg-red-50/50 border-red-100 dark:bg-red-950/20 dark:border-red-900/50' : ''}
+              ${item.color === 'orange' ? 'bg-orange-50/50 border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/50' : ''}
+              ${item.color === 'rose' ? 'bg-rose-50/50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/50' : ''}
+            `}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className={`text-sm font-bold uppercase tracking-wider opacity-70`}>{item.title}</p>
+              <item.icon className="h-5 w-5 opacity-50" />
             </div>
-            <p className="text-xs text-blue-600 dark:text-blue-400">PerÃ­odo seleccionado</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-800 shadow dark:shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-red-700 dark:text-red-400">Eventos CrÃ­ticos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-              {isLoading ? '-' : stats.criticalEvents}
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-black tabular-nums tracking-tight">
+                {isLoading ? (
+                  <Loader2 className="h-6 w-6 animate-spin opacity-20" />
+                ) : (
+                  item.value
+                )}
+              </span>
             </div>
-            <p className="text-xs text-red-600 dark:text-red-400">Requieren atenciÃ³n inmediata</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border-orange-200 dark:border-orange-800 shadow dark:shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-400">Eventos de Alto Riesgo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-              {isLoading ? '-' : stats.highRiskEvents}
-            </div>
-            <p className="text-xs text-orange-600 dark:text-orange-400">Eventos de alta prioridad</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 border-red-200 dark:border-red-800 shadow dark:shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-red-700 dark:text-red-400">Intentos Fallidos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-              {isLoading ? '-' : stats.failedAttempts}
-            </div>
-            <p className="text-xs text-red-600 dark:text-red-400">Accesos denegados</p>
-          </CardContent>
-        </Card>
+            <p className="text-xs font-medium mt-1 opacity-60">{item.subtitle}</p>
+            {item.color === 'red' && !isLoading && item.value > 0 && (
+              <motion.div 
+                animate={{ opacity: [0.3, 0.6, 0.3] }}
+                transition={{ repeat: Infinity, duration: 2 }}
+                className="absolute top-0 right-0 h-2 w-2 m-4 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+              />
+            )}
+          </motion.div>
+        ))}
       </div>
 
       {/* Filtros */}
@@ -382,7 +389,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
                 <SelectItem value="critical">
                   <div className="flex items-center">
                     <XCircle className="h-4 w-4 text-red-600 mr-2" />
-                    CrÃ­tica
+                    Crítica
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -390,13 +397,13 @@ export function SecurityPanel({}: SecurityPanelProps) {
             
             <Select value={timeFilter} onValueChange={setTimeFilter}>
               <SelectTrigger className="w-full sm:w-40 border-purple-200 focus:border-purple-500 focus:ring-purple-500 dark:bg-gray-900 dark:border-purple-900">
-                <SelectValue placeholder="PerÃ­odo" />
+                <SelectValue placeholder="Período" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1h">Ãšltima hora</SelectItem>
-                <SelectItem value="24h">Ãšltimas 24 horas</SelectItem>
-                <SelectItem value="7d">Ãšltimos 7 dÃ­as</SelectItem>
-                <SelectItem value="30d">Ãšltimos 30 dÃ­as</SelectItem>
+                <SelectItem value="1h">Última hora</SelectItem>
+                <SelectItem value="24h">Últimas 24 horas</SelectItem>
+                <SelectItem value="7d">Últimos 7 días</SelectItem>
+                <SelectItem value="30d">Últimos 30 días</SelectItem>
               </SelectContent>
             </Select>
 
@@ -415,11 +422,11 @@ export function SecurityPanel({}: SecurityPanelProps) {
               </Select>
             )}
 
-            {/* Filtros avanzados: UbicaciÃ³n/IP */}
+            {/* Filtros avanzados: Ubicación/IP */}
             {uniqueLocations.length > 0 && (
               <Select value={locationFilter} onValueChange={setLocationFilter}>
                 <SelectTrigger className="w-full sm:w-48 border-teal-200 focus:border-teal-500 focus:ring-teal-500 dark:bg-gray-900 dark:border-teal-900">
-                  <SelectValue placeholder="UbicaciÃ³n/IP" />
+                  <SelectValue placeholder="Ubicación/IP" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas las ubicaciones</SelectItem>
@@ -440,7 +447,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
             <span>Registro de Eventos ({isLoading ? '...' : filteredLogs.length})</span>
             {!isLoading && filteredLogs.length > 0 && (
               <Badge variant="secondary">
-                PÃ¡gina {currentPage} de {totalPages}
+                Página {currentPage} de {totalPages}
               </Badge>
             )}
           </CardTitle>
@@ -458,7 +465,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
                 <TableRow className="dark:border-gray-700 hover:bg-transparent">
                   <TableHead className="dark:text-gray-400">Evento</TableHead>
                   <TableHead className="dark:text-gray-400">Usuario</TableHead>
-                  <TableHead className="dark:text-gray-400">UbicaciÃ³n</TableHead>
+                  <TableHead className="dark:text-gray-400">Ubicación</TableHead>
                   <TableHead className="dark:text-gray-400">Severidad</TableHead>
                   <TableHead className="dark:text-gray-400">Fecha/Hora</TableHead>
                 </TableRow>
@@ -554,4 +561,5 @@ export function SecurityPanel({}: SecurityPanelProps) {
     </div>
   )
 }
+
 

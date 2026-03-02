@@ -14,8 +14,12 @@ interface UseDatabaseMonitoringReturn {
     totalSizeFormatted: string
     activeConnections: number
     connectionUsage: number
+    avgQueryTime: number
+    cacheHitRatio: number
+    alertsCount: number
+    status: 'good' | 'warning' | 'critical'
   } | null
-  performMaintenance: (task: 'reset_stats' | 'clear_logs') => Promise<{ success: boolean; message: string }>
+  performMaintenance: (task: 'reset_stats' | 'clear_logs' | 'rotate_logs', params?: any) => Promise<{ success: boolean; message: string }>
 }
 
 export function useDatabaseMonitoring(autoRefresh = true): UseDatabaseMonitoringReturn {
@@ -23,7 +27,7 @@ export function useDatabaseMonitoring(autoRefresh = true): UseDatabaseMonitoring
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [quickMetrics, setQuickMetrics] = useState<any>(null)
+  const [quickMetrics, setQuickMetrics] = useState<UseDatabaseMonitoringReturn['quickMetrics']>(null)
 
   const loadMetrics = useCallback(async () => {
     try {
@@ -38,7 +42,17 @@ export function useDatabaseMonitoring(autoRefresh = true): UseDatabaseMonitoring
         // También actualizar métricas rápidas
         const quickResult = await databaseMonitoringService.getQuickMetrics()
         if (quickResult.success && quickResult.data) {
-          setQuickMetrics(quickResult.data)
+          const qd = quickResult.data
+          setQuickMetrics({
+            totalSize: qd.totalSizeBytes,
+            totalSizeFormatted: qd.totalSize,
+            activeConnections: qd.activeConnections,
+            connectionUsage: Math.min(100, (qd.activeConnections / 100) * 100),
+            avgQueryTime: qd.avgQueryTime,
+            cacheHitRatio: qd.cacheHitRatio,
+            alertsCount: qd.alertsCount,
+            status: qd.status
+          })
         }
       } else {
         setError(result.error || 'Error desconocido')
