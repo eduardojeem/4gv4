@@ -212,14 +212,7 @@ export default async function ProductDetailPage(props: Props) {
                     </p>
                   )}
                 </div>
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  Precio por {product.unit_measure}
-                </p>
-                {isInStock && (
-                  <p className="mt-1 text-xs text-primary">
-                    Stock disponible: {product.stock_quantity} {product.stock_quantity === 1 ? 'unidad' : 'unidades'}
-                  </p>
-                )}
+
               </div>
 
               {/* Description */}
@@ -240,18 +233,6 @@ export default async function ProductDetailPage(props: Props) {
                   Detalles
                 </h2>
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                  <div>
-                    <dt className="text-muted-foreground">SKU</dt>
-                    <dd className="font-mono font-medium text-foreground">
-                      {product.sku}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">Unidad</dt>
-                    <dd className="font-medium text-foreground">
-                      {product.unit_measure}
-                    </dd>
-                  </div>
                   {product.brand && (
                     <div>
                       <dt className="text-muted-foreground">Marca</dt>
@@ -262,22 +243,12 @@ export default async function ProductDetailPage(props: Props) {
                   )}
                   {product.category && (
                     <div>
-                      <dt className="text-muted-foreground">Categoria</dt>
+                      <dt className="text-muted-foreground">Categoría</dt>
                       <dd className="font-medium text-foreground">
                         {product.category.name}
                       </dd>
                     </div>
                   )}
-                  <div>
-                    <dt className="text-muted-foreground">Disponibilidad</dt>
-                    <dd className="font-medium">
-                      {isInStock ? (
-                        <span className="text-primary">En stock</span>
-                      ) : (
-                        <span className="text-destructive">Agotado</span>
-                      )}
-                    </dd>
-                  </div>
                 </dl>
               </div>
 

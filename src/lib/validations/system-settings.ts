@@ -21,6 +21,11 @@ export const SystemSettingsSchema = z.object({
     .max(50, 'El teléfono no puede exceder 50 caracteres')
     .trim(),
   
+  companyRuc: z.string()
+    .max(50, 'El RUC no puede exceder 50 caracteres')
+    .optional()
+    .default(''),
+
   companyAddress: z.string()
     .max(500, 'La dirección no puede exceder 500 caracteres')
     .optional()
@@ -32,9 +37,7 @@ export const SystemSettingsSchema = z.object({
     .default(''),
   
   // Configuración general
-  currency: z.enum(['PYG', 'USD', 'EUR', 'MXN'], {
-    errorMap: () => ({ message: 'Moneda no válida' })
-  }),
+  currency: z.enum(['PYG', 'USD', 'EUR', 'MXN']),
   
   taxRate: z.number()
     .min(0, 'La tasa de impuesto no puede ser negativa')
@@ -62,8 +65,8 @@ export const SystemSettingsSchema = z.object({
   language: z.string().default('es'),
 
   // Características y Redes
-  socialLinks: z.record(z.string()).default({}),
-  features: z.record(z.boolean()).default({}),
+  socialLinks: z.record(z.string(), z.string()).default({}),
+  features: z.record(z.string(), z.boolean()).default({}),
   retentionDays: z.number().int().min(30).max(3650).default(90),
   
   // Opciones del sistema
@@ -113,6 +116,15 @@ export const SystemSettingsDBSchema = z.object({
   tax_rate: z.union([z.string(), z.number()]),
   low_stock_threshold: z.number(),
   session_timeout: z.number(),
+  theme: z.string().optional(),
+  primary_color: z.string().optional(),
+  date_format: z.string().optional(),
+  time_zone: z.string().optional(),
+  language: z.string().optional(),
+  items_per_page: z.number().optional(),
+  social_links: z.record(z.string(), z.any()).nullable().optional(),
+  features: z.record(z.string(), z.any()).nullable().optional(),
+  retention_days: z.number().optional(),
   auto_backup: z.boolean(),
   email_notifications: z.boolean(),
   sms_notifications: z.boolean(),
@@ -139,6 +151,15 @@ export function mapDBToSettings(dbData: z.infer<typeof SystemSettingsDBSchema>):
     city: dbData.city || '',
     currency: dbData.currency as 'PYG' | 'USD' | 'EUR' | 'MXN',
     taxRate: typeof dbData.tax_rate === 'string' ? parseFloat(dbData.tax_rate) : dbData.tax_rate,
+    theme: (dbData.theme as 'light' | 'dark' | 'system') || 'system',
+    primaryColor: dbData.primary_color || 'blue',
+    dateFormat: dbData.date_format || 'DD/MM/YYYY',
+    timeZone: dbData.time_zone || 'America/Asuncion',
+    language: dbData.language || 'es',
+    itemsPerPage: dbData.items_per_page ?? 10,
+    socialLinks: (dbData.social_links as Record<string, string>) || {},
+    features: (dbData.features as Record<string, boolean>) || {},
+    retentionDays: dbData.retention_days ?? 90,
     lowStockThreshold: dbData.low_stock_threshold,
     sessionTimeout: dbData.session_timeout,
     autoBackup: dbData.auto_backup,
@@ -201,9 +222,7 @@ export const SystemActionSchema = z.enum([
   'clearCache',
   'checkIntegrity',
   'testEmail'
-], {
-  errorMap: () => ({ message: 'Acción no válida' })
-})
+])
 
 export type SystemAction = z.infer<typeof SystemActionSchema>
 
@@ -227,7 +246,7 @@ export function validateImportedSettings(data: unknown): SystemSettings {
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const firstError = error.errors[0]
+      const firstError = error.issues[0]
       throw new Error(`Validación fallida: ${firstError.path.join('.')}: ${firstError.message}`)
     }
     throw error
@@ -243,3 +262,4 @@ function sanitizeString(str: string): string {
     .replace(/<[^>]+>/g, '')
     .trim()
 }
+

@@ -8,12 +8,6 @@ interface DashboardLayoutContextValue {
     setSidebarCollapsed: (collapsed: boolean) => void
     userRole: 'admin' | 'vendedor' | 'tecnico' | 'cliente'
     setUserRole: (role: 'admin' | 'vendedor' | 'tecnico' | 'cliente') => void
-    userData: {
-        name: string
-        email: string
-        avatar?: string
-    } | null
-    setUserData: (data: any) => void
 }
 
 const DashboardLayoutContext = createContext<DashboardLayoutContextValue | null>(null)
@@ -32,13 +26,6 @@ export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
 
     // User role state
     const [userRole, setUserRole] = useState<'admin' | 'vendedor' | 'tecnico' | 'cliente'>('vendedor')
-
-    // User data state
-    const [userData, setUserData] = useState<{
-        name: string
-        email: string
-        avatar?: string
-    } | null>(null)
 
     // Load preferences from localStorage on mount
     useEffect(() => {
@@ -72,9 +59,7 @@ export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
         setSidebarCollapsed,
         userRole,
         setUserRole,
-        userData,
-        setUserData
-    }), [sidebarCollapsed, toggleSidebar, userRole, userData])
+    }), [sidebarCollapsed, toggleSidebar, userRole])
 
     return (
         <DashboardLayoutContext.Provider value={value}>

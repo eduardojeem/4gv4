@@ -151,39 +151,6 @@ export function useSharedSettings() {
     }
   }, [])
 
-  // Mapper function: App -> Database
-  const mapToDbSettings = useCallback((appSettings: SharedSettings): Partial<SystemSettingsRow> => {
-    return {
-      company_name: appSettings.companyName,
-      company_email: appSettings.companyEmail,
-      company_phone: appSettings.companyPhone,
-      company_ruc: appSettings.companyRuc,
-      company_address: appSettings.companyAddress,
-      city: appSettings.city,
-      currency: appSettings.currency,
-      tax_rate: appSettings.taxRate,
-      theme: appSettings.theme,
-      primary_color: appSettings.primaryColor,
-      session_timeout: appSettings.sessionTimeout,
-      low_stock_threshold: appSettings.lowStockThreshold,
-      auto_backup: appSettings.autoBackup,
-      date_format: appSettings.dateFormat,
-      time_zone: appSettings.timeZone,
-      language: appSettings.language,
-      items_per_page: appSettings.itemsPerPage,
-      retention_days: appSettings.retentionDays,
-      email_notifications: appSettings.emailNotifications,
-      sms_notifications: appSettings.smsNotifications,
-      allow_registration: appSettings.allowRegistration,
-      require_email_verification: appSettings.requireEmailVerification,
-      max_login_attempts: appSettings.maxLoginAttempts,
-      password_min_length: appSettings.passwordMinLength,
-      require_two_factor: appSettings.requireTwoFactor,
-      maintenance_mode: appSettings.maintenanceMode,
-      updated_at: new Date().toISOString()
-    }
-  }, [])
-
   // Load settings from Supabase
   const loadSettings = useCallback(async () => {
     setIsLoading(true)
@@ -274,17 +241,23 @@ export function useSharedSettings() {
         return { success: false, error: 'El nombre de la empresa es requerido' }
       }
 
-      const dbData = mapToDbSettings(settings)
-      
-      const { error: updateError } = await supabase
-        .from('system_settings')
-        .update(dbData)
-        .eq('id', 'system')
+      const response = await fetch('/api/admin/system/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ settings })
+      })
 
-      if (updateError) throw updateError
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result?.success || !result?.data) {
+        throw new Error(result?.error || `No se pudo guardar la configuración (${response.status})`)
+      }
 
-      setOriginalSettings(settings)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+      const mapped = mapToAppSettings(result.data as SystemSettingsRow)
+      setSettings(mapped)
+      setOriginalSettings(mapped)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
       
       return { success: true }
     } catch (err: any) {
@@ -293,7 +266,7 @@ export function useSharedSettings() {
     } finally {
       setIsSaving(false)
     }
-  }, [settings, mapToDbSettings, supabase])
+  }, [settings, mapToAppSettings])
 
   const resetSettings = useCallback(() => {
     setSettings(originalSettings)

@@ -24,7 +24,7 @@ import {
   DollarSign, Clock, FileText, Image as ImageIcon,
   Edit, Trash, Printer, Package as PackageIcon, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
-  PackageCheck, PackageX, CheckCircle2
+  PackageCheck, PackageX, CheckCircle2, ExternalLink
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -52,13 +52,17 @@ interface RepairDetailDialogProps {
   repair: Repair | null
   onClose: () => void
   onEdit?: (repair: Repair) => void
+  onDeliver?: (repair: Repair) => void
+  onQuickPay?: (repair: Repair) => void
 }
 
 export function RepairDetailDialog({
   open,
   repair,
   onClose,
-  onEdit
+  onEdit,
+  onDeliver,
+  onQuickPay
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
   const [showSensitiveData, setShowSensitiveData] = useState(false)
@@ -1048,6 +1052,50 @@ export function RepairDetailDialog({
           <Button variant="outline" onClick={onClose}>
             Cerrar
           </Button>
+
+          {repair.status !== 'entregado' && (
+            <>
+              {onQuickPay && (
+                <Button
+                  variant="default"
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => {
+                    onClose()
+                    onQuickPay(repair)
+                  }}
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Cobrar Aquí
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => {
+                  if (repair.customer?.id) {
+                    window.location.href = `/dashboard/pos?customerId=${repair.customer.id}&repairId=${repair.id}`
+                  }
+                  onClose()
+                }}
+              >
+                <ExternalLink className="h-4 w-4" />
+                + Productos en POS
+              </Button>
+              {onDeliver && (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => {
+                    onClose()
+                    onDeliver(repair)
+                  }}
+                >
+                  <PackageCheck className="h-4 w-4" />
+                  Entregar
+                </Button>
+              )}
+            </>
+          )}
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

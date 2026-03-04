@@ -10,7 +10,6 @@ import {
   Package,
   Users,
   Wrench,
-  Settings,
   BarChart3,
   Menu
 } from 'lucide-react'
@@ -31,6 +30,7 @@ const MOBILE_NAV_ITEMS: NavItem[] = [
   { name: 'Productos', href: '/dashboard/products', icon: Package, roles: ['admin', 'vendedor'] },
   { name: 'Clientes', href: '/dashboard/customers', icon: Users, roles: ['admin', 'vendedor'] },
   { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, roles: ['admin', 'vendedor', 'tecnico'] },
+  { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, roles: ['admin', 'vendedor'] },
 ]
 
 export const MobileNav = memo(function MobileNav() {
@@ -45,12 +45,12 @@ export const MobileNav = memo(function MobileNav() {
   const filteredItems = useMemo(() => {
     return MOBILE_NAV_ITEMS.filter(item => 
       isDev ? true : item.roles.includes(userRole)
-    ).slice(0, 4) // Show max 4 items + menu button
+    ).slice(0, 5) // Show max 5 items + menu button
   }, [userRole, isDev])
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-border bg-background/95 backdrop-blur-sm supports-backdrop-filter:bg-background/80 shadow-lg">
-      <div className="flex items-center justify-around px-2 py-2 safe-area-inset-bottom">
+      <div className="flex items-center justify-around px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {filteredItems.map((item) => {
           const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
           return (
@@ -58,7 +58,7 @@ export const MobileNav = memo(function MobileNav() {
               key={item.name}
               href={item.href}
               className={cn(
-                "relative flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all duration-200 min-w-[64px]",
+                "relative flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-lg transition-all duration-200 min-w-[52px]",
                 isActive 
                   ? "text-primary bg-primary/10" 
                   : "text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -82,7 +82,7 @@ export const MobileNav = memo(function MobileNav() {
           size="sm"
           onClick={toggleSidebar}
           className={cn(
-            "flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg min-w-[64px] h-auto",
+            "flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-lg min-w-[52px] h-auto",
             "text-muted-foreground hover:text-foreground hover:bg-accent"
           )}
         >

@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import type { SystemSettings } from '@/lib/validations/system-settings'
+
+export type { SystemSettings } from '@/lib/validations/system-settings'
 
 
 export interface User {
@@ -167,10 +170,20 @@ export function useAdminDashboard() {
     companyName: process.env.NEXT_PUBLIC_COMPANY_NAME || '4G celulares',
     companyEmail: 'info@4gcelulares.com',
     companyPhone: process.env.NEXT_PUBLIC_COMPANY_PHONE || '+595 21 123-4567',
+    companyRuc: '',
     companyAddress: process.env.NEXT_PUBLIC_COMPANY_ADDRESS || 'Av. Mariscal López 1234, Asunción, Paraguay',
     city: 'Asunción',
     currency: process.env.NEXT_PUBLIC_CURRENCY || 'PYG',
     taxRate: parseFloat(process.env.NEXT_PUBLIC_TAX_RATE || '0.10') * 100,
+    theme: 'system',
+    primaryColor: 'blue',
+    dateFormat: 'DD/MM/YYYY',
+    timeZone: 'America/Asuncion',
+    language: 'es',
+    itemsPerPage: 10,
+    socialLinks: {},
+    features: {},
+    retentionDays: 90,
     lowStockThreshold: 10,
     sessionTimeout: 30,
     autoBackup: true,
@@ -301,7 +314,7 @@ export function useAdminDashboard() {
       setIsLoading(true)
       
       // 1. Validar con Zod
-      const { SystemSettingsPartialSchema, mapSettingsToDB } = await import('@/lib/validations/system-settings')
+      const { SystemSettingsPartialSchema } = await import('@/lib/validations/system-settings')
       const validated = SystemSettingsPartialSchema.parse(newSettings)
       
       // 2. Verificar rate limit
@@ -314,23 +327,24 @@ export function useAdminDashboard() {
         }
       }
       
-      // 3. Convertir a formato DB
-      const dbData = mapSettingsToDB(validated)
-      
-      // 4. Actualizar en base de datos
-      const { data, error } = await supabase
-        .from('system_settings')
-        .update(dbData)
-        .eq('id', 'system')
-        .select()
-        .single()
-      
-      if (error) {
-        console.error('Error updating settings:', error)
-        return { success: false, error: error.message }
+      // 3. Actualizar via endpoint protegido en servidor
+      const response = await fetch('/api/admin/system/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ settings: validated })
+      })
+
+      const responseData = await response.json().catch(() => ({}))
+      if (!response.ok || !responseData?.success || !responseData?.data) {
+        const errorMessage =
+          responseData?.error || `No se pudo guardar la configuración (${response.status})`
+        console.error('Error updating settings via API:', errorMessage)
+        return { success: false, error: errorMessage }
       }
       
-      // 5. Registrar en audit log
+      // 4. Registrar en audit log
       const { logAuditEvent, getChangedFields, determineSeverity } = await import('@/lib/security/audit-log')
       const changes = getChangedFields(settings, validated as SystemSettings)
       
@@ -349,9 +363,9 @@ export function useAdminDashboard() {
         })
       }
       
-      // 6. Actualizar estado local
+      // 5. Actualizar estado local
       const { mapDBToSettings } = await import('@/lib/validations/system-settings')
-      const updatedSettings = mapDBToSettings(data)
+      const updatedSettings = mapDBToSettings(responseData.data)
       setSettings(updatedSettings)
       
       return { success: true }

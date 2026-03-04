@@ -1,15 +1,16 @@
 'use client'
 
-import { memo, useEffect, useMemo } from 'react'
+import { memo, useMemo, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { createClient as createSupabaseClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import {
   LayoutDashboard,
   Users,
@@ -28,8 +29,11 @@ import {
   Tag,
   Percent,
   Building2,
-  MessageCircle
+  MessageCircle,
+  Smartphone,
+  LogOut
 } from 'lucide-react'
+
 
 type NavItem = { name: string; href: string; icon: any; roles: Array<'admin' | 'vendedor' | 'tecnico'>; description?: string }
 const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
@@ -76,7 +80,10 @@ export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { sidebarCollapsed: collapsed, toggleSidebar, userRole, setUserRole } = useDashboardLayout()
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
+  const [sidebarBadges, setSidebarBadges] = useState({ repairs: 0, lowStock: 0 })
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [logoutOpen, setLogoutOpen] = useState(false)
 
   // Load user role from Supabase on mount
   useEffect(() => {
@@ -85,7 +92,7 @@ export const Sidebar = memo(function Sidebar() {
     
     const loadRole = async () => {
       try {
-        const supabase = createSupabaseClient()
+        const supabase = createClient()
         // Check session first to avoid unnecessary calls
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.user) return
@@ -108,6 +115,36 @@ export const Sidebar = memo(function Sidebar() {
     }
     loadRole()
   }, [setUserRole])
+
+  // Load dynamic badge counts
+  useEffect(() => {
+    if (!config.supabase.isConfigured) return
+    const fetchBadges = async () => {
+      try {
+        const supabase = createClient()
+        const [{ count: repairs }, { data: lowStockData }] = await Promise.all([
+          supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', ['recibido', 'diagnostico', 'reparacion', 'listo']),
+          supabase.from('products').select('stock_quantity, min_stock').gt('stock_quantity', 0)
+        ])
+        const lowStock = (lowStockData || []).filter(p => Number(p.stock_quantity ?? 0) <= Number(p.min_stock ?? 5)).length
+        setSidebarBadges({ repairs: repairs || 0, lowStock })
+      } catch { /* ignore errors */ }
+    }
+    fetchBadges()
+    const interval = setInterval(fetchBadges, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const handleQuickLogout = async () => {
+    setIsSigningOut(true)
+    try {
+      await signOut()
+      router.push('/login')
+    } catch { /* ignore */ } finally {
+      setIsSigningOut(false)
+      setLogoutOpen(false)
+    }
+  }
 
   // Development mode check
   const isDev = process.env.NODE_ENV === 'development'
@@ -147,7 +184,7 @@ export const Sidebar = memo(function Sidebar() {
           {!collapsed && (
             <div className="flex items-center space-x-3">
               <div className="bg-linear-to-br from-blue-600 to-blue-700 p-2.5 rounded-xl shadow-lg">
-                <Settings className="h-6 w-6 text-white" />
+                <Smartphone className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-foreground">4G celulares</h1>
@@ -181,7 +218,8 @@ export const Sidebar = memo(function Sidebar() {
               )}
               <div className="space-y-1">
                 {group.items.map(item => {
-                  const isActive = pathname === item.href
+                  const isActive = pathname === item.href ||
+                    (item.href !== '/dashboard' && pathname.startsWith(item.href + '/'))
                   return (
                     <Link
                       key={item.name}
@@ -200,12 +238,18 @@ export const Sidebar = memo(function Sidebar() {
                       )}
                       <item.icon className="h-5 w-5 shrink-0" />
                       {!collapsed && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-1">
                           <span>{item.name}</span>
                           {item.href === '/dashboard/pos' && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">POS</span>
                           )}
                         </div>
+                      )}
+                      {!collapsed && item.href === '/dashboard/repairs' && sidebarBadges.repairs > 0 && (
+                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">{sidebarBadges.repairs}</span>
+                      )}
+                      {!collapsed && item.href === '/dashboard/products' && sidebarBadges.lowStock > 0 && (
+                        <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">{sidebarBadges.lowStock}</span>
                       )}
                     </Link>
                   )
@@ -233,10 +277,42 @@ export const Sidebar = memo(function Sidebar() {
                   {isDev ? 'todos (dev)' : userRole}
                 </p>
               </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0"
+                onClick={() => setLogoutOpen(true)}
+                disabled={isSigningOut}
+                title="Cerrar sesión"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Logout confirmation dialog */}
+      <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
+        <AlertDialogContent className="max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cerrar sesión?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro que quieres salir del sistema?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSigningOut}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleQuickLogout}
+              disabled={isSigningOut}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isSigningOut ? 'Cerrando...' : 'Sí, cerrar sesión'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 })

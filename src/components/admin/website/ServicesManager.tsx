@@ -95,6 +95,27 @@ export function ServicesManager() {
 
   const handleSaveAll = async () => {
     if (!services) return
+
+    const invalidService = services.find((service) => {
+      const title = service.title?.trim() || ''
+      const description = service.description?.trim() || ''
+      const validBenefits = (service.benefits || []).map((b) => b.trim()).filter(Boolean)
+
+      return (
+        title.length < 3 ||
+        description.length < 10 ||
+        validBenefits.length < 1 ||
+        validBenefits.length > 10
+      )
+    })
+
+    if (invalidService) {
+      toast.error('Hay servicios inválidos', {
+        description: 'Revisa título (mín. 3), descripción (mín. 10) y beneficios (1-10, sin vacíos).'
+      })
+      return
+    }
+
     const result = await updateSetting('services', services)
     if (result.success) {
       toast.success('Cambios guardados en la base de datos')
@@ -129,17 +150,44 @@ export function ServicesManager() {
   const handleApplyChanges = () => {
     if (!editingService || !services) return
     
-    // Validaciones básicas
-    if (!editingService.title.trim()) {
-      toast.error('El título es obligatorio')
+    // Validaciones alineadas con backend
+    const title = editingService.title.trim()
+    const description = editingService.description.trim()
+    const benefits = editingService.benefits.map((b) => b.trim()).filter(Boolean)
+
+    if (title.length < 3) {
+      toast.error('Título inválido', {
+        description: 'El título debe tener al menos 3 caracteres.'
+      })
       return
+    }
+
+    if (description.length < 10) {
+      toast.error('Descripción inválida', {
+        description: 'La descripción debe tener al menos 10 caracteres.'
+      })
+      return
+    }
+
+    if (benefits.length < 1 || benefits.length > 10) {
+      toast.error('Beneficios inválidos', {
+        description: 'Debes cargar entre 1 y 10 beneficios válidos.'
+      })
+      return
+    }
+
+    const normalizedService: Service = {
+      ...editingService,
+      title,
+      description,
+      benefits
     }
 
     const updated = [...services]
     if (editingIndex !== null) {
-      updated[editingIndex] = editingService
+      updated[editingIndex] = normalizedService
     } else {
-      updated.push(editingService)
+      updated.push(normalizedService)
     }
     
     setServices(updated)

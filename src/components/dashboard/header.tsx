@@ -96,13 +96,15 @@ export const Header = memo(function Header() {
 
   // Compact header on scroll for better content visibility
   useEffect(() => {
+    const container = document.getElementById('dashboard-main')
+    if (!container) return
     const onScroll = () => {
-      setIsCompact(window.scrollY > 16)
+      setIsCompact(container.scrollTop > 16)
     }
 
     onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
   }, [])
 
   const handleLogout = async () => {
@@ -135,6 +137,11 @@ export const Header = memo(function Header() {
       { prefix: '/dashboard/catalog', label: 'Catálogo' },
       { prefix: '/dashboard/posts', label: 'Publicaciones' },
       { prefix: '/dashboard/profile', label: 'Perfil' },
+      { prefix: '/dashboard/brands', label: 'Marcas' },
+      { prefix: '/dashboard/categories', label: 'Categorías' },
+      { prefix: '/dashboard/promotions', label: 'Promociones' },
+      { prefix: '/dashboard/whatsapp', label: 'WhatsApp' },
+      { prefix: '/dashboard/credits', label: 'Créditos' },
       { prefix: '/admin', label: 'Administración' },
       { prefix: '/dashboard', label: 'Dashboard' },
     ]
@@ -261,9 +268,11 @@ export const Header = memo(function Header() {
                     <div className="pt-1">
                       <span className={cn(
                         "text-[10px] px-1.5 py-0.5 rounded-full font-medium border capitalize",
-                        user.role === 'admin' ? "bg-purple-50 text-purple-700 border-purple-200" :
-                          user.role === 'vendedor' ? "bg-blue-50 text-blue-700 border-blue-200" :
-                            "bg-gray-50 text-gray-700 border-gray-200"
+                        user.role === 'admin'
+                          ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700/50"
+                          : user.role === 'vendedor'
+                          ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700/50"
+                          : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50"
                       )}>
                         {user.role}
                       </span>

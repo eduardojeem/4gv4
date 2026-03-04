@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import React, { useState, useMemo, useCallback, useEffect, memo, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   Search, Plus, Minus, Trash2, ShoppingCart, CreditCard, FileText,
@@ -108,6 +109,14 @@ const isValidEan = (digits: string) => {
 
 
 export default function POSPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <POSPageContent />
+    </React.Suspense>
+  )
+}
+
+function POSPageContent() {
   const { settings } = useSharedSettings()
   
   const companyInfo = useMemo(() => ({
@@ -181,6 +190,17 @@ export default function POSPage() {
 
   const [customerRepairs, setCustomerRepairs] = useState<any[]>([])
   const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([])
+
+  // Pre-load customer and repair from URL params (e.g. coming from /dashboard/repairs)
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const cid = searchParams.get('customerId')
+    const rid = searchParams.get('repairId')
+    if (cid) setSelectedCustomer(cid)
+    if (rid) setSelectedRepairIds([rid])
+  // Only run once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   
   const [paymentAttempts, setPaymentAttempts] = useState<Array<{ time: string; status: 'processing' | 'success' | 'failed'; method: 'single' | 'mixed'; amount: number; message?: string }>>([])
   const addPaymentAttempt = useCallback((attempt: { status: 'processing' | 'success' | 'failed'; method: 'single' | 'mixed'; amount: number; message?: string }) => {
@@ -377,7 +397,7 @@ export default function POSPage() {
     isSearching: isSmartSearching,
     addToRecentSearches
   } = useSmartSearch({
-    products: inventoryProducts || [],
+    products: (inventoryProducts || []) as any[],
     maxResults: 20,
     enableFuzzySearch: true,
     enableSemanticSearch: true
@@ -496,18 +516,19 @@ export default function POSPage() {
               if (!row) return
 
               if (payload.eventType === 'DELETE') {
-                setCustomers(prev => prev.filter(c => c.id !== row.id))
+                setCustomers(customers.filter(c => c.id !== row.id))
                 return
               }
 
               const mapped = mapRowToCustomer(row)
-              setCustomers(prev => {
-                const idx = prev.findIndex(c => c.id === row.id)
-                if (idx === -1) return [mapped, ...prev]
-                const copy = [...prev]
+              const idx = customers.findIndex(c => c.id === row.id)
+              if (idx === -1) {
+                setCustomers([mapped, ...customers])
+              } else {
+                const copy = [...customers]
                 copy[idx] = mapped
-                return copy
-              })
+                setCustomers(copy)
+              }
             })
 
           channel = channelInstance

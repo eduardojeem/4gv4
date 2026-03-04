@@ -40,6 +40,7 @@ import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailD
 import { RepairSuccessDialog } from '@/components/dashboard/repairs/RepairSuccessDialog'
 import { RepairCardsView } from '@/components/dashboard/repairs/RepairCardsView'
 import { RepairDeliveryDialog } from '@/components/dashboard/repairs/RepairDeliveryDialog'
+import { RepairPaymentDialog, type RepairPaymentResult } from '@/components/dashboard/repairs/RepairPaymentDialog'
 import { RepairFormDialogV2 as RepairFormDialog, RepairFormMode } from '@/components/dashboard/repair-form-dialog-v2'
 import type { RepairFormData } from '@/schemas'
 import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
@@ -111,6 +112,7 @@ function RepairsPageContent() {
   const [detailRepair, setDetailRepair] = useState<Repair | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
+  const [payTarget, setPayTarget] = useState<Repair | null>(null)
   const [pageSize, setPageSize] = useState<number>(20)
   const [searchOpen, setSearchOpen] = useState(false)
   const [successDialogData, setSuccessDialogData] = useState<RepairPrintPayload | null>(null)
@@ -225,6 +227,41 @@ function RepairsPageContent() {
       }
     }
   }, [deleteId, deleteRepair])
+
+  const handleQuickPayConfirm = useCallback(async (repairId: string, result: RepairPaymentResult) => {
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+
+      const updateData: Record<string, unknown> = {
+        payment_status: 'pagado',
+        paid_amount: result.amount,
+        updated_at: new Date().toISOString(),
+      }
+
+      if (result.markDelivered) {
+        const now = new Date().toISOString()
+        updateData.status = 'entregado'
+        updateData.picked_up_at = now
+        updateData.completed_at = now
+        updateData.delivery_outcome = result.outcome || 'repaired'
+      }
+
+      if (result.note) {
+        updateData.solution = result.note
+      }
+
+      const { error } = await supabase.from('repairs').update(updateData).eq('id', repairId)
+      if (error) throw error
+
+      await refreshRepairs()
+      toast.success(result.markDelivered ? 'Pago registrado y equipo entregado' : 'Pago registrado exitosamente')
+    } catch (err) {
+      logger.error('Error registering payment', { error: err })
+      toast.error('Error al registrar el pago')
+      throw err
+    }
+  }, [refreshRepairs])
 
   const handleFormSubmit = useCallback(async (data: RepairFormData) => {
     try {
@@ -358,9 +395,9 @@ function RepairsPageContent() {
           warrantyNotes: data.warrantyNotes,
           customer_id: data.existingCustomerId || undefined,
           technician_id: d.technician || undefined,
-          parts: data.parts || [],
-          notes: data.notes || [],
-          images: Array.isArray(d.images) ? d.images : []
+          parts: (data.parts || []) as any,
+          notes: (data.notes || []) as any,
+          images: (Array.isArray(d.images) ? d.images : []) as any
         }
         
         await updateRepair(selectedRepair.id, updatePayload)
@@ -418,7 +455,7 @@ function RepairsPageContent() {
       images: Array.isArray(selectedRepair.images) ? selectedRepair.images.map(img => img.url) : []
     }],
     parts: selectedRepair.parts || [],
-    notes: selectedRepair.notes || []
+    notes: (selectedRepair.notes || []).map(n => ({ text: n.text, isInternal: false, id: n.id }))
   } : undefined
 
   // Quick access navigation items
@@ -657,6 +694,8 @@ function RepairsPageContent() {
             setIsDetailOpen(false)
             handleEditRepair(repair)
         }}
+        onDeliver={(repair) => setDeliverTarget(repair)}
+        onQuickPay={(repair) => setPayTarget(repair)}
       />
 
       <RepairDeleteDialog
@@ -674,6 +713,13 @@ function RepairsPageContent() {
         repair={deliverTarget}
         onOpenChange={(open) => !open && setDeliverTarget(null)}
         onConfirm={async (id, outcome, note) => { await deliverRepair(id, outcome, note) }}
+      />
+
+      <RepairPaymentDialog
+        open={!!payTarget}
+        repair={payTarget}
+        onOpenChange={(open) => !open && setPayTarget(null)}
+        onConfirm={handleQuickPayConfirm}
       />
     </div>
   )

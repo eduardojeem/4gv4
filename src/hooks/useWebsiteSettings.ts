@@ -78,19 +78,15 @@ export function useWebsiteSettings() {
 
 export function useAdminWebsiteSettings() {
   const [isSaving, setIsSaving] = useState(false)
+  const [isInitializing, setIsInitializing] = useState(false)
+
   const fetcher = useMemo(() => async () => {
-    // Intentar endpoint admin
     const adminRes = await fetch('/api/admin/website/settings')
     if (adminRes.ok) {
       const adminData = await adminRes.json()
       return adminData.data as WebsiteSettings
     }
-    // Fallback: cargar datos públicos si falla admin (403/401/500)
-    const publicRes = await fetch('/api/public/website/settings')
-    if (publicRes.ok) {
-      const publicData = await publicRes.json()
-      return publicData.data as WebsiteSettings
-    }
+
     const errBody = await adminRes.json().catch(() => ({}))
     const statusText = adminRes.statusText || 'Error'
     const message = errBody?.error || statusText
@@ -105,8 +101,10 @@ export function useAdminWebsiteSettings() {
   const updateSetting = async (key: keyof WebsiteSettings, value: any) => {
     const cacheKey = '/api/admin/website/settings'
     const previous = data
+
     try {
       setIsSaving(true)
+
       // Optimistically update cache
       await mutate(cacheKey, (current?: WebsiteSettings) => {
         if (!current) return current ?? null
@@ -135,6 +133,34 @@ export function useAdminWebsiteSettings() {
       return { success: false, error: message }
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const initializeMissingSettings = async () => {
+    try {
+      setIsInitializing(true)
+
+      const res = await fetch('/api/admin/website/settings', {
+        method: 'POST'
+      })
+
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok || body?.success === false) {
+        const message = body?.error || res.statusText || 'Failed to initialize settings'
+        throw new Error(message)
+      }
+
+      await mutate('/api/admin/website/settings')
+      return {
+        success: true,
+        insertedCount: Number(body?.insertedCount || 0),
+        insertedKeys: Array.isArray(body?.insertedKeys) ? body.insertedKeys : []
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to initialize settings'
+      return { success: false, error: message, insertedCount: 0, insertedKeys: [] as string[] }
+    } finally {
+      setIsInitializing(false)
     }
   }
 
@@ -169,7 +195,9 @@ export function useAdminWebsiteSettings() {
     isLoading,
     error: error ? (error as Error).message : null,
     isSaving,
+    isInitializing,
     updateSetting,
+    initializeMissingSettings,
     refetch: () => mutate('/api/admin/website/settings')
   }
 }

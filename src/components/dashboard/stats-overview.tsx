@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { TrendingUp, TrendingDown, ShoppingCart, Users, Wrench, Package, AlertTriangle } from 'lucide-react'
+import { TrendingUp, TrendingDown, ShoppingCart, Users, Wrench, Package, AlertTriangle, Inbox } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -29,27 +29,27 @@ function StatCard({ title, value, change, changeType, icon }: StatCardProps) {
   const getChangeColor = () => {
     switch (changeType) {
       case 'increase':
-        return 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/20'
+        return 'text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-900/40'
       case 'decrease':
-        return 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-900/20'
+        return 'text-rose-700 bg-rose-100 dark:text-rose-300 dark:bg-rose-900/40'
       default:
-        return 'text-slate-600 bg-slate-50 dark:text-slate-400 dark:bg-slate-800'
+        return 'text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/60'
     }
   }
 
   const getIconColor = () => {
     switch (changeType) {
       case 'increase':
-        return 'text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30'
+        return 'text-emerald-600 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-900/50'
       case 'decrease':
-        return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30'
+        return 'text-rose-600 bg-rose-100 dark:text-rose-300 dark:bg-rose-900/50'
       default:
-        return 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30'
+        return 'text-blue-600 bg-blue-100 dark:text-blue-300 dark:bg-blue-900/50'
     }
   }
 
   return (
-    <Card className="relative overflow-hidden border-0 shadow-sm bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm hover:shadow-md transition-all duration-200 group">
+    <Card className="relative overflow-hidden border border-border/60 dark:border-white/[0.06] shadow-sm dark:shadow-black/30 bg-white/70 dark:bg-white/[0.04] backdrop-blur-sm hover:shadow-md dark:hover:bg-white/[0.07] transition-all duration-200 group">
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex-1">
@@ -58,10 +58,10 @@ function StatCard({ title, value, change, changeType, icon }: StatCardProps) {
                 {icon}
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                   {title}
                 </p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {value}
                 </p>
               </div>
@@ -84,47 +84,53 @@ function StatCard({ title, value, change, changeType, icon }: StatCardProps) {
 }
 
 export function StatsOverview() {
-  const [stats, setStats] = useState([
+  const [stats, setStats] = useState<Array<{
+    title: string
+    value: string
+    change: string
+    changeType: 'increase' | 'decrease' | 'neutral'
+    icon: React.ReactNode
+  }>>([
     {
       title: 'Ventas del Día',
       value: '$0',
       change: 'Calculando...',
-      changeType: 'neutral' as const,
+      changeType: 'neutral',
       icon: <GSIcon className="h-4 w-4" />
     },
     {
       title: 'Órdenes Activas',
       value: '0',
       change: 'Calculando...',
-      changeType: 'neutral' as const,
+      changeType: 'neutral',
       icon: <ShoppingCart className="h-4 w-4" />
     },
     {
       title: 'Clientes Nuevos',
       value: '0',
       change: 'Calculando...',
-      changeType: 'neutral' as const,
+      changeType: 'neutral',
       icon: <Users className="h-4 w-4" />
     },
     {
       title: 'Reparaciones Pendientes',
       value: '0',
       change: 'Calculando...',
-      changeType: 'neutral' as const,
+      changeType: 'neutral',
       icon: <Wrench className="h-4 w-4" />
     },
     {
       title: 'Productos en Stock',
       value: '0',
       change: 'Calculando...',
-      changeType: 'neutral' as const,
+      changeType: 'neutral',
       icon: <Package className="h-4 w-4" />
     },
     {
       title: 'Stock Bajo',
       value: '0',
       change: 'Calculando...',
-      changeType: 'neutral' as const,
+      changeType: 'neutral',
       icon: <AlertTriangle className="h-4 w-4" />
     }
   ])
@@ -187,7 +193,7 @@ export function StatsOverview() {
             title: 'Ventas del Día',
             value: formatCurrency(totalSalesToday),
             change: salesChange,
-            changeType: salesChangeType,
+            changeType: salesChangeType as 'increase' | 'decrease' | 'neutral',
             icon: <GSIcon className="h-4 w-4" />
           },
           {
@@ -201,7 +207,7 @@ export function StatsOverview() {
             title: 'Clientes Nuevos',
             value: (customersWeek.count || 0).toString(),
             change: 'Últimos 7 días',
-            changeType: 'increase',
+            changeType: 'increase' as const,
             icon: <Users className="h-4 w-4" />
           },
           {
@@ -222,7 +228,7 @@ export function StatsOverview() {
             title: 'Stock Bajo',
             value: (lowStock.count || 0).toString(),
             change: 'Requiere reabastecer',
-            changeType: 'decrease',
+            changeType: 'decrease' as const,
             icon: <AlertTriangle className="h-4 w-4" />
           }
         ])
@@ -555,10 +561,18 @@ export function RecentActivity() {
 
   return (
     <div className="space-y-3">
-      {items.map((activity, index) => {
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="p-4 rounded-full bg-slate-100 dark:bg-white/[0.05] mb-4">
+            <Inbox className="h-8 w-8 text-slate-400 dark:text-slate-500" />
+          </div>
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Sin actividad reciente</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Las ventas, reparaciones y clientes aparecerán aquí</p>
+        </div>
+      ) : items.map((activity, index) => {
         const statusConfig = getStatusConfig(activity.status)
         return (
-          <div key={index} className="group flex items-center gap-4 p-4 rounded-xl bg-slate-50/50 dark:bg-slate-800/50 hover:bg-slate-100/50 dark:hover:bg-slate-700/50 transition-colors duration-200">
+          <div key={index} className="group flex items-center gap-4 p-4 rounded-xl bg-slate-50/60 dark:bg-white/[0.04] hover:bg-slate-100/80 dark:hover:bg-white/[0.07] border border-transparent dark:border-white/[0.05] transition-all duration-200">
             <div className={`p-2 rounded-lg ${statusConfig.iconBg}`}>
               {activity.icon}
             </div>

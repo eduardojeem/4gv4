@@ -6,11 +6,32 @@ import { HeroEditor } from '@/components/admin/website/HeroEditor'
 import { ServicesManager } from '@/components/admin/website/ServicesManager'
 import { TestimonialsManager } from '@/components/admin/website/TestimonialsManager'
 import { MaintenanceModeToggle } from '@/components/admin/website/MaintenanceModeToggle'
-import { Settings, Building2, Sparkles, Briefcase, MessageSquare, Eye } from 'lucide-react'
+import { Settings, Building2, Sparkles, Briefcase, MessageSquare, Eye, Database, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { toast } from 'sonner'
+import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 
 export default function WebsiteAdminPage() {
+  const { initializeMissingSettings, isInitializing } = useAdminWebsiteSettings()
+
+  const handleInitMissingSettings = async () => {
+    const result = await initializeMissingSettings()
+    if (!result.success) {
+      toast.error(result.error || 'No se pudo inicializar la configuración')
+      return
+    }
+
+    if (result.insertedCount === 0) {
+      toast.success('No faltan claves por inicializar')
+      return
+    }
+
+    toast.success(`Inicialización completada (${result.insertedCount})`, {
+      description: `Claves creadas: ${result.insertedKeys.join(', ')}`
+    })
+  }
+
   return (
     <div className="space-y-6">
       {/* Header Premium */}
@@ -31,15 +52,36 @@ export default function WebsiteAdminPage() {
               </div>
             </div>
             
-            <Link href="/inicio" target="_blank" className="w-full md:w-auto">
-              <Button 
-                variant="secondary" 
+            <div className="w-full md:w-auto flex flex-col sm:flex-row gap-2">
+              <Button
+                variant="secondary"
+                onClick={handleInitMissingSettings}
+                disabled={isInitializing}
                 className="w-full md:w-auto bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
               >
-                <Eye className="mr-2 h-4 w-4" />
-                Vista Previa
+                {isInitializing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Inicializando...
+                  </>
+                ) : (
+                  <>
+                    <Database className="mr-2 h-4 w-4" />
+                    Inicializar Faltantes
+                  </>
+                )}
               </Button>
-            </Link>
+
+              <Link href="/inicio" target="_blank" className="w-full md:w-auto">
+                <Button 
+                  variant="secondary" 
+                  className="w-full md:w-auto bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Vista Previa
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
