@@ -1,4 +1,12 @@
-import { PredictiveMetrics, RepairOrder } from "@/types/repairs";
+import { RepairOrder } from "@/types/repairs";
+
+interface PredictiveMetrics {
+  deviceModel: string
+  meanDurationHours: number
+  stdDevHours: number
+  confidenceIntervalHours: [number, number]
+  topSymptoms: string[]
+}
 
 export interface TimePrediction {
   predictedHours: number;

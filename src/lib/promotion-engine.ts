@@ -1,9 +1,18 @@
 import { 
   Promotion, 
-  PromotionContext, 
   PromotionResult, 
   PromotionEngineConfig 
 } from '@/types/promotion'
+
+interface PromotionContext {
+  order_total: number
+  cart_items: Array<{
+    product_id: string
+    category_id?: string
+    quantity: number
+    unit_price: number
+  }>
+}
 
 export class PromotionEngine {
   private config: PromotionEngineConfig
@@ -12,7 +21,8 @@ export class PromotionEngine {
     max_promotions_per_order: 1,
     allow_stacking: false,
     auto_apply_best_promotion: true,
-    priority_based_application: false
+    priority_based_application: false,
+    tax_rate: 0
   }) {
     this.config = config
   }

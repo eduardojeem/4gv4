@@ -39,6 +39,8 @@ interface Session {
   last_activity: string
   is_active: boolean
   is_current?: boolean
+  country?: string
+  city?: string
 }
 
 interface SecuritySectionProps {
@@ -568,7 +570,7 @@ export function SecuritySection({ userId, role }: SecuritySectionProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleLogoutSession(session.session_id, session.is_current)}
+                              onClick={() => handleLogoutSession(session.session_id)}
                               className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 gap-2 px-3 shrink-0"
                               title="Cerrar esta sesión"
                             >

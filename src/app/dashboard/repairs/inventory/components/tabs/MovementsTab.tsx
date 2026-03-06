@@ -78,14 +78,14 @@ export function MovementsTab() {
                     <TableCell>
                       <Badge 
                         className={
-                          mov.movement_type === 'in' 
+                          mov.movement_type === 'entrada' 
                             ? 'bg-green-500 hover:bg-green-600 text-white' 
-                            : mov.movement_type === 'out' 
+                            : mov.movement_type === 'salida' 
                             ? 'bg-red-500 hover:bg-red-600 text-white' 
                             : 'bg-blue-500 hover:bg-blue-600 text-white'
                         }
                       >
-                        {mov.movement_type === 'in' ? '↑ Entrada' : mov.movement_type === 'out' ? '↓ Salida' : mov.movement_type}
+                        {mov.movement_type === 'entrada' ? '↑ Entrada' : mov.movement_type === 'salida' ? '↓ Salida' : mov.movement_type}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -102,8 +102,8 @@ export function MovementsTab() {
                         {mov.new_stock}
                       </span>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={mov.reason}>
-                      {mov.reason || "-"}
+                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={mov.notes || ''}>
+                      {mov.notes || "-"}
                     </TableCell>
                   </TableRow>
                 ))

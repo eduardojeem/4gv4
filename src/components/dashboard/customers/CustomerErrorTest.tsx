@@ -77,8 +77,8 @@ export function CustomerErrorTest() {
         results[1] = { 
           step: 'Validation', 
           status: 'error', 
-          message: `Errores: ${validation.errors.issues.map(i => i.message).join(', ')}`,
-          data: validation.errors.issues
+          message: `Errores: ${((validation as any)?.errors?.issues || []).map((i: any) => i.message).join(', ')}`,
+          data: ((validation as any)?.errors?.issues || [])
         }
       }
       setTestResults([...results])

@@ -140,7 +140,7 @@ export function RepairPaymentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-1">
+        <div className="space-y-4 py-1 max-h-[70vh] overflow-y-auto px-1">
           {/* Monto total destacado */}
           <div className="flex items-center justify-between rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 px-4 py-3">
             <span className="text-sm font-medium text-emerald-800 dark:text-emerald-300">Total a cobrar</span>

@@ -3,9 +3,15 @@ import { createClient as createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { normalizeRole, type AppRole } from '@/lib/auth/role-utils'
 
-type AuthResult =
+export type AuthResult =
   | { authenticated: true; user: { id: string; email?: string }; role: AppRole }
   | { authenticated: false; response: NextResponse }
+
+/** Type-safe narrowing helper: returns the NextResponse when unauthenticated, else null */
+export function getAuthResponse(auth: AuthResult): NextResponse | null {
+  if (!auth.authenticated) return (auth as { authenticated: false; response: NextResponse }).response
+  return null
+}
 
 /**
  * Verifies that the current request is made by an authenticated user.

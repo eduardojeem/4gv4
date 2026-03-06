@@ -74,13 +74,40 @@ export function CustomerQuickCreateDialog({
             const parts = String(customerRow.name || '').trim().split(/\s+/)
             const created: Customer = {
                 id: customerRow.id,
-                first_name: parts[0] || '',
-                last_name: parts.slice(1).join(' ') || '',
+                customerCode: `CLI-${String(customerRow.id).slice(0, 6)}`,
+                name: String(customerRow.name || '').trim() || [parts[0], parts.slice(1).join(' ')].filter(Boolean).join(' ').trim(),
                 phone: customerRow.phone || '',
                 email: customerRow.email || '',
                 customer_type: customerRow.customer_type || 'regular',
                 status: customerRow.status || 'active',
-                created_at: customerRow.created_at
+                total_purchases: 0,
+                total_repairs: 0,
+                registration_date: customerRow.created_at || new Date().toISOString(),
+                created_at: customerRow.created_at || new Date().toISOString(),
+                last_visit: customerRow.created_at || new Date().toISOString(),
+                last_activity: customerRow.created_at || new Date().toISOString(),
+                address: '',
+                city: '',
+                credit_score: 0,
+                segment: 'regular',
+                satisfaction_score: 0,
+                lifetime_value: 0,
+                avg_order_value: 0,
+                purchase_frequency: 'low',
+                preferred_contact: 'email',
+                birthday: '',
+                loyalty_points: 0,
+                credit_limit: 0,
+                current_balance: 0,
+                pending_amount: 0,
+                notes: '',
+                tags: [],
+                referral_source: '',
+                discount_percentage: 0,
+                payment_terms: 'Contado',
+                assigned_salesperson: 'Sin asignar',
+                last_purchase_amount: 0,
+                total_spent_this_year: 0
             }
             onCreated(customerRow.id, created)
             reset()

@@ -576,7 +576,7 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
         <div class="logo">4G</div>
         <h1>${company.name}</h1>
         <div class="subtitle">Reparación y Service</div>
-        ${company.ruc ? `<p>RUC: ${company.ruc}</p>` : ''}
+        ${'ruc' in company && company.ruc ? `<p>RUC: ${company.ruc}</p>` : ''}
         <p>${company.address}</p>
         <p>☎ ${company.phone}</p>
         <p>📧 ${company.email}</p>

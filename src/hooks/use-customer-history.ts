@@ -63,14 +63,14 @@ export function useCustomerHistory(customerId: string) {
 
   // Fetch data from existing hooks
   const { data: purchasesData, isLoading: loadingPurchases } = useCustomerPurchases(customerId)
-  const { repairs, loading: loadingRepairs, fetchPendingRepairs } = useCustomerRepairs()
+  const { repairs, loading: loadingRepairs, fetchRepairs } = useCustomerRepairs()
 
   // Fetch repairs when customer changes
   React.useEffect(() => {
     if (customerId) {
-      fetchPendingRepairs(customerId)
+      fetchRepairs(customerId, ['pending', 'in_progress'])
     }
-  }, [customerId, fetchPendingRepairs])
+  }, [customerId, fetchRepairs])
 
   // Transform and combine all history items
   const allHistoryItems = useMemo(() => {

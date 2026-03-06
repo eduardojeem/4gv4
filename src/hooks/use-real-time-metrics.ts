@@ -103,6 +103,52 @@ export function useRealTimeMetrics(customers: Customer[]) {
     }
   }, [])
 
+  const getMetricValue = useCallback((metrics: RealTimeMetrics, metric: string): number | null => {
+    switch (metric) {
+      case 'todayRevenue':
+        return Number(metrics.todayRevenue ?? 0)
+      case 'pendingSupport':
+        return Number(metrics.pendingSupport ?? 0)
+      case 'onlineCustomers':
+        return Number(metrics.onlineCustomers ?? 0)
+      case 'systemHealth':
+        return Number(metrics.systemHealth ?? 0)
+      default:
+        return null
+    }
+  }, [])
+
+  const evaluateThreshold = useCallback((value: number, threshold: MetricsThreshold): boolean => {
+    switch (threshold.operator) {
+      case 'gt':
+        return value > threshold.value
+      case 'lt':
+        return value < threshold.value
+      case 'eq':
+        return value === threshold.value
+      case 'gte':
+        return value >= threshold.value
+      case 'lte':
+        return value <= threshold.value
+      default:
+        return false
+    }
+  }, [])
+
+  const getAlertTitle = useCallback((metric: string, severity: MetricsAlert['severity']): string => {
+    const labels: Record<string, string> = {
+      todayRevenue: 'Ingresos de hoy',
+      pendingSupport: 'Soportes pendientes',
+      onlineCustomers: 'Clientes en linea',
+      systemHealth: 'Salud del sistema'
+    }
+    return `${labels[metric] || metric} (${severity})`
+  }, [])
+
+  const getAlertMessage = useCallback((metric: string, value: number, threshold: MetricsThreshold): string => {
+    return `${metric}: valor actual ${value}, umbral ${threshold.operator} ${threshold.value}`
+  }, [])
+
   // Verificar umbrales y generar alertas
   const checkThresholds = useCallback((metrics: RealTimeMetrics) => {
     const newAlerts: MetricsAlert[] = []

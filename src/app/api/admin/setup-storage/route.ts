@@ -16,15 +16,17 @@ async function handler(request: NextRequest, context: { user: { id: string; emai
     const { createClient } = await import('@/lib/supabase/server')
     const supabase = await createClient()
     
-    await supabase.from('audit_log').insert({
+    const { error: auditError } = await supabase.from('audit_log').insert({
       user_id: context.user.id,
       action: 'setup_storage',
       resource: 'storage',
       resource_id: 'buckets',
       new_values: { success: true }
-    }).catch(err => {
-      logger.error('Failed to log storage setup', { error: err })
     })
+
+    if (auditError) {
+      logger.error('Failed to log storage setup', { error: auditError })
+    }
 
     logger.info('Storage setup completed', { userId: context.user.id })
 

@@ -204,7 +204,7 @@ export function useProductOperations() {
       includeImages: false,
       includeCategories: true,
       includeSuppliers: true,
-      fields: ['name', 'sku', 'price', 'stock', 'category', 'supplier']
+      fields: ['name', 'sku', 'sale_price', 'stock_quantity', 'category', 'supplier']
     }
   ): Promise<OperationResult<{ url: string, filename: string }>> => {
     const operation = createOperation('export', products.length)
@@ -404,7 +404,7 @@ function validateProductData(product: Partial<Product>): { valid: boolean, error
   
   if (!product.name) errors.push('Nombre es requerido')
   if (!product.sku) errors.push('SKU es requerido')
-  if (!product.price || product.price <= 0) errors.push('Precio debe ser mayor a 0')
+  if (!product.sale_price || product.sale_price <= 0) errors.push('Precio debe ser mayor a 0')
   
   return {
     valid: errors.length === 0,

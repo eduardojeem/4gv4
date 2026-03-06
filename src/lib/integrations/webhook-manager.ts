@@ -61,7 +61,7 @@ export interface IncomingWebhook {
   verified: boolean
   processed: boolean
   processedAt?: Date
-  response?: Record<string, unknown>
+  response?: unknown
   error?: string
   retryCount: number
   nextRetryAt?: Date
@@ -77,7 +77,7 @@ export interface WebhookDelivery {
   timestamp: Date
   status: 'pending' | 'delivered' | 'failed' | 'cancelled'
   statusCode?: number
-  response?: Record<string, unknown>
+  response?: unknown
   error?: string
   attempts: WebhookAttempt[]
   nextAttemptAt?: Date
@@ -89,7 +89,7 @@ export interface WebhookAttempt {
   attemptNumber: number
   timestamp: Date
   statusCode?: number
-  response?: Record<string, unknown>
+  response?: unknown
   error?: string
   duration: number
 }
@@ -684,7 +684,7 @@ class WebhookManager {
           const value = this.getNestedValue(result, transformation.field)
           if (value !== undefined && transformation.value) {
             // Aplicar formato específico (fecha, número, etc.)
-            const formattedValue = this.formatValue(value, transformation.value)
+            const formattedValue = this.formatValue(value, String(transformation.value))
             this.setNestedValue(result, transformation.field, formattedValue)
           }
           break
@@ -731,7 +731,7 @@ class WebhookManager {
   private formatValue(value: unknown, format: string): unknown {
     switch (format) {
       case 'date':
-        return new Date(value).toISOString()
+        return new Date(String(value)).toISOString()
       case 'number':
         return Number(value)
       case 'string':

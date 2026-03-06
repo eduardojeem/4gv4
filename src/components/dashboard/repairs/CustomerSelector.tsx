@@ -30,7 +30,7 @@ interface CustomerSelectorProps {
 }
 
 export function CustomerSelector({ value, onChange, error, disabled }: CustomerSelectorProps) {
-    const { customers, isLoading, refreshCustomers } = useCustomers()
+    const { customers, isLoading, actions } = useCustomers()
     const [open, setOpen] = useState(false)
     const [showQuickCreate, setShowQuickCreate] = useState(false)
     const [searchValue, setSearchValue] = useState('')
@@ -48,7 +48,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
         const digits = debouncedSearch.replace(/\D/g, '')
         const normalize = (p?: string) => (p || '').replace(/\D/g, '')
         return customers.filter(c =>
-            `${c.first_name} ${c.last_name}`.toLowerCase().includes(lower) ||
+            (c.name || '').toLowerCase().includes(lower) ||
             normalize(c.phone).includes(digits) ||
             (c.email || '').toLowerCase().includes(lower)
         ).slice(0, 50)
@@ -114,7 +114,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                                 <div className="flex items-center gap-2">
                                     <User className="h-4 w-4" />
                                     <span className="truncate">
-                                        {selectedCustomer.first_name} {selectedCustomer.last_name}
+                                        {selectedCustomer.name || 'Cliente sin nombre'}
                                     </span>
                                     {selectedCustomer.phone && (
                                         <span className="text-muted-foreground text-xs">
@@ -140,7 +140,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={refreshCustomers}
+                                    onClick={actions.refresh}
                                     disabled={disabled || isLoading}
                                     className="h-8"
                                 >
@@ -207,7 +207,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                                                 />
                                                 <div className="flex-1 min-w-0">
                                                     <div className="font-medium truncate">
-                                                        {customer.first_name} {customer.last_name}
+                                                        {customer.name || 'Cliente sin nombre'}
                                                     </div>
                                                     <div className="text-xs text-muted-foreground flex gap-2">
                                                         {customer.phone && <span>{customer.phone}</span>}
@@ -233,7 +233,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                                             />
                                             <div className="flex-1 min-w-0">
                                                 <div className="font-medium truncate">
-                                                    {customer.first_name} {customer.last_name}
+                                                    {customer.name || 'Cliente sin nombre'}
                                                 </div>
                                                 <div className="text-xs text-muted-foreground flex gap-2">
                                                     {customer.phone && <span>{customer.phone}</span>}

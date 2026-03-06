@@ -1,4 +1,5 @@
-'use client'
+﻿'use client'
+import { logger } from '@/lib/logger'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { 

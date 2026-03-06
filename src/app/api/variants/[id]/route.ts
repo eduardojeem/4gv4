@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ProductVariant } from '@/types/product-variants'
-import { requireAuth, requireStaff } from '@/lib/auth/require-auth'
+import { requireAuth, requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 
 // Mock data - En producción esto vendría de la base de datos
 const mockVariants: ProductVariant[] = [
@@ -31,7 +31,7 @@ export async function GET(
 ) {
   try {
     const auth = await requireAuth()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { id } = await params
     
     const variant = mockVariants.find(v => v.id === id)
@@ -64,7 +64,7 @@ export async function PUT(
 ) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { id } = await params
     const body = await request.json()
     
@@ -119,7 +119,7 @@ export async function DELETE(
 ) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { id } = await params
     
     const variantIndex = mockVariants.findIndex(v => v.id === id)
@@ -158,7 +158,7 @@ export async function PATCH(
 ) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { id } = await params
     const body = await request.json()
     

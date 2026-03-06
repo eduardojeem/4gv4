@@ -15,7 +15,7 @@ import {
   CheckCircle2, AlertTriangle, RefreshCw, Calculator,
   Users, CreditCard, UserCheck, TrendingUp, Eye
 } from 'lucide-react'
-import { useCustomers } from '@/hooks/use-customer-state'
+import { useCustomerState } from '@/hooks/use-customer-state'
 import { useCustomersWithCredits } from '@/hooks/use-customer-credits'
 import { toast } from 'sonner'
 
@@ -29,7 +29,7 @@ interface MetricVerification {
 }
 
 export function CustomerDashboardVerification() {
-  const { customers, loading: customersLoading } = useCustomers()
+  const { customers, loading: customersLoading } = useCustomerState()
   const { creditSummaries, loading: creditsLoading } = useCustomersWithCredits(customers)
   const [verifications, setVerifications] = useState<MetricVerification[]>([])
   const [isVerifying, setIsVerifying] = useState(false)

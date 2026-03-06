@@ -259,10 +259,19 @@ const StockControl: React.FC = () => {
     setIsLoading(true)
     
     try {
+      const newStock = movementType === 'entrada'
+        ? selectedProduct.stock + movementQuantity
+        : selectedProduct.stock - movementQuantity
+
+      if (newStock < 0) {
+        alert('La operación dejaría el stock en negativo. Ajusta la cantidad antes de continuar.')
+        setIsLoading(false)
+        return
+      }
       // Intentar usar RPC primero
       const { error: rpcError } = await supabase.rpc('update_product_stock', {
         product_id: selectedProduct.id,
-        quantity_change: movementType === 'salida' ? -movementQuantity : movementQuantity,
+        quantity_change: movementType === 'entrada' ? movementQuantity : -movementQuantity,
         movement_type: movementType === 'entrada' ? 'entry' : movementType === 'salida' ? 'exit' : 'adjustment',
         reason: movementReason,
         notes: movementReason // Intentar ambos nombres de parámetro por si acaso
@@ -272,10 +281,6 @@ const StockControl: React.FC = () => {
         console.warn('RPC update_product_stock failed, falling back to direct update:', rpcError)
         
         // Fallback: Actualización directa
-        const newStock = movementType === 'entrada' 
-          ? selectedProduct.stock + movementQuantity 
-          : selectedProduct.stock - movementQuantity
-        
         const { error: updateError } = await supabase
           .from('products')
           .update({ stock_quantity: newStock }) // Probar stock_quantity
@@ -342,14 +347,50 @@ const StockControl: React.FC = () => {
     }
   }
 
+  const toLocalDateKey = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   const filteredMovements = movements.filter(movement => {
     if (filterType !== 'all' && movement.type !== filterType) return false
-    if (filterDate && !movement.timestamp.toISOString().startsWith(filterDate)) return false
+    if (filterDate && toLocalDateKey(movement.timestamp) !== filterDate) return false
     return true
   })
 
   const activeAlerts = alerts.filter(alert => alert.isActive)
   const criticalAlerts = activeAlerts.filter(alert => alert.severity === 'critical')
+
+  const exportFilteredMovements = () => {
+    const rows = [
+      ['Fecha', 'Producto', 'SKU', 'Tipo', 'Cantidad', 'Stock Anterior', 'Stock Nuevo', 'Motivo', 'Referencia'],
+      ...filteredMovements.map((movement) => [
+        movement.timestamp.toLocaleString(),
+        movement.productName,
+        movement.productSku,
+        movement.type,
+        String(movement.quantity),
+        String(movement.previousStock),
+        String(movement.newStock),
+        movement.reason,
+        movement.reference || ''
+      ])
+    ]
+
+    const csv = rows
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `movimientos_stock_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="space-y-6">
@@ -518,7 +559,7 @@ const StockControl: React.FC = () => {
                     onChange={(e) => setFilterDate(e.target.value)}
                     className="w-40 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
                   />
-                  <Button variant="outline" className="dark:border-gray-700 dark:text-gray-300">
+                  <Button variant="outline" onClick={exportFilteredMovements} className="dark:border-gray-700 dark:text-gray-300">
                     <Download className="h-4 w-4 mr-2" />
                     Exportar
                   </Button>
@@ -814,7 +855,7 @@ const StockControl: React.FC = () => {
                     <p className="font-semibold dark:text-gray-200">
                       {movementType === 'entrada' 
                         ? selectedProduct.stock + movementQuantity 
-                        : selectedProduct.stock - movementQuantity}
+                        : Math.max(0, selectedProduct.stock - movementQuantity)}
                     </p>
                   </div>
                 </div>
@@ -841,8 +882,49 @@ const StockControl: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isAlertSettingsOpen} onOpenChange={setIsAlertSettingsOpen}>
+        <DialogContent className="max-w-xl dark:bg-gray-800 dark:border-gray-700">
+          <DialogHeader>
+            <DialogTitle className="dark:text-gray-100">Configuración de Alertas</DialogTitle>
+            <DialogDescription className="dark:text-gray-400">
+              Ajusta umbrales y frecuencia para el monitoreo de inventario.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="dark:text-gray-300">Umbral de stock bajo</Label>
+                <Input type="number" min={1} defaultValue={5} className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100" />
+              </div>
+              <div className="space-y-2">
+                <Label className="dark:text-gray-300">Intervalo de revisión (min)</Label>
+                <Input type="number" min={5} defaultValue={60} className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100" />
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Esta configuración es visual para el panel y puede extenderse con reglas automáticas en base de datos.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsAlertSettingsOpen(false)}
+              className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+            >
+              Cancelar
+            </Button>
+            <Button onClick={() => setIsAlertSettingsOpen(false)} className="bg-blue-600 hover:bg-blue-700 text-white">
+              Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
 export default StockControl
+

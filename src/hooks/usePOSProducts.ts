@@ -87,7 +87,7 @@ export function usePOSProducts() {
         return newProducts
       } else if (updatedProduct.is_active) {
         // Agregar nuevo producto activo
-        const newProduct: UnifiedProduct = {
+        const newProduct = {
           id: updatedProduct.id,
           name: updatedProduct.name,
           sku: updatedProduct.sku,
@@ -101,7 +101,7 @@ export function usePOSProducts() {
           unit_measure: updatedProduct.unit_measure || 'unidad',
           is_active: updatedProduct.is_active,
           purchase_price: (updatedProduct as any).cost_price || 0
-        }
+        } as unknown as UnifiedProduct
         return [...prevProducts, newProduct]
       }
       
@@ -181,7 +181,7 @@ export function usePOSProducts() {
         unit_measure: 'unidad',
         is_active: p.is_active, 
         purchase_price: 0 
-      }))
+      } as unknown as UnifiedProduct))
 
       setProducts(unifiedProducts)
     } catch (err) {
@@ -239,7 +239,7 @@ export function usePOSProducts() {
         unit_measure: data.unit_measure || 'unidad',
         is_active: data.is_active,
         purchase_price: (data as any).cost_price || 0
-      }
+      } as unknown as UnifiedProduct
     } catch (err) {
       console.error('Error buscando producto por código de barras:', err)
       return null

@@ -51,8 +51,8 @@ export async function GET(request: NextRequest) {
       ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
       : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
 
-    let queryBuilder = supabase
-      .from('products')
+    const productsTable: any = supabase.from('products')
+    let queryBuilder: any = productsTable
       .select(selectFields, { count: 'exact' })
       .eq('is_active', true)
 

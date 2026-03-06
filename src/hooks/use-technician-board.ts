@@ -28,13 +28,8 @@ export function useTechnicianBoard() {
         try {
             if (isDemoMode()) {
                 await new Promise(resolve => setTimeout(resolve, 800))
-                // Add dbStatus to mock repairs for demo
-                const enhancedMock = mockRepairs.map(r => ({
-                    ...r,
-                    dbStatus: r.status as DbRepairStatus
-                }))
-                setRepairs(enhancedMock)
-                setCurrentTechnicianId('TECH-001') // Mock ID
+                setRepairs([])
+                setCurrentTechnicianId('TECH-001')
             } else {
                 const supabase = createSupabaseClient()
                 const { data: { user } } = await supabase.auth.getUser()
@@ -54,11 +49,7 @@ export function useTechnicianBoard() {
                     const msg = (error as any)?.message || String(error)
                     const missingTable = msg.includes("Could not find the table 'public.repairs'") || msg.includes('relation "repairs" does not exist')
                     if (missingTable) {
-                        const enhancedMock = mockRepairs.map(r => ({
-                            ...r,
-                            dbStatus: r.status as DbRepairStatus
-                        }))
-                        setRepairs(enhancedMock)
+                        setRepairs([])
                         return
                     }
                     throw error
@@ -161,7 +152,7 @@ export function useTechnicianBoard() {
     }
 
 interface RepairUpdateData {
-    devices?: Array<{ brand: string; model: string }>
+    devices?: Array<{ brand: string; model: string; issue?: string; description?: string; estimatedCost?: number; technician?: string }>
     issue?: string
     description?: string
     status?: string
@@ -169,6 +160,8 @@ interface RepairUpdateData {
     urgency?: string
     estimated_cost?: number
     final_cost?: number
+    laborCost?: number
+    finalCost?: number
     technician_id?: string
     notes?: string
     [key: string]: unknown

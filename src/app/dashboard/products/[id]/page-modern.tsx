@@ -53,6 +53,7 @@ export default function ProductDetailPageModern() {
   const {
     products,
     categories,
+    brands,
     suppliers,
     loading,
     updateProduct,
@@ -114,6 +115,21 @@ export default function ProductDetailPageModern() {
       updated_at: s.updated_at
     }))
   }, [suppliers])
+
+  const normalizedBrands = useMemo(() => {
+    return (brands || []).map(b => ({
+      id: b.id,
+      name: b.name,
+      description: b.description || '',
+      country: b.country || null,
+      founded_year: b.founded_year || 0,
+      logo_url: b.logo_url || null,
+      website: b.website || null,
+      is_active: b.is_active,
+      created_at: b.created_at,
+      updated_at: b.updated_at
+    }))
+  }, [brands])
 
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
   type PriceHistoryEntry = {
@@ -612,6 +628,7 @@ export default function ProductDetailPageModern() {
             onClose={() => setEditModalOpen(false)}
             product={product ?? null}
             categories={normalizedCategories}
+            brands={normalizedBrands}
             suppliers={normalizedSuppliers}
             onSave={async (data) => {
               try {

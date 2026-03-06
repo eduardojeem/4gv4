@@ -10,7 +10,7 @@ import {
   Image, 
   Crop, 
   RotateCw, 
-  Compress,
+  Minimize2,
   CheckCircle,
   Clock,
   FileImage
@@ -36,7 +36,7 @@ export function AvatarUploadDemo() {
       description: 'Recorte, rotación y ajuste de calidad'
     },
     {
-      icon: <Compress className="h-5 w-5 text-purple-500" />,
+      icon: <Minimize2 className="h-5 w-5 text-purple-500" />,
       title: 'Compresión Inteligente',
       description: 'Optimización automática a WebP con calidad ajustable'
     },

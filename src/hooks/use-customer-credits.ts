@@ -171,7 +171,7 @@ export function useCustomerCredits(customerId?: string) {
       return daysPastDue > 30 // Consideramos perdido después de 30 días
     }).length
 
-    const totalPaymentEvents = onTimePayments + latePayments.length + missedPayments.length
+    const totalPaymentEvents = onTimePayments + latePayments.length + missedPayments
     const paymentScore = totalPaymentEvents > 0 
       ? Math.round(((onTimePayments * 100) + (latePayments.length * 50)) / (totalPaymentEvents * 100) * 100)
       : 100

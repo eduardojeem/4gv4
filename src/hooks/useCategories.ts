@@ -14,6 +14,7 @@ export type Category = CategoryRow & {
     total_stock_value: number
     avg_margin_percentage: number
   }
+  products_count?: number
 }
 
 interface CategoryFilters {

@@ -1,6 +1,6 @@
-import { NextRequest } from 'next/server'
+﻿import { NextRequest } from 'next/server'
 import { generateReorderAlerts, ProductStock } from '@/services/inventory-repair-sync'
-import { requireStaff } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
       // API key is valid, proceed
     } else {
       const auth = await requireStaff()
-      if (!auth.authenticated) return auth.response
+      { const r = getAuthResponse(auth); if (r) return r }
     }
     const body = await req.json()
     const { products, threshold } = body as { products: ProductStock[]; threshold?: number }
@@ -24,3 +24,4 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: e?.message ?? 'Unknown error' }), { status: 500 })
   }
 }
+

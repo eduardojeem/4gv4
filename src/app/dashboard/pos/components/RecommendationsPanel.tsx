@@ -67,11 +67,6 @@ export function RecommendationsPanel({
                     >
                       {(rec.confidence * 100).toFixed(0)}% confianza
                     </Badge>
-                    {rec.price && (
-                      <span className="text-xs font-medium text-green-600">
-                        ${rec.price.toFixed(2)}
-                      </span>
-                    )}
                   </div>
                 </div>
                 

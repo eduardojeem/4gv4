@@ -19,9 +19,10 @@ export function RecentProducts({
 }: RecentProductsProps) {
   if (products.length === 0) return null
 
-  const formatTime = (timestamp: number) => {
+  const formatTime = (timestamp: Date) => {
     const now = Date.now()
-    const diff = now - timestamp
+    const ts = timestamp instanceof Date ? timestamp.getTime() : new Date(timestamp).getTime()
+    const diff = now - ts
     const minutes = Math.floor(diff / 60000)
     const hours = Math.floor(diff / 3600000)
     
@@ -53,7 +54,7 @@ export function RecentProducts({
                 </p>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
-                  <span>{formatTime(product.last_viewed)}</span>
+                  <span>{formatTime(product.timestamp)}</span>
                   {product.view_count > 1 && (
                     <Badge variant="secondary" className="text-xs">
                       {product.view_count}x visto

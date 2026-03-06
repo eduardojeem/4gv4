@@ -9,7 +9,7 @@ interface SEOConfig {
   keywords?: string[]
   image?: string
   url?: string
-  type?: string
+  type?: 'website' | 'article'
   noIndex?: boolean
 }
 

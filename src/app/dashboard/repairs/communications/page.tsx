@@ -1,9 +1,18 @@
-
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, MessageSquare, TrendingUp, Send, Clock } from "lucide-react"
+import {
+  ArrowLeft,
+  MessageSquare,
+  TrendingUp,
+  Send,
+  Clock,
+  Phone,
+  Mail,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,8 +27,8 @@ export default function RepairsCommunicationsPage() {
   const router = useRouter()
   const { repairs, isLoading: repairsLoading } = useRepairs()
   const [selectedRepairId, setSelectedRepairId] = useState<string | null>(null)
+  const [whatsappCloudConfigured, setWhatsappCloudConfigured] = useState<boolean | null>(null)
 
-  // Get selected repair object
   const selectedRepair = useMemo(
     () => repairs.find((r) => r.id === selectedRepairId) || null,
     [repairs, selectedRepairId]
@@ -38,18 +47,18 @@ export default function RepairsCommunicationsPage() {
     return sendMessage(
       channel,
       content,
-      selectedRepair.customer.phone,
-      selectedRepair.customer.email,
+      selectedRepair.customer?.phone,
+      selectedRepair.customer?.email,
       templateId
     )
   }
 
-  // Calculate stats
   const stats = useMemo(() => {
     const totalMessages = messages.length
     const sentToday = messages.filter(
       (m) => new Date(m.sentAt).toDateString() === new Date().toDateString()
     ).length
+    const failed = messages.filter((m) => m.status === "failed").length
     const byChannel = messages.reduce(
       (acc, m) => {
         acc[m.channel] = (acc[m.channel] || 0) + 1
@@ -58,13 +67,40 @@ export default function RepairsCommunicationsPage() {
       {} as Record<string, number>
     )
 
-    return { totalMessages, sentToday, byChannel }
+    return { totalMessages, sentToday, failed, byChannel }
   }, [messages])
+
+  const hasPhone = Boolean(selectedRepair?.customer?.phone)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function fetchWhatsAppStatus() {
+      try {
+        const response = await fetch("/api/repairs/communications/whatsapp", { method: "GET" })
+        if (!response.ok) {
+          if (mounted) setWhatsappCloudConfigured(false)
+          return
+        }
+
+        const data = await response.json()
+        if (mounted) {
+          setWhatsappCloudConfigured(data?.configured === true)
+        }
+      } catch {
+        if (mounted) setWhatsappCloudConfigured(false)
+      }
+    }
+
+    fetchWhatsAppStatus()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-slate-950 dark:via-blue-950/20 dark:to-slate-950">
       <div className="container mx-auto p-6 space-y-6 max-w-7xl">
-        {/* Header */}
         <div className="flex flex-col gap-4">
           <Button
             variant="ghost"
@@ -78,15 +114,35 @@ export default function RepairsCommunicationsPage() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
-                Centro de Comunicación
+                Centro de Comunicacion
               </h1>
               <p className="text-muted-foreground mt-1">
                 Gestiona comunicaciones con clientes por WhatsApp, SMS y Email
               </p>
             </div>
 
-            {selectedRepair && (
-              <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Badge
+                variant="outline"
+                className={
+                  whatsappCloudConfigured === null
+                    ? "text-slate-700 border-slate-200 dark:text-slate-300 dark:border-slate-700"
+                    : whatsappCloudConfigured
+                      ? "text-emerald-700 border-emerald-200 dark:text-emerald-400 dark:border-emerald-800"
+                      : "text-amber-700 border-amber-200 dark:text-amber-400 dark:border-amber-800"
+                }
+              >
+                {whatsappCloudConfigured === null
+                  ? "Cloud API: verificando"
+                  : whatsappCloudConfigured
+                    ? "Cloud API: configurado"
+                    : "Cloud API: no configurado"}
+              </Badge>
+              <Badge variant="outline">
+                {repairsLoading ? "Reparaciones: cargando..." : `Reparaciones: ${repairs.length}`}
+              </Badge>
+              {selectedRepair && (
+                <>
                 <Badge variant="outline" className="gap-1">
                   <MessageSquare className="h-3 w-3" />
                   {stats.totalMessages} mensajes
@@ -95,22 +151,36 @@ export default function RepairsCommunicationsPage() {
                   <TrendingUp className="h-3 w-3" />
                   {stats.sentToday} hoy
                 </Badge>
-              </div>
-            )}
+                <Badge
+                  variant="outline"
+                  className={hasPhone ? "text-green-700 border-green-200 dark:text-green-400 dark:border-green-800" : "text-red-700 border-red-200 dark:text-red-400 dark:border-red-800"}
+                >
+                  {hasPhone ? (
+                    <span className="inline-flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      WhatsApp listo
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      Falta telefono
+                    </span>
+                  )}
+                </Badge>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Stats Cards */}
         {selectedRepair && stats.totalMessages > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/40 dark:to-blue-900/20 border-blue-200 dark:border-blue-800">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Total Mensajes</p>
-                    <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
-                      {stats.totalMessages}
-                    </p>
+                    <p className="text-sm text-muted-foreground">Total</p>
+                    <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">{stats.totalMessages}</p>
                   </div>
                   <MessageSquare className="h-8 w-8 text-blue-600 dark:text-blue-400 opacity-50" />
                 </div>
@@ -122,9 +192,7 @@ export default function RepairsCommunicationsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">WhatsApp</p>
-                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                      {stats.byChannel.whatsapp || 0}
-                    </p>
+                    <p className="text-2xl font-bold text-green-700 dark:text-green-400">{stats.byChannel.whatsapp || 0}</p>
                   </div>
                   <MessageSquare className="h-8 w-8 text-green-600 dark:text-green-400 opacity-50" />
                 </div>
@@ -136,9 +204,7 @@ export default function RepairsCommunicationsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Email</p>
-                    <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
-                      {stats.byChannel.email || 0}
-                    </p>
+                    <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">{stats.byChannel.email || 0}</p>
                   </div>
                   <Send className="h-8 w-8 text-purple-600 dark:text-purple-400 opacity-50" />
                 </div>
@@ -150,55 +216,60 @@ export default function RepairsCommunicationsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">SMS</p>
-                    <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">
-                      {stats.byChannel.sms || 0}
-                    </p>
+                    <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">{stats.byChannel.sms || 0}</p>
                   </div>
                   <Clock className="h-8 w-8 text-orange-600 dark:text-orange-400 opacity-50" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-red-50 to-red-100/50 dark:from-red-950/40 dark:to-red-900/20 border-red-200 dark:border-red-800">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Fallidos</p>
+                    <p className="text-2xl font-bold text-red-700 dark:text-red-400">{stats.failed}</p>
+                  </div>
+                  <AlertCircle className="h-8 w-8 text-red-600 dark:text-red-400 opacity-50" />
                 </div>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {/* Repair Selector */}
         <Card className="shadow-lg border-2 hover:border-primary/30 transition-colors">
           <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent">
             <CardTitle className="text-lg flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-primary" />
-              Seleccionar Reparación
+              Seleccionar Reparacion
             </CardTitle>
             <CardDescription>
-              Elige la reparación para gestionar sus comunicaciones
+              Elige la reparacion para gestionar sus comunicaciones
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              <RepairSelector 
-                repairs={repairs}
-                selectedRepairId={selectedRepairId}
-                onSelectRepair={setSelectedRepairId}
-                isLoading={repairsLoading}
-                className="flex-1 max-w-xl"
-              />
-            </div>
+            <RepairSelector
+              repairs={repairs}
+              selectedRepairId={selectedRepairId}
+              onSelectRepair={setSelectedRepairId}
+              isLoading={repairsLoading}
+              className="flex-1 max-w-xl"
+            />
 
             {selectedRepair && (
               <div className="flex flex-wrap gap-2 pt-2 border-t">
-                <Badge variant="outline">
-                  Cliente: {selectedRepair.customer.name}
-                </Badge>
-                <Badge variant="outline">
-                  Dispositivo: {selectedRepair.device}
-                </Badge>
-                {selectedRepair.customer.phone && (
-                  <Badge variant="outline">
-                    📱 {selectedRepair.customer.phone}
+                <Badge variant="outline">Cliente: {selectedRepair.customer?.name || "Cliente sin nombre"}</Badge>
+                <Badge variant="outline">Dispositivo: {selectedRepair.device}</Badge>
+                {selectedRepair.customer?.phone && (
+                  <Badge variant="outline" className="gap-1">
+                    <Phone className="h-3 w-3" />
+                    {selectedRepair.customer.phone}
                   </Badge>
                 )}
-                {selectedRepair.customer.email && (
-                  <Badge variant="outline">
-                    ✉️ {selectedRepair.customer.email}
+                {selectedRepair.customer?.email && (
+                  <Badge variant="outline" className="gap-1">
+                    <Mail className="h-3 w-3" />
+                    {selectedRepair.customer.email}
                   </Badge>
                 )}
               </div>
@@ -206,7 +277,6 @@ export default function RepairsCommunicationsPage() {
           </CardContent>
         </Card>
 
-        {/* Communication Center */}
         <CommunicationCenterEnhanced
           repair={selectedRepair}
           templates={DEFAULT_TEMPLATES}

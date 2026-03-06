@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { suggestReservations, costReport, ProductStock } from "@/services/inventory-repair-sync";
 import { RepairOrder } from "@/types/repairs";
-import { requireStaff } from "@/lib/auth/require-auth";
+import { requireStaff, getAuthResponse } from "@/lib/auth/require-auth";
 
 export async function POST(req: Request) {
   try {
     const auth = await requireStaff();
-    if (!auth.authenticated) return auth.response;
+    { const r = getAuthResponse(auth); if (r) return r };
     const body = await req.json();
     const repairs = body.repairs as RepairOrder[];
     const products = body.products as ProductStock[];
@@ -17,3 +17,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: String(e) }, { status: 400 });
   }
 }
+

@@ -8,12 +8,13 @@ export function useKanban(
     updateRepairStatus: (id: string, status: RepairStatus) => Promise<void>
 ) {
     const [kanbanOrder, setKanbanOrder] = useState<Record<RepairStatus, string[]>>({
-        pending: [],
-        in_progress: [],
-        waiting_parts: [],
-        on_hold: [],
-        completed: [],
-        cancelled: []
+        recibido: [],
+        diagnostico: [],
+        reparacion: [],
+        pausado: [],
+        listo: [],
+        entregado: [],
+        cancelado: []
     })
     const [draggedRepairId, setDraggedRepairId] = useState<string | null>(null)
     const [dragOverTarget, setDragOverTarget] = useState<{ id: string | null, status: RepairStatus } | null>(null)
@@ -24,7 +25,7 @@ export function useKanban(
             // Try loading from Supabase or LocalStorage
             // Simplified for this refactor: Initialize from repairs list if empty
             const initial: Record<RepairStatus, string[]> = {
-                pending: [], in_progress: [], waiting_parts: [], on_hold: [], completed: [], cancelled: []
+                recibido: [], diagnostico: [], reparacion: [], pausado: [], listo: [], entregado: [], cancelado: []
             }
 
             // Populate based on current repairs

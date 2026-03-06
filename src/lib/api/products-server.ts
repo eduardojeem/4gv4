@@ -264,7 +264,6 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     .from('products')
     .select(selectFields)
     .eq('id', cleanId)
-    .single()
 
   // Visibility check is tricky with single() because if filtered out it returns null/error.
   // We can't use .or() easily here for filtering visibility because it's an AND condition with ID.
@@ -277,7 +276,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     queryBuilder = queryBuilder.eq('visibility', 'public')
   }
 
-  const { data, error } = await queryBuilder
+  const { data, error } = await queryBuilder.single()
 
   if (error || !data) return null
 

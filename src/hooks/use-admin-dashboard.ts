@@ -173,7 +173,7 @@ export function useAdminDashboard() {
     companyRuc: '',
     companyAddress: process.env.NEXT_PUBLIC_COMPANY_ADDRESS || 'Av. Mariscal López 1234, Asunción, Paraguay',
     city: 'Asunción',
-    currency: process.env.NEXT_PUBLIC_CURRENCY || 'PYG',
+    currency: ((process.env.NEXT_PUBLIC_CURRENCY || 'PYG') as 'PYG' | 'USD' | 'EUR' | 'MXN'),
     taxRate: parseFloat(process.env.NEXT_PUBLIC_TAX_RATE || '0.10') * 100,
     theme: 'system',
     primaryColor: 'blue',

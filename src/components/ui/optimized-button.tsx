@@ -2,9 +2,11 @@
 
 import React, { forwardRef, useState, useCallback } from 'react'
 import { Loader2, Check, AlertTriangle, Info } from 'lucide-react'
-import { Button, ButtonProps } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useButtonNotifications, NotificationOptions } from '@/hooks/use-optimized-notifications'
+
+type ButtonProps = React.ComponentProps<typeof Button>
 
 export interface OptimizedButtonProps extends Omit<ButtonProps, 'onClick'> {
   // Configuraci贸n de notificaciones
@@ -181,13 +183,8 @@ export const OptimizedButton = forwardRef<HTMLButtonElement, OptimizedButtonProp
     ])
 
     // Determinar el estado actual del bot贸n
-    const currentState = disabled ? 'disabled' : status
-    const isCurrentlyLoading = hookIsLoading || isClicked
-    const currentIcon = getCurrentIcon(currentState, isCurrentlyLoading)
-    const currentMessage = message
-
     // Determinar si el bot贸n est谩 deshabilitado
-    const isDisabled = disabled || hookButtonState === 'loading' || isProcessing || (preventDoubleClick && isClicked)
+    const isDisabled = disabled || hookIsLoading || isProcessing || (preventDoubleClick && isClicked)
 
     // Clases CSS din谩micas
     const buttonClasses = cn(
@@ -246,19 +243,25 @@ OptimizedButton.displayName = 'OptimizedButton'
 export interface ConfirmationButtonProps extends OptimizedButtonProps {
   confirmationMessage?: string
   confirmationTitle?: string
+  confirmationDescription?: string
+  confirmButtonText?: string
+  cancelButtonText?: string
   requireConfirmation?: boolean
 }
 
 export const ConfirmationButton = forwardRef<HTMLButtonElement, ConfirmationButtonProps>(
   ({
     confirmationMessage = '驴Est谩s seguro de que quieres realizar esta acci贸n?',
-    confirmationTitle = 'Confirmar acci贸n',
+    confirmationTitle = 'Confirmar acci髇',
+    confirmationDescription,
+    confirmButtonText,
+    cancelButtonText,
     requireConfirmation = true,
     onAsyncClick,
     onClick,
     ...props
   }, ref) => {
-    const notifications = useButtonNotifications(props.buttonId || 'confirmation-button')
+    useButtonNotifications(props.buttonId || 'confirmation-button')
 
     const handleConfirmationClick = useCallback(async () => {
       if (!requireConfirmation) {
@@ -268,22 +271,12 @@ export const ConfirmationButton = forwardRef<HTMLButtonElement, ConfirmationButt
         return
       }
 
-      return new Promise<void>((resolve, reject) => {
-        notifications.notifyWithConfirmation(
-          confirmationMessage,
-          async () => {
-            try {
-              if (onAsyncClick) {
-                await onAsyncClick()
-              }
-              resolve()
-            } catch (error) {
-              reject(error)
-            }
-          }
-        )
-      })
-    }, [requireConfirmation, confirmationMessage, onAsyncClick, notifications])
+      const confirmed = window.confirm(confirmationDescription || confirmationMessage)
+      if (!confirmed) return
+      if (onAsyncClick) {
+        await onAsyncClick()
+      }
+    }, [requireConfirmation, confirmationDescription, confirmationMessage, onAsyncClick])
 
     return (
       <OptimizedButton
@@ -297,3 +290,6 @@ export const ConfirmationButton = forwardRef<HTMLButtonElement, ConfirmationButt
 )
 
 ConfirmationButton.displayName = 'ConfirmationButton'
+
+
+

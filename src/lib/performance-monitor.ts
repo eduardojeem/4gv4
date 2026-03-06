@@ -3,6 +3,8 @@
  * Sistema de monitoreo de rendimiento en tiempo real
  */
 
+import React from 'react'
+
 interface PerformanceMetric {
   name: string;
   value: number;
@@ -96,7 +98,8 @@ class PerformanceMonitor {
     if ('PerformanceObserver' in window) {
       const fidObserver = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          this.recordMetric('first_input_delay', entry.processingStart - entry.startTime, 'timing');
+          const fidEntry = entry as PerformanceEventTiming;
+          this.recordMetric('first_input_delay', fidEntry.processingStart - fidEntry.startTime, 'timing');
         }
       });
       

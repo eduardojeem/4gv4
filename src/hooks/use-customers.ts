@@ -45,6 +45,9 @@ export function useCustomers(options: UseCustomersOptions = {}) {
         credit_score_range: [0, 10],
         lifetime_value_range: [0, 10000],
         tags: [],
+        purchases_min: 0,
+        spent_min: 0,
+        loyalty_points_min: 0,
         ...initialFilters
     })
     
@@ -235,7 +238,10 @@ export function useCustomers(options: UseCustomersOptions = {}) {
                 date_range: { from: null, to: null },
                 credit_score_range: [0, 10],
                 lifetime_value_range: [0, 10000],
-                tags: []
+                tags: [],
+                purchases_min: 0,
+                spent_min: 0,
+                loyalty_points_min: 0
             })
         },
 

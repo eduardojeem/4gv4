@@ -78,7 +78,7 @@ function exportToCSV(categories: Category[], fields?: string[], filename?: strin
 }
 
 function exportToJSON(categories: Category[], fields?: string[], filename?: string) {
-    let data: Record<string, unknown>[] = categories
+    let data: unknown[] = categories
 
     if (fields && fields.length > 0) {
         data = categories.map(category => {

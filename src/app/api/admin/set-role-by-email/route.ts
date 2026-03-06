@@ -1,12 +1,16 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { createAdminSupabase, mapUiRoleToDbRole } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/auth/require-auth'
+import { requireAdmin, getAuthResponse } from '@/lib/auth/require-auth'
 
 export async function POST(request: Request) {
   try {
     // Solo un admin puede cambiar roles por email
     const auth = await requireAdmin()
-    if (!auth.authenticated) return auth.response
+    const authResponse = getAuthResponse(auth)
+    if (authResponse) return authResponse
+    if (!auth.authenticated) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     const body = await request.json().catch(() => ({}))
     const email = typeof body?.email === 'string' ? body.email.trim() : ''
@@ -81,3 +85,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+

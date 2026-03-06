@@ -513,7 +513,7 @@ export function ProductDetailDialog({
                           </TableCell>
                           <TableCell>{mov.new_stock}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {mov.reason || '-'}
+                            {mov.notes || '-'}
                           </TableCell>
                         </TableRow>
                       ))}

@@ -7,6 +7,7 @@ import { useErrorHandler } from './use-error-handler'
 import { useDebounce } from './use-debounce'
 import { measure, trackMetric } from '@/lib/performance'
 import type { RepairFormData } from '@/schemas'
+import { isDemoMode } from '@/lib/config'
 
 export function useRepairs() {
   const [repairs, setRepairs] = useState<Repair[]>([])

@@ -1,5 +1,6 @@
-"use client"
+﻿"use client"
 
+import { logger } from '@/lib/logger'
 import { useState, useEffect } from 'react'
 import {
   Dialog,

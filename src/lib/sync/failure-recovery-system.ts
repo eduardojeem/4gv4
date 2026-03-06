@@ -481,9 +481,14 @@ export class FailureRecoverySystem {
 
     this.failures.set(id, failure)
 
+    const allowedOperations = ['product_sync', 'realtime_event', 'catalog_sync', 'supplier_sync', 'inventory_sync'] as const
+    const normalizedOperation = allowedOperations.includes(operation as (typeof allowedOperations)[number])
+      ? (operation as (typeof allowedOperations)[number])
+      : 'product_sync'
+
     // Registrar métricas
     await syncPerformanceMonitor.recordSyncOperation(
-      operation,
+      normalizedOperation,
       Date.now(),
       Date.now(),
       0,

@@ -4,11 +4,11 @@ import { Clock, TrendingUp, Search } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { SearchEntry } from '../lib/search-history'
+import type { SearchHistoryEntry, FrequentSearch } from '../lib/search-history'
 
 interface FrequentSearchesProps {
-  recentSearches: SearchEntry[]
-  frequentSearches: SearchEntry[]
+  recentSearches: SearchHistoryEntry[]
+  frequentSearches: FrequentSearch[]
   onSearchClick?: (query: string) => void
   className?: string
 }
@@ -83,11 +83,9 @@ export function FrequentSearches({
                     <Badge variant="secondary" className="text-xs">
                       {search.count}x
                     </Badge>
-                    {search.results_count > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        {search.results_count} resultados
-                      </span>
-                    )}
+                    <span className="text-xs text-muted-foreground">
+                      Usado recientemente
+                    </span>
                   </div>
                 </button>
               ))}

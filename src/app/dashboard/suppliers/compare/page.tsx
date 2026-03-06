@@ -1,4 +1,5 @@
-'use client'
+﻿'use client'
+import { logger } from '@/lib/logger'
 
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'

@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireStaff } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 
 // PATCH /api/repairs/:id/status -> Actualiza stage de la reparación
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
 
     const { id } = await context.params
     const body = await req.json()

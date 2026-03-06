@@ -18,6 +18,26 @@ interface CatalogSyncOptions {
 
 const DEFAULT_STORAGE_KEY = 'catalog-data'
 
+const toFullCategory = (category: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Category => {
+  const now = new Date().toISOString()
+  return {
+    ...category,
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now
+  }
+}
+
+const toFullBrand = (brand: Omit<Brand, 'id' | 'createdAt' | 'updatedAt'>): Brand => {
+  const now = new Date().toISOString()
+  return {
+    ...brand,
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now
+  }
+}
+
 export function useCatalogSync(options: CatalogSyncOptions = {}) {
   const {
     autoSave = true,
@@ -26,8 +46,8 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
   } = options
 
   const [catalogData, setCatalogData] = useState<CatalogData>({
-    categories: DEFAULT_CATEGORIES,
-    brands: DEFAULT_BRANDS,
+    categories: DEFAULT_CATEGORIES.map(toFullCategory),
+    brands: DEFAULT_BRANDS.map(toFullBrand),
     suppliers: []
   })
 
@@ -41,8 +61,8 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
       if (savedData) {
         const parsedData = JSON.parse(savedData)
         setCatalogData({
-          categories: parsedData.categories || DEFAULT_CATEGORIES,
-          brands: parsedData.brands || DEFAULT_BRANDS,
+          categories: parsedData.categories || DEFAULT_CATEGORIES.map(toFullCategory),
+          brands: parsedData.brands || DEFAULT_BRANDS.map(toFullBrand),
           suppliers: parsedData.suppliers || []
         })
       }
@@ -166,7 +186,8 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
       .map(supplier => ({
         value: supplier.id,
         label: supplier.name,
-        category: supplier.category,
+        category: supplier.categories[0] || '',
+        categories: supplier.categories,
         email: supplier.email
       }))
   }, [catalogData.suppliers])
@@ -192,7 +213,7 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
         return catalogData.suppliers.filter(supplier =>
           supplier.name.toLowerCase().includes(searchTerm) ||
           supplier.email.toLowerCase().includes(searchTerm) ||
-          supplier.category.toLowerCase().includes(searchTerm)
+          supplier.categories.some(category => category.toLowerCase().includes(searchTerm))
         )
       default:
         return []
@@ -276,8 +297,8 @@ export function useCatalogSync(options: CatalogSyncOptions = {}) {
   // Función para resetear datos
   const resetData = useCallback(() => {
     setCatalogData({
-      categories: DEFAULT_CATEGORIES,
-      brands: DEFAULT_BRANDS,
+      categories: DEFAULT_CATEGORIES.map(toFullCategory),
+      brands: DEFAULT_BRANDS.map(toFullBrand),
       suppliers: []
     })
   }, [])

@@ -78,6 +78,14 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
   const supabase = createClient()
 
+  const matchesStockStatus = useCallback((product: Product, stockStatus: string) => {
+    if (stockStatus === 'out') return product.stock_quantity === 0
+    if (stockStatus === 'low') return product.stock_quantity <= product.min_stock && product.stock_quantity > 0
+    if (stockStatus === 'high') return product.stock_quantity >= product.max_stock
+    if (stockStatus === 'normal') return product.stock_quantity > product.min_stock && product.stock_quantity < product.max_stock
+    return true
+  }, [])
+
   const fetchCategories = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -117,7 +125,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     setLoading(true)
     setError(null)
     try {
-      let query = supabase
+      let baseQuery = supabase
         .from('products')
         .select(`
           *,
@@ -127,7 +135,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
       // Aplicar filtros
       if (filters.search) {
-        query = query.or(`name.ilike.%${filters.search}%,sku.ilike.%${filters.search}%,description.ilike.%${filters.search}%`)
+        baseQuery = baseQuery.or(`name.ilike.%${filters.search}%,sku.ilike.%${filters.search}%,description.ilike.%${filters.search}%`)
       }
 
       if (filters.category !== 'all') {
@@ -139,50 +147,36 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
         // Mejor filtrar por category_id si es posible.
         // Por ahora, si filters.category es un UUID, filtramos por category_id
         if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(filters.category)) {
-           query = query.eq('category_id', filters.category)
+           baseQuery = baseQuery.eq('category_id', filters.category)
         }
       }
 
       if (filters.status !== 'all') {
-        query = query.eq('status', filters.status)
+        baseQuery = baseQuery.eq('status', filters.status)
+      }
+      // Con filtro de stock aplicamos filtro antes de paginar para mantener totalCount correcto.
+      if (filters.stockStatus !== 'all') {
+        const { data: fullData, error } = await baseQuery.order('created_at', { ascending: false })
+        if (error) throw error
+
+        const filteredData = (fullData as Product[]).filter((p) => matchesStockStatus(p, filters.stockStatus))
+        const from = (page - 1) * pageSize
+        const to = from + pageSize
+
+        setProducts(filteredData.slice(from, to))
+        setTotalCount(filteredData.length)
+        return
       }
 
-      // Filtros de stock (más complejo de hacer en servidor sin RPC o lógica compleja, 
-      // pero podemos intentarlo con filtros simples o hacerlo en cliente si son pocos datos.
-      // Para optimización real, debería ser en servidor.
-      // Supabase no soporta comparaciones de columnas directas (stock <= min_stock) en .filter() estándar fácilmente sin raw sql filter.
-      // Usaremos lógica cliente para stockFilter complejo por ahora si la paginación es pequeña, 
-      // O idealmente un RPC 'get_products_with_stock_status'.
-      // Para mantenerlo simple y "safe", si hay filtro de stock, quizás sea mejor traer más y filtrar, o no paginar.
-      // Pero intentemos paginación estándar primero.
-      
-      // Paginación
       const from = (page - 1) * pageSize
       const to = from + pageSize - 1
-      query = query.range(from, to).order('created_at', { ascending: false })
-
-      const { data, error, count } = await query
+      const { data, error, count } = await baseQuery
+        .order('created_at', { ascending: false })
+        .range(from, to)
 
       if (error) throw error
 
-      let processedData = data as Product[]
-
-      // Filtrado de stock en cliente (limitación: solo filtra sobre la página actual si no usamos RPC)
-      // Esto es un compromiso. Para hacerlo bien en servidor se necesita RPC o vistas.
-      if (filters.stockStatus !== 'all') {
-         // Si el usuario filtra por stock, esto podría devolver menos resultados por página de los esperados
-         // Solución ideal: Crear una vista o función RPC.
-         // Por ahora, aplicamos el filtro en memoria a los resultados devueltos (imperfecto pero funcional para UI)
-         processedData = processedData.filter(p => {
-            if (filters.stockStatus === 'out') return p.stock_quantity === 0
-            if (filters.stockStatus === 'low') return p.stock_quantity <= p.min_stock && p.stock_quantity > 0
-            if (filters.stockStatus === 'high') return p.stock_quantity >= p.max_stock
-            if (filters.stockStatus === 'normal') return p.stock_quantity > p.min_stock && p.stock_quantity < p.max_stock
-            return true
-         })
-      }
-
-      setProducts(processedData)
+      setProducts((data || []) as Product[])
       setTotalCount(count || 0)
 
     } catch (err: any) {
@@ -191,7 +185,7 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     } finally {
       setLoading(false)
     }
-  }, [supabase, page, pageSize, filters])
+  }, [supabase, page, pageSize, filters, matchesStockStatus])
 
   // Carga inicial
   useEffect(() => {
@@ -203,6 +197,10 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   useEffect(() => {
     fetchProducts()
   }, [fetchProducts])
+
+  useEffect(() => {
+    setPage(1)
+  }, [filters.search, filters.category, filters.status, filters.stockStatus, pageSize])
 
   // Operaciones CRUD
   const createProduct = async (productData: Partial<Product>) => {
@@ -295,3 +293,4 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     refreshSuppliers: fetchSuppliers
   }
 }
+

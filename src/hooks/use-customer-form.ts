@@ -84,7 +84,7 @@ export function useCustomerForm({
   const [stepValidation, setStepValidation] = useState<Record<string, boolean>>({})
   
   // Refs
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout>()
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSavedDataRef = useRef<CustomerFormData | null>(null)
 
   // Form setup

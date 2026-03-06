@@ -68,13 +68,15 @@ export function useSaleProcessor(options: SaleProcessorOptions = {}) {
       // Validar datos
       const validation = validateSale(saleData)
       if (!validation.success) {
-        throw new Error(validation.errors.join(', '))
+        const validationErrors = 'errors' in validation ? validation.errors : ['Datos de venta inválidos']
+        throw new Error(validationErrors.join(', '))
       }
 
       // Validar reglas de negocio
       const businessValidation = validateSaleBusinessRules(validation.data)
       if (!businessValidation.valid) {
-        throw new Error(businessValidation.errors.join(', '))
+        const businessErrors = 'errors' in businessValidation ? businessValidation.errors : ['Reglas de negocio inválidas']
+        throw new Error(businessErrors.join(', '))
       }
 
       // Procesar en Supabase
@@ -101,7 +103,8 @@ export function useSaleProcessor(options: SaleProcessorOptions = {}) {
       return saleId
     } catch (error) {
       setPaymentStatus('failed')
-      const errorMessage = POSErrorHandler.handle(error, 'sale', { cart, total })
+      POSErrorHandler.handle(error, 'sale', { cart, total })
+      const errorMessage = error instanceof Error ? error.message : 'Error al procesar la venta'
       setPaymentError(errorMessage)
       options.onError?.(error)
       throw error
@@ -123,4 +126,74 @@ export function useSaleProcessor(options: SaleProcessorOptions = {}) {
   ])
 
   return { processSale }
+}
+
+async function persistSaleToSupabase(
+  cart: CartItem[],
+  paymentMethod: string,
+  discount: number,
+  tax: number,
+  total: number,
+  selectedCustomer?: string,
+  repairIds: string[] = [],
+  markRepairDelivered: boolean = false,
+  finalCostFromSale: boolean = false
+): Promise<string> {
+  const supabase = createClient()
+
+  const salePayload: Record<string, unknown> = {
+    customer_id: selectedCustomer || null,
+    payment_method: paymentMethod,
+    discount_amount: discount || 0,
+    tax_amount: tax || 0,
+    total_amount: total || 0,
+    subtotal_amount: Math.max(0, (total || 0) - (tax || 0)),
+    notes: null
+  }
+
+  const { data: saleRow, error: saleError } = await supabase
+    .from('sales')
+    .insert(salePayload)
+    .select('id')
+    .single()
+
+  if (saleError || !saleRow?.id) {
+    throw new Error(saleError?.message || 'No se pudo crear la venta')
+  }
+
+  if (cart.length > 0) {
+    const itemsPayload = cart.map((item) => ({
+      sale_id: saleRow.id,
+      product_id: item.id,
+      quantity: item.quantity,
+      unit_price: item.price,
+      subtotal: item.subtotal ?? item.price * item.quantity,
+      discount: item.discount || 0
+    }))
+
+    const { error: itemsError } = await supabase.from('sale_items').insert(itemsPayload)
+    if (itemsError) {
+      throw new Error(itemsError.message || 'No se pudieron guardar los ítems de la venta')
+    }
+  }
+
+  if (repairIds.length > 0 && markRepairDelivered) {
+    const status = 'entregado'
+    const updatePayload: Record<string, unknown> = {
+      status,
+      delivered_at: new Date().toISOString()
+    }
+    if (finalCostFromSale) {
+      updatePayload.final_cost = total
+    }
+    const { error: repairsError } = await supabase
+      .from('repairs')
+      .update(updatePayload)
+      .in('id', repairIds)
+    if (repairsError) {
+      throw new Error(repairsError.message || 'No se pudieron actualizar las reparaciones')
+    }
+  }
+
+  return saleRow.id
 }

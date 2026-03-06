@@ -52,6 +52,7 @@ interface ChartExporterProps {
   metrics?: Record<string, any>
   chartRefs: React.RefObject<HTMLDivElement | null>[]
   chartTitles: string[]
+  chartData?: any[][]
   onExport?: (format: string, success: boolean) => void
   className?: string
 }
@@ -62,6 +63,7 @@ export function ChartExporter({
   metrics = {},
   chartRefs,
   chartTitles,
+  chartData,
   onExport,
   className = ''
 }: ChartExporterProps) {
@@ -228,7 +230,8 @@ export function ChartExporter({
           )
 
           // Agregar descripción o datos si está habilitado
-          if (options.includeData && data.length > 0) {
+          if (options.includeData && (data.length > 0 || (chartData && chartData[i] && chartData[i].length > 0))) {
+            const currentChartData = (chartData && chartData[i]) || data;
             const dataYPos = yPos + chartHeight + 30
             
             doc.setFontSize(12)
@@ -236,14 +239,14 @@ export function ChartExporter({
             doc.text('Datos del Gráfico:', margin, dataYPos)
 
             // Agregar tabla con datos relevantes (primeros 10 registros)
-            const tableData = data.slice(0, 10).map(item => 
+            const tableData = currentChartData.slice(0, 10).map((item: any) => 
               Object.values(item).map(val => val?.toString() || '')
             )
             
             if (tableData.length > 0) {
               autoTable(doc, {
                 startY: dataYPos + 20,
-                head: [Object.keys(data[0] || {})],
+                head: [Object.keys(currentChartData[0] || {})],
                 body: tableData,
                 styles: { fontSize: 8, cellPadding: 3 },
                 headStyles: { fillColor: [54, 96, 146], textColor: [255, 255, 255] },

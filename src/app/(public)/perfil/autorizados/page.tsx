@@ -23,7 +23,8 @@ import {
   CheckCircle2, 
   Info,
   X,
-  UserPlus
+  UserPlus,
+  Save
 } from 'lucide-react'
 import Link from 'next/link'
 import { z } from 'zod'
@@ -99,7 +100,7 @@ export default function AuthorizedPersonsPage() {
     } catch (error) {
       if (error instanceof z.ZodError) {
         const fieldErrors: Record<string, string> = {}
-        error.errors.forEach(err => {
+        error.issues.forEach(err => {
           if (err.path[0]) fieldErrors[err.path[0].toString()] = err.message
         })
         setErrors(fieldErrors)
@@ -392,6 +393,3 @@ export default function AuthorizedPersonsPage() {
   )
 }
 
-function Save() {
-  return <Plus className="h-5 w-5" />
-}

@@ -138,7 +138,7 @@ export function useOptimizedCustomers(options: UseOptimizedCustomersOptions = {}
   // Función para prefetch de un cliente específico
   const prefetchCustomer = useCallback(async (customerId: string) => {
     try {
-      await cacheUtils.prefetch(['customer', customerId], async () => {
+      await cacheUtils.prefetch(`customer:${customerId}`, async () => {
         const response = await customerService.getCustomer(customerId)
         return response.success ? response.data : null
       })
@@ -246,7 +246,7 @@ async function prefetchRelatedData(customers: Customer[]) {
     const segments = [...new Set(customers.map(c => c.segment).filter(Boolean))]
     
     for (const segment of segments.slice(0, 3)) { // Limitar a 3 segmentos
-      await cacheUtils.prefetch(['customers', 'segment', segment], async () => {
+      await cacheUtils.prefetch(`customers:segment:${segment}`, async () => {
         const response = await customerService.getCustomers(1, 200)
         return response.success ? 
           (response.data || []).filter(c => c.segment === segment) : 
@@ -260,7 +260,7 @@ async function prefetchRelatedData(customers: Customer[]) {
 
 async function prefetchPopularCustomers(customers: Customer[]) {
   const prefetchPromises = customers.map(customer =>
-    cacheUtils.prefetch(['customer', customer.id], async () => customer)
+    cacheUtils.prefetch(`customer:${customer.id}`, async () => customer)
   )
   
   await Promise.allSettled(prefetchPromises)

@@ -274,7 +274,7 @@ const InventoryReports: React.FC = () => {
             revenue: data.revenue,
             profit,
             margin: Number(margin.toFixed(1)),
-            trend: 'stable' // To implement trend, we'd need comparison with previous period
+            trend: 'stable' as const // To implement trend, we'd need comparison with previous period
           }
         })
         .sort((a, b) => b.revenue - a.revenue)

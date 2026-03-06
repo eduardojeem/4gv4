@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { Promotion } from '@/types/promotion'
-import { requireStaff } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 
 // Mock data - en producción esto vendría de la base de datos
 const mockPromotions: Promotion[] = [
@@ -76,7 +76,7 @@ export async function PUT(
 ) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { id } = await params
     const body = await request.json()
 
@@ -142,7 +142,7 @@ export async function DELETE(
 ) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { id } = await params
 
     const index = mockPromotions.findIndex(p => p.id === id)
@@ -194,7 +194,7 @@ export async function PATCH(
 ) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { id } = await params
     const body = await request.json()
 

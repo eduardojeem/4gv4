@@ -3,10 +3,10 @@
 import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Package, AlertCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import type { POSMetrics } from '../lib/analytics-engine'
+import type { SalesMetrics } from '../lib/analytics-engine'
 
 interface AnalyticsDashboardProps {
-  metrics: POSMetrics
+  metrics: SalesMetrics
   className?: string
 }
 
@@ -41,14 +41,14 @@ export function AnalyticsDashboard({ metrics, className }: AnalyticsDashboardPro
     {
       title: 'Ticket Promedio',
       value: formatCurrency(metrics.averageTicket),
-      change: metrics.ticketChange,
+      change: metrics.salesChange,
       icon: ShoppingCart,
       color: 'text-purple-600'
     },
     {
       title: 'Margen',
       value: `${metrics.profitMargin.toFixed(1)}%`,
-      change: metrics.marginChange,
+      change: metrics.profitChange,
       icon: Package,
       color: 'text-orange-600'
     }

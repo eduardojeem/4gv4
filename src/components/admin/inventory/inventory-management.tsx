@@ -13,8 +13,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Badge } from '@/components/ui/badge'
 import AdvancedSearch from '@/components/admin/advanced-search'
 import StockControl from '@/components/admin/inventory/stock-control'
+import StockMovements from '@/components/admin/inventory/stock-movements'
 import InventoryReports from '@/components/admin/reports/inventory-reports'
-import { SupplierManagement } from '@/components/dashboard/supplier-management'
+import SupplierManagement from '@/components/admin/inventory/supplier-management'
 import { useInventory, Product } from '@/hooks/use-inventory'
 import {
   Package,
@@ -48,6 +49,24 @@ interface ValidationError {
   message: string
 }
 
+interface SearchResult {
+  id: string
+  name: string
+  sku: string
+  category: string
+  supplier: string
+  price: number
+  stock: number
+  status: string
+  lastMovement: Date
+}
+
+interface AdvancedSearchFilter {
+  id: string
+  type: string
+  value: unknown
+}
+
 export default function InventoryManagement() {
   const {
     products,
@@ -79,18 +98,30 @@ export default function InventoryManagement() {
   const [formData, setFormData] = useState<Partial<Product>>({})
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([])
   const [successMessage, setSuccessMessage] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+
+  const parseNumberInput = (rawValue: string, parser: (value: string) => number) => {
+    const trimmed = rawValue.trim()
+    if (trimmed === '') return undefined
+    const parsed = parser(trimmed)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
 
   // Validaciones
   const validateProduct = (data: Partial<Product>): ValidationError[] => {
     const errors: ValidationError[] = []
+    const salePrice = Number(data.sale_price)
+    const purchasePrice = Number(data.purchase_price)
+    const stockQuantity = Number(data.stock_quantity)
 
     if (!data.name?.trim()) errors.push({ field: 'name', message: 'El nombre es requerido' })
     if (!data.sku?.trim()) errors.push({ field: 'sku', message: 'El SKU es requerido' })
     if (!data.category_id) errors.push({ field: 'category_id', message: 'La categoría es requerida' })
     if (!data.supplier_id) errors.push({ field: 'supplier_id', message: 'El proveedor es requerido' })
-    if (data.sale_price === undefined || data.sale_price <= 0) errors.push({ field: 'sale_price', message: 'Precio inválido' })
-    if (data.purchase_price === undefined || data.purchase_price < 0) errors.push({ field: 'purchase_price', message: 'Costo inválido' })
-    if (data.stock_quantity === undefined || data.stock_quantity < 0) errors.push({ field: 'stock_quantity', message: 'Stock inválido' })
+    if (!Number.isFinite(salePrice) || salePrice <= 0) errors.push({ field: 'sale_price', message: 'Precio inválido' })
+    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) errors.push({ field: 'purchase_price', message: 'Costo inválido' })
+    if (!Number.isFinite(stockQuantity) || stockQuantity < 0) errors.push({ field: 'stock_quantity', message: 'Stock inválido' })
 
     return errors
   }
@@ -127,6 +158,8 @@ export default function InventoryManagement() {
 
   // Handlers CRUD
   const handleAddProduct = async () => {
+    setValidationErrors([])
+    setActionError('')
     setIsSubmitting(true)
     const errors = validateProduct(formData)
     if (errors.length > 0) {
@@ -142,27 +175,39 @@ export default function InventoryManagement() {
       setFormData({})
       setTimeout(() => setSuccessMessage(''), 3000)
     } else {
-      console.error(result.error)
+      setActionError(result.error || 'No fue posible crear el producto')
     }
     setIsSubmitting(false)
   }
 
   const handleEditProduct = async () => {
     if (!selectedProduct) return
+    setValidationErrors([])
+    setActionError('')
     setIsSubmitting(true)
-    
+
+    const errors = validateProduct(formData)
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      setIsSubmitting(false)
+      return
+    }
+
     const result = await updateProduct(selectedProduct.id, formData)
     if (result.success) {
       setSuccessMessage('Producto actualizado')
       setIsEditDialogOpen(false)
       setSelectedProduct(null)
       setTimeout(() => setSuccessMessage(''), 3000)
+    } else {
+      setActionError(result.error || 'No fue posible actualizar el producto')
     }
     setIsSubmitting(false)
   }
 
   const handleDeleteProduct = async () => {
     if (!selectedProduct) return
+    setActionError('')
     setIsSubmitting(true)
     const result = await deleteProduct(selectedProduct.id)
     if (result.success) {
@@ -170,6 +215,8 @@ export default function InventoryManagement() {
       setIsDeleteDialogOpen(false)
       setSelectedProduct(null)
       setTimeout(() => setSuccessMessage(''), 3000)
+    } else {
+      setActionError(result.error || 'No fue posible eliminar el producto')
     }
     setIsSubmitting(false)
   }
@@ -177,10 +224,126 @@ export default function InventoryManagement() {
   const openEditDialog = (product: Product) => {
     setSelectedProduct(product)
     setFormData({ ...product })
+    setValidationErrors([])
+    setActionError('')
     setIsEditDialogOpen(true)
   }
 
   const getFieldError = (field: string) => validationErrors.find(e => e.field === field)?.message
+
+  const toLowerSafe = (value?: string | null) => (value || '').toLowerCase()
+
+  const getStockDerivedStatus = (product: Product) => {
+    if (product.stock_quantity === 0) return 'out_of_stock'
+    if (product.stock_quantity <= product.min_stock) return 'low_stock'
+    return product.status
+  }
+
+  const handleAdvancedSearch = (activeFilters: AdvancedSearchFilter[]) => {
+    const byId = new Map(activeFilters.map((f) => [f.id, f]))
+    const search = String(byId.get('search')?.value || '').trim().toLowerCase()
+    const categoriesFilter = Array.isArray(byId.get('category')?.value) ? (byId.get('category')?.value as string[]) : []
+    const suppliersFilter = Array.isArray(byId.get('supplier')?.value) ? (byId.get('supplier')?.value as string[]) : []
+    const statusFilter = Array.isArray(byId.get('status')?.value) ? (byId.get('status')?.value as string[]) : []
+    const priceRange = Array.isArray(byId.get('priceRange')?.value) ? (byId.get('priceRange')?.value as number[]) : null
+    const stockRange = Array.isArray(byId.get('stockRange')?.value) ? (byId.get('stockRange')?.value as number[]) : null
+    const dateAdded = String(byId.get('dateAdded')?.value || '')
+    const hasImage = Boolean(byId.get('hasImage')?.value)
+
+    const filtered = products.filter((product) => {
+      const productName = toLowerSafe(product.name)
+      const sku = toLowerSafe(product.sku)
+      const description = toLowerSafe(product.description)
+      const categoryName = toLowerSafe(product.category?.name)
+      const supplierName = toLowerSafe(product.supplier?.name)
+
+      if (search && !productName.includes(search) && !sku.includes(search) && !description.includes(search)) {
+        return false
+      }
+
+      if (
+        categoriesFilter.length > 0 &&
+        !categoriesFilter.some((value) => categoryName.includes(String(value).toLowerCase()))
+      ) {
+        return false
+      }
+
+      if (
+        suppliersFilter.length > 0 &&
+        !suppliersFilter.some((value) => supplierName.includes(String(value).toLowerCase()))
+      ) {
+        return false
+      }
+
+      if (priceRange && typeof priceRange[0] === 'number' && typeof priceRange[1] === 'number') {
+        if (product.sale_price < priceRange[0] || product.sale_price > priceRange[1]) return false
+      }
+
+      if (stockRange && typeof stockRange[0] === 'number' && typeof stockRange[1] === 'number') {
+        if (product.stock_quantity < stockRange[0] || product.stock_quantity > stockRange[1]) return false
+      }
+
+      if (statusFilter.length > 0) {
+        const derivedStatus = getStockDerivedStatus(product)
+        if (!statusFilter.includes(derivedStatus) && !statusFilter.includes(product.status)) return false
+      }
+
+      if (dateAdded && !product.created_at?.startsWith(dateAdded)) return false
+      if (hasImage && !product.image_url) return false
+
+      return true
+    })
+
+    setSearchResults(
+      filtered.map((product) => ({
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        category: product.category?.name || '-',
+        supplier: product.supplier?.name || '-',
+        price: product.sale_price,
+        stock: product.stock_quantity,
+        status: getStockDerivedStatus(product),
+        lastMovement: new Date(product.updated_at)
+      }))
+    )
+  }
+
+  const clearAdvancedSearch = () => {
+    setSearchResults([])
+  }
+
+  const handleExportProducts = () => {
+    const rows = [
+      ['Nombre', 'SKU', 'Categoria', 'Proveedor', 'Precio Venta', 'Costo', 'Stock', 'Estado'],
+      ...products.map((product) => [
+        product.name,
+        product.sku,
+        product.category?.name || '',
+        product.supplier?.name || '',
+        String(product.sale_price),
+        String(product.purchase_price),
+        String(product.stock_quantity),
+        product.status
+      ])
+    ]
+
+    const csv = rows
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `inventario_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const hasNextPage = page * pageSize < totalCount
+  const rangeStart = totalCount === 0 ? 0 : ((page - 1) * pageSize) + 1
+  const rangeEnd = totalCount === 0 ? 0 : Math.min(page * pageSize, totalCount)
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -189,6 +352,12 @@ export default function InventoryManagement() {
         <Alert className="border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-800">
           <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
           <AlertDescription className="text-green-800 dark:text-green-300">{successMessage}</AlertDescription>
+        </Alert>
+      )}
+      {(error || actionError) && (
+        <Alert className="border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800">
+          <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+          <AlertDescription className="text-red-800 dark:text-red-300">{actionError || error}</AlertDescription>
         </Alert>
       )}
 
@@ -206,6 +375,7 @@ export default function InventoryManagement() {
           <div className="flex items-center space-x-3">
             <Button
               variant="outline"
+              onClick={handleExportProducts}
               className="border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/30"
             >
               <Download className="h-4 w-4 mr-2" />
@@ -215,6 +385,7 @@ export default function InventoryManagement() {
               onClick={() => {
                 setFormData({})
                 setValidationErrors([])
+                setActionError('')
                 setIsAddDialogOpen(true)
               }}
               className="bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-600 dark:hover:bg-blue-700"
@@ -279,7 +450,7 @@ export default function InventoryManagement() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-white dark:bg-gray-800 border dark:border-gray-700 p-1 rounded-lg grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 h-auto">
+        <TabsList className="bg-white dark:bg-gray-800 border dark:border-gray-700 p-1 rounded-lg grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 h-auto">
           <TabsTrigger value="products">Productos</TabsTrigger>
           <TabsTrigger value="categories">Categorías</TabsTrigger>
           <TabsTrigger value="suppliers">Proveedores</TabsTrigger>
@@ -404,13 +575,13 @@ export default function InventoryManagement() {
             {/* Paginación */}
             <div className="p-4 border-t dark:border-gray-700 flex justify-between items-center">
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, totalCount)} de {totalCount}
+                Mostrando {rangeStart} - {rangeEnd} de {totalCount}
               </span>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={products.length < pageSize || loading}>
+                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={!hasNextPage || loading}>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -443,11 +614,15 @@ export default function InventoryManagement() {
         </TabsContent>
 
         <TabsContent value="search">
-          <AdvancedSearch onSearch={() => {}} onClearFilters={() => {}} results={[]} />
+          <AdvancedSearch onSearch={handleAdvancedSearch} onClearFilters={clearAdvancedSearch} results={searchResults} />
         </TabsContent>
 
         <TabsContent value="stock-control">
           <StockControl />
+        </TabsContent>
+
+        <TabsContent value="movements">
+          <StockMovements />
         </TabsContent>
 
         <TabsContent value="alerts">
@@ -517,25 +692,55 @@ export default function InventoryManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="dark:text-gray-300">Costo *</Label>
-                  <Input type="number" step="0.01" value={formData.purchase_price || ''} onChange={e => setFormData({ ...formData, purchase_price: parseFloat(e.target.value) })} className="dark:bg-gray-900 dark:border-gray-600" />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.purchase_price ?? ''}
+                    onChange={e => setFormData({ ...formData, purchase_price: parseNumberInput(e.target.value, parseFloat) })}
+                    className={`dark:bg-gray-900 dark:border-gray-600 ${getFieldError('purchase_price') ? 'border-red-500' : ''}`}
+                  />
+                  {getFieldError('purchase_price') && <p className="text-xs text-red-500">{getFieldError('purchase_price')}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label className="dark:text-gray-300">Precio Venta *</Label>
-                  <Input type="number" step="0.01" value={formData.sale_price || ''} onChange={e => setFormData({ ...formData, sale_price: parseFloat(e.target.value) })} className="dark:bg-gray-900 dark:border-gray-600" />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={formData.sale_price ?? ''}
+                    onChange={e => setFormData({ ...formData, sale_price: parseNumberInput(e.target.value, parseFloat) })}
+                    className={`dark:bg-gray-900 dark:border-gray-600 ${getFieldError('sale_price') ? 'border-red-500' : ''}`}
+                  />
+                  {getFieldError('sale_price') && <p className="text-xs text-red-500">{getFieldError('sale_price')}</p>}
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className="dark:text-gray-300">Stock *</Label>
-                  <Input type="number" value={formData.stock_quantity || ''} onChange={e => setFormData({ ...formData, stock_quantity: parseInt(e.target.value) })} className="dark:bg-gray-900 dark:border-gray-600" />
+                  <Input
+                    type="number"
+                    value={formData.stock_quantity ?? ''}
+                    onChange={e => setFormData({ ...formData, stock_quantity: parseNumberInput(e.target.value, parseInt) })}
+                    className={`dark:bg-gray-900 dark:border-gray-600 ${getFieldError('stock_quantity') ? 'border-red-500' : ''}`}
+                  />
+                  {getFieldError('stock_quantity') && <p className="text-xs text-red-500">{getFieldError('stock_quantity')}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label className="dark:text-gray-300">Min</Label>
-                  <Input type="number" value={formData.min_stock || ''} onChange={e => setFormData({ ...formData, min_stock: parseInt(e.target.value) })} className="dark:bg-gray-900 dark:border-gray-600" />
+                  <Input
+                    type="number"
+                    value={formData.min_stock ?? ''}
+                    onChange={e => setFormData({ ...formData, min_stock: parseNumberInput(e.target.value, parseInt) })}
+                    className="dark:bg-gray-900 dark:border-gray-600"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="dark:text-gray-300">Max</Label>
-                  <Input type="number" value={formData.max_stock || ''} onChange={e => setFormData({ ...formData, max_stock: parseInt(e.target.value) })} className="dark:bg-gray-900 dark:border-gray-600" />
+                  <Input
+                    type="number"
+                    value={formData.max_stock ?? ''}
+                    onChange={e => setFormData({ ...formData, max_stock: parseNumberInput(e.target.value, parseInt) })}
+                    className="dark:bg-gray-900 dark:border-gray-600"
+                  />
                 </div>
               </div>
             </div>
@@ -571,3 +776,5 @@ export default function InventoryManagement() {
     </div>
   )
 }
+
+

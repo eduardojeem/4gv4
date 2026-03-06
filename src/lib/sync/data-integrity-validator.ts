@@ -19,7 +19,7 @@ export interface ValidationResult {
   passed: boolean
   severity: 'error' | 'warning' | 'info'
   message: string
-  affectedRecords: Record<string, unknown>[]
+  affectedRecords: unknown[]
   details: Record<string, unknown>
   timestamp: Date
 }
@@ -431,7 +431,7 @@ export class DataIntegrityValidator {
     }
 
     const records = data || []
-    const orphanedRecords: Record<string, unknown>[] = []
+    const orphanedRecords: unknown[] = []
 
     for (const record of records) {
       const { data: referencedData, error: refError } = await this.supabase
@@ -445,7 +445,7 @@ export class DataIntegrityValidator {
       }
 
       if (!referencedData || referencedData.length === 0) {
-        orphanedRecords.push(record)
+        orphanedRecords.push(record as unknown)
       }
     }
 
@@ -500,6 +500,40 @@ export class DataIntegrityValidator {
         constraint,
         violationCount: affectedRecords.length 
       },
+      timestamp: new Date()
+    }
+  }
+
+  private async validateDataType(rule: ValidationRule): Promise<ValidationResult> {
+    const constraint = rule.constraint as { type?: 'string' | 'number' | 'boolean' | 'date' }
+    const expectedType = constraint.type || 'string'
+
+    const { data, error } = await this.supabase
+      .from(rule.table)
+      .select(`id, ${rule.field!}`)
+      .not(rule.field!, 'is', null)
+
+    if (error) {
+      throw new Error(`Error validating data type: ${error.message}`)
+    }
+
+    const records = (data || []) as unknown as Array<Record<string, unknown>>
+    const invalidRecords = records.filter((record) => {
+      const value = record[rule.field!]
+      if (expectedType === 'date') return Number.isNaN(new Date(String(value)).getTime())
+      return typeof value !== expectedType
+    })
+
+    return {
+      ruleId: rule.id,
+      ruleName: rule.name,
+      passed: invalidRecords.length === 0,
+      severity: rule.severity,
+      message: invalidRecords.length === 0
+        ? `Todos los valores de ${rule.field} tienen tipo válido`
+        : `${invalidRecords.length} valores con tipo inválido en ${rule.field}`,
+      affectedRecords: invalidRecords,
+      details: { fieldName: rule.field, expectedType, invalidCount: invalidRecords.length },
       timestamp: new Date()
     }
   }
@@ -736,6 +770,7 @@ export class DataIntegrityValidator {
   private generateRecommendations(results: ValidationResult[]): string[] {
     const recommendations: string[] = []
     const failedResults = results.filter(r => !r.passed)
+    const totalRules = this.validationRules.size
 
     if (failedResults.length === 0) {
       recommendations.push('Todos los datos están íntegros. Mantener las validaciones actuales.')

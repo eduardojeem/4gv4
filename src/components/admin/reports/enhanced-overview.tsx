@@ -20,6 +20,9 @@ import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { SystemMetrics } from '@/hooks/use-admin-dashboard'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { formatCurrency } from '@/lib/currency'
+import { createClient } from '@/lib/supabase/client'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 import { 
   StandardGrid, 
   KPICard, 
@@ -33,6 +36,27 @@ interface EnhancedOverviewProps {
   metrics: SystemMetrics
   users: any[]
   securityLogs: any[]
+}
+
+interface ChartData {
+  name: string
+  ventas: number
+}
+
+interface ActivityItem {
+  id: string | number
+  user: string
+  action: string
+  amount?: number
+  time: string
+  type: 'success' | 'warning' | 'info'
+}
+
+interface AlertItem {
+  id: string | number
+  type: 'warning' | 'error'
+  message: string
+  priority: 'high' | 'medium'
 }
 
 // Datos simplificados para el gráfico principal
@@ -113,7 +137,11 @@ function EnhancedOverviewComponent({ metrics, users, securityLogs }: EnhancedOve
         if (recentSales) {
           const newActivities: ActivityItem[] = recentSales.map(sale => ({
             id: sale.id,
-            user: sale.client?.name || 'Cliente Casual',
+            user: (() => {
+              const clientData = (sale as any)?.client
+              if (Array.isArray(clientData)) return clientData[0]?.name || 'Cliente Casual'
+              return clientData?.name || 'Cliente Casual'
+            })(),
             action: 'Venta completada',
             amount: sale.total_amount,
             time: format(new Date(sale.created_at), 'HH:mm', { locale: es }),

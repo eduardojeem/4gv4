@@ -91,6 +91,9 @@ const CONTEXTUAL_MESSAGES: Record<NotificationContext, Partial<Record<ActionType
       icon: '🔄'
     }
   },
+  [NotificationContext.USER_MANAGEMENT]: {},
+  [NotificationContext.INVENTORY]: {},
+  [NotificationContext.SALES]: {},
   [NotificationContext.IMPORT_EXPORT]: {
     [ActionType.IMPORT]: {
       loading: 'Importando datos...',

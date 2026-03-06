@@ -70,7 +70,7 @@ export function useBarcodeScanner(options: BarcodeScannerOptions = {}): BarcodeS
   // Referencias para el escáner de teclado
   const scanBufferRef = useRef('')
   const lastKeypressRef = useRef(0)
-  const scanTimeoutRef = useRef<NodeJS.Timeout>()
+  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Debounce para entrada manual
   const debouncedManualInput = useCriticalDebounce(manualInput, 300)

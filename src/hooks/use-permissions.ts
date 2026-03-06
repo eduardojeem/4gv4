@@ -63,7 +63,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionRequirement> = {
   },
   '/dashboard/promotions': {
     permissions: ['promotions.read'],
-    roles: ['admin', 'vendedor', 'manager'],
+    roles: ['admin', 'vendedor'],
     requireAll: false
   }
 }

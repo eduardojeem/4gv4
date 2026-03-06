@@ -1,8 +1,15 @@
+import { useState, useEffect, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { CommunicationMessage, CommunicationChannel } from '@/types/repairs'
+import { toast } from 'sonner'
+import { getWhatsAppLink, formatWhatsAppPhone } from '@/lib/whatsapp'
 
-import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { CommunicationMessage, CommunicationChannel } from '@/types/repairs';
-import { toast } from 'sonner';
+function getChannelLabel(channel: CommunicationChannel): string {
+  if (channel === 'whatsapp') return 'WhatsApp'
+  if (channel === 'email') return 'Email'
+  if (channel === 'sms') return 'SMS'
+  return channel
+}
 
 function openExternalApp(
   channel: CommunicationChannel,
@@ -12,78 +19,118 @@ function openExternalApp(
 ): boolean {
   try {
     if (channel === 'whatsapp' && customerPhone) {
-      const cleanPhone = customerPhone.replace(/\D/g, '');
-      const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(content)}`;
-      // Use window.open for WhatsApp Web/Desktop redirect
-      const win = window.open(url, '_blank', 'noopener,noreferrer');
-      return Boolean(win);
+      const url = getWhatsAppLink({ phone: formatWhatsAppPhone(customerPhone), message: content })
+      const win = window.open(url, '_blank', 'noopener,noreferrer')
+      if (!win) {
+        window.location.href = url
+      }
+      return true
     }
 
     if (channel === 'email' && customerEmail) {
-      const subject = encodeURIComponent('Actualización reparación');
-      const body = encodeURIComponent(content);
-      window.location.href = `mailto:${customerEmail}?subject=${subject}&body=${body}`;
-      return true;
+      const subject = encodeURIComponent('Actualizacion de reparacion')
+      const body = encodeURIComponent(content)
+      window.location.href = `mailto:${customerEmail}?subject=${subject}&body=${body}`
+      return true
     }
 
     if (channel === 'sms' && customerPhone) {
-      const cleanPhone = customerPhone.replace(/\D/g, '');
-      const body = encodeURIComponent(content);
-      // Modern mobile browsers handle sms: protocol well
-      window.location.href = `sms:${cleanPhone}?body=${body}`;
-      return true;
+      const cleanPhone = customerPhone.replace(/\D/g, '')
+      const body = encodeURIComponent(content)
+      window.location.href = `sms:${cleanPhone}?body=${body}`
+      return true
     }
   } catch (error) {
-    console.error('Error opening external app:', error);
+    console.error('Error opening external app:', error)
   }
 
-  return false;
+  return false
+}
+
+interface WhatsAppSendResult {
+  sent: boolean
+  reason?: string
+}
+
+async function sendWhatsAppViaCloud(
+  repairId: string,
+  content: string,
+  customerPhone?: string
+): Promise<WhatsAppSendResult> {
+  if (!customerPhone) {
+    return { sent: false, reason: 'missing_phone' }
+  }
+
+  try {
+    const response = await fetch('/api/repairs/communications/whatsapp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repairId,
+        phone: customerPhone,
+        content,
+      }),
+    })
+
+    if (!response.ok) {
+      return { sent: false, reason: `http_${response.status}` }
+    }
+
+    const data = await response.json()
+    return {
+      sent: data?.sent === true,
+      reason: typeof data?.reason === 'string' ? data.reason : undefined,
+    }
+  } catch (error) {
+    console.error('Error sending WhatsApp via Cloud API:', error)
+    return { sent: false, reason: 'network_error' }
+  }
 }
 
 export function useRepairCommunications(repairId: string | undefined) {
-  const [messages, setMessages] = useState<CommunicationMessage[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [messages, setMessages] = useState<CommunicationMessage[]>([])
+  const [loading, setLoading] = useState(false)
 
   const fetchMessages = useCallback(async () => {
     if (!repairId) {
-      setMessages([]);
-      return;
+      setMessages([])
+      return
     }
 
-    setLoading(true);
-    const supabase = createClient();
+    setLoading(true)
+    const supabase = createClient()
     const { data, error } = await supabase
       .from('communication_messages')
       .select('*')
       .eq('repair_id', repairId)
-      .order('sent_at', { ascending: false });
+      .order('sent_at', { ascending: false })
 
     if (error) {
-      console.error('Error fetching messages:', error);
-      toast.error('Error al cargar historial de mensajes');
-      setLoading(false);
-      return;
+      console.error('Error fetching messages:', error)
+      toast.error('Error al cargar historial de mensajes')
+      setLoading(false)
+      return
     }
 
     const mapped: CommunicationMessage[] = (data || []).map((m: any) => ({
       id: m.id,
       repairId: m.repair_id,
-      channel: m.channel as CommunicationChannel,
-      content: m.content,
-      sentAt: m.sent_at,
-      status: m.status as 'pending' | 'sent' | 'failed',
-    }));
+      channel: (m.channel || 'whatsapp') as CommunicationChannel,
+      content: m.content || '',
+      sentAt: m.sent_at || m.created_at || new Date().toISOString(),
+      status: (m.status || 'sent') as 'pending' | 'sent' | 'failed',
+    }))
 
-    setMessages(mapped);
-    setLoading(false);
-  }, [repairId]);
+    setMessages(mapped)
+    setLoading(false)
+  }, [repairId])
 
   useEffect(() => {
-    fetchMessages();
+    fetchMessages()
 
-    if (!repairId) return;
+    if (!repairId) return
 
-    const supabase = createClient();
+    const supabase = createClient()
     const channel = supabase
       .channel(`comms-${repairId}`)
       .on(
@@ -95,15 +142,15 @@ export function useRepairCommunications(repairId: string | undefined) {
           filter: `repair_id=eq.${repairId}`,
         },
         () => {
-          fetchMessages();
+          fetchMessages()
         }
       )
-      .subscribe();
+      .subscribe()
 
     return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchMessages, repairId]);
+      supabase.removeChannel(channel)
+    }
+  }, [fetchMessages, repairId])
 
   const sendMessage = async (
     channel: CommunicationChannel,
@@ -112,42 +159,41 @@ export function useRepairCommunications(repairId: string | undefined) {
     customerEmail?: string,
     templateId?: string
   ) => {
-    if (!repairId) return false;
+    if (!repairId) return false
 
-    const trimmedContent = content.trim();
+    const trimmedContent = content.trim()
     if (!trimmedContent) {
-      toast.error('El contenido del mensaje está vacío');
-      return false;
+      toast.error('El contenido del mensaje esta vacio')
+      return false
     }
 
     if (channel === 'whatsapp' || channel === 'sms') {
       if (!customerPhone) {
-        toast.error('El cliente no tiene teléfono registrado');
-        return false;
+        toast.error('El cliente no tiene telefono registrado')
+        return false
       }
-      const cleanPhone = customerPhone.replace(/\D/g, '');
-      if (cleanPhone.length < 6) { // Relaxed validation
-        toast.error('Número de teléfono inválido');
-        return false;
+      const cleanPhone = customerPhone.replace(/\D/g, '')
+      if (cleanPhone.length < 6) {
+        toast.error('Numero de telefono invalido')
+        return false
       }
     }
 
     if (channel === 'email') {
       if (!customerEmail) {
-        toast.error('El cliente no tiene email registrado');
-        return false;
+        toast.error('El cliente no tiene email registrado')
+        return false
       }
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(customerEmail)) {
-        toast.error('Formato de email inválido');
-        return false;
+        toast.error('Formato de email invalido')
+        return false
       }
     }
 
-    const supabase = createClient();
+    const supabase = createClient()
 
-    // 1. Optimistic UI update
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `temp-${Date.now()}`
     const newMessage: CommunicationMessage = {
       id: tempId,
       repairId,
@@ -155,14 +201,30 @@ export function useRepairCommunications(repairId: string | undefined) {
       content: trimmedContent,
       sentAt: new Date().toISOString(),
       status: 'pending',
-    };
-    setMessages(prev => [newMessage, ...prev]);
+    }
+    setMessages((prev) => [newMessage, ...prev])
 
-    // 2. Try to open external app first
-    const opened = openExternalApp(channel, trimmedContent, customerPhone, customerEmail);
-    const finalStatus = opened ? 'sent' : 'failed';
+    let delivered = false
+    let usedCloudApi = false
+    let usedManualFallback = false
+    let failureReason: string | undefined
 
-    // 3. Save to DB asynchronously
+    if (channel === 'whatsapp') {
+      const cloudResult = await sendWhatsAppViaCloud(repairId, trimmedContent, customerPhone)
+      if (cloudResult.sent) {
+        delivered = true
+        usedCloudApi = true
+      } else {
+        failureReason = cloudResult.reason
+        delivered = openExternalApp(channel, trimmedContent, customerPhone, customerEmail)
+        usedManualFallback = delivered
+      }
+    } else {
+      delivered = openExternalApp(channel, trimmedContent, customerPhone, customerEmail)
+    }
+
+    const finalStatus: 'sent' | 'failed' = delivered ? 'sent' : 'failed'
+
     try {
       const { data: inserted, error: insertError } = await supabase
         .from('communication_messages')
@@ -171,34 +233,53 @@ export function useRepairCommunications(repairId: string | undefined) {
           channel,
           content: trimmedContent,
           template_id: templateId,
-          status: finalStatus, // Save directly with final status
+          status: finalStatus,
           direction: 'outbound',
           sent_at: new Date().toISOString(),
         })
         .select('id')
-        .single();
+        .single()
 
-      if (insertError) throw insertError;
+      if (insertError) throw insertError
 
-      // Update the optimistic message with real ID
-      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: inserted.id, status: finalStatus } : m));
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, id: inserted.id, status: finalStatus } : m))
+      )
 
-      if (opened) {
-        toast.success(`App de ${channel} abierta`);
-        return true;
-      } else {
-        toast.error(`No se pudo abrir la app de ${channel}`);
-        return false;
+      if (delivered) {
+        if (channel === 'whatsapp' && usedCloudApi) {
+          toast.success('Mensaje enviado por WhatsApp Cloud')
+        } else if (channel === 'whatsapp' && usedManualFallback && failureReason === 'provider_error') {
+          toast.success('Cloud API fallo, se abrio WhatsApp manualmente')
+        } else if (channel === 'whatsapp' && usedManualFallback && failureReason === 'network_error') {
+          toast.success('Sin conexion a Cloud API, se abrio WhatsApp manualmente')
+        } else if (channel === 'whatsapp' && usedManualFallback && failureReason === 'not_configured') {
+          toast.success('WhatsApp Cloud no configurado, se abrio WhatsApp manualmente')
+        } else if (channel === 'whatsapp') {
+          toast.success('WhatsApp abierto y mensaje registrado')
+        } else {
+          toast.success(`${getChannelLabel(channel)} sincronizado y abierto`)
+        }
+        return true
       }
 
+      if (channel === 'whatsapp' && failureReason === 'not_configured') {
+        toast.error('WhatsApp Cloud no esta configurado y no se pudo abrir WhatsApp')
+      } else if (channel === 'whatsapp' && failureReason === 'provider_error') {
+        toast.error('WhatsApp Cloud rechazo el envio y no se pudo abrir WhatsApp')
+      } else if (channel === 'whatsapp' && failureReason === 'network_error') {
+        toast.error('Sin conexion con WhatsApp Cloud y no se pudo abrir WhatsApp')
+      } else {
+        toast.error(`No se pudo abrir ${getChannelLabel(channel)}`)
+      }
+      return false
     } catch (error) {
-      console.error('Error saving message:', error);
-      toast.error('Error al guardar en historial');
-      // Rollback optimistic update on error
-      setMessages(prev => prev.filter(m => m.id !== tempId));
-      return false;
+      console.error('Error saving message:', error)
+      toast.error('Error al guardar en historial')
+      setMessages((prev) => prev.filter((m) => m.id !== tempId))
+      return false
     }
-  };
+  }
 
-  return { messages, loading, sendMessage, refresh: fetchMessages };
+  return { messages, loading, sendMessage, refresh: fetchMessages }
 }

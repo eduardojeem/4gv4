@@ -284,9 +284,7 @@ export function useCustomerSearch(options: CustomerSearchOptions = {}) {
 
   // Refresh customers function
   const refreshCustomers = useCallback(async () => {
-    if (customersHook.actions?.loadCustomers) {
-      await customersHook.actions.loadCustomers()
-    }
+    await customersHook.actions.refresh()
   }, [customersHook.actions])
 
   return {

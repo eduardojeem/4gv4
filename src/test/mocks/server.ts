@@ -21,7 +21,7 @@ const handlers = [
   }),
 
   // Products endpoints
-  http.get('/api/products', ({ request }: { request: Request }) => {
+  http.get('/api/products', ({ request }) => {
     const url = new URL(request.url)
     const page = url.searchParams.get('page') || '1'
     const limit = url.searchParams.get('limit') || '10'
@@ -43,8 +43,8 @@ const handlers = [
     })
   }),
 
-  http.post('/api/products', async ({ request }: { request: Request }) => {
-    const body = await request.json()
+  http.post('/api/products', async ({ request }) => {
+    const body = await request.json() as Record<string, unknown>
     return HttpResponse.json({
       id: 'new-product-id',
       ...body,
@@ -52,8 +52,8 @@ const handlers = [
     }, { status: 201 })
   }),
 
-  http.put('/api/products/:id', async ({ params, request }: { params: Record<string, string>; request: Request }) => {
-    const body = await request.json()
+  http.put('/api/products/:id', async ({ params, request }) => {
+    const body = await request.json() as Record<string, unknown>
     return HttpResponse.json({
       id: params.id,
       ...body,
@@ -61,7 +61,7 @@ const handlers = [
     })
   }),
 
-  http.delete('/api/products/:id', ({ params }: { params: Record<string, string> }) => {
+  http.delete('/api/products/:id', ({ params }) => {
     return HttpResponse.json({
       message: `Product ${params.id} deleted successfully`
     })
@@ -88,16 +88,16 @@ const handlers = [
   }),
 
   // POS endpoints
-  http.post('/api/pos/checkout', async ({ request }: { request: Request }) => {
-    const body = await request.json()
+  http.post('/api/pos/checkout', async ({ request }) => {
+    const body = await request.json() as { total?: number; items?: unknown[] }
     return HttpResponse.json({
       transactionId: 'txn-' + Date.now(),
-      total: body.total,
+      total: body.total ?? 0,
       status: 'completed',
       receipt: {
         id: 'receipt-' + Date.now(),
-        items: body.items,
-        total: body.total,
+        items: body.items ?? [],
+        total: body.total ?? 0,
         timestamp: new Date().toISOString()
       }
     })

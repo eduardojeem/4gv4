@@ -144,7 +144,8 @@ export const useMemoizedComputation = <T, R>(
   input: T,
   equalityFn?: (a: T, b: T) => boolean
 ): R => {
-  const memoizedInput = useMemoizedValue(input, equalityFn || shallowEqual)
+  const compare = equalityFn || ((a: T, b: T) => shallowEqual(a as Record<string, unknown>, b as Record<string, unknown>))
+  const memoizedInput = useMemoizedValue(input, compare)
   
   return useMemo(() => computation(memoizedInput), [computation, memoizedInput])
 }

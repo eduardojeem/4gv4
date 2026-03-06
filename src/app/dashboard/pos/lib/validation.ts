@@ -25,8 +25,8 @@ export const cartItemSchema = z.object({
 export type ValidatedCartItem = z.infer<typeof cartItemSchema>
 
 // Esquema para métodos de pago
-export const paymentMethodSchema = z.enum(['cash', 'card', 'transfer', 'credit', 'mixed'], {
-  errorMap: () => ({ message: 'Método de pago inválido' })
+export const paymentMethodSchema = z.enum(['cash', 'card', 'transfer', 'credit', 'mixed'] as const, {
+  error: () => ({ message: 'Método de pago inválido' })
 })
 
 // Esquema para split de pagos
@@ -121,7 +121,7 @@ export function validateSale(data: unknown): { success: true; data: ValidatedSal
     return { success: true, data: result.data }
   }
   
-  const errors = result.error.errors.map(err => {
+  const errors = result.error.issues.map(err => {
     const path = err.path.join('.')
     return path ? `${path}: ${err.message}` : err.message
   })
@@ -136,7 +136,7 @@ export function validateCartItem(data: unknown): { success: true; data: Validate
     return { success: true, data: result.data }
   }
   
-  const errors = result.error.errors.map(err => err.message)
+  const errors = result.error.issues.map(err => err.message)
   return { success: false, errors }
 }
 
@@ -147,7 +147,7 @@ export function validateCustomer(data: unknown): { success: true; data: Validate
     return { success: true, data: result.data }
   }
   
-  const errors = result.error.errors.map(err => err.message)
+  const errors = result.error.issues.map(err => err.message)
   return { success: false, errors }
 }
 
@@ -158,7 +158,7 @@ export function validateCashMovement(data: unknown): { success: true; data: Vali
     return { success: true, data: result.data }
   }
   
-  const errors = result.error.errors.map(err => err.message)
+  const errors = result.error.issues.map(err => err.message)
   return { success: false, errors }
 }
 
@@ -169,7 +169,7 @@ export function validateRegisterOpening(data: unknown): { success: true; data: V
     return { success: true, data: result.data }
   }
   
-  const errors = result.error.errors.map(err => err.message)
+  const errors = result.error.issues.map(err => err.message)
   return { success: false, errors }
 }
 
@@ -180,7 +180,7 @@ export function validateRegisterClosing(data: unknown): { success: true; data: V
     return { success: true, data: result.data }
   }
   
-  const errors = result.error.errors.map(err => err.message)
+  const errors = result.error.issues.map(err => err.message)
   return { success: false, errors }
 }
 

@@ -245,13 +245,14 @@ export function useUsersOptimized({
                 toast.success('Usuario creado exitosamente')
                 
                 // Log audit event
-                await supabase.rpc('log_data_event', {
+                const { error: logError } = await supabase.rpc('log_data_event', {
                     p_user_id: user?.id,
                     p_action: 'create',
                     p_resource: 'user',
                     p_resource_id: null,
                     p_new_values: userData
-                }).catch(console.error)
+                })
+                if (logError) console.error(logError)
 
                 fetchUsers()
                 fetchStats()
@@ -294,14 +295,15 @@ export function useUsersOptimized({
             if (error) throw error
 
             // Log audit event
-            await supabase.rpc('log_data_event', {
+            const { error: logError } = await supabase.rpc('log_data_event', {
                 p_user_id: user?.id,
                 p_action: 'update',
                 p_resource: 'user',
                 p_resource_id: userId,
                 p_old_values: oldData,
                 p_new_values: userData
-            }).catch(console.error)
+            })
+            if (logError) console.error(logError)
 
             toast.success('Usuario actualizado correctamente')
             fetchUsers()
@@ -331,13 +333,14 @@ export function useUsersOptimized({
             if (error) throw error
 
             // Log audit event
-            await supabase.rpc('log_data_event', {
+            const { error: logError } = await supabase.rpc('log_data_event', {
                 p_user_id: user?.id,
                 p_action: 'delete',
                 p_resource: 'user',
                 p_resource_id: userId,
                 p_new_values: { status: 'inactive' }
-            }).catch(console.error)
+            })
+            if (logError) console.error(logError)
 
             toast.success('Usuario desactivado correctamente')
             fetchUsers()
@@ -361,13 +364,14 @@ export function useUsersOptimized({
             if (error) throw error
 
             // Log audit event
-            await supabase.rpc('log_data_event', {
+            const { error: logError } = await supabase.rpc('log_data_event', {
                 p_user_id: user?.id,
                 p_action: 'reactivate',
                 p_resource: 'user',
                 p_resource_id: userId,
                 p_new_values: { status: 'active' }
-            }).catch(console.error)
+            })
+            if (logError) console.error(logError)
 
             toast.success('Usuario reactivado correctamente')
             fetchUsers()

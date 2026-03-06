@@ -83,10 +83,7 @@ export function CashRegisterHeader({ onOpenPermissions, onOpenAudit }: CashRegis
                     <RefreshCw className="h-4 w-4" />
                 </Button>
 
-                <ConnectionStatus
-                    status={isOnline ? 'online' : 'offline'}
-                    onSync={syncWithServer}
-                />
+                <ConnectionStatus />
 
                 <Button
                     variant="outline"

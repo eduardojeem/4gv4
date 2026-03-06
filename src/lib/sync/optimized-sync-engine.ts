@@ -49,7 +49,7 @@ export class OptimizedSyncEngine {
   private config: SyncConfig
   private operationQueue: Map<string, SyncOperation[]> = new Map()
   private activeOperations = new Set<string>()
-  private cache = new Map<string, { data: Record<string, unknown>; expiry: Date }>()
+  private cache = new Map<string, { data: unknown; expiry: Date }>()
   private circuitBreakers = new Map<string, CircuitBreakerState>()
   private compressionWorker?: Worker
   private isProcessing = false
@@ -518,7 +518,7 @@ export class OptimizedSyncEngine {
       return null
     }
     
-    return cached.data
+    return cached.data as Record<string, unknown>
   }
 
   private updateCache(table: string, data: Record<string, unknown>, result: SyncResult): void {

@@ -103,7 +103,7 @@ export function useCriticalDebounce<T>(
   delay: number = CRITICAL_PERFORMANCE_CONFIG.debounceMs
 ): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value)
-  const timeoutRef = useRef<NodeJS.Timeout>()
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     if (timeoutRef.current) {
@@ -130,7 +130,7 @@ export function useCriticalMemo<T>(
   deps: React.DependencyList,
   config: CriticalPerformanceConfig = CRITICAL_PERFORMANCE_CONFIG
 ): T {
-  const memoRef = useRef<{ value: T; deps: React.DependencyList }>()
+  const memoRef = useRef<{ value: T; deps: React.DependencyList } | null>(null)
 
   return useMemo(() => {
     if (!config.enableMemoization) {
@@ -196,7 +196,7 @@ export function useLazyImage(
   const [imageSrc, setImageSrc] = useState<string>('')
   const [isLoaded, setIsLoaded] = useState(false)
   const [isError, setIsError] = useState(false)
-  const imgRef = useRef<HTMLImageElement>()
+  const imgRef = useRef<HTMLImageElement | null>(null)
 
   useEffect(() => {
     if (!config.enableImageLazyLoading || !src) {

@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import type { Promotion, PromotionType } from '@/types/promotion'
-import { requireStaff } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 
 // Mock data para desarrollo
 const mockPromotions: Promotion[] = [
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const body = await request.json()
     
     // Validaciones básicas
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const body = await request.json()
     
     if (!Array.isArray(body.promotions)) {
@@ -260,3 +260,4 @@ export async function PUT(request: NextRequest) {
     )
   }
 }
+

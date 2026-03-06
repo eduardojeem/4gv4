@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { ProductVariant } from '@/types/product-variants'
-import { requireAuth, requireStaff } from '@/lib/auth/require-auth'
+import { requireAuth, getAuthResponse, requireStaff } from '@/lib/auth/require-auth'
 
 // Mock data - En producción esto vendría de la base de datos
 const mockVariants: ProductVariant[] = [
@@ -46,7 +46,7 @@ const mockVariants: ProductVariant[] = [
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { searchParams } = new URL(request.url)
     const productId = searchParams.get('product_id')
     const sku = searchParams.get('sku')
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const body = await request.json()
     
     // Validaciones básicas
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const body = await request.json()
     const { variants } = body
 
@@ -207,3 +207,4 @@ export async function PUT(request: NextRequest) {
     )
   }
 }
+

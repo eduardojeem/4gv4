@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useCallback } from 'react'
+import React, { useMemo, useCallback, useState, useEffect } from 'react'
 import { formatCurrency } from '@/lib/currency'
 import { useVirtualList } from '@/hooks/use-virtual-list'
 

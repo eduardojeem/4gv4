@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { calculatePriorityScoreWithInventory, defaultPriorityConfig } from '@/services/repair-priority'
 import { ProductStock } from '@/services/inventory-repair-sync'
-import { requireStaff } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { RepairOrder } from '@/types/repairs'
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
       // Valid API key, proceed
     } else {
       const auth = await requireStaff()
-      if (!auth.authenticated) return auth.response
+      { const r = getAuthResponse(auth); if (r) return r }
     }
 
     const body = await req.json()
@@ -20,10 +21,16 @@ export async function POST(req: NextRequest) {
     if (!repair) {
       return new Response(JSON.stringify({ error: 'Missing repair payload' }), { status: 400 })
     }
-    const score = calculatePriorityScoreWithInventory(repair, config ?? defaultPriorityConfig, products ?? [])
+    const score = calculatePriorityScoreWithInventory(
+      repair as unknown as RepairOrder,
+      (config as unknown as typeof defaultPriorityConfig) ?? defaultPriorityConfig,
+      products ?? []
+    )
     return new Response(JSON.stringify({ score }), { status: 200, headers: { 'content-type': 'application/json' } })
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Unknown error'
     return new Response(JSON.stringify({ error: message }), { status: 500 })
   }
 }
+
+

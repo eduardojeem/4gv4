@@ -890,7 +890,7 @@ export function CustomerDashboard() {
                     customer={selectedCustomer}
                     onSave={async (formData) => {
                       try {
-                        const result = await updateCustomer(selectedCustomer.id, formData)
+                        const result = await updateCustomer(selectedCustomer.id, formData as any)
                         if (result.success) {
                           // Actualizar el cliente en la lista local si es necesible
                           handleBackToList()

@@ -374,7 +374,7 @@ export function AnalyticsDashboard({
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <StatusBadge status="vip" size="sm" />
+                    <Badge variant="secondary" className="text-xs">VIP</Badge>
                     <span className="text-sm">VIP</span>
                   </div>
                   <span className="font-medium">{metrics.vipCustomers}</span>
@@ -417,21 +417,26 @@ export function AnalyticsDashboard({
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {metrics.segmentDistribution.map((segment, index) => (
+                  {metrics.segmentDistribution.map((segment, index) => {
+                    const count = segment.value
+                    const percentage = metrics.totalCustomers > 0 ? (count / metrics.totalCustomers) * 100 : 0
+                    const revenue = metrics.totalRevenue * (percentage / 100)
+                    const avgValue = count > 0 ? revenue / count : 0
+                    return (
                     <div key={segment.name} className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="font-medium">{segment.name}</span>
                         <span className="text-sm text-muted-foreground">
-                          {segment.count} clientes ({formatters.percentage(segment.percentage)})
+                          {count} clientes ({formatters.percentage(percentage)})
                         </span>
                       </div>
-                      <Progress value={segment.percentage} className="h-2" />
+                      <Progress value={percentage} className="h-2" />
                       <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>Ingresos: {formatters.currency(segment.revenue)}</span>
-                        <span>Promedio: {formatters.currency(segment.avgValue)}</span>
+                        <span>Ingresos: {formatters.currency(revenue)}</span>
+                        <span>Promedio: {formatters.currency(avgValue)}</span>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </CardContent>
             </Card>

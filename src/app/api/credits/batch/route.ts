@@ -1,12 +1,12 @@
-
+﻿
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireStaff } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 
 export async function POST(request: Request) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
 
     const { customerIds } = await request.json()
 
@@ -62,3 +62,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+

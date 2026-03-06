@@ -1,110 +1,102 @@
-import {
-  CommunicationChannel,
-  CommunicationMessage,
-  CommunicationTemplate,
-  ReminderRule,
-  RepairOrder,
-} from "@/types/repairs";
+import { CommunicationChannel, CommunicationMessage } from "@/types/repairs"
+
+export function expandTemplate(
+  template: string,
+  variables: Record<string, string | number>
+): string {
+  return Object.entries(variables).reduce(
+    (text, [key, value]) => text.replace(new RegExp(`{{${key}}}`, "g"), String(value)),
+    template
+  )
+}
+
+export function validateContent(
+  first: CommunicationChannel | string,
+  second: CommunicationChannel | string
+): { valid: boolean; error?: string } {
+  const isChannelFirst = first === "sms" || first === "email" || first === "whatsapp" || first === "in_app"
+  const channel = (isChannelFirst ? first : second) as CommunicationChannel
+  const content = String(isChannelFirst ? second : first)
+
+  if (!content.trim()) return { valid: false, error: "El contenido no puede estar vacio" }
+  if (channel === "sms" && content.length > 160) {
+    return { valid: false, error: "El mensaje SMS excede los 160 caracteres" }
+  }
+  return { valid: true }
+}
 
 export class CommunicationStore {
-  private messages: CommunicationMessage[] = [];
+  private messages: CommunicationMessage[] = []
 
   add(message: CommunicationMessage) {
-    this.messages.push(message);
+    this.messages.push(message)
   }
 
   forRepair(repairId: string) {
     return this.messages
-      .filter((m) => m.repairId === repairId)
-      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+      .filter((message) => message.repairId === repairId)
+      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
   }
 
   all() {
-    return [...this.messages];
+    return [...this.messages]
   }
 }
 
-export function expandTemplate(template: string, vars: Record<string, string | number>) {
-  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => String(vars[key] ?? ""));
-}
+export class CommunicationService {
+  private supabase
 
-export function validateContent(channel: CommunicationChannel, content: string) {
-  if (!content || content.trim().length === 0) {
-    return { valid: false, error: "Contenido vacío" };
+  constructor(supabaseClient: any) {
+    this.supabase = supabaseClient
   }
-  if (channel === "sms" && content.length > 160) {
-    return { valid: false, error: "SMS excede 160 caracteres" };
+
+  async getMessages(repairId: string): Promise<CommunicationMessage[]> {
+    const { data, error } = await this.supabase
+      .from("communication_messages")
+      .select("*")
+      .eq("repair_id", repairId)
+      .order("created_at", { ascending: false })
+
+    if (error) throw error
+
+    return (data || []).map((msg: any) => ({
+      id: msg.id,
+      repairId: msg.repair_id,
+      channel: msg.channel as CommunicationChannel,
+      content: msg.content,
+      sentAt: msg.sent_at,
+      status: msg.status,
+    }))
   }
-  return { valid: true };
-}
 
-/**
- * @deprecated Use useRepairCommunications hook instead.
- */
-export function sendMessage(
-  store: CommunicationStore,
-  channel: CommunicationChannel,
-  repair: RepairOrder,
-  content: string
-): CommunicationMessage {
-  const validation = validateContent(channel, content);
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const message: CommunicationMessage = {
-    id,
-    repairId: repair.id,
-    channel,
-    content,
-    sentAt: new Date().toISOString(),
-    status: validation.valid ? "sent" : "failed",
-  };
-  store.add(message);
+  async logMessage(
+    repairId: string,
+    channel: CommunicationChannel,
+    content: string,
+    status: "sent" | "failed" = "sent"
+  ): Promise<CommunicationMessage> {
+    const { data, error } = await this.supabase
+      .from("communication_messages")
+      .insert({
+        repair_id: repairId,
+        channel,
+        content,
+        status,
+        direction: "outbound",
+        sent_at: new Date().toISOString(),
+      })
+      .select()
+      .single()
 
-  // naive dispatch for demo
-  try {
-    if (validation.valid) {
-      if (channel === "whatsapp" && repair.customerPhone) {
-        const url = `https://wa.me/${repair.customerPhone}?text=${encodeURIComponent(content)}`;
-        if (typeof window !== "undefined") window.open(url, "_blank");
-      }
-      if (channel === "email" && repair.customerEmail) {
-        const url = `mailto:${repair.customerEmail}?subject=${encodeURIComponent(
-          `Actualización reparación ${repair.id}`
-        )}&body=${encodeURIComponent(content)}`;
-        if (typeof window !== "undefined") window.location.href = url;
-      }
-      if (channel === "sms" && repair.customerPhone) {
-        const url = `sms:${repair.customerPhone}?body=${encodeURIComponent(content)}`;
-        if (typeof window !== "undefined") window.location.href = url;
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-  return message;
-}
+    if (error) throw error
 
-export function scheduleReminders(
-  rules: ReminderRule[],
-  repairs: RepairOrder[],
-  templates: CommunicationTemplate[],
-  store: CommunicationStore
-) {
-  const now = Date.now();
-  for (const rule of rules) {
-    const tmpl = templates.find((t) => t.id === rule.templateId);
-    if (!tmpl) continue;
-    for (const r of repairs) {
-      if (r.stage !== rule.trigger.stage) continue;
-      const last = new Date(r.updatedAt ?? r.createdAt).getTime();
-      const hours = (now - last) / (1000 * 60 * 60);
-      if (hours >= rule.trigger.inactivityHours) {
-        const content = expandTemplate(tmpl.content, {
-          customerName: r.customerName || 'Cliente',
-          repairId: r.id,
-          deviceModel: r.deviceModel || 'Dispositivo',
-        });
-        sendMessage(store, tmpl.channel, r, content);
-      }
+    return {
+      id: data.id,
+      repairId: data.repair_id,
+      channel: data.channel as CommunicationChannel,
+      content: data.content,
+      sentAt: data.sent_at,
+      status: data.status,
     }
   }
 }

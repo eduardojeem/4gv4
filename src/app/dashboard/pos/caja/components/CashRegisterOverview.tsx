@@ -32,29 +32,25 @@ export function CashRegisterOverview({
     const {
         getCurrentRegister,
         userPermissions,
-        calculateDiscrepancy,
-        getSessionReport // <-- Changed from cashReport to getSessionReport
+        calculateDiscrepancy
     } = useCashRegisterContext()
 
     const isRegisterOpen = getCurrentRegister.isOpen
     const movements = [...getCurrentRegister.movements].reverse()
     const discrepancy = calculateDiscrepancy()
     
-    // Calculate totals directly from current session movements for real-time updates
-    const currentSessionReport = getSessionReport ? getSessionReport() : null
-    
-    // Fallback or override if getSessionReport returns null (shouldn't happen if open)
-    const incomes = currentSessionReport?.totalSales ? (currentSessionReport.totalSales + currentSessionReport.totalCashIn) : 
-                    movements.filter(m => m.type === 'sale' || m.type === 'cash_in').reduce((sum, m) => sum + (Number(m.amount) || 0), 0)
-                    
-    const expenses = currentSessionReport?.totalCashOut || 
-                     movements.filter(m => m.type === 'cash_out').reduce((sum, m) => sum + (Number(m.amount) || 0), 0)
+    const incomes = movements
+        .filter(m => m.type === 'sale' || m.type === 'cash_in')
+        .reduce((sum, m) => sum + (Number(m.amount) || 0), 0)
+    const expenses = movements
+        .filter(m => m.type === 'cash_out')
+        .reduce((sum, m) => sum + (Number(m.amount) || 0), 0)
 
     // Calculate Payment Methods Breakdown (Real-time)
     const paymentMethods = movements.reduce((acc, m) => {
         const amount = Number(m.amount) || 0
         if (m.type === 'sale') {
-            const method = m.payment_method || 'cash'
+            const method = String(m.payment_method || 'cash').toLowerCase()
             // Map methods to standardized keys
             let key = 'others'
             if (method === 'cash' || method === 'efectivo') key = 'cash'

@@ -73,7 +73,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
     phone: settings.companyPhone || config.company.phone,
     email: settings.companyEmail || config.company.email,
     ruc: settings.companyRuc,
-    website: settings.companyWebsite || 'www.4gcelulares.com'
+    website: 'www.4gcelulares.com'
   }
 
   // Generar código QR

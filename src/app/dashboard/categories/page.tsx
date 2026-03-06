@@ -90,7 +90,11 @@ export default function CategoriesPage() {
   const stats = useMemo(() => computeCategoryStats(categories), [categories])
   const rootCount = useMemo(() => categories.filter(c => !c.parent_id).length, [categories])
   const subCount = useMemo(() => categories.filter(c => !!c.parent_id).length, [categories])
-  const withProducts = useMemo(() => categories.filter(c => (c.products_count ?? c.stats?.product_count ?? 0) > 0).length, [categories])
+  const withProducts = useMemo(
+    () =>
+      categories.filter((c) => (((c as any).products_count ?? c.stats?.product_count ?? 0) > 0)).length,
+    [categories]
+  )
 
   // Filter categories by quick filter
   const filteredCategories = useMemo(() => {

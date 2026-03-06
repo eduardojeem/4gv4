@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { VariantAttribute } from '@/types/product-variants'
-import { requireAuth, requireStaff } from '@/lib/auth/require-auth'
+import { requireAuth, getAuthResponse, requireStaff } from '@/lib/auth/require-auth'
 
 // Mock data - En producción esto vendría de la base de datos
 const mockAttributes: VariantAttribute[] = [
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const body = await request.json()
     
     // Validaciones básicas
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const body = await request.json()
     const { attributes } = body
 
@@ -165,3 +165,4 @@ export async function PUT(request: NextRequest) {
     )
   }
 }
+

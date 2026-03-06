@@ -43,7 +43,7 @@ export const ProductSchema = z.object({
     .min(0, 'El stock mínimo no puede ser negativo'),
   
   status: z.enum(['active', 'inactive'], {
-    errorMap: () => ({ message: 'Estado debe ser activo o inactivo' })
+    message: 'Estado debe ser activo o inactivo'
   }),
   
   image: z.string()
@@ -279,7 +279,7 @@ export async function validateProduct(
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      errors.push(...(error as z.ZodError).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`))
+      errors.push(...(error as z.ZodError).issues.map((e: any) => `${e.path.join('.')}: ${e.message}`))
     }
   }
 
@@ -330,7 +330,7 @@ export function useProductValidation() {
       if (error instanceof z.ZodError) {
         return { 
           isValid: false, 
-          error: (error as z.ZodError).errors[0]?.message || 'Valor inválido' 
+          error: (error as z.ZodError).issues[0]?.message || 'Valor inválido' 
         }
       }
       return { isValid: false, error: 'Error de validación' }

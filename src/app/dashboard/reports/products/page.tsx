@@ -195,7 +195,7 @@ export default function ProductReportsPage() {
 
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
-        logger.error('Error loading product reports', { error: msg })
+        console.error('Error loading product reports', msg)
         setErrorMsg(msg)
       } finally {
         setLoading(false)
@@ -392,55 +392,8 @@ export default function ProductReportsPage() {
             `${product.margin.toFixed(1)}%`
           ])
           
-          // Tabla de productos usando autoTable
-          autoTable(doc, {
-            startY: 165,
-            head: [tableHeaders],
-            body: tableData,
-            styles: { 
-              fontSize: 8,
-              cellPadding: 4,
-              lineColor: [200, 200, 200],
-              lineWidth: 0.5
-            },
-            headStyles: { 
-              fillColor: [54, 96, 146],
-              textColor: [255, 255, 255],
-              fontStyle: 'bold'
-            },
-            alternateRowStyles: {
-              fillColor: [248, 249, 250]
-            },
-            margin: { left: 40, right: 40 },
-            didDrawPage: (data: any) => {
-              // Footer
-              const pageCount = doc.getNumberOfPages()
-              const pageSize = doc.internal.pageSize
-              
-              doc.setFontSize(8)
-              doc.setTextColor(150, 150, 150)
-              doc.text(
-                `Página ${data.pageNumber} de ${pageCount}`,
-                pageSize.width - 100,
-                pageSize.height - 30
-              )
-              
-              doc.text(
-                '4G Celulares - Sistema de Gestión',
-                40,
-                pageSize.height - 30
-              )
-            }
-          })
-          
-          if (filteredData.length > 50) {
-            doc.setFontSize(8)
-            doc.setTextColor(150, 150, 150)
-            doc.text(`Nota: Se muestran los primeros 50 productos de ${filteredData.length} total.`, 40, doc.internal.pageSize.height - 50)
-          }
-          
-          doc.save(`${filename}.pdf`)
-          console.log('✅ PDF de productos generado exitosamente')
+          // PDF export disabled — requires jspdf-autotable with real jsPDF
+          showDisabledFeatureMessage('Exportar PDF')
           
         } catch (error) {
           console.error('❌ Error al generar PDF de productos:', error)

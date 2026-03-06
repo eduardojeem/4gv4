@@ -76,7 +76,7 @@ export function GlobalSearch({ open, onOpenChange, onSearch }: GlobalSearchProps
                 <span className="text-xs text-muted-foreground">Sin filtros</span>
               ) : (
                 activeFilters.map(([k, v]) => (
-                  <Badge key={k} variant="outline" className="text-xs">{k}: {v}</Badge>
+                  <Badge key={k} variant="outline" className="text-xs">{k}: {String(v)}</Badge>
                 ))
               )}
             </div>

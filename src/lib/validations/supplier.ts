@@ -58,13 +58,13 @@ export const supplierSchema = z.object({
     .transform(val => val === '' ? undefined : val),
 
   // Business Information
-  business_type: z.enum(['manufacturer', 'distributor', 'wholesaler', 'retailer', 'service_provider'], {
-    errorMap: () => ({ message: "Tipo de negocio inválido" })
+  business_type: z.enum(['manufacturer', 'distributor', 'wholesaler', 'retailer', 'service_provider'] as const, {
+    error: () => ({ message: "Tipo de negocio inválido" })
   }),
 
   // Status and Performance
-  status: z.enum(['active', 'inactive', 'pending', 'suspended'], {
-    errorMap: () => ({ message: "Estado inválido" })
+  status: z.enum(['active', 'inactive', 'pending', 'suspended'] as const, {
+    error: () => ({ message: "Estado inválido" })
   }).default('pending'),
 
   rating: z.number()

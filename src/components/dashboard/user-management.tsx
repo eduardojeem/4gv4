@@ -71,8 +71,18 @@ import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
 import { useAuth } from '@/hooks/use-auth'
-import { UserRole, ROLE_PERMISSIONS, PERMISSIONS } from '@/lib/auth/roles-permissions'
+import { ROLE_PERMISSIONS } from '@/lib/auth/roles-permissions'
 import { format } from 'date-fns'
+
+type DashboardUserRole =
+  | 'super_admin'
+  | 'admin'
+  | 'manager'
+  | 'employee'
+  | 'viewer'
+  | 'vendedor'
+  | 'tecnico'
+  | 'cliente'
 
 // Tipos para usuarios
 export interface User {
@@ -80,7 +90,7 @@ export interface User {
   email: string
   name?: string
   avatar_url?: string
-  role: UserRole
+  role: DashboardUserRole
   is_active: boolean
   last_sign_in?: Date
   created_at: Date
@@ -95,7 +105,7 @@ export interface User {
 const mockUsers: User[] = []
 
 // Componente para mostrar el rol con icono
-function RoleBadge({ role }: { role: UserRole }) {
+function RoleBadge({ role }: { role: DashboardUserRole }) {
   const roleConfig = {
     super_admin: { 
       label: 'Super Admin', 
@@ -124,7 +134,7 @@ function RoleBadge({ role }: { role: UserRole }) {
     }
   }
 
-  const config = roleConfig[role]
+  const config = (roleConfig as any)[role] || roleConfig.viewer
   const Icon = config.icon
 
   return (
@@ -160,7 +170,7 @@ function EditUserDialog({
   const handleSave = () => {
     if (!user || !formData.role) return
 
-    if (!canManageUser(user.role)) {
+    if (!canManageUser(user.role as any)) {
       toast({
         title: 'Error',
         description: 'No tienes permisos para editar este usuario',
@@ -213,7 +223,7 @@ function EditUserDialog({
             <Label htmlFor="role">Rol</Label>
             <Select 
               value={formData.role} 
-              onValueChange={(value) => setFormData({ ...formData, role: value as UserRole })}
+              onValueChange={(value) => setFormData({ ...formData, role: value as DashboardUserRole })}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -261,8 +271,11 @@ function EditUserDialog({
 }
 
 // Componente para mostrar permisos de un rol
-function RolePermissions({ role }: { role: UserRole }) {
-  const roleData = ROLE_PERMISSIONS[role]
+function RolePermissions({ role }: { role: DashboardUserRole }) {
+  const roleData = (ROLE_PERMISSIONS as any)[role] || {
+    description: role,
+    permissions: []
+  }
   
   return (
     <Card>
@@ -296,11 +309,11 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const deferredSearch = useDeferredValue(searchTerm)
-  const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all')
+  const [roleFilter, setRoleFilter] = useState<DashboardUserRole | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<UserRole>('viewer')
+  const [selectedRole, setSelectedRole] = useState<DashboardUserRole>('viewer')
   
   const { hasPermission, canManageUser } = useAuth()
   const { toast } = useToast()
@@ -320,7 +333,7 @@ export default function UserManagement() {
             email: profile.email || '', 
             name: profile.full_name || 'Sin nombre',
             avatar_url: profile.avatar_url,
-            role: profile.role || 'viewer',
+            role: (profile.role || 'viewer') as DashboardUserRole,
             is_active: true, // Asumimos activo si existe perfil por ahora
             last_sign_in: undefined,
             created_at: new Date(profile.created_at || Date.now()),
@@ -378,7 +391,7 @@ export default function UserManagement() {
   }, [users])
 
   const handleEditUser = (user: User) => {
-    if (!canManageUser(user.role)) {
+    if (!canManageUser(user.role as any)) {
       toast({
         title: 'Sin permisos',
         description: 'No tienes permisos para editar este usuario',
@@ -396,7 +409,7 @@ export default function UserManagement() {
 
   const handleToggleUserStatus = (userId: string) => {
     const user = users.find(u => u.id === userId)
-    if (!user || !canManageUser(user.role)) {
+    if (!user || !canManageUser(user.role as any)) {
       toast({
         title: 'Sin permisos',
         description: 'No tienes permisos para modificar este usuario',
@@ -528,7 +541,7 @@ export default function UserManagement() {
                     />
                   </div>
                 </div>
-                <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value as UserRole | 'all')}>
+                <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value as DashboardUserRole | 'all')}>
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
@@ -655,7 +668,7 @@ export default function UserManagement() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as UserRole)}>
+                <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as DashboardUserRole)}>
                   <SelectTrigger className="w-64">
                     <SelectValue />
                   </SelectTrigger>

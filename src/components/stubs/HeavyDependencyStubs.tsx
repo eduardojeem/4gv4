@@ -34,8 +34,9 @@ export interface DragEndEvent {
 // Stub para XLSX
 export const XLSX = {
   utils: {
-    json_to_sheet: (data: any[]) => ({ data }),
-    book_new: () => ({ SheetNames: [], Sheets: {} }),
+    json_to_sheet: (data: any[]) => ({ data } as any),
+    aoa_to_sheet: (data: any[][]) => ({ data } as any),
+    book_new: () => ({ SheetNames: [] as string[], Sheets: {} as Record<string, any>, Props: {} as any }),
     book_append_sheet: (wb: any, ws: any, name: string) => {
       wb.SheetNames.push(name);
       wb.Sheets[name] = ws;
@@ -49,22 +50,21 @@ export const XLSX = {
 
 // Stub para jsPDF
 export class jsPDF {
+  internal = { pageSize: { width: 792, height: 612 } }
   constructor(options?: any) {
     console.warn('PDF export deshabilitado temporalmente para optimización de bundle');
   }
-  
-  text(text: string, x: number, y: number) {
-    return this;
-  }
-  
+  text(text: string, x: number, y: number) { return this }
   save(filename: string) {
-    console.warn('PDF export deshabilitado temporalmente para optimización de bundle');
+    console.warn('PDF export deshabilitado');
     alert('Función de exportación PDF temporalmente deshabilitada');
   }
-  
-  autoTable(options: any) {
-    return this;
-  }
+  setFontSize(size: number) { return this }
+  setTextColor(r: number, g?: number, b?: number) { return this }
+  setDrawColor(r: number, g?: number, b?: number) { return this }
+  line(x1: number, y1: number, x2: number, y2: number) { return this }
+  getNumberOfPages() { return 1 }
+  autoTable(options: any) { return this }
 }
 
 // Stub para html2canvas

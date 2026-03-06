@@ -32,7 +32,9 @@ export const InventoryAlerts: React.FC<InventoryAlertsProps> = ({
     // Cargar alertas iniciales
     setAlerts(inventoryManager.getActiveAlerts())
 
-    return unsubscribe
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
   }, [inventoryManager])
 
   const getSeverityIcon = (severity: InventoryAlert['severity']) => {

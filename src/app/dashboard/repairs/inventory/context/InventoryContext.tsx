@@ -19,6 +19,7 @@ interface InventoryContextValue {
   services: Product[]
   inventory: Product[]
   categories: any[]
+  suppliers: any[]
   movements: ProductMovement[]
   
   // Estados
@@ -60,6 +61,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
   const {
     products,
     categories,
+    suppliers,
     loading,
     error,
     filters: supabaseFilters,
@@ -262,6 +264,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     services,
     inventory,
     categories,
+    suppliers,
     movements,
     
     // Estados
@@ -284,6 +287,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     services,
     inventory,
     categories,
+    suppliers,
     movements,
     loading,
     error,

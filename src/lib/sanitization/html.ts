@@ -7,7 +7,7 @@ import { JSDOM } from 'jsdom'
 
 // Crear instancia de DOMPurify para Node.js
 const window = new JSDOM('').window
-const purify = DOMPurify(window as unknown as Window)
+const purify = DOMPurify(window as any)
 
 /**
  * Configuración de sanitización

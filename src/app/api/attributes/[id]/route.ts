@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { VariantAttribute } from '@/types/product-variants'
-import { requireStaff } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 
 // Mock data - En producción esto vendría de la base de datos
 const mockAttributes: VariantAttribute[] = [
@@ -56,7 +56,7 @@ export async function PUT(
 ) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { id } = await params
     const body = await request.json()
     
@@ -113,7 +113,7 @@ export async function DELETE(
 ) {
   try {
     const auth = await requireStaff()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
     const { id } = await params
     
     const attributeIndex = mockAttributes.findIndex(attr => attr.id === id)

@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/auth/require-auth'
+import { requireAdmin, getAuthResponse } from '@/lib/auth/require-auth'
 import { UserRole } from '@/lib/auth/roles-permissions'
 
 const VALID_ROLES: UserRole[] = ['admin', 'vendedor', 'tecnico', 'cliente']
@@ -9,7 +9,11 @@ export async function POST(request: Request) {
   try {
     // Solo un admin puede asignar roles
     const auth = await requireAdmin()
-    if (!auth.authenticated) return auth.response
+    const authResponse = getAuthResponse(auth)
+    if (authResponse) return authResponse
+    if (!auth.authenticated) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     const { role, user_id } = await request.json()
 
@@ -87,3 +91,4 @@ export async function POST(request: Request) {
     )
   }
 }
+

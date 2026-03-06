@@ -30,7 +30,6 @@ export function suggestReservations(
         level: "warning",
         message: `Sin repuesto sugerido para ${r.deviceModel} (${r.issueDescription})`,
         createdAt: new Date().toISOString(),
-        supplierSuggestion: { supplierName: "Repair Parts Express", leadTimeDays: 3 },
       });
       continue;
     }
@@ -38,10 +37,9 @@ export function suggestReservations(
       alerts.push({
         id: `${Date.now()}-${Math.random()}`,
         productId: candidate.id,
-        level: "critical",
+        level: "error",
         message: `Stock agotado para ${candidate.name}`,
         createdAt: new Date().toISOString(),
-        supplierSuggestion: { supplierName: candidate.supplierName ?? "Proveedor alternativo", leadTimeDays: 7 },
       });
       continue;
     }
@@ -51,7 +49,7 @@ export function suggestReservations(
       productId: candidate.id,
       quantity: 1,
       reservedAt: new Date().toISOString(),
-      status: "reserved",
+      status: "active",
     });
   }
 
@@ -100,10 +98,9 @@ export function generateReorderAlerts(products: ProductStock[], threshold = 3) {
       alerts.push({
         id: `${Date.now()}-${Math.random()}`,
         productId: p.id,
-        level: p.stock === 0 ? "critical" : "warning",
+        level: p.stock === 0 ? "error" : "warning",
         message: `Stock bajo para ${p.name} (quedan ${p.stock})`,
         createdAt: new Date().toISOString(),
-        supplierSuggestion: { supplierName: p.supplierName ?? "Proveedor", leadTimeDays: p.stock === 0 ? 7 : 3 },
       });
     }
   }

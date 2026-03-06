@@ -6,6 +6,9 @@
 export { 
     motion, 
     AnimatePresence,
+    useMotionValue,
+    useTransform,
+    animate,
     type Variants,
     type Transition,
     type MotionProps 

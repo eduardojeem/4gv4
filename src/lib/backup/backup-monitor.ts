@@ -950,7 +950,8 @@ class BackupMonitor {
 
     const components: { [component: string]: 'healthy' | 'warning' | 'critical' } = {}
     for (const health of healthResults) {
-      components[health.configurationId] = health.overallHealth
+      components[health.configurationId] =
+        health.overallHealth === 'unknown' ? 'warning' : health.overallHealth
     }
 
     return { overall, components }

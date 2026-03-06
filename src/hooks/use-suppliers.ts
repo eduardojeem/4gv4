@@ -205,6 +205,9 @@ export function useSuppliers() {
             // Validate data before sending to database
             const validation = validateSupplier(supplierData)
             if (!validation.success) {
+                if (!('errors' in validation)) {
+                    throw new Error('Datos invalidos')
+                }
                 const errors = formatValidationErrors(validation.errors)
                 const errorMessage = Object.values(errors)[0] || 'Datos inválidos'
                 throw new Error(errorMessage)
@@ -378,3 +381,5 @@ export function useSuppliers() {
         refresh: fetchSuppliers
     }
 }
+
+

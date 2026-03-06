@@ -100,7 +100,7 @@ beforeAll(() => {
   })
 
   // Mock de PerformanceObserver
-  global.PerformanceObserver = vi.fn().mockImplementation((callback) => {
+  const MockPerformanceObserver = vi.fn().mockImplementation((callback) => {
     const mockObserver = {
       observe: vi.fn(),
       disconnect: vi.fn(),
@@ -119,6 +119,8 @@ beforeAll(() => {
     }
     return mockObserver
   })
+  Object.assign(MockPerformanceObserver, { supportedEntryTypes: [] as string[] })
+  global.PerformanceObserver = MockPerformanceObserver as unknown as typeof PerformanceObserver
 
   // Mock de PerformanceEntry para Web Vitals
   global.PerformanceEntry = vi.fn().mockImplementation(() => ({

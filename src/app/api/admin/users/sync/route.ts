@@ -73,7 +73,7 @@ async function handler(request: Request, context: { user: { id: string; email?: 
         }
 
         // Registrar sincronización en audit_log
-        await supabaseAdmin.from('audit_log').insert({
+        const { error: auditError } = await supabaseAdmin.from('audit_log').insert({
             user_id: context.user.id,
             action: 'user_sync',
             resource: 'users',
@@ -83,9 +83,11 @@ async function handler(request: Request, context: { user: { id: string; email?: 
                 updated: results.updated,
                 errors: results.errors.length
             }
-        }).catch(err => {
-            logger.error('Failed to log user sync', { error: err })
         })
+
+        if (auditError) {
+            logger.error('Failed to log user sync', { error: auditError })
+        }
 
         logger.info('User sync completed', {
             syncedBy: context.user.id,

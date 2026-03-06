@@ -162,40 +162,82 @@ export function useProductAnalytics(
 
       // Cargar movimientos si está habilitado
       if (stableConfig.includeMovements) {
-        const movementsQuery = supabase
-          .from('product_movements')
-          .select('*')
-          .in('product_id', productIds)
-          .gte('created_at', dateRange.start.toISOString())
-          .lte('created_at', dateRange.end.toISOString())
-          .order('created_at', { ascending: false })
-        
         promises.push(
-          movementsQuery.then(({ data, error }: { data: ProductMovement[] | null; error: any }) => {
+          supabase
+            .from('product_movements')
+            .select('*')
+            .in('product_id', productIds)
+            .gte('created_at', dateRange.start.toISOString())
+            .lte('created_at', dateRange.end.toISOString())
+            .order('created_at', { ascending: false })
+            .then(({ data, error }) => {
             if (error) {
-              throw createProductError.analyticsCalculationError('load_movements', error)
+              throw createProductError.analyticsCalculationError('load_movements', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+              })
             }
-            return { type: 'movements' as const, data: data || [] }
+            const normalizedMovements: ProductMovement[] = (data || []).map((m: any) => ({
+              id: m.id,
+              product_id: m.product_id,
+              movement_type:
+                m.movement_type === 'in'
+                  ? 'entrada'
+                  : m.movement_type === 'out'
+                    ? 'salida'
+                    : m.movement_type === 'adjustment'
+                      ? 'ajuste'
+                      : 'ajuste',
+              quantity: m.quantity || 0,
+              previous_stock: m.previous_stock || 0,
+              new_stock: m.new_stock || 0,
+              unit_cost: m.unit_cost ?? undefined,
+              reference_id: m.reference_id ?? undefined,
+              reference_type: m.reference_type ?? undefined,
+              notes: m.reason ?? undefined,
+              user_id: m.user_id ?? undefined,
+              created_at: m.created_at
+            }))
+            return { type: 'movements' as const, data: normalizedMovements }
           })
         )
       }
 
       // Cargar alertas si está habilitado
       if (stableConfig.includeAlerts) {
-        const alertsQuery = supabase
-          .from('product_alerts')
-          .select('*')
-          .in('product_id', productIds)
-          .gte('created_at', dateRange.start.toISOString())
-          .lte('created_at', dateRange.end.toISOString())
-          .order('created_at', { ascending: false })
-        
         promises.push(
-          alertsQuery.then(({ data, error }: { data: ProductAlert[] | null; error: any }) => {
+          supabase
+            .from('product_alerts')
+            .select('*')
+            .in('product_id', productIds)
+            .gte('created_at', dateRange.start.toISOString())
+            .lte('created_at', dateRange.end.toISOString())
+            .order('created_at', { ascending: false })
+            .then(({ data, error }) => {
             if (error) {
-              throw createProductError.analyticsCalculationError('load_alerts', error)
+              throw createProductError.analyticsCalculationError('load_alerts', {
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                code: error.code
+              })
             }
-            return { type: 'alerts' as const, data: data || [] }
+            const normalizedAlerts: ProductAlert[] = (data || []).map((a: any) => ({
+              id: a.id,
+              product_id: a.product_id,
+              type: a.alert_type || 'low_stock',
+              alert_type: a.alert_type || 'low_stock',
+              message: a.message || '',
+              severity: a.alert_type === 'out_of_stock' ? 'high' : 'medium',
+              is_read: false,
+              read: false,
+              is_resolved: Boolean(a.is_resolved),
+              created_at: a.created_at,
+              resolved_at: a.resolved_at ?? null
+            }))
+            return { type: 'alerts' as const, data: normalizedAlerts }
           })
         )
       }

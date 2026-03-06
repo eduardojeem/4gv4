@@ -99,7 +99,7 @@ export function RepairSelector({
             <div className="flex flex-col items-start gap-1 text-left w-full overflow-hidden">
               <div className="flex items-center gap-2 w-full">
                 <span className="font-medium truncate">
-                  {selectedRepair.customer.name}
+                  {selectedRepair.customer?.name || "Cliente sin nombre"}
                 </span>
                 <Badge variant="secondary" className="text-[10px] h-5 px-1.5 shrink-0">
                   {selectedRepair.ticketNumber || selectedRepair.id.slice(0, 8)}
@@ -132,8 +132,11 @@ export function RepairSelector({
                 <CommandItem
                   key={repair.id}
                   value={repair.id}
-                  onSelect={(currentValue) => {
-                    // Use the original ID directly to avoid casing issues with currentValue
+                  onSelect={() => {
+                    handleSelect(repair.id)
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault()
                     handleSelect(repair.id)
                   }}
                   className="flex flex-col items-start gap-1 py-3 px-3 cursor-pointer"

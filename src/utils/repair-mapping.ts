@@ -43,7 +43,7 @@ interface SupabaseRepairNote {
 interface SupabaseRepair {
     id: string
     ticket_number?: string
-    customer?: SupabaseCustomer
+    customer?: SupabaseCustomer | SupabaseCustomer[]
     device_brand: string
     device_model: string
     device_type?: string
@@ -58,7 +58,7 @@ interface SupabaseRepair {
     estimated_cost?: number
     final_cost?: number
     labor_cost?: number
-    technician?: SupabaseTechnician
+    technician?: SupabaseTechnician | SupabaseTechnician[]
     location?: string
     warranty?: string
     warranty_months?: number
@@ -87,15 +87,23 @@ interface SupabaseRepair {
  * Ya no es necesario convertir estados porque usamos español directamente
  */
 export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
+    // Normalize customer: Supabase returns arrays from joins, pick first element
+    const cust: SupabaseCustomer | undefined = Array.isArray(r.customer)
+        ? (r.customer[0] ?? undefined)
+        : r.customer
+    // Normalize technician
+    const tech: SupabaseTechnician | undefined = Array.isArray(r.technician)
+        ? (r.technician[0] ?? undefined)
+        : r.technician
     return {
         id: r.id,
         ticketNumber: r.ticket_number,
         customer: {
-            id: r.customer?.id,
-            customerCode: r.customer?.customer_code,
-            name: r.customer?.name || (r.customer?.first_name ? `${r.customer?.first_name} ${r.customer?.last_name || ''}`.trim() : 'Cliente Desconocido'),
-            phone: r.customer?.phone || '',
-            email: r.customer?.email || ''
+            id: cust?.id,
+            customerCode: cust?.customer_code,
+            name: cust?.name || (cust?.first_name ? `${cust?.first_name} ${cust?.last_name || ''}`.trim() : 'Cliente Desconocido'),
+            phone: cust?.phone || '',
+            email: cust?.email || ''
         },
         device: `${r.device_brand} ${r.device_model}`,
         deviceType: (r.device_type as DeviceType) || 'smartphone',
@@ -111,9 +119,9 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
         estimatedCost: r.estimated_cost || 0,
         finalCost: r.final_cost ?? null,
         laborCost: r.labor_cost || 0,
-        technician: r.technician ? {
-            name: r.technician.full_name || r.technician.email,
-            id: r.technician.id
+        technician: tech ? {
+            name: tech.full_name || tech.email,
+            id: tech.id
         } : null,
         location: r.location || 'Taller Principal',
         warranty: r.warranty_months ? `${r.warranty_months} meses` : null,

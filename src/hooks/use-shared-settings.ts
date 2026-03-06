@@ -162,7 +162,16 @@ export function useSharedSettings() {
         .eq('id', 'system')
         .single()
 
-      if (error) throw error
+      if (error) {
+        // Ignorar error si es porque no existe la fila (PGRST116)
+        if (error.code === 'PGRST116') {
+          console.log('No system settings found, using defaults')
+          setSettings(defaultSettings)
+          setOriginalSettings(defaultSettings)
+          return
+        }
+        throw error
+      }
 
       if (data) {
         const mapped = mapToAppSettings(data as SystemSettingsRow)

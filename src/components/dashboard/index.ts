@@ -28,7 +28,7 @@ export { default as RecentActivity } from './recent-activity'
 export { default as UserManagement } from './user-management'
 export { default as SupplierManagement } from './supplier-management'
 export { default as SupplierList } from './supplier-list'
-export { default as SupplierModal } from './supplier-modal'
+export { SupplierModal } from './supplier-modal'
 
 // Componentes de búsqueda y filtros
 export { default as SmartSearch } from './smart-search'

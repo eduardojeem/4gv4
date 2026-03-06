@@ -132,8 +132,11 @@ export function useProducts() {
       const { data, error, count } = await query
       // Fallbacks if generated columns don't exist yet
       if (error && stockFilter === 'low-stock' && /is_low_stock/.test(error.message || '')) {
-        const { data: data2, error: error2, count: count2 } = await base
+        const { data: data2, error: error2, count: count2 } = await supabase
+          .from('products')
           .select('id,name,sku,stock,min_stock,purchase_price,sale_price,description,created_at,category_id,supplier_id', { count: 'exact' })
+          .order(orderField, { ascending: sortDirection === 'asc' })
+          .range(from, to)
         if (error2) {
           setError(error2.message || 'Error cargando productos')
           setProducts([])
@@ -145,14 +148,18 @@ export function useProducts() {
           const min = Number((p as any).min_stock ?? 0)
           return qty > 0 && qty <= min
         })
-        setProducts(filtered as UIProduct[])
+        const mapped = (filtered as DBProduct[]).map(p => mapDbToUi(p, new Map<string, string>(), new Map<string, string>()))
+        setProducts(mapped)
         setTotal(count2 ?? filtered.length)
         setLoading(false)
         return
       } else if (error && marginRange && /margin_percent/.test(error.message || '')) {
         // Fallback for margin filter: fetch without margin_percent and filter in JS
-        const { data: data3, error: error3, count: count3 } = await base
+        const { data: data3, error: error3, count: count3 } = await supabase
+          .from('products')
           .select('id,name,sku,stock,min_stock,purchase_price,sale_price,description,created_at,category,category_id,supplier,supplier_id', { count: 'exact' })
+          .order(orderField, { ascending: sortDirection === 'asc' })
+          .range(from, to)
         if (error3) {
           setError(error3.message || 'Error cargando productos')
           setProducts([])

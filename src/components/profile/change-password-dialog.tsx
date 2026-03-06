@@ -89,7 +89,8 @@ export function ChangePasswordDialog() {
       if (!result.success) {
         const formattedErrors: Record<string, string> = {}
         result.error.issues.forEach((issue) => {
-          formattedErrors[issue.path[0]] = issue.message
+          const key = String(issue.path[0] ?? 'form')
+          formattedErrors[key] = issue.message
         })
         setErrors(formattedErrors)
         return

@@ -539,7 +539,9 @@ class AutoRecovery {
 
   private async checkDataCorruption(condition: RecoveryCondition): Promise<boolean> {
     try {
-      const integrityCheck = await backupManager.verifyDataIntegrity()
+      const verifyDataIntegrity = (backupManager as unknown as { verifyDataIntegrity?: () => Promise<{ isValid: boolean }> }).verifyDataIntegrity
+      if (!verifyDataIntegrity) return false
+      const integrityCheck = await verifyDataIntegrity()
       return !integrityCheck.isValid
     } catch (error) {
       return true

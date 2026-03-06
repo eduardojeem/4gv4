@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { syncPerformanceMonitor } from './sync-performance-monitor'
+import type { SyncMetrics } from './sync-performance-monitor'
 
 export interface ConnectionConfig {
   maxConcurrentConnections: number
@@ -129,7 +130,7 @@ export class DataCompressor {
     this.config = config
   }
 
-  async compress(data: Record<string, unknown>): Promise<{ compressed: string; ratio: number; originalSize: number; compressedSize: number }> {
+  async compress(data: unknown): Promise<{ compressed: string; ratio: number; originalSize: number; compressedSize: number }> {
     if (!this.config.enabled) {
       const serialized = JSON.stringify(data)
       return {
@@ -210,7 +211,7 @@ export class DataCompressor {
 }
 
 export class RequestCache {
-  private cache: Map<string, { data: Record<string, unknown>; timestamp: number; accessCount: number }> = new Map()
+  private cache: Map<string, { data: unknown; timestamp: number; accessCount: number }> = new Map()
   private config: CacheConfig
   private accessOrder: string[] = []
 
@@ -219,7 +220,7 @@ export class RequestCache {
     this.startCleanupInterval()
   }
 
-  get(key: string): Record<string, unknown> | null {
+  get(key: string): unknown | null {
     if (!this.config.enabled) return null
 
     const entry = this.cache.get(key)
@@ -238,7 +239,7 @@ export class RequestCache {
     return entry.data
   }
 
-  set(key: string, data: Record<string, unknown>): void {
+  set(key: string, data: unknown): void {
     if (!this.config.enabled) return
 
     const now = Date.now()
@@ -388,7 +389,7 @@ export class CommunicationOptimizer {
       const cachedResult = this.cache.get(cacheKey)
       if (cachedResult) {
         fromCache = true
-        result = cachedResult
+        result = cachedResult as T
       }
     }
 
@@ -530,9 +531,20 @@ export class CommunicationOptimizer {
       this.metrics = this.metrics.slice(-1000)
     }
 
+    const allowedOperations: SyncMetrics['operation'][] = [
+      'product_sync',
+      'realtime_event',
+      'catalog_sync',
+      'supplier_sync',
+      'inventory_sync'
+    ]
+    const normalizedOperation: SyncMetrics['operation'] = allowedOperations.includes(metrics.operation as SyncMetrics['operation'])
+      ? (metrics.operation as SyncMetrics['operation'])
+      : 'product_sync'
+
     // Record in performance monitor
     await syncPerformanceMonitor.recordSyncOperation(
-      metrics.operation,
+      normalizedOperation,
       Date.now() - metrics.latency,
       Date.now(),
       1,

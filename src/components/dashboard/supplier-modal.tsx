@@ -51,8 +51,8 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
   const [activeTab, setActiveTab] = useState('basic')
   const [generalError, setGeneralError] = useState<string | null>(null)
 
-  const form = useForm<SupplierFormData>({
-    resolver: zodResolver(supplierSchema),
+  const form = useForm<any>({
+    resolver: zodResolver(supplierSchema) as any,
     defaultValues: {
       name: supplier?.name || '',
       contact_name: supplier?.contact_name || '',
@@ -76,7 +76,7 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
       setGeneralError(null)
       setActiveTab('basic')
       
-      const values: SupplierFormData = {
+      const values: any = {
         name: supplier?.name || '',
         contact_name: supplier?.contact_name || '',
         email: supplier?.email || '',
@@ -95,7 +95,7 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
     }
   }, [isOpen, supplier, mode, form])
 
-  const onSubmit = async (data: SupplierFormData) => {
+  const onSubmit = async (data: any) => {
     setGeneralError(null)
     try {
       await onSave(data)

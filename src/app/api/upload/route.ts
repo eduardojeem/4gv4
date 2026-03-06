@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server'
+﻿import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireAuth } from '@/lib/auth/require-auth'
+import { requireAuth, getAuthResponse } from '@/lib/auth/require-auth'
 
 // Tipos MIME permitidos para subida
 const ALLOWED_MIME_TYPES = [
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     // Verificar que el usuario esta autenticado
     const auth = await requireAuth()
-    if (!auth.authenticated) return auth.response
+    { const r = getAuthResponse(auth); if (r) return r }
 
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -92,3 +92,4 @@ export async function POST(request: Request) {
     )
   }
 }
+

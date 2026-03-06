@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,7 @@ import { Line } from 'recharts/es6/cartesian/Line';
 import { PieChart } from 'recharts/es6/chart/PieChart';
 import { Pie } from 'recharts/es6/polar/Pie';
 import { Cell } from 'recharts/es6/component/Cell';
+import { ChartExporter } from '@/components/reports/ChartExporter'
 import {
   TrendingUp,
   TrendingDown,
@@ -94,6 +95,21 @@ export default function ReportsPage() {
   const [categoryMinSales, setCategoryMinSales] = useState<number>(0)
   const [saleItemsAll, setSaleItemsAll] = useState<any[]>([])
   const [totalProfit, setTotalProfit] = useState(0)
+
+  // Referencias para exportación
+  const salesChartRef = useRef<HTMLDivElement>(null)
+  const repairsChartRef = useRef<HTMLDivElement>(null)
+  const repairsStatusRef = useRef<HTMLDivElement>(null)
+  const productsChartRef = useRef<HTMLDivElement>(null)
+  const productTrendRef = useRef<HTMLDivElement>(null)
+  const categoriesChartRef = useRef<HTMLDivElement>(null)
+
+  const visibleProducts = useMemo(() => {
+    const totalProductSales = productData.reduce((s, p) => s + p.sales, 0)
+    const filtered = productCategoryFilter === 'all' ? productData : productData.filter((p) => p.category === productCategoryFilter)
+    const sorted = [...filtered].sort((a, b) => productSortBy === 'sales' ? b.sales - a.sales : b.quantity - a.quantity)
+    return sorted.slice(0, productTopCount).map((p) => ({ ...p, share: totalProductSales > 0 ? (p.sales / totalProductSales) * 100 : 0 }))
+  }, [productData, productCategoryFilter, productSortBy, productTopCount])
 
   useEffect(() => {
     const byDate: Record<string, { sales: number; qty: number }> = {}
@@ -493,10 +509,22 @@ export default function ReportsPage() {
             </SelectContent>
           </Select>
           
-          <Button variant="outline" onClick={() => exportReport('ventas')}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
+          <ChartExporter
+            title="Reporte de Gestión - 4G Celulares"
+            data={salesData}
+            metrics={{
+              'Ventas Totales': formatFullPrice(totalSales),
+              'Órdenes': totalOrders,
+              'Clientes': totalCustomers,
+              'Valor Promedio': formatFullPrice(avgOrderValue),
+              'Ganancia Estimada': formatFullPrice(totalProfit),
+              'Reparaciones Totales': repairsMetrics.total,
+              'Tasa de Finalización': `${repairsMetrics.completionRate.toFixed(0)}%`
+            }}
+            chartRefs={[salesChartRef, repairsChartRef, repairsStatusRef, productsChartRef, productTrendRef, categoriesChartRef]}
+            chartTitles={['Tendencia de Ventas', 'Tendencia de Reparaciones', 'Distribución por Estado', 'Productos Más Vendidos', 'Tendencia del Producto', 'Distribución por Categorías']}
+            chartData={[salesData, repairsTrend, repairsStatusDist, visibleProducts, selectedProductTrend, categoryComputed.visible]}
+          />
         </div>
       </div>
 
@@ -631,6 +659,7 @@ export default function ReportsPage() {
               <CardTitle>Tendencia de Ventas</CardTitle>
             </CardHeader>
             <CardContent>
+              <div ref={salesChartRef}>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={salesData}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -652,6 +681,7 @@ export default function ReportsPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -662,6 +692,7 @@ export default function ReportsPage() {
               <CardTitle>Tendencia de Reparaciones</CardTitle>
             </CardHeader>
             <CardContent>
+              <div ref={repairsChartRef}>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={repairsTrend}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -677,6 +708,7 @@ export default function ReportsPage() {
                   />
                 </LineChart>
               </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
 
@@ -685,6 +717,7 @@ export default function ReportsPage() {
               <CardTitle>Distribución por Estado</CardTitle>
             </CardHeader>
             <CardContent>
+              <div ref={repairsStatusRef}>
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie data={repairsStatusDist} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}` }>
@@ -695,6 +728,7 @@ export default function ReportsPage() {
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
 
@@ -766,11 +800,6 @@ export default function ReportsPage() {
           </div>
 
           {(() => {
-            const totalProductSales = productData.reduce((s, p) => s + p.sales, 0)
-            const filtered = productCategoryFilter === 'all' ? productData : productData.filter((p) => p.category === productCategoryFilter)
-            const sorted = [...filtered].sort((a, b) => productSortBy === 'sales' ? b.sales - a.sales : b.quantity - a.quantity)
-            const visibleProducts = sorted.slice(0, productTopCount).map((p) => ({ ...p, share: totalProductSales > 0 ? (p.sales / totalProductSales) * 100 : 0 }))
-
             // Tendencia del producto seleccionada: memo fuera del render
 
             return (
@@ -780,6 +809,7 @@ export default function ReportsPage() {
                   <CardTitle>Productos Más Vendidos</CardTitle>
                 </CardHeader>
                 <CardContent>
+                  <div ref={productsChartRef}>
                   <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={visibleProducts}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -790,6 +820,7 @@ export default function ReportsPage() {
                   <Bar dataKey="quantity" name="Cantidad" fill={productQuantityColor} />
                   </BarChart>
                   </ResponsiveContainer>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -799,6 +830,7 @@ export default function ReportsPage() {
                     <CardTitle>Tendencia del Producto Seleccionado</CardTitle>
                   </CardHeader>
                   <CardContent>
+                    <div ref={productTrendRef}>
                     <ResponsiveContainer width="100%" height={240}>
                       <LineChart data={selectedProductTrend}>
                         <CartesianGrid strokeDasharray="3 3" />
@@ -824,6 +856,7 @@ export default function ReportsPage() {
                         />
                       </LineChart>
                     </ResponsiveContainer>
+                    </div>
                     <div className="flex justify-end mt-3">
                       <Link href={selectedProductId ? `/dashboard/products/${selectedProductId}` : '/dashboard/products'}>
                         <Button variant="outline">Ver detalle del producto</Button>
@@ -942,6 +975,7 @@ export default function ReportsPage() {
                     <CardTitle>Distribución por Categorías</CardTitle>
                   </CardHeader>
                   <CardContent>
+                    <div ref={categoriesChartRef}>
                     <ResponsiveContainer width="100%" height={300}>
                       {categoryChartType === 'pie' ? (
                         <PieChart>
@@ -974,6 +1008,7 @@ export default function ReportsPage() {
                         </BarChart>
                       )}
                     </ResponsiveContainer>
+                    </div>
                   </CardContent>
                 </Card>
 

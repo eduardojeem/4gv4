@@ -692,7 +692,11 @@ export class PerformanceOptimizer {
       actionExecution.status = 'running'
       
       // Capture before metrics
-      actionExecution.metrics = await this.captureActionMetrics('before')
+      const beforeMetrics = await this.captureActionMetrics('before')
+      actionExecution.metrics = {
+        ...actionExecution.metrics,
+        ...beforeMetrics
+      }
 
       // Execute action based on type
       switch (action.type) {

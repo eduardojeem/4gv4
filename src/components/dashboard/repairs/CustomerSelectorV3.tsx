@@ -37,7 +37,7 @@ export function CustomerSelectorV3({
   const handleChange = (customerId: string, customer?: Customer) => {
     if (customer) {
       onChange(customerId, {
-        name: `${customer.first_name} ${customer.last_name}`.trim(),
+        name: customer.name || '',
         phone: customer.phone || '',
         email: customer.email || '',
       })

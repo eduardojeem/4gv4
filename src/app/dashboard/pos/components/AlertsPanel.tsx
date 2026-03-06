@@ -102,9 +102,9 @@ export function AlertsPanel({ alerts, onDismiss, className }: AlertsPanelProps) 
                     <p className="text-sm text-muted-foreground">
                       {alert.message}
                     </p>
-                    {alert.metadata && (
+                    {alert.data && typeof alert.data === 'object' && (
                       <div className="mt-2 text-xs text-muted-foreground">
-                        {Object.entries(alert.metadata).map(([key, value]) => (
+                        {Object.entries(alert.data as Record<string, unknown>).map(([key, value]) => (
                           <span key={key} className="mr-3">
                             <strong>{key}:</strong> {String(value)}
                           </span>

@@ -64,7 +64,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'sale' | 'repair'>('all')
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const { fetchPendingRepairs } = useCustomerRepairs()
+  const { fetchRepairs } = useCustomerRepairs()
 
   // Fetch activity data for a specific customer
   const fetchCustomerActivity = async (customerId: string) => {
@@ -80,7 +80,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
       const salesData = salesResponse.success ? salesResponse.data || [] : []
 
       // Fetch repairs data
-      const repairsData = await fetchPendingRepairs(customerId)
+      const repairsData = await fetchRepairs(customerId, ['pending', 'received', 'in_progress', 'diagnosis'])
 
       // Combine and format activities
       const combinedActivities: ActivityItem[] = [

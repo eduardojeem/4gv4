@@ -77,10 +77,10 @@ interface CustomerListViewProps {
   onBulkDelete?: (customerIds: string[]) => void
   bulkDeleting?: boolean
   onToggleCustomerStatus?: (customer: Customer) => void
-  onBulkStatusChange?: (customerIds: string[], status: 'active' | 'inactive' | 'suspended') => void
+  onBulkStatusChange?: (customerIds: string[], status: 'active' | 'inactive' | 'suspended' | 'pending') => void
   loading?: boolean
 }
-type SortField = 'name' | 'email' | 'phone' | 'status' | 'lifetime_value' | 'last_activity'
+type SortField = 'name' | 'email' | 'phone' | 'status' | 'lifetime_value' | 'last_activity' | 'total_purchases'
 type SortOrder = 'asc' | 'desc'
 
 export function CustomerListView({

@@ -332,7 +332,7 @@ export class IntegrationMonitor {
     const response = await fetch(config.healthCheckUrl || config.baseUrl, {
       method: 'GET',
       headers: config.headers || {},
-      timeout: 10000
+      signal: AbortSignal.timeout(10000)
     })
 
     const metrics: HealthMetrics = {
@@ -359,7 +359,7 @@ export class IntegrationMonitor {
     try {
       const response = await fetch(config.url, {
         method: 'HEAD',
-        timeout: 5000
+        signal: AbortSignal.timeout(5000)
       })
 
       return {
@@ -639,6 +639,28 @@ export class IntegrationMonitor {
   private async getRequestsPerMinute(url: string): Promise<number> {
     // Obtener RPM basado en métricas
     return 45 // Placeholder
+  }
+
+  private async updateMetrics(): Promise<void> {
+    const checks = Array.from(this.healthChecks.values())
+    if (checks.length === 0) return
+
+    const avgResponseTime = checks.reduce((sum, c) => sum + c.responseTime, 0) / checks.length
+    const avgUptime = checks.reduce((sum, c) => sum + c.uptime, 0) / checks.length
+    const avgErrorRate = checks.reduce((sum, c) => sum + c.errorRate, 0) / checks.length
+
+    try {
+      await this.supabase.from('integration_metrics').insert({
+        timestamp: new Date().toISOString(),
+        integrations_count: checks.length,
+        average_response_time: avgResponseTime,
+        average_uptime: avgUptime,
+        average_error_rate: avgErrorRate,
+        active_alerts: this.activeAlerts.size
+      })
+    } catch (error) {
+      console.error('Failed to update metrics:', error)
+    }
   }
 
   // Métodos de persistencia

@@ -57,6 +57,15 @@ interface MovementSummary {
   totalAjustes: number
 }
 
+const normalizeMovementType = (rawType: unknown): StockMovement['type'] => {
+  const value = String(rawType || '').toLowerCase()
+  if (value === 'entrada' || value === 'entry') return 'entrada'
+  if (value === 'salida' || value === 'exit' || value === 'sale') return 'salida'
+  if (value === 'transferencia' || value === 'transfer') return 'transferencia'
+  if (value === 'devolucion' || value === 'devolución' || value === 'return') return 'devolucion'
+  return 'ajuste'
+}
+
 const StockMovements: React.FC = () => {
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [loading, setLoading] = useState(true)
@@ -118,7 +127,22 @@ const StockMovements: React.FC = () => {
 
       if (error) throw error
 
-      setMovements(data as any) // Cast to any to avoid strict typing issues with joins for now
+      const normalizedMovements: StockMovement[] = (data || []).map((movement: any) => ({
+        id: movement.id,
+        product_id: movement.product_id,
+        product: movement.product || { name: 'Producto Desconocido', sku: 'N/A' },
+        type: normalizeMovementType(movement.type ?? movement.movement_type),
+        quantity: Number(movement.quantity || 0),
+        previous_stock: Number(movement.previous_stock || 0),
+        new_stock: Number(movement.new_stock || 0),
+        reason: movement.reason || movement.notes || movement.movement_type || 'Sin motivo',
+        reference: movement.reference || movement.reference_id || '',
+        user_id: movement.user_id || 'system',
+        created_at: movement.created_at,
+        notes: movement.notes || ''
+      }))
+
+      setMovements(normalizedMovements)
       setTotalCount(count || 0)
 
       // Calcular resumen (esto debería ser un count en el servidor idealmente, pero haremos un simple conteo de la página actual o query separada)
@@ -359,19 +383,21 @@ const StockMovements: React.FC = () => {
             <div className="text-center py-8 text-gray-500">No se encontraron movimientos.</div>
           ) : (
             <div className="space-y-4">
-              {movements.map(movement => (
+              {movements.map(movement => {
+                const movementType = normalizeMovementType(movement.type)
+                return (
                 <div key={movement.id} className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors dark:border-gray-700">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                      <div className={`p-2 rounded-lg ${getMovementTypeColor(movement.type)}`}>
-                        {getMovementIcon(movement.type)}
+                      <div className={`p-2 rounded-lg ${getMovementTypeColor(movementType)}`}>
+                        {getMovementIcon(movementType)}
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-1">
                           <h4 className="font-medium dark:text-white">{movement.product?.name || 'Producto Desconocido'}</h4>
                           <Badge variant="outline" className="dark:text-gray-300 dark:border-gray-600">{movement.product?.sku || 'N/A'}</Badge>
-                          <Badge className={getMovementTypeColor(movement.type)}>
-                            {movement.type.toUpperCase()}
+                          <Badge className={getMovementTypeColor(movementType)}>
+                            {movementType.toUpperCase()}
                           </Badge>
                         </div>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">{movement.reason}</p>
@@ -396,9 +422,9 @@ const StockMovements: React.FC = () => {
                     <div className="text-right">
                       <div className="flex items-center space-x-2 mb-1 justify-end">
                         <span className={`text-lg font-semibold ${
-                          movement.type === 'entrada' || movement.type === 'devolucion' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                          movementType === 'entrada' || movementType === 'devolucion' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
-                          {(movement.type === 'entrada' || movement.type === 'devolucion') ? '+' : '-'}{Math.abs(movement.quantity)}
+                          {(movementType === 'entrada' || movementType === 'devolucion') ? '+' : '-'}{Math.abs(movement.quantity)}
                         </span>
                         <Button
                           size="sm"
@@ -418,7 +444,7 @@ const StockMovements: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           )}
 

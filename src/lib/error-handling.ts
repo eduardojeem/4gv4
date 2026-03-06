@@ -48,7 +48,7 @@ export class NotificationError extends Error {
     this.retryable = options?.retryable ?? this.isRetryableByDefault(type)
     
     if (options?.cause) {
-      this.cause = options.cause
+      ;(this as Error & { cause?: Error }).cause = options.cause
     }
   }
 
@@ -268,7 +268,7 @@ export class ErrorLogger {
       context: { ...error.context, logContext: context }
     }
 
-    this.logs.unshift(logEntry as NotificationError)
+    this.logs.unshift(logEntry as unknown as NotificationError)
     
     // Mantener solo los últimos MAX_LOGS errores
     if (this.logs.length > this.MAX_LOGS) {

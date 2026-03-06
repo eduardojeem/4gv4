@@ -115,7 +115,7 @@ export function useAnalytics(timeRange: '7d' | '30d' | '90d' | '1y' = '30d') {
       // Process Sales Data for Chart
       const salesMap = new Map<string, { ventas: number, ingresos: number }>()
       const categoryMap = new Map<string, number>()
-      const productMap = new Map<string, { name: string, sales: number, revenue: number }>()
+      const productMap = new Map<string, { id: string, name: string, sales: number, revenue: number }>()
       
       salesData?.forEach(sale => {
         // Sales Chart Data
@@ -148,9 +148,10 @@ export function useAnalytics(timeRange: '7d' | '30d' | '90d' | '1y' = '30d') {
             categoryMap.set(catName, currentCatVal + itemTotal)
 
             // Update Product Stats
-            const currentProd = productMap.get(item.product_id) || { name: prodName, sales: 0, revenue: 0 }
+            const currentProd = productMap.get(item.product_id) || { id: item.product_id, name: prodName, sales: 0, revenue: 0 }
             
             productMap.set(item.product_id, {
+              id: item.product_id,
               name: prodName,
               sales: currentProd.sales + (item.quantity || 0),
               revenue: currentProd.revenue + itemTotal

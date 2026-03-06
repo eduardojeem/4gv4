@@ -39,7 +39,7 @@ import { toast } from 'sonner'
 import { showAddToCartToast } from '@/lib/pos-toasts'
 import { ReceiptGenerator } from '@/components/pos/ReceiptGenerator'
 import { createReceiptData, printReceipt, downloadReceipt, shareReceipt } from '@/lib/receipt-utils'
-// Limpieza: se retiran componentes de debug/diagnÃ³stico del POS
+// Limpieza: se retiran componentes de debug/diagnóstico del POS
 import { VirtualizedProductGrid } from './components/VirtualizedProductList'
 import { formatStockStatus } from '@/lib/inventory-manager'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
@@ -84,7 +84,7 @@ const getErrorMessage = (e: unknown) => {
   try { return JSON.stringify(e) } catch { return String(e) }
 }
 
-// Utilidades de cÃ³digo de barras (EAN-8/13)
+// Utilidades de código de barras (EAN-8/13)
 const normalizeBarcode = (raw: string) => raw.replace(/\D+/g, '').trim()
 const eanChecksum = (digits: string) => {
   const len = digits.length
@@ -211,8 +211,8 @@ function POSPageContent() {
       if (!err) return 'Error desconocido'
       const msg = typeof err === 'string' ? err : (err.message || err.error_description || err.details || err.hint || 'Error desconocido')
       const lower = (msg || '').toLowerCase()
-      if (lower.includes('network') || lower.includes('fetch')) return 'Error de red: verifique la conexiÃ³n.'
-      if (lower.includes('permission') || lower.includes('auth') || lower.includes('jwt')) return 'Permisos insuficientes o sesiÃ³n invÃ¡lida.'
+      if (lower.includes('network') || lower.includes('fetch')) return 'Error de red: verifique la conexión.'
+      if (lower.includes('permission') || lower.includes('auth') || lower.includes('jwt')) return 'Permisos insuficientes o sesión inválida.'
       if (lower.includes('duplicate key') || lower.includes('unique constraint')) return 'Registro duplicado.'
       if (lower.includes('timeout')) return 'Tiempo de espera agotado.'
       if (lower.includes('not null')) return 'Faltan datos requeridos.'
@@ -229,20 +229,20 @@ function POSPageContent() {
     }
   }, [isCheckoutOpen, setPaymentError, setPaymentStatus])
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
-  // Opciones de vinculaciÃ³n de reparaciÃ³n
+  // Opciones de vinculación de reparación
   const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
   const [deliveryOutcome, setDeliveryOutcome] = useState<'repaired' | 'withdrawn' | 'unrepairable'>('repaired')
   const [finalCostFromSale, setFinalCostFromSale] = useState(false)
   const selectedRepairs = useMemo(() => customerRepairs.filter((r: any) => selectedRepairIds.includes(r.id)), [customerRepairs, selectedRepairIds])
   const supabaseStatusToLabel: Record<string, string> = {
     recibido: 'Recibido',
-    diagnostico: 'En diagnÃ³stico',
-    reparacion: 'En reparaciÃ³n',
+    'diagnostico': 'En diagnóstico',
+    'reparacion': 'En reparación',
     listo: 'Listo para entrega',
     entregado: 'Entregado',
   }
   useEffect(() => {
-    // Resetear toggles al cerrar checkout o al cambiar de reparaciÃ³n
+    // Resetear toggles al cerrar checkout o al cambiar de reparación
     if (!isCheckoutOpen) {
       setMarkRepairDelivered(false)
       setDeliveryOutcome('repaired')
@@ -272,7 +272,7 @@ function POSPageContent() {
   const { applyPromotionByCode, calculateCartSummary } = usePromotionEngine()
   const { allPromotions } = usePromotions()
 
-  // Descuento automÃ¡tico para clientes VIP
+  // Descuento automático para clientes VIP
   const VIP_DISCOUNT_RATE = 10
   const [vipAutoApplied, setVipAutoApplied] = useState(false)
 
@@ -327,8 +327,8 @@ function POSPageContent() {
   const [movementAmount, setMovementAmount] = useState('')
   const [movementNote, setMovementNote] = useState('')
 
-  // Estados para mÃºltiples mÃ©todos de pago
-  // Eliminados estados locales que ahora estÃ¡n en CheckoutContext
+  // Estados para múltiples métodos de pago
+  // Eliminados estados locales que ahora están en CheckoutContext
 
   // Estados para sistema de tickets
   const [showReceiptModal, setShowReceiptModal] = useState(false)
@@ -382,7 +382,7 @@ function POSPageContent() {
   
   const WHOLESALE_DISCOUNT_RATE = 10
 
-  // FunciÃ³n para verificar disponibilidad de stock
+  // Función para verificar disponibilidad de stock
   const checkAvailability = useCallback((productId: string, quantity: number) => {
     const product = inventoryProducts.find(p => p.id === productId)
     return product ? product.stock_quantity >= quantity : false
@@ -432,8 +432,8 @@ function POSPageContent() {
       return processInventorySale(saleData)
     },
     subscribe: (callback: (products: any[]) => void) => {
-      // Para compatibilidad, retornamos una funciÃ³n de desuscripciÃ³n vacÃ­a
-      // ya que los productos se actualizan automÃ¡ticamente con el hook
+      // Para compatibilidad, retornamos una función de desuscripción vacía
+      // ya que los productos se actualizan automáticamente con el hook
       return () => { }
     },
     importData: (data: { products: any[] }) => {
@@ -541,9 +541,9 @@ function POSPageContent() {
     }
   }, [])
 
-  // Cargar reparaciones del cliente seleccionado y suscribirse a cambios
+  // Cargar reparaciónes del cliente seleccionado y suscribirse a cambios
   useEffect(() => {
-    // Cargar reparaciones del cliente desde Supabase
+    // Cargar reparaciónes del cliente desde Supabase
     if (!selectedCustomer) {
       setCustomerRepairs([])
       setSelectedRepairIds(prev => (prev.length ? [] : prev))
@@ -563,11 +563,11 @@ function POSPageContent() {
         const msg = error.message || ''
         const missingTable = msg.includes("Could not find the table 'public.repairs'") || msg.includes('relation "repairs" does not exist')
         if (missingTable) {
-          console.warn('Tabla repairs no encontrada en Supabase; usando lista vacÃ­a para el cliente.')
+          console.warn('Tabla repairs no encontrada en Supabase; usando lista vacía para el cliente.')
           canSubscribe = false
           setCustomerRepairs([])
         } else {
-          console.error('Error cargando reparaciones del cliente:', msg)
+          console.error('Error cargando reparaciónes del cliente:', msg)
         }
         return
       }
@@ -723,12 +723,12 @@ function POSPageContent() {
               }
             } catch (e: any) {
               const msg = String(e?.message || e || '')
-              const missingCreditsTables = msg.includes('relation \"customer_credits\" does not exist')
-                || msg.includes('relation \"credit_installments\" does not exist')
+              const missingCreditsTables = msg.includes('relation "customer_credits" does not exist')
+                || msg.includes('relation "credit_installments" does not exist')
               if (missingCreditsTables) {
-                console.warn('Supabase: tablas de crÃ©ditos no encontradas. Omitiendo creaciÃ³n de crÃ©dito.')
+                console.warn('Supabase: tablas de créditos no encontradas. Omitiendo creación de crédito.')
               } else {
-                console.error('Error creando crÃ©dito desde POS:', msg)
+                console.error('Error creando crédito desde POS:', msg)
               }
             }
           }
@@ -747,7 +747,7 @@ function POSPageContent() {
             }
           }
 
-          // Vincular venta a reparaciones
+          // Vincular venta a reparaciónes
           if (selectedRepairIds && selectedRepairIds.length > 0) {
             try {
               const { data: repairRows, error: repairGetError } = await supabase
@@ -772,7 +772,7 @@ function POSPageContent() {
                 }
                 
                 if (finalCostFromSale) {
-                  // Si hay mÃºltiples reparaciones, dividimos el costo total equitativamente
+                  // Si hay múltiples reparaciónes, dividimos el costo total equitativamente
                   // Si es solo una, asignamos el total
                   updatePayload.final_cost = selectedRepairIds.length > 1 
                     ? (totalValue / selectedRepairIds.length) 
@@ -788,7 +788,7 @@ function POSPageContent() {
                 if (repairUpdError) throw new Error(repairUpdError.message)
               }
             } catch (e: any) {
-              console.error('No se pudo vincular venta a reparaciones:', e?.message || e)
+              console.error('No se pudo vincular venta a reparaciónes:', e?.message || e)
             }
           }
         }
@@ -814,18 +814,18 @@ function POSPageContent() {
     [selectedCustomer, selectedRepairIds, finalCostFromSale, markRepairDelivered, deliveryOutcome]
   )
 
-  // Estados para bÃºsqueda avanzada
+  // Estados para búsqueda avanzada
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'stock' | 'category'>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: 1000000 })
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
-  // Estados para paginaciÃ³n
+  // Estados para paginación
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(24) // 24 items por pÃ¡gina por defecto
+  const [itemsPerPage, setItemsPerPage] = useState(24) // 24 items por página por defecto
 
-  // Resetear pÃ¡gina al cambiar filtros
+  // Resetear página al cambiar filtros
   useEffect(() => {
     setCurrentPage(1)
   }, [debouncedSearchTerm, selectedCategory, stockFilter, priceRange, showFeatured, sortOrder, sortBy])
@@ -862,7 +862,7 @@ function POSPageContent() {
   // Use smart search suggestions instead of local ones
   const searchSuggestions = smartSearchSuggestions.map(s => s.text)
 
-  // Guardar cambios de preferencias (despuÃ©s de declarar recentSearches)
+  // Guardar cambios de preferencias (después de declarar recentSearches)
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
@@ -884,7 +884,7 @@ function POSPageContent() {
     }
   }, [selectedCategory, showFeatured, viewMode, sortBy, sortOrder, priceRange, stockFilter, recentSearches, sidebarCollapsed, itemsPerPage])
 
-  // Medidas del viewport para virtualizaciÃ³n dinÃ¡mica
+  // Medidas del viewport para virtualización dinámica
   const [viewportWidth, setViewportWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 1024)
   const [viewportHeight, setViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 768)
 
@@ -900,11 +900,11 @@ function POSPageContent() {
 
   const virtualizationThreshold = 100
 
-  // Efecto de debouncing para bÃºsqueda optimizada
+  // Efecto de debouncing para búsqueda optimizada
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm)
-    }, 300) // 300ms de delay para evitar bÃºsquedas excesivas
+    }, 300) // 300ms de delay para evitar búsquedas excesivas
 
     return () => clearTimeout(timer)
   }, [searchTerm])
@@ -915,7 +915,7 @@ function POSPageContent() {
   const triggerHandlerById = useCallback((id: string) => {
     const el = document.getElementById(id) as HTMLElement | null
     if (!el) return
-    // Intentar ejecutar handler directo si existiera como propiedad (poco comÃºn en React)
+    // Intentar ejecutar handler directo si existiera como propiedad (poco común en React)
     const anyEl = el as any
     const handler = anyEl?.onclick
     if (typeof handler === 'function') {
@@ -926,7 +926,7 @@ function POSPageContent() {
     el.click()
   }, [])
 
-  // CategorÃ­as Ãºnicas (usar nombre de categorÃ­a)
+  // Categorías únicas (usar nombre de categoría)
   const categories = useMemo(() => {
     const names = inventoryProducts
       .map(p => (typeof p.category === 'object' ? p.category?.name : p.category))
@@ -935,7 +935,7 @@ function POSPageContent() {
     return ['all', ...uniqueNames]
   }, [inventoryProducts])
 
-  // Rango de precios dinÃ¡mico
+  // Rango de precios dinámico
   const priceRangeLimits = useMemo(() => {
     const prices = inventoryProducts.map(p => p.sale_price)
     return {
@@ -944,14 +944,14 @@ function POSPageContent() {
     }
   }, [inventoryProducts])
 
-  // Generar sugerencias de bÃºsqueda (now using smart search)
+  // Generar sugerencias de búsqueda (now using smart search)
   const generateSearchSuggestions = useCallback((term: string) => {
     // Smart search handles suggestions automatically
     // Just update the show state
     setShowSuggestions(term.length > 0)
   }, [])
 
-  // Manejar cambios en bÃºsqueda
+  // Manejar cambios en búsqueda
   const handleSearchChange = useCallback((value: string) => {
     setSearchTerm(value)
     setSmartSearchQuery(value) // Update smart search query
@@ -973,7 +973,7 @@ function POSPageContent() {
     }
   }, [recentSearches])
 
-  // NavegaciÃ³n por teclado en sugerencias
+  // Navegación por teclado en sugerencias
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!showSuggestions || searchSuggestions.length === 0) return
 
@@ -1021,7 +1021,7 @@ function POSPageContent() {
         (product.barcode && product.barcode.includes(debouncedSearchTerm))
 
       const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory
-      const matchesFeatured = !showFeatured || (product as any).featured === true  // CORREGIDO: verificaciÃ³n explÃ­cita
+      const matchesFeatured = !showFeatured || (product as any).featured === true  // CORREGIDO: verificación explícita
       const matchesPrice = product.sale_price >= priceRange.min && product.sale_price <= priceRange.max
 
       let matchesStock = true
@@ -1040,7 +1040,7 @@ function POSPageContent() {
       return matchesSearch && matchesCategory && matchesFeatured && matchesPrice && matchesStock
     })
 
-    // Registrar mÃ©trica de bÃºsqueda
+    // Registrar métrica de búsqueda
     // const endTime = performance.now()
     // const searchTime = endTime - startTime
     // if (searchTime > 0) {
@@ -1105,7 +1105,7 @@ function POSPageContent() {
     })
   }, [getProductWithVariants, measureCartOperation, addToCartHook])
 
-  // FunciÃ³n para agregar variante al carrito
+  // Función para agregar variante al carrito
   const addVariantToCart = useCallback((variant: ProductVariant, quantity: number) => {
     const cartItemWithVariant = convertVariantToCartItem(variant, quantity)
 
@@ -1120,7 +1120,7 @@ function POSPageContent() {
 
   // updateQuantity is now provided by useOptimizedCart
 
-  // Utilidad comÃºn para redondear a 2 decimales
+  // Utilidad común para redondear a 2 decimales
   const roundToTwo = useCallback((num: number) => Math.round((num + Number.EPSILON) * 100) / 100, [])
 
   // Unified Cart + Repairs Calculations
@@ -1222,7 +1222,7 @@ function POSPageContent() {
     totalItemCount: unifiedCalculations.totalItemCount
   }), [unifiedCalculations, generalDiscount, cashReceived, getTotalPaid])
 
-  // AplicaciÃ³n automÃ¡tica de descuento VIP despuÃ©s de cÃ¡lculos del carrito
+  // Aplicación automática de descuento VIP después de cálculos del carrito
   useEffect(() => {
     try {
       const activeCustomer = customers.find(c => c.id === selectedCustomer)
@@ -1249,7 +1249,7 @@ function POSPageContent() {
   const combinedCartItems = useMemo(() => {
     const repairItems: CartItem[] = selectedRepairs.map(repair => ({
       id: repair.id,
-      name: `ReparaciÃ³n: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
+      name: `Reparación: ${repair.device_model || 'Dispositivo'} (${repair.device_brand || ''})`,
       price: repair.final_cost || repair.estimated_cost || 0,
       quantity: 1,
       isService: true,
@@ -1270,7 +1270,7 @@ function POSPageContent() {
     // Check if it's a repair
     if (selectedRepairIds.includes(id)) {
       setSelectedRepairIds(prev => prev.filter(repairId => repairId !== id))
-      toast.info('ReparaciÃ³n removida del cobro')
+      toast.info('Reparación removida del cobro')
     } else {
       // It's a product
       removeFromCart(id)
@@ -1292,7 +1292,7 @@ function POSPageContent() {
       }))
 
     if (cartItems.length === 0) {
-      toast.error('No hay Ã­tems en el carrito para aplicar promociÃ³n')
+      toast.error('No hay items en el carrito para aplicar promoción')
       return false
     }
 
@@ -1300,14 +1300,14 @@ function POSPageContent() {
     const result = applyPromotionByCode(code, cartItems as any, allPromotions)
 
     if (!result.applied) {
-      toast.error(result.reason || 'CÃ³digo promocional invÃ¡lido')
+      toast.error(result.reason || 'Código promocional inválido')
       return false
     }
 
-    // AplicaciÃ³n por item: solo a productos elegibles
+    // Aplicación por item: solo a productos elegibles
     const promotion = allPromotions.find(p => p.code.toLowerCase() === code.toLowerCase())
     if (!promotion) {
-      toast.error('PromociÃ³n no encontrada en la base de datos')
+      toast.error('Promoción no encontrada en la base de datos')
       return false
     }
 
@@ -1319,16 +1319,17 @@ function POSPageContent() {
 
     const eligibleItems = cartItems.filter(isEligible)
     if (eligibleItems.length === 0) {
-      toast.error('No hay Ã­tems elegibles para este cÃ³digo')
+      toast.error('No hay items elegibles para este código')
       return false
     }
 
-    // Base de lÃ­nea segÃºn modo mayorista
+    // Base de línea según modo mayorista
     const lineBase = (item: any) => {
       const unitNonWholesale = item.unit_price
       const existingItem = combinedCartItems.find(ci => ci.id === item.id)
       const isService = existingItem?.isService === true
-      const unitWholesaleCandidate = (existingItem?.wholesalePrice ?? (unitNonWholesale * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
+      const unitWholesaleCandidate =
+        existingItem?.wholesalePrice ?? (unitNonWholesale * (1 - (WHOLESALE_DISCOUNT_RATE / 100)))
       const unitApplied = isWholesale && !isService ? unitWholesaleCandidate : unitNonWholesale
       return unitApplied * item.quantity
     }
@@ -1338,7 +1339,7 @@ function POSPageContent() {
     setVipAutoApplied(false)
 
     if (promotion.type === 'percentage') {
-      // Aplicar porcentaje directo a Ã­tems elegibles
+      // Aplicar porcentaje directo a items elegibles
       eligibleItems.forEach(it => {
         const existingItem = combinedCartItems.find(ci => ci.id === it.id)
         const currentDiscount = (existingItem as any)?.discount || 0
@@ -1346,11 +1347,11 @@ function POSPageContent() {
         updateItemDiscount(it.id, Math.min(100, Math.max(0, newDiscount)))
         updateItemPromoCode(it.id, code)
       })
-      toast.success(`CÃ³digo aplicado: ${promotion.value}% en Ã­tems elegibles`)
+      toast.success(`Código aplicado: ${promotion.value}% en items elegibles`)
     } else {
       // Distribuir monto fijo proporcionalmente
       if (totalApplicable <= 0) {
-        toast.error('Subtotal aplicable invÃ¡lido para distribuir descuento')
+        toast.error('Subtotal aplicable inválido para distribuir descuento')
         return false
       }
       eligibleItems.forEach(it => {
@@ -1363,7 +1364,7 @@ function POSPageContent() {
         updateItemDiscount(it.id, newDiscount)
         updateItemPromoCode(it.id, code)
       })
-      toast.success(`CÃ³digo aplicado: ahorro ${formatCurrency(result.discount_amount)} distribuido en Ã­tems elegibles`)
+      toast.success(`Código aplicado: ahorro ${formatCurrency(result.discount_amount)} distribuido en items elegibles`)
     }
 
     return true
@@ -1373,7 +1374,7 @@ function POSPageContent() {
     // 1 punto por cada $10 gastados
     const basePoints = Math.floor(total / 10)
 
-    // BonificaciÃ³n por monto alto
+    // Bonificación por monto alto
     const bonusMultiplier = total >= 500 ? 2 : total >= 200 ? 1.5 : 1
 
     return Math.floor(basePoints * bonusMultiplier)
@@ -1383,12 +1384,12 @@ function POSPageContent() {
   const processSale = useCallback(async () => {
     return measureSaleProcessing(async () => {
       if (!getCurrentRegister.isOpen) {
-        toast.error('La caja estÃ¡ cerrada. No se pueden procesar ventas.')
+        toast.error('La caja está cerrada. No se pueden procesar ventas.')
         return
       }
 
       if (combinedCartItems.length === 0) {
-        const msg = 'El carrito estÃ¡ vacÃ­o'
+        const msg = 'El carrito está vacío'
         toast.error(msg)
         setPaymentStatus('failed')
         setPaymentError(msg)
@@ -1419,7 +1420,7 @@ function POSPageContent() {
       }
 
       if (!paymentMethod) {
-        const msg = 'Seleccione un mÃ©todo de pago'
+        const msg = 'Seleccione un método de pago'
         toast.error(msg)
         setPaymentStatus('failed')
         setPaymentError(msg)
@@ -1454,7 +1455,7 @@ function POSPageContent() {
         'Cajero Principal'
       )
 
-      // Guardar datos de la Ãºltima venta
+      // Guardar datos de la última venta
       setLastSaleData(receiptData)
       setCurrentReceipt(receiptData)
 
@@ -1527,7 +1528,7 @@ function POSPageContent() {
       setSelectedRepairIds([])
       resetCheckoutState()
       
-      // Cerrar luego de una breve confirmaciÃ³n visual
+      // Cerrar luego de una breve confirmación visual
       setTimeout(() => {
         setIsCheckoutOpen(false)
         setPaymentStatus('idle')
@@ -1539,7 +1540,7 @@ function POSPageContent() {
 
   const processMixedPayment = useCallback(async () => {
     if (!getCurrentRegister.isOpen) {
-      toast.error('La caja estÃ¡ cerrada. No se pueden procesar ventas.')
+      toast.error('La caja está cerrada. No se pueden procesar ventas.')
       return
     }
     const totalPaid = getTotalPaid()
@@ -1564,7 +1565,7 @@ function POSPageContent() {
         return
       }
       if (split.method === 'card' && (!split.cardLast4 || split.cardLast4.length < 4)) {
-        const msg = 'Ingrese los Ãºltimos 4 dÃ­gitos de la tarjeta'
+        const msg = 'Ingrese los últimos 4 dígitos de la tarjeta'
         toast.error(msg)
         setPaymentStatus('failed')
         setPaymentError(msg)
@@ -1610,7 +1611,7 @@ function POSPageContent() {
       'Cajero Principal'
     )
 
-    // Guardar datos de la Ãºltima venta
+    // Guardar datos de la última venta
     setLastSaleData(receiptData)
     setCurrentReceipt(receiptData)
 
@@ -1652,7 +1653,7 @@ function POSPageContent() {
         (saleResult && (saleResult as any).saleId) ? (saleResult as any).saleId : undefined
       )
       setPaymentStatus('success')
-      toast.success('Venta procesada con mÃºltiples mÃ©todos de pago')
+      toast.success('Venta procesada con múltiples métodos de pago')
       addPaymentAttempt({ status: 'success', method: 'mixed', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
       if (markRepairDelivered && selectedRepairIds.length > 0) {
         setCustomerRepairs(prev => prev.map(r => (
@@ -1693,7 +1694,7 @@ function POSPageContent() {
     setDiscount(0)
     setNotes('')
     setCashReceived(0)
-    // Cerrar luego de una breve confirmaciÃ³n visual
+    // Cerrar luego de una breve confirmación visual
     setTimeout(() => {
       setIsCheckoutOpen(false)
       setPaymentStatus('idle')
@@ -1718,7 +1719,7 @@ function POSPageContent() {
   // Atajos de teclado mejorados
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Evitar atajos cuando se estÃ¡ escribiendo en inputs
+      // Evitar atajos cuando se está escribiendo en inputs
       const activeElement = document.activeElement
       const isInputFocused = activeElement?.tagName === 'INPUT' ||
         activeElement?.tagName === 'TEXTAREA' ||
@@ -1730,41 +1731,41 @@ function POSPageContent() {
           case 'f':
             e.preventDefault()
             document.getElementById('search-input')?.focus()
-            toast.info('ðŸ” Campo de bÃºsqueda enfocado')
+            toast.info('Campo de búsqueda enfocado')
             break
           case 'Enter':
             e.preventDefault()
             if (combinedCartItems.length > 0) {
               setIsCheckoutOpen(true)
-              toast.info('ðŸ’³ Abriendo checkout')
+              toast.info('Abriendo checkout')
             } else {
-              toast.error('Carrito vacÃ­o y sin reparaciones')
+              toast.error('Carrito vacío y sin reparaciónes')
             }
             break
           case 'Backspace':
             e.preventDefault()
             if (cart.length > 0) {
               clearCart()
-              toast.success('ðŸ—‘ï¸ Carrito vaciado correctamente')
+              toast.success('Carrito vaciado correctamente')
             }
             break
           case 'n':
             e.preventDefault()
             clearCart()
             setSelectedCustomer('')
-            toast.success('ðŸ†• Nueva venta iniciada')
+            toast.success('Nueva venta iniciada')
             break
           case 'p':
             e.preventDefault()
             if (combinedCartItems.length > 0) {
               setIsCheckoutOpen(true)
-              toast.info('ðŸ’³ Procesando pago')
+              toast.info('Procesando pago')
             }
             break
           case 'g':
             e.preventDefault()
             setViewMode(viewMode === 'grid' ? 'list' : 'grid')
-            toast.info(`ðŸ“‹ Vista cambiada a ${viewMode === 'grid' ? 'lista' : 'grilla'}`)
+            toast.info(`Vista cambiada a ${viewMode === 'grid' ? 'lista' : 'grilla'}`)
             break
           case 'h':
             e.preventDefault()
@@ -1783,28 +1784,28 @@ function POSPageContent() {
           case 'F2':
             e.preventDefault()
             setShowAdvancedFilters(!showAdvancedFilters)
-            toast.info(`ðŸ”§ Filtros ${showAdvancedFilters ? 'ocultos' : 'mostrados'}`)
+            toast.info(`Filtros ${showAdvancedFilters ? 'ocultos' : 'mostrados'}`)
             break
           case 'F3':
             e.preventDefault()
             setShowAccessibilitySettings(true)
-            toast.info('â™¿ ConfiguraciÃ³n de accesibilidad abierta')
+            toast.info('Configuración de accesibilidad abierta')
             break
           case 'F5':
             e.preventDefault()
             setShowFeatured(!showFeatured)
-            toast.info(`â­ ${showFeatured ? 'Todos los productos' : 'Solo destacados'}`)
+            toast.info(`⭐ ${showFeatured ? 'Todos los productos' : 'Solo destacados'}`)
             break
           case 'F4':
             e.preventDefault()
             setIsFullscreen(!isFullscreen)
-            toast.info(`ðŸ“º Modo ${isFullscreen ? 'ventana' : 'pantalla completa'}`)
+            toast.info(`Modo ${isFullscreen ? 'ventana' : 'pantalla completa'}`)
             break
           case 'Escape':
             e.preventDefault()
             if (isCheckoutOpen) {
               setIsCheckoutOpen(false)
-              toast.info('âŒ Checkout cancelado')
+              toast.info('Checkout cancelado')
             } else if (showKeyboardShortcuts) {
               setShowKeyboardShortcuts(false)
             } else if (showAccessibilitySettings) {
@@ -1826,7 +1827,7 @@ function POSPageContent() {
         }
       }
 
-      // NavegaciÃ³n por nÃºmeros (1-9 para agregar productos rÃ¡pidamente)
+      // Navegación por números (1-9 para agregar productos rápidamente)
       if (!isInputFocused && /^[1-9]$/.test(e.key)) {
         const index = parseInt(e.key) - 1
         if (filteredProducts[index]) {
@@ -1839,13 +1840,13 @@ function POSPageContent() {
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [cart.length, clearCart, viewMode, showAdvancedFilters, showFeatured, isFullscreen, isCheckoutOpen, showKeyboardShortcuts, showAccessibilitySettings, filteredProducts, addToCart])
 
-  // BÃºsqueda por cÃ³digo de barras
+  // Búsqueda por código de barras
   useEffect(() => {
     const normalized = normalizeBarcode(barcodeInput)
     if (normalized.length === 8 || normalized.length === 13) {
       const valid = isValidEan(normalized)
       if (!valid) {
-        toast.error('CÃ³digo de barras invÃ¡lido')
+        toast.error('Código de barras inválido')
         setBarcodeInput('')
         return
       }
@@ -1866,7 +1867,7 @@ function POSPageContent() {
 
   return (
     <div className={`pos-theme pos-shell min-h-dvh flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-      {/* Header mÃ³vil compactado */}
+      {/* Header móvil compactado */}
       <div className="lg:hidden pos-header-gradient shadow-sm border-b shrink-0">
         {/* Header principal */}
         <div className="p-2 sm:p-3">
@@ -1911,19 +1912,19 @@ function POSPageContent() {
                 size="sm"
                 className="h-8 sm:h-9 px-2 sm:px-3 pos-header-action"
                 onClick={() => setShowAccessibilitySettings(true)}
-                aria-label="ConfiguraciÃ³n de accesibilidad"
+                aria-label="Configuración de accesibilidad"
               >
                 <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
               </Button>
             </div>
           </div>
 
-          {/* Alertas de inventario mÃ³vil */}
+          {/* Alertas de inventario móvil */}
           <div className="mb-3">
             
           </div>
 
-          {/* Resumen del carrito mÃ³vil mejorado */}
+          {/* Resumen del carrito móvil mejorado */}
           <div className="pos-card-accent rounded-lg p-3 border border-border/40 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -1932,10 +1933,10 @@ function POSPageContent() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-foreground truncate">
-                    {cartCalculations.totalItemCount} {cartCalculations.totalItemCount === 1 ? 'artÃ­culo' : 'artÃ­culos'}
+                    {cartCalculations.totalItemCount} {cartCalculations.totalItemCount === 1 ? 'artículo' : 'artículos'}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {cart.length > 0 ? `Promedio: ${formatCurrency(cartCalculations.averageItemPrice)}` : (selectedRepairIds.length > 0 ? 'ReparaciÃ³n vinculada' : 'Carrito vacÃ­o')}
+                    {cart.length > 0 ? `Promedio: ${formatCurrency(cartCalculations.averageItemPrice)}` : (selectedRepairIds.length > 0 ? 'Reparación vinculada' : 'Carrito vacío')}
                   </p>
                 </div>
               </div>
@@ -1952,11 +1953,11 @@ function POSPageContent() {
               </div>
             </div>
 
-            {/* Indicador de descuentos en mÃ³vil */}
+            {/* Indicador de descuentos en móvil */}
             {cartCalculations.hasDiscount && (
               <div className="mt-2 pt-2 border-t border-border">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="pos-savings-chip font-medium">ðŸ’° Ahorros:</span>
+                  <span className="pos-savings-chip font-medium">💰 Ahorros:</span>
                   <span className="pos-savings-chip font-bold">{formatCurrency(cartCalculations.totalSavings)}</span>
                 </div>
               </div>
@@ -1964,7 +1965,7 @@ function POSPageContent() {
           </div>
         </div>
 
-        {/* Barra de acciones rÃ¡pidas mÃ³vil */}
+        {/* Barra de acciones rápidas móvil */}
         <div className="bg-muted border-t border-border px-3 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -2060,7 +2061,7 @@ function POSPageContent() {
 
 
 
-          {/* Header mÃ³vil con acciÃ³n principal del carrito */}
+          {/* Header móvil con acción principal del carrito */}
   <POSHeader
     className="flex lg:hidden items-center justify-between bg-card border-b border-border px-4 py-2 sticky top-0 z-20"
     registers={registers}
@@ -2120,7 +2121,7 @@ function POSPageContent() {
             <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-muted/40 flex items-center justify-center">
               <ShoppingCart className="h-6 w-6 text-muted-foreground/60" />
             </div>
-            <p className="text-sm font-medium">Carrito vacio</p>
+            <p className="text-sm font-medium">Carrito vacío</p>
             <p className="text-xs text-muted-foreground">Agrega productos para continuar</p>
           </div>
         ) : (
@@ -2171,16 +2172,16 @@ function POSPageContent() {
             
           </div>
 
-          {/* Barra de bÃºsqueda y filtros */}
+          {/* Barra de búsqueda y filtros */}
           <div className="bg-card border-b border-border p-4 lg:p-6">
             <div className="flex flex-col lg:flex-row gap-4">
-              {/* BÃºsqueda con autocompletado */}
+              {/* Búsqueda con autocompletado */}
               <div className="flex-1 relative" id="search-container">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                   <Input
                     id="search-input"
-                    placeholder="Buscar productos por nombre, SKU o cÃ³digo de barras..."
+                    placeholder="Buscar productos por nombre, SKU o código de barras..."
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
@@ -2208,16 +2209,16 @@ function POSPageContent() {
                 )}
               </div>
 
-              {/* Filtros rÃ¡pidos */}
+              {/* Filtros rápidos */}
               <div className="flex flex-wrap gap-2">
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                   <SelectTrigger className="w-40">
-                    <SelectValue placeholder="CategorÃ­a" />
+                    <SelectValue placeholder="Categoría" />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map(category => (
                       <SelectItem key={category} value={category}>
-                        {category === 'all' ? 'Todas las categorÃ­as' : category}
+                        {category === 'all' ? 'Todas las categorías' : category}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2267,7 +2268,7 @@ function POSPageContent() {
                           <SelectItem value="name">Nombre</SelectItem>
                           <SelectItem value="price">Precio</SelectItem>
                           <SelectItem value="stock">Stock</SelectItem>
-                          <SelectItem value="category">CategorÃ­a</SelectItem>
+                          <SelectItem value="category">Categoría</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -2354,7 +2355,7 @@ function POSPageContent() {
                   </div>
                 </div>
 
-                {/* EscÃ¡ner de cÃ³digos de barras */}
+                {/* Escáner de códigos de barras */}
                 {getFeatureFlag('enableBarcodeScanner') && (
                   <POSBarcodeScanner
                     onProductFound={async (barcode) => {
@@ -2470,11 +2471,11 @@ function POSPageContent() {
                     <Package className="h-10 w-10 text-muted-foreground/50" />
                   </div>
                   <h3 className="text-lg font-medium text-foreground mb-1">No se encontraron productos</h3>
-                  <p className="text-muted-foreground text-sm max-w-xs mx-auto">Intenta ajustar los tÃ©rminos de bÃºsqueda o los filtros seleccionados</p>
+                  <p className="text-muted-foreground text-sm max-w-xs mx-auto">Intenta ajustar los términos de búsqueda o los filtros seleccionados</p>
                 </div>
               )}
 
-              {/* Controles de paginaciÃ³n */}
+              {/* Controles de paginación */}
               {!productsLoading && !productsError && filteredProducts.length > 0 && filteredProducts.length <= virtualizationThreshold && (
                 <div className="pos-panel flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 py-4 px-3 rounded-xl">
                   <div className="flex items-center gap-2 order-2 sm:order-1">
@@ -2606,7 +2607,7 @@ function POSPageContent() {
             </SheetContent>
           </Sheet>
           
-          {/* BotÃ³n de limpiar carrito en mÃ³vil */}
+          {/* Botón de limpiar carrito en móvil */}
           {cart.length > 0 && (
             <Button
               variant="outline"
@@ -2664,7 +2665,7 @@ function POSPageContent() {
         }}
       />
 
-      {/* DiÃ¡logo para abrir caja */}
+      {/* Diálogo para abrir caja */}
       <Dialog open={isOpenRegisterDialogOpen} onOpenChange={setIsOpenRegisterDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -2689,7 +2690,7 @@ function POSPageContent() {
                 id="note"
                 value={openingNote}
                 onChange={(e) => setOpeningNote(e.target.value)}
-                placeholder="Ej. Turno maÃ±ana"
+                placeholder="Ej. Turno mañana"
               />
             </div>
           </div>
@@ -2706,7 +2707,7 @@ function POSPageContent() {
         </DialogContent>
       </Dialog>
 
-      {/* DiÃ¡logo de GestiÃ³n de Cajas */}
+      {/* Diálogo de Gestión de Cajas */}
       <Dialog open={isRegisterManagerOpen} onOpenChange={setIsRegisterManagerOpen}>
         <DialogContent className="max-w-xl dark:bg-gray-900">
           <DialogHeader>
@@ -2908,7 +2909,7 @@ function POSPageContent() {
               </div>
               <div>
                 <strong>F3</strong>
-                <p className="text-muted-foreground">ConfiguraciÃ³n de accesibilidad</p>
+                <p className="text-muted-foreground">Configuración de accesibilidad</p>
               </div>
               <div>
                 <strong>F4</strong>
@@ -2989,7 +2990,7 @@ function POSPageContent() {
           )}
         </DialogContent>
       </Dialog>
-      {/* DiÃ¡logo de configuraciÃ³n de accesibilidad */}
+      {/* Diálogo de configuración de accesibilidad */}
       
 
       {/* Selector de variantes */}
@@ -3005,7 +3006,7 @@ function POSPageContent() {
         />
       )}
 
-      {/* DiÃ¡logo de Registro de Movimiento */}
+      {/* Diálogo de Registro de Movimiento */}
       <Dialog open={isMovementDialogOpen} onOpenChange={setIsMovementDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -3065,7 +3066,7 @@ function POSPageContent() {
               onClick={() => {
                 const amount = parseFloat(movementAmount)
                 if (!amount || amount <= 0) {
-                  toast.error('Ingrese un monto vÃ¡lido')
+                  toast.error('Ingrese un monto válido')
                   return
                 }
                 addMovement(movementType, amount, movementNote)
@@ -3083,4 +3084,3 @@ function POSPageContent() {
     </div>
   )
 }
-

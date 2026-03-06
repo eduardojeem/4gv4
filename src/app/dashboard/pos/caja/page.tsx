@@ -247,30 +247,27 @@ export default function CashRegisterPage() {
       <CashCountModal
         isOpen={isCashCountModalOpen}
         onClose={() => setIsCashCountModalOpen(false)}
-        onConfirm={(count) => performCashCount(count)}
+        onConfirm={(count) => performCashCount({
+          ...count,
+          timestamp: new Date().toISOString(),
+          countedBy: user?.id || 'system'
+        })}
         systemBalance={getCurrentRegister.balance || 0}
       />
 
       <PermissionsModal
         isOpen={isPermissionsModalOpen}
         onClose={() => setIsPermissionsModalOpen(false)}
-        currentPermissions={userPermissions}
-        onSave={setUserPermissions}
       />
 
       <AuditLogModal
         isOpen={isAuditLogModalOpen}
         onClose={() => setIsAuditLogModalOpen(false)}
-        auditLog={auditLog}
       />
 
       <ZClosureHistoryModal
         isOpen={isZClosureHistoryModalOpen}
         onClose={() => setIsZClosureHistoryModalOpen(false)}
-        closures={zClosureHistory}
-        onExportData={(filteredClosures) => {
-          console.log('Exporting closures:', filteredClosures)
-        }}
         onViewDetails={(closure) => {
           // Optional: Handle viewing details of a closure
           console.log('View details', closure)

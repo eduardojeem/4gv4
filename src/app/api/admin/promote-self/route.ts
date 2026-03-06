@@ -54,7 +54,7 @@ export async function POST() {
         resource_id: user.id,
         new_values: { 
           attempted_role: 'admin',
-          existing_admins: adminCount,
+          existing_admins: totalAdmins,
           blocked: true
         }
       })
@@ -125,4 +125,3 @@ export async function POST() {
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
-

@@ -72,6 +72,7 @@ interface BackupDashboardProps {
 }
 
 const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444']
+const STORAGE_CAPACITY_BYTES = 50 * 1024 * 1024 * 1024
 
 export default function BackupDashboard({ className }: BackupDashboardProps) {
   const { metrics, jobs, configs, createConfig, executeBackup, restoreBackup, loadBackupData } = useBackupSystem()
@@ -253,6 +254,7 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
   const BackupStatusBadge = ({ status }: { status: BackupJob['status'] }) => {
     const getStatusConfig = () => {
       switch (status) {
+        case 'success':
         case 'completed':
           return { variant: 'default' as const, color: 'bg-green-100 text-green-800', icon: CheckCircle }
         case 'failed':
@@ -297,7 +299,7 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
                 <div>
                   <p className="font-medium">Backup {job.configId}</p>
                   <p className="text-sm text-gray-600">
-                    {job.startTime.toLocaleDateString()} {job.startTime.toLocaleTimeString()}
+                    {new Date(job.startTime || job.startedAt).toLocaleDateString()} {new Date(job.startTime || job.startedAt).toLocaleTimeString()}
                   </p>
                 </div>
               </div>
@@ -482,7 +484,7 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
               />
               <KPICard
                 title="Tasa de Éxito"
-                value={(metrics.successfulBackups / metrics.totalBackups) * 100}
+                value={metrics.successRate}
                 change={2.1}
                 trend="up"
                 icon={CheckCircle}
@@ -491,7 +493,7 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
               />
               <KPICard
                 title="Tamaño Total"
-                value={metrics.totalSize}
+                value={metrics.totalStorageBytes}
                 change={8.3}
                 trend="up"
                 icon={HardDrive}
@@ -500,7 +502,7 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
               />
               <KPICard
                 title="Tiempo Promedio"
-                value={metrics.averageDuration}
+                value={metrics.avgDurationMs}
                 change={-3.1}
                 trend="up"
                 icon={Clock}
@@ -522,13 +524,13 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
                     <div className="flex justify-between items-center">
                       <span>Usado</span>
                       <span className="font-semibold">
-                        {formatBytes(metrics.storageUsage.used)}
+                        {formatBytes(metrics.totalStorageBytes)}
                       </span>
                     </div>
-                    <Progress value={metrics.storageUsage.percentage} />
+                    <Progress value={Math.min(100, (metrics.totalStorageBytes / STORAGE_CAPACITY_BYTES) * 100)} />
                     <div className="flex justify-between text-sm text-gray-600">
-                      <span>{formatBytes(metrics.storageUsage.used)} usado</span>
-                      <span>{formatBytes(metrics.storageUsage.available)} disponible</span>
+                      <span>{formatBytes(metrics.totalStorageBytes)} usado</span>
+                      <span>{formatBytes(Math.max(0, STORAGE_CAPACITY_BYTES - metrics.totalStorageBytes))} disponible</span>
                     </div>
                   </div>
                 )}
@@ -547,7 +549,7 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
                       <span>Último Backup</span>
                     </div>
                     <span className="text-sm text-gray-600">
-                      {metrics?.lastBackupTime?.toLocaleString() || 'N/A'}
+                      {jobs[0]?.completedAt ? new Date(jobs[0].completedAt).toLocaleString() : 'N/A'}
                     </span>
                   </div>
                   
@@ -557,7 +559,7 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
                       <span>Próximo Backup</span>
                     </div>
                     <span className="text-sm text-gray-600">
-                      {metrics?.nextScheduledBackup?.toLocaleString() || 'N/A'}
+                      {configs.find(c => c.enabled)?.schedule?.time || 'Sin programación'}
                     </span>
                   </div>
                   
@@ -566,8 +568,8 @@ export default function BackupDashboard({ className }: BackupDashboardProps) {
                       <Shield className="h-5 w-5 text-purple-500" />
                       <span>Cumplimiento</span>
                     </div>
-                    <Badge variant={metrics?.retentionCompliance.compliant ? 'default' : 'destructive'}>
-                      {metrics?.retentionCompliance.compliant ? 'Completo' : 'Pendiente'}
+                    <Badge variant={configs.some(c => c.enabled) ? 'default' : 'destructive'}>
+                      {configs.some(c => c.enabled) ? 'Completo' : 'Pendiente'}
                     </Badge>
                   </div>
                 </div>

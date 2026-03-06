@@ -384,8 +384,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
           parts:repair_parts(*),
           notes:repair_notes(*)
         `)
-                .single() // We query by ID in the context of previous operations, but need to be sure we get the right one
                 .eq('id', id)
+                .single() // We query by ID in the context of previous operations, but need to be sure we get the right one
 
             if (fetchError) throw fetchError
 

@@ -26,7 +26,6 @@ import { Repair } from '@/types/repairs'
 import { toast } from 'sonner'
 import { RepairList } from '@/components/dashboard/repairs/RepairList'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
-import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
 
 export default function TechnicianPanel() {
   const {
@@ -128,25 +127,24 @@ export default function TechnicianPanel() {
           estimated_cost: d.estimatedCost,
         }
         
-        await updateRepair(selectedRepair.id, updatePayload as unknown as Repair)
+        await updateRepair(selectedRepair.id, updatePayload as any)
         toast.success('Reparación actualizada correctamente')
       } else {
         const d = data.devices[0]
         const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
-        const payload: PersistRepairFormData = {
-          customer_id: data.existingCustomerId || '',
-          device: `${d.brand} ${d.model}`.trim(),
-          deviceType: d.deviceType,
-          brand: d.brand,
-          model: d.model,
-          issue: d.issue,
-          description: d.description || '',
-          accessType: d.accessType || 'none',
-          accessPassword: d.accessPassword || undefined,
+        const payload = {
+          customer_name: data.customerName || '',
+          customer_phone: data.customerPhone || '',
+          customer_email: data.customerEmail || '',
+          device_brand: d.brand,
+          device_model: d.model,
+          issue_description: d.issue,
+          status: selectedRepair?.dbStatus || 'recibido',
           priority: data.priority,
           urgency,
           technician_id: d.technician,
           estimated_cost: d.estimatedCost || 0,
+          notes: d.description || '',
         }
         
         const created = await createRepair(payload)
