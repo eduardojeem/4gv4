@@ -7,6 +7,7 @@ import type { Database } from '@/lib/supabase/types'
 import type { Product as UnifiedProduct, Category as UnifiedCategory } from '@/types/product-unified'
 import { config } from '@/lib/config'
 import { useProductRealTimeSync } from './useRealTimeSync'
+import { SALE_STATUS } from '@/lib/sales-status'
 
 type DbProductRow = Database['public']['Tables']['products']['Row']
 type DbCategoryRow = Database['public']['Tables']['categories']['Row']
@@ -152,7 +153,7 @@ export function usePOSProducts() {
       // 2. Cargar productos
       const { data: dbProducts, error } = await supabase
         .from('products')
-        .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active, categories(name)')
+        .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active, image_url, images, categories(name)')
         .order('name')
         .limit(5000)
 
@@ -177,7 +178,7 @@ export function usePOSProducts() {
         category_id: p.category_id,
         category: p.categories ? { id: p.category_id, name: p.categories.name } : undefined,
         description: p.description,
-        image: undefined, 
+        image: (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : undefined) || p.image_url || undefined,
         unit_measure: 'unidad',
         is_active: p.is_active, 
         purchase_price: 0 
@@ -362,7 +363,7 @@ export function usePOSProducts() {
           payment_method: saleData.payment_method,
           payment_status: 'completed',
           notes: saleData.notes || '',
-          status: 'completed',
+          status: SALE_STATUS.COMPLETED,
           created_at: new Date().toISOString()
         },
         p_items: saleItems,

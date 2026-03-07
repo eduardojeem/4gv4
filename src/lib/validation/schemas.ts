@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { SALE_STATUS, normalizeSaleStatus } from '@/lib/sales-status'
 
 /**
  * Validation schemas for API endpoints
@@ -118,9 +119,9 @@ export const saleSchema = z.object({
   
   payment_method: z.enum(['efectivo', 'tarjeta', 'transferencia']),
   
-  status: z.enum(['pendiente', 'completada', 'cancelada'])
-    .default('completada')
-    .optional(),
+  status: z.enum(['pendiente', 'completada', 'cancelada', 'pending', 'completed', 'cancelled'])
+    .optional()
+    .transform((status) => normalizeSaleStatus(status) ?? SALE_STATUS.COMPLETED),
   
   notes: z.string()
     .max(500, 'Notes must be less than 500 characters')
@@ -145,7 +146,9 @@ export const saleSchema = z.object({
 
 export const saleUpdateSchema = z.object({
   id: z.string().uuid('Invalid sale ID'),
-  status: z.enum(['pendiente', 'completada', 'cancelada']).optional()
+  status: z.enum(['pendiente', 'completada', 'cancelada', 'pending', 'completed', 'cancelled'])
+    .optional()
+    .transform((status) => (status ? normalizeSaleStatus(status) : undefined))
 })
 
 // ============================================================================

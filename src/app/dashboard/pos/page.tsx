@@ -15,7 +15,6 @@ import {
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useCashRegisterContext } from './contexts/CashRegisterContext'
 import { Button } from '@/components/ui/button'
-import { ThemeToggleSimple } from '@/components/ui/theme-toggle'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -76,12 +75,26 @@ import { useCheckout } from './contexts/CheckoutContext'
 import { usePOSCustomer } from './contexts/POSCustomerContext'
 import { CartItem, PaymentSplit, PaymentMethodOption } from './types'
 import type { Product } from '@/types/product-unified'
+import { SALE_STATUS } from '@/lib/sales-status'
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
   if (typeof e === 'string') return e
   if (e && typeof e === 'object' && 'message' in e) return String((e as any).message)
   try { return JSON.stringify(e) } catch { return String(e) }
+}
+
+type HeldSale = {
+  id: string
+  label: string
+  createdAt: string
+  cart: CartItem[]
+  itemCount: number
+  total: number
+  selectedCustomer: string
+  selectedRepairIds: string[]
+  isWholesale: boolean
+  discount: number
 }
 
 // Utilidades de código de barras (EAN-8/13)
@@ -262,6 +275,14 @@ function POSPageContent() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showCartDialog, setShowCartDialog] = useState(false)
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
+  const [heldSales, setHeldSales] = useState<HeldSale[]>([])
+  const [isQuickItemDialogOpen, setIsQuickItemDialogOpen] = useState(false)
+  const [quickItemName, setQuickItemName] = useState('')
+  const [quickItemPrice, setQuickItemPrice] = useState('')
+  const [quickItemQty, setQuickItemQty] = useState('1')
+  const [quickItemSku, setQuickItemSku] = useState('')
+  const [quickItemSaving, setQuickItemSaving] = useState(false)
 
   // Estados para variantes y promociones
   const [variantSelectorOpen, setVariantSelectorOpen] = useState(false)
@@ -367,6 +388,7 @@ function POSPageContent() {
     updateItemDiscount,
     updateItemPromoCode,
     clearCart,
+    replaceCart,
     checkAvailability: checkCartAvailability
   } = useOptimizedCart(inventoryProducts, {
     taxRate: getTaxConfig().rate,
@@ -654,7 +676,7 @@ function POSPageContent() {
               tax_amount: (taxValue || 0),
               discount_amount: (discountValue || 0),
               payment_method: paymentMethodDb,
-              status: 'completed',
+              status: SALE_STATUS.COMPLETED,
             })
             .select()
             .single()
@@ -820,6 +842,17 @@ function POSPageContent() {
   const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: 1000000 })
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const activeFiltersCount = useMemo(() => {
+    let count = 0
+    if (selectedCategory !== 'all') count += 1
+    if (showFeatured) count += 1
+    if (viewMode !== 'grid') count += 1
+    if (showAdvancedFilters) count += 1
+    if (sortBy !== 'name') count += 1
+    if (sortOrder !== 'asc') count += 1
+    if (stockFilter !== 'all') count += 1
+    return count
+  }, [selectedCategory, showFeatured, viewMode, showAdvancedFilters, sortBy, sortOrder, stockFilter])
 
   // Estados para paginación
   const [currentPage, setCurrentPage] = useState(1)
@@ -1115,6 +1148,10 @@ function POSPageContent() {
     }
     
     addVariantToCartHook(cartItemWithVariant)
+    showAddToCartToast({
+      name: cartItemWithVariant.product_name || variant.name,
+      quantity
+    })
     
   }, [convertVariantToCartItem, addVariantToCartHook])
 
@@ -1789,15 +1826,13 @@ function POSPageContent() {
           case 'f':
             e.preventDefault()
             document.getElementById('search-input')?.focus()
-            toast.info('Campo de búsqueda enfocado')
             break
           case 'Enter':
             e.preventDefault()
             if (combinedCartItems.length > 0) {
               setIsCheckoutOpen(true)
-              toast.info('Abriendo checkout')
             } else {
-              toast.error('Carrito vacío y sin reparaciónes')
+              toast.error('Carrito vacío y sin reparaciones')
             }
             break
           case 'Backspace':
@@ -1817,13 +1852,11 @@ function POSPageContent() {
             e.preventDefault()
             if (combinedCartItems.length > 0) {
               setIsCheckoutOpen(true)
-              toast.info('Procesando pago')
             }
             break
           case 'g':
             e.preventDefault()
             setViewMode(viewMode === 'grid' ? 'list' : 'grid')
-            toast.info(`Vista cambiada a ${viewMode === 'grid' ? 'lista' : 'grilla'}`)
             break
           case 'h':
             e.preventDefault()
@@ -1842,28 +1875,23 @@ function POSPageContent() {
           case 'F2':
             e.preventDefault()
             setShowAdvancedFilters(!showAdvancedFilters)
-            toast.info(`Filtros ${showAdvancedFilters ? 'ocultos' : 'mostrados'}`)
             break
           case 'F3':
             e.preventDefault()
             setShowAccessibilitySettings(true)
-            toast.info('Configuración de accesibilidad abierta')
             break
           case 'F5':
             e.preventDefault()
             setShowFeatured(!showFeatured)
-            toast.info(`⭐ ${showFeatured ? 'Todos los productos' : 'Solo destacados'}`)
             break
           case 'F4':
             e.preventDefault()
             setIsFullscreen(!isFullscreen)
-            toast.info(`Modo ${isFullscreen ? 'ventana' : 'pantalla completa'}`)
             break
           case 'Escape':
             e.preventDefault()
             if (isCheckoutOpen) {
               setIsCheckoutOpen(false)
-              toast.info('Checkout cancelado')
             } else if (showKeyboardShortcuts) {
               setShowKeyboardShortcuts(false)
             } else if (showAccessibilitySettings) {
@@ -1923,155 +1951,177 @@ function POSPageContent() {
     }
   }, [barcodeInput, addToCart, inventoryProducts])
 
+  // Persistencia de ventas en espera
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = localStorage.getItem('pos.heldSales')
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        setHeldSales(parsed.slice(0, 20))
+      }
+    } catch (e) {
+      console.warn('No se pudo restaurar ventas en espera', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem('pos.heldSales', JSON.stringify(heldSales.slice(0, 20)))
+    } catch (e) {
+      console.error('No se pudo guardar ventas en espera', e)
+    }
+  }, [heldSales])
+
+  const holdCurrentSale = useCallback(() => {
+    if (cart.length === 0 && selectedRepairIds.length === 0) {
+      toast.error('No hay productos o reparaciones para poner en espera')
+      return
+    }
+
+    const customerName = customers.find(c => c.id === selectedCustomer)?.name || 'Cliente'
+    const timeLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const label = `${customerName} - ${timeLabel}`
+
+    const held: HeldSale = {
+      id: `held-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      label,
+      createdAt: new Date().toISOString(),
+      cart: cart.map(item => ({ ...item })),
+      itemCount: cart.reduce((sum, item) => sum + item.quantity, 0) + selectedRepairIds.length,
+      total: Number(unifiedCalculations.total || 0),
+      selectedCustomer,
+      selectedRepairIds: [...selectedRepairIds],
+      isWholesale,
+      discount: generalDiscount
+    }
+
+    setHeldSales(prev => [held, ...prev].slice(0, 20))
+
+    clearCart(true)
+    setSelectedRepairIds([])
+    setSelectedCustomer('')
+    setGeneralDiscount(0)
+    setIsWholesale(false)
+    resetCheckoutState()
+    setPaymentAttempts([])
+    toast.success('Venta puesta en espera')
+  }, [
+    cart,
+    selectedRepairIds,
+    customers,
+    selectedCustomer,
+    isWholesale,
+    generalDiscount,
+    clearCart,
+    setSelectedRepairIds,
+    setSelectedCustomer,
+    setGeneralDiscount,
+    setIsWholesale,
+    unifiedCalculations.total,
+    resetCheckoutState
+  ])
+
+  const resumeHeldSale = useCallback((heldId: string) => {
+    const held = heldSales.find(h => h.id === heldId)
+    if (!held) return
+
+    replaceCart(Array.isArray(held.cart) ? held.cart : [])
+    setSelectedRepairIds(Array.isArray(held.selectedRepairIds) ? held.selectedRepairIds : [])
+    setSelectedCustomer(held.selectedCustomer || '')
+    setIsWholesale(Boolean(held.isWholesale))
+    setGeneralDiscount(Number(held.discount || 0))
+    setHeldSales(prev => prev.filter(h => h.id !== heldId))
+    toast.success(`Venta recuperada: ${held.label}`)
+  }, [heldSales, replaceCart, setSelectedRepairIds, setSelectedCustomer, setIsWholesale, setGeneralDiscount])
+
+  const createQuickItem = useCallback(async () => {
+    const name = quickItemName.trim()
+    const price = Number(quickItemPrice)
+    const qty = Math.max(1, Number(quickItemQty) || 1)
+    const providedSku = quickItemSku.trim()
+
+    if (name.length < 2) {
+      toast.error('Ingrese un nombre valido')
+      return
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      toast.error('Ingrese un precio valido')
+      return
+    }
+
+    setQuickItemSaving(true)
+    try {
+      const supabase = createSupabaseClient()
+      let sku = providedSku || `QK-${Date.now().toString().slice(-8)}`
+
+      if (providedSku) {
+        const { data: existingSku } = await supabase
+          .from('products')
+          .select('id')
+          .eq('sku', sku)
+          .maybeSingle()
+        if (existingSku?.id) {
+          toast.error('El SKU ya existe. Use otro SKU.')
+          return
+        }
+      }
+
+      const payload = {
+        sku,
+        name,
+        description: 'Item rapido creado desde POS',
+        purchase_price: 0,
+        sale_price: price,
+        stock_quantity: qty,
+        min_stock: 0,
+        unit_measure: 'unidad',
+        is_active: true,
+        visibility: 'public' as const,
+        featured: false
+      }
+
+      const { data: created, error: createError } = await supabase
+        .from('products')
+        .insert(payload)
+        .select('id, name, sku, sale_price, stock_quantity, category_id, is_active')
+        .single()
+
+      if (createError || !created) {
+        throw new Error(createError?.message || 'No se pudo crear el item rapido')
+      }
+
+      const quickProduct = {
+        id: created.id,
+        name: created.name,
+        sku: created.sku,
+        sale_price: Number(created.sale_price || 0),
+        stock_quantity: Number(created.stock_quantity || 0),
+        category_id: created.category_id,
+        is_active: created.is_active,
+        purchase_price: 0
+      } as Product
+
+      addToCartHook(quickProduct, qty)
+      showAddToCartToast({ name: quickProduct.name, quantity: qty })
+
+      setQuickItemName('')
+      setQuickItemPrice('')
+      setQuickItemQty('1')
+      setQuickItemSku('')
+      setIsQuickItemDialogOpen(false)
+      toast.success('Item rapido creado y sincronizado')
+    } catch (e: any) {
+      toast.error(`Error creando item rapido: ${String(e?.message || e)}`)
+    } finally {
+      setQuickItemSaving(false)
+    }
+  }, [quickItemName, quickItemPrice, quickItemQty, quickItemSku, addToCartHook])
+
   return (
     <div className={`pos-theme pos-shell min-h-dvh flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
-      {/* Header móvil compactado */}
-      <div className="lg:hidden pos-header-gradient shadow-sm border-b shrink-0">
-        {/* Header principal */}
-        <div className="p-2 sm:p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold text-white truncate">4G POS</h1>
-              <p className="text-xs text-white/80 truncate">Sistema de punto de venta avanzado</p>
-            </div>
-            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-              <ThemeToggleSimple />
-              <Link href="/dashboard/pos/dashboard">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 sm:h-9 px-2 sm:px-3 pos-header-action"
-                  aria-label="Ir al dashboard"
-                >
-                  <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Dashboard</span>
-                </Button>
-              </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 sm:h-9 px-2 sm:px-3 pos-header-action"
-                onClick={() => setIsFullscreen(!isFullscreen)}
-                aria-label={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-              >
-                {isFullscreen ? <Minimize className="h-3 w-3 sm:h-4 sm:w-4" /> : <Maximize className="h-3 w-3 sm:h-4 sm:w-4" />}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 sm:h-9 px-2 sm:px-3 pos-header-action"
-                onClick={() => setShowKeyboardShortcuts(true)}
-                aria-label="Mostrar atajos de teclado"
-              >
-                <Keyboard className="h-3 w-3 sm:h-4 sm:w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 sm:h-9 px-2 sm:px-3 pos-header-action"
-                onClick={() => setShowAccessibilitySettings(true)}
-                aria-label="Configuración de accesibilidad"
-              >
-                <Settings className="h-3 w-3 sm:h-4 sm:w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Alertas de inventario móvil */}
-          <div className="mb-3">
-            
-          </div>
-
-          {/* Resumen del carrito móvil mejorado */}
-          <div className="pos-card-accent rounded-lg p-3 border border-border/40 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <div className="bg-accent rounded-full p-1.5">
-                  <ShoppingCart className="h-4 w-4 text-primary" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {cartCalculations.totalItemCount} {cartCalculations.totalItemCount === 1 ? 'artículo' : 'artículos'}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {cart.length > 0 ? `Promedio: ${formatCurrency(cartCalculations.averageItemPrice)}` : (selectedRepairIds.length > 0 ? 'Reparación vinculada' : 'Carrito vacío')}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right flex-shrink-0 ml-2">
-                <p className="text-lg font-bold text-primary">{formatCurrency(cartCalculations.total)}</p>
-                <Button
-                  size="sm"
-                  onClick={() => setIsCheckoutOpen(true)}
-                  className="pos-button-primary h-7 px-3 text-xs mt-1"
-                  aria-label={`Procesar pago por ${formatCurrency(cartCalculations.total)}`}
-                >
-                  Procesar
-                </Button>
-              </div>
-            </div>
-
-            {/* Indicador de descuentos en móvil */}
-            {cartCalculations.hasDiscount && (
-              <div className="mt-2 pt-2 border-t border-border">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="pos-savings-chip font-medium">💰 Ahorros:</span>
-                  <span className="pos-savings-chip font-bold">{formatCurrency(cartCalculations.totalSavings)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Barra de acciones rápidas móvil */}
-        <div className="bg-muted border-t border-border px-3 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button
-                variant={viewMode === 'grid' ? "default" : "outline"}
-                size="sm"
-                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="h-7 px-2 text-xs"
-                aria-label={`Cambiar a vista ${viewMode === 'grid' ? 'lista' : 'grilla'}`}
-              >
-                {viewMode === 'grid' ? <List className="h-3 w-3" /> : <Grid className="h-3 w-3" />}
-              </Button>
-              <Button
-                variant={showFeatured ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowFeatured(!showFeatured)}
-                className="h-7 px-2 text-xs"
-                aria-label={showFeatured ? "Mostrar todos los productos" : "Mostrar solo destacados"}
-              >
-                <Star className="h-3 w-3" />
-              </Button>
-              <Button
-                variant={showAdvancedFilters ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className="h-7 px-2 text-xs"
-                aria-label={showAdvancedFilters ? "Ocultar filtros" : "Mostrar filtros"}
-              >
-                <Filter className="h-3 w-3" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground">
-                {filteredProducts.length} productos
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs">Mayorista</span>
-                <Switch
-                  checked={isWholesale}
-                  onCheckedChange={handleWholesaleToggle}
-                  aria-label="Ver precio mayorista"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="flex flex-1 min-h-0">
         {/* Contenido principal */}
         <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'lg:ml-0' : 'lg:ml-0'}`}>
@@ -2111,7 +2161,7 @@ function POSPageContent() {
                     {registerState[activeRegisterId]?.isOpen ? 'Caja Abierta' : 'Caja Cerrada'}
                   </span>
                   <div className="w-px h-3 bg-border/40 mx-1" />
-                  <SupabaseStatus mode="compact" />
+                  <SupabaseStatus mode="minimal" />
                 </div>
               </div>
             </div>
@@ -2138,6 +2188,7 @@ function POSPageContent() {
     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
     onOpenCart={() => setShowCartDialog(true)}
     cartItemCount={cartItemCount}
+    mobileCompact
   >
             <div className="flex items-center gap-2">
               <div className="bg-primary/10 p-1 rounded">
@@ -2267,8 +2318,26 @@ function POSPageContent() {
                 )}
               </div>
 
+              <div className="lg:hidden flex items-center justify-end gap-2 mt-2">
+                <Button
+                  variant={isMobileFiltersOpen ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setIsMobileFiltersOpen((v) => !v)}
+                  className="h-8"
+                >
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filtros
+                  {activeFiltersCount > 0 && (
+                    <span className="ml-2 rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-semibold">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                  {isMobileFiltersOpen ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                </Button>
+              </div>
+
               {/* Filtros rápidos */}
-              <div className="flex flex-wrap gap-2">
+              <div className={`flex flex-wrap gap-2 ${isMobileFiltersOpen ? '' : 'hidden lg:flex'}`}>
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                   <SelectTrigger className="w-40">
                     <SelectValue placeholder="Categoría" />
@@ -2308,12 +2377,50 @@ function POSPageContent() {
                   Filtros
                   {showAdvancedFilters ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
                 </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsQuickItemDialogOpen(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Item rapido
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={holdCurrentSale}
+                  disabled={cart.length === 0 && selectedRepairIds.length === 0}
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  En espera
+                </Button>
+
+                <Select value="" onValueChange={resumeHeldSale}>
+                  <SelectTrigger className="w-52">
+                    <SelectValue placeholder={`Recuperar (${heldSales.length})`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {heldSales.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        No hay ventas en espera
+                      </div>
+                    ) : (
+                      heldSales.map((sale) => (
+                        <SelectItem key={sale.id} value={sale.id}>
+                          {`${sale.label} - ${sale.itemCount} item(s) - ${formatCurrency(sale.total)}`}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             {/* Filtros avanzados */}
             {showAdvancedFilters && (
-              <Card className="mt-4">
+              <Card className={`mt-4 ${isMobileFiltersOpen ? '' : 'hidden lg:block'}`}>
                 <CardContent className="p-4">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
@@ -2623,13 +2730,12 @@ function POSPageContent() {
 
       {/* Mobile Cart Bottom Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t p-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-lg z-50">
-        <div className="grid grid-cols-1 gap-2">
-          <div className="flex items-center justify-between gap-3">
+        <div className="grid grid-cols-[1fr_auto] gap-2 items-stretch">
           <Sheet>
             <SheetTrigger asChild>
-              <div className="flex-1 flex flex-col cursor-pointer hover:bg-muted/50 p-1 rounded-md transition-colors">
-                 <span className="text-xs text-muted-foreground">{unifiedCalculations.totalItemCount} items</span>
-                 <span className="font-bold text-lg">{formatCurrency(unifiedCalculations.total)}</span>
+              <div className="flex flex-col justify-center cursor-pointer hover:bg-muted/50 px-3 py-2 rounded-md transition-colors border border-border/60">
+                 <span className="text-[11px] text-muted-foreground">{unifiedCalculations.totalItemCount} items en carrito</span>
+                 <span className="font-bold text-base">{formatCurrency(unifiedCalculations.total)}</span>
               </div>
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[80vh] p-0 flex flex-col overflow-hidden">
@@ -2664,33 +2770,86 @@ function POSPageContent() {
               </div>
             </SheetContent>
           </Sheet>
-          
-          {/* Botón de limpiar carrito en móvil */}
-          {cart.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 px-3"
-              onClick={() => clearCart()}
-              title="Limpiar Carrito"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span className="ml-1 text-xs">Limpiar</span>
-            </Button>
-          )}
-
-          </div>
 
           <Button
-            className="pos-button-primary w-full h-12 text-base font-semibold"
+            className="pos-button-primary h-full min-h-[52px] px-4 text-sm font-semibold"
             onClick={() => setIsCheckoutOpen(true)}
             disabled={cart.length === 0 && selectedRepairIds.length === 0}
           >
-            <CreditCard className="mr-2 h-5 w-5" />
+            <CreditCard className="mr-2 h-4 w-4" />
             Cobrar
+            <span className="ml-2 font-bold">{formatCurrency(unifiedCalculations.total)}</span>
           </Button>
         </div>
       </div>
+
+      <Dialog open={isQuickItemDialogOpen} onOpenChange={setIsQuickItemDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Agregar item rapido</DialogTitle>
+            <DialogDescription>
+              Crea un producto al vuelo, lo sincroniza en base de datos y lo agrega al carrito.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 py-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="quick-item-name">Nombre</Label>
+              <Input
+                id="quick-item-name"
+                value={quickItemName}
+                onChange={(e) => setQuickItemName(e.target.value)}
+                placeholder="Ej: Cambio de pin de carga"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="quick-item-price">Precio</Label>
+                <Input
+                  id="quick-item-price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={quickItemPrice}
+                  onChange={(e) => setQuickItemPrice(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="quick-item-qty">Cantidad</Label>
+                <Input
+                  id="quick-item-qty"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={quickItemQty}
+                  onChange={(e) => setQuickItemQty(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="quick-item-sku">SKU (opcional)</Label>
+              <Input
+                id="quick-item-sku"
+                value={quickItemSku}
+                onChange={(e) => setQuickItemSku(e.target.value)}
+                placeholder="Se genera automatico si lo dejas vacio"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsQuickItemDialogOpen(false)} disabled={quickItemSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={createQuickItem} disabled={quickItemSaving}>
+              {quickItemSaving ? 'Guardando...' : 'Guardar y agregar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de checkout */}
       <CheckoutModal

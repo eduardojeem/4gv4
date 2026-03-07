@@ -29,6 +29,7 @@ import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { formatCurrency } from '@/lib/currency'
+import { COMPLETED_SALE_STATUSES, PENDING_SALE_STATUSES, isCompletedSaleStatus } from '@/lib/sales-status'
 
 // Dynamic imports optimized for Next.js
 const RecentActivity = dynamic(
@@ -208,19 +209,19 @@ export default function DashboardPage() {
       ] = await Promise.all([
         supabase.from('sales').select('total:total_amount,status,created_at')
           .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
-        supabase.from('sales').select('id', { count: 'exact', head: true }).eq('status', 'pendiente'),
+        supabase.from('sales').select('id', { count: 'exact', head: true }).in('status', [...PENDING_SALE_STATUSES]),
         supabase.from('customers').select('id', { count: 'exact', head: true }).gte('created_at', startOfWeek.toISOString()),
         supabase.from('products').select('id', { count: 'exact', head: true }),
         supabase.from('products').select('stock_quantity, min_stock').gt('stock_quantity', 0),
         supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', ['recibido', 'diagnostico', 'reparacion', 'listo']),
         supabase.from('sales').select('total_amount,created_at,status')
-          .gte('created_at', last7Days[0].toISOString()).eq('status', 'completada')
+          .gte('created_at', last7Days[0].toISOString()).in('status', [...COMPLETED_SALE_STATUSES])
       ])
 
       type SaleRow = { total: number; status: string; created_at: string }
       const salesRows = (salesToday || []) as unknown as SaleRow[]
       const totalRevenueToday = salesRows
-        .filter(s => s.status === 'completada')
+        .filter(s => isCompletedSaleStatus(s.status))
         .reduce((sum, s) => sum + (Number(s.total) || 0), 0)
 
       const activeOrders = activeOrdersCount || 0

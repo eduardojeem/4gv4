@@ -50,6 +50,7 @@ import { format, subDays, subMonths, startOfMonth, endOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 import { createClient } from '@/lib/supabase/client'
+import { isCompletedSaleStatus } from '@/lib/sales-status'
 
 // Datos mock eliminados
 
@@ -106,7 +107,7 @@ export default function ProductReportsPage() {
         const inRangeCompleted = (itemsData ?? []).filter((i: any) => {
           const d = i?.sale?.created_at ? new Date(i.sale.created_at) : null
           const s = i?.sale?.status
-          return d && d >= dateRange.from && d <= dateRange.to && s === 'completada'
+          return d && d >= dateRange.from && d <= dateRange.to && isCompletedSaleStatus(s)
         })
 
         const productAgg: Record<string, any> = {}

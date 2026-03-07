@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/api/withAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { saleSchema, saleUpdateSchema } from '@/lib/validation/schemas'
+import { SALE_STATUS } from '@/lib/sales-status'
 
 // GET /api/sales - Get sales with filters
 export const GET = withAuth(async (request, { user }) => {
@@ -128,7 +129,7 @@ export const POST = withAuth(async (request, { user }) => {
         tax: validated.tax_amount || 0,
         discount: validated.discount_amount || 0,
         payment_method: validated.payment_method,
-        status: validated.status || 'completada'
+        status: validated.status || SALE_STATUS.COMPLETED
       })
       .select()
       .single()

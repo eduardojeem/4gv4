@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { startOfDay, subDays, format, parseISO, endOfDay, eachDayOfInterval } from 'date-fns'
+import { startOfDay, format, parseISO, endOfDay, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { DateRange } from 'react-day-picker'
 
@@ -48,7 +48,7 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<Error | null>(null)
 
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
 
     const fetchStats = useCallback(async () => {
         if (!dateRange?.from) return
@@ -154,19 +154,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 .filter(c => c.status === 'active' || c.status === 'defaulted')
                 .reduce((sum, c) => sum + (c.principal || 0), 0)
 
-            // Merge Credit Sales into Total Sales if they are NOT in sales table
-             const hasCreditInSales = salesData?.some(s => s.payment_method === 'credit')
-  
-             let finalTotalSales = totalSales
-             let finalTotalTransactions = totalTransactions
-  
-             if (!hasCreditInSales && creditCount > 0) {
-                 finalTotalSales += creditTotalAmount
-                 finalTotalTransactions += creditCount
-            }
-
-            // Calculate KPIs
-            const averageTicket = finalTotalTransactions > 0 ? finalTotalSales / finalTotalTransactions : 0
+            // Calculate KPIs using sales as source of truth
+            const averageTicket = totalTransactions > 0 ? totalSales / totalTransactions : 0
 
             // Process Top Products from Flat Items List
             const productMap = new Map<string, { name: string; sales: number; revenue: number }>()
@@ -219,20 +208,6 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 }
             })
 
-            // Fill with credit data if not in sales
-            if (!hasCreditInSales) {
-                credits.forEach((credit: any) => {
-                    const d = parseISO(credit.created_at)
-                    const key = format(d, 'dd/MM')
-
-                    if (daysMap.has(key)) {
-                        const entry = daysMap.get(key)!
-                        entry.sales += (credit.principal || 0)
-                        entry.transactions += 1
-                    }
-                })
-            }
-
             const dailySales = Array.from(daysMap.values())
 
             // Process Payment Methods
@@ -241,23 +216,18 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
                 let method = sale.payment_method || 'Otros'
                 if (method === 'cash' || method === 'efectivo') method = 'Efectivo'
                 else if (method === 'card' || method === 'tarjeta') method = 'Tarjeta' // Removed 'credit' from here to separate it if it exists
-                else if (method === 'credit') method = 'Crédito'
+                else if (method === 'credit') method = 'Credito'
                 else if (method === 'transfer' || method === 'transferencia') method = 'Transferencia'
                 else method = method.charAt(0).toUpperCase() + method.slice(1)
 
                 methodsMap.set(method, (methodsMap.get(method) || 0) + (sale.total || 0))
             })
 
-            // Add credits from customer_credits table if not in sales
-            if (!hasCreditInSales && creditCount > 0) {
-                 methodsMap.set('Crédito', (methodsMap.get('Crédito') || 0) + creditTotalAmount)
-            }
-
             const colors: Record<string, string> = {
                 'Efectivo': '#10b981',
                 'Tarjeta': '#3b82f6',
                 'Transferencia': '#f59e0b',
-                'Crédito': '#8b5cf6', // Violet/Purple for Credit
+                'Credito': '#8b5cf6',
                 'Otros': '#6b7280'
             }
 
@@ -275,8 +245,8 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
             }))
 
             setStats({
-                totalSales: finalTotalSales,
-                totalTransactions: finalTotalTransactions,
+                totalSales: totalSales,
+                totalTransactions: totalTransactions,
                 averageTicket,
                 topProduct,
                 dailySales,
@@ -305,3 +275,4 @@ export function usePosStats(dateRange: DateRange | undefined): UsePosStatsReturn
 
     return { stats, loading, error, refetch: fetchStats }
 }
+

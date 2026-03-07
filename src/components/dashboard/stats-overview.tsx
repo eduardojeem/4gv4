@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { TrendingUp, TrendingDown, ShoppingCart, Users, Wrench, Package, AlertTriangle, Inbox } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { isCompletedSaleStatus, isPendingSaleStatus } from '@/lib/sales-status'
 // Tipos locales para evitar dependencias profundas de generics de Supabase
-type SaleRow = { id: string; total?: number | null; status: 'pendiente' | 'completada' | 'cancelada'; created_at: string }
+type SaleRow = { id: string; total?: number | null; status?: string | null; created_at: string }
 type RepairRow = {
   id: string
   device_brand?: string | null
@@ -15,7 +16,7 @@ type RepairRow = {
   created_at: string
   final_cost?: number | null
 }
-type CustomerRow = { id: string; name?: string | null; created_at: string }
+type CustomerRow = { id: string; first_name?: string | null; last_name?: string | null; created_at: string }
 
 interface StatCardProps {
   title: string
@@ -348,11 +349,19 @@ export function QuickActions() {
 }
 
 export function RecentActivity() {
+  const [windowHours, setWindowHours] = useState<24 | 48 | 72>(72)
+  const recentSinceIso = useMemo(
+    () => new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString(),
+    [windowHours]
+  )
+
   const [items, setItems] = useState<Array<{
+    id: string
     type: 'sale' | 'repair' | 'customer'
     description: string
     amount?: string
     time: string
+    createdAt: number
     status: 'completed' | 'in_progress' | 'new' | 'updated'
     icon: React.ReactNode
   }>>([])
@@ -370,6 +379,7 @@ export function RecentActivity() {
         const supabase = createClient()
         type SBQuery = {
           select: (...args: unknown[]) => SBQuery
+          gte: (...args: unknown[]) => SBQuery
           order: (...args: unknown[]) => SBQuery
           limit: (...args: unknown[]) => unknown
         }
@@ -377,9 +387,9 @@ export function RecentActivity() {
           ((supabase as unknown as { from: (t: string) => unknown }).from(table) as unknown as SBQuery)
         // Evitar TS2589 por generics profundos usando cast a unknown en el builder
         const [{ data: sales }, { data: repairs }, { data: customers }] = await Promise.all([
-          from('sales').select('id,total:total_amount,status,created_at').order('created_at', { ascending: false }).limit(5) as unknown as Promise<{ data?: unknown }>,
-          from('repairs').select('id,device_brand,device_model,status,created_at,final_cost').order('created_at', { ascending: false }).limit(5) as unknown as Promise<{ data?: unknown }>,
-          from('customers').select('id,name,created_at').order('created_at', { ascending: false }).limit(5) as unknown as Promise<{ data?: unknown }>
+          from('sales').select('id,total:total_amount,status,created_at').gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
+          from('repairs').select('id,device_brand,device_model,status,created_at,final_cost').gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>,
+          from('customers').select('id,first_name,last_name,created_at').gte('created_at', recentSinceIso).order('created_at', { ascending: false }).limit(20) as unknown as Promise<{ data?: unknown }>
         ])
 
         const toTime = (iso?: string): string => {
@@ -396,11 +406,13 @@ export function RecentActivity() {
         }
 
         const saleItems = ((sales || []) as SaleRow[]).map(s => ({
+          id: `sale:${s.id}`,
           type: 'sale' as const,
           description: 'Venta',
           amount: formatCurrency(Number(s.total ?? 0) || 0),
           time: toTime(s.created_at),
-          status: (s.status === 'completada' ? 'completed' : s.status === 'pendiente' ? 'in_progress' : 'updated') as 'completed' | 'in_progress' | 'updated',
+          createdAt: new Date(s.created_at).getTime(),
+          status: (isCompletedSaleStatus(s.status) ? 'completed' : isPendingSaleStatus(s.status) ? 'in_progress' : 'updated') as 'completed' | 'in_progress' | 'updated',
           icon: <ShoppingCart className="h-4 w-4" />
         }))
 
@@ -413,36 +425,41 @@ export function RecentActivity() {
             st === 'listo' || st === 'entregado' ? 'completed' : st === 'reparacion' ? 'in_progress' : 'updated'
           const amount = r.final_cost !== null && r.final_cost !== undefined ? formatCurrency(Number(r.final_cost) || 0) : undefined
           return {
+            id: `repair:${r.id}`,
             type: 'repair' as const,
             description: label ? `Reparación - ${label}` : 'Reparación',
             amount,
             time: toTime(r.created_at),
+            createdAt: new Date(r.created_at).getTime(),
             status,
             icon: <Wrench className="h-4 w-4" />
           }
         })
 
-        const customerItems = ((customers || []) as CustomerRow[]).map(c => ({
-          type: 'customer' as const,
-          description: c.name ? `Nuevo cliente - ${c.name}` : 'Nuevo cliente registrado',
-          time: toTime(c.created_at),
-          status: 'new' as const,
-          icon: <Users className="h-4 w-4" />
-        }))
+        const customerItems = ((customers || []) as CustomerRow[]).map(c => {
+          const fullName = [c.first_name, c.last_name].filter(Boolean).join(' ').trim()
+          return ({
+            id: `customer:${c.id}`,
+            type: 'customer' as const,
+            description: fullName ? `Nuevo cliente - ${fullName}` : 'Nuevo cliente registrado',
+            time: toTime(c.created_at),
+            createdAt: new Date(c.created_at).getTime(),
+            status: 'new' as const,
+            icon: <Users className="h-4 w-4" />
+          })
+        })
 
         const merged = [...saleItems, ...repairItems, ...customerItems]
-          .sort((a, b) => {
-            const wa = a.time.includes('s') ? 0 : a.time.includes('min') ? 1 : a.time.includes('hora') ? 2 : 3
-            const wb = b.time.includes('s') ? 0 : b.time.includes('min') ? 1 : b.time.includes('hora') ? 2 : 3
-            return wa - wb
-          })
+          .sort((a, b) => b.createdAt - a.createdAt)
           .slice(0, 10)
 
         setItems(merged as Array<{
+          id: string
           type: 'sale' | 'repair' | 'customer'
           description: string
           amount?: string
           time: string
+          createdAt: number
           status: 'completed' | 'in_progress' | 'new' | 'updated'
           icon: React.ReactNode
         }>)
@@ -453,7 +470,7 @@ export function RecentActivity() {
       }
     }
     load()
-  }, [])
+  }, [recentSinceIso])
   
   useEffect(() => {
     const subscribe = async () => {
@@ -481,16 +498,18 @@ export function RecentActivity() {
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales' }, (payload: unknown) => {
           const row = (payload as { new: SaleRow }).new
           const status: 'completed' | 'in_progress' | 'updated' =
-            row.status === 'completada' ? 'completed' : row.status === 'pendiente' ? 'in_progress' : 'updated'
+            isCompletedSaleStatus(row.status) ? 'completed' : isPendingSaleStatus(row.status) ? 'in_progress' : 'updated'
           const item = {
+            id: `sale:${row.id}`,
             type: 'sale' as const,
             description: 'Venta',
             amount: formatCurrency(Number(row.total ?? 0) || 0),
             time: toTime(row.created_at),
+            createdAt: new Date(row.created_at).getTime(),
             status,
             icon: <ShoppingCart className="h-4 w-4" />
           }
-          setItems(prev => [item, ...prev].slice(0, 10))
+          setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
         })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'repairs' }, (payload: unknown) => {
           const row = (payload as { new: RepairRow }).new
@@ -498,25 +517,30 @@ export function RecentActivity() {
           const status: 'completed' | 'in_progress' | 'updated' =
             row.status === 'listo' || row.status === 'entregado' ? 'completed' : row.status === 'reparacion' ? 'in_progress' : 'updated'
           const item = {
+            id: `repair:${row.id}`,
             type: 'repair' as const,
             description: label ? `Reparación - ${label}` : 'Reparación',
             amount: row.final_cost !== null && row.final_cost !== undefined ? formatCurrency(Number(row.final_cost ?? 0) || 0) : undefined,
             time: toTime(row.created_at),
+            createdAt: new Date(row.created_at).getTime(),
             status,
             icon: <Wrench className="h-4 w-4" />
           }
-          setItems(prev => [item, ...prev].slice(0, 10))
+          setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
         })
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customers' }, (payload: unknown) => {
           const row = (payload as { new: CustomerRow }).new
+          const fullName = [row.first_name, row.last_name].filter(Boolean).join(' ').trim()
           const item = {
+            id: `customer:${row.id}`,
             type: 'customer' as const,
-            description: row.name ? `Nuevo cliente - ${row.name}` : 'Nuevo cliente registrado',
+            description: fullName ? `Nuevo cliente - ${fullName}` : 'Nuevo cliente registrado',
             time: toTime(row.created_at),
+            createdAt: new Date(row.created_at).getTime(),
             status: 'new' as const,
             icon: <Users className="h-4 w-4" />
           }
-          setItems(prev => [item, ...prev].slice(0, 10))
+          setItems(prev => [item, ...prev.filter(p => p.id !== item.id)].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10))
         })
         .subscribe()
       
@@ -561,6 +585,22 @@ export function RecentActivity() {
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center justify-end gap-2">
+        {[24, 48, 72].map((h) => (
+          <button
+            key={h}
+            type="button"
+            onClick={() => setWindowHours(h as 24 | 48 | 72)}
+            className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+              windowHours === h
+                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-900/20 dark:text-blue-300'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-white/[0.12] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]'
+            }`}
+          >
+            {h}h
+          </button>
+        ))}
+      </div>
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="p-4 rounded-full bg-slate-100 dark:bg-white/[0.05] mb-4">
@@ -569,10 +609,10 @@ export function RecentActivity() {
           <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Sin actividad reciente</p>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Las ventas, reparaciones y clientes aparecerán aquí</p>
         </div>
-      ) : items.map((activity, index) => {
+      ) : items.map((activity) => {
         const statusConfig = getStatusConfig(activity.status)
         return (
-          <div key={index} className="group flex items-center gap-4 p-4 rounded-xl bg-slate-50/60 dark:bg-white/[0.04] hover:bg-slate-100/80 dark:hover:bg-white/[0.07] border border-transparent dark:border-white/[0.05] transition-all duration-200">
+          <div key={activity.id} className="group flex items-center gap-4 p-4 rounded-xl bg-slate-50/60 dark:bg-white/[0.04] hover:bg-slate-100/80 dark:hover:bg-white/[0.07] border border-transparent dark:border-white/[0.05] transition-all duration-200">
             <div className={`p-2 rounded-lg ${statusConfig.iconBg}`}>
               {activity.icon}
             </div>

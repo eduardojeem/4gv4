@@ -6,6 +6,7 @@ import {
   Settings, 
   Maximize, 
   Minimize, 
+  MoreVertical,
   BarChart3,
   CreditCard,
   FileText,
@@ -13,6 +14,12 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { cn } from '@/lib/utils'
 
@@ -35,6 +42,7 @@ interface POSHeaderProps {
   className?: string;
   onOpenCart?: () => void;
   cartItemCount?: number;
+  mobileCompact?: boolean;
 }
 
 export const POSHeader: React.FC<POSHeaderProps> = React.memo(({ 
@@ -50,7 +58,8 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
   children,
   className,
   onOpenCart,
-  cartItemCount
+  cartItemCount,
+  mobileCompact = false
 }) => {
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => {
@@ -102,15 +111,17 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
                 </Select>
               )}
               
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-primary"
-                onClick={onOpenRegisterManager}
-                title="Gestionar cajas"
-              >
-                <Settings className="h-3.5 w-3.5" />
-              </Button>
+              {!mobileCompact && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-primary"
+                  onClick={onOpenRegisterManager}
+                  title="Gestionar cajas"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -122,60 +133,104 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none"
+            className={cn(
+              "h-7 text-xs font-medium hover:bg-background shadow-none",
+              mobileCompact ? "w-8 px-0" : "px-3"
+            )}
             onClick={onOpenCart}
             title="Ver productos agregados"
           >
-            <ShoppingCart className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-            Carrito {typeof cartItemCount === 'number' ? `(${cartItemCount})` : ''}
+            <ShoppingCart className={cn("h-3.5 w-3.5 text-muted-foreground", !mobileCompact && "mr-2")} />
+            {!mobileCompact && <span className="hidden sm:inline">Carrito</span>}
+            {!mobileCompact && (typeof cartItemCount === 'number' ? ` (${cartItemCount})` : '')}
           </Button>
         )}
-        <div className="flex items-center bg-muted/30 rounded-lg p-1 border border-border/40 mr-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none"
-            onClick={isRegisterOpen ? onOpenMovements : onOpenRegister}
-            title={isRegisterOpen ? "Ver movimientos" : "Abrir caja"}
-          >
-            <GSIcon className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-            {isRegisterOpen ? 'Movimientos' : 'Abrir caja'}
-          </Button>
-          {isRegisterOpen && (
-            <>
-              <div className="w-px h-4 bg-border/40 mx-1" />
-              <Link href="/dashboard/pos/caja">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none"
-                >
-                  <FileText className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
-                  Detalles de Caja
-                </Button>
-              </Link>
-              <div className="w-px h-4 bg-border/40 mx-1" />
-              <Link href="/dashboard/pos/dashboard">
-                <Button variant="ghost" size="sm" className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none">
-                  <BarChart3 className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+        {mobileCompact ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={isRegisterOpen ? onOpenMovements : onOpenRegister}>
+                <GSIcon className="h-4 w-4 mr-2" />
+                {isRegisterOpen ? 'Movimientos' : 'Abrir caja'}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenRegisterManager}>
+                <Settings className="h-4 w-4 mr-2" />
+                Gestionar cajas
+              </DropdownMenuItem>
+              {isRegisterOpen && (
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/pos/caja">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Detalles de caja
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/pos/dashboard">
+                  <BarChart3 className="h-4 w-4 mr-2" />
                   Reportes
-                </Button>
-              </Link>
-            </>
-          )}
-        </div>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onToggleFullscreen}>
+                {isFullscreen ? <Minimize className="h-4 w-4 mr-2" /> : <Maximize className="h-4 w-4 mr-2" />}
+                {isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <>
+            <div className="flex items-center bg-muted/30 rounded-lg p-1 border border-border/40 mr-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none"
+                onClick={isRegisterOpen ? onOpenMovements : onOpenRegister}
+                title={isRegisterOpen ? "Ver movimientos" : "Abrir caja"}
+              >
+                <GSIcon className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <span className="hidden sm:inline">{isRegisterOpen ? 'Movimientos' : 'Abrir caja'}</span>
+              </Button>
+              {isRegisterOpen && (
+                <>
+                  <div className="hidden lg:block w-px h-4 bg-border/40 mx-1" />
+                  <Link href="/dashboard/pos/caja" className="hidden lg:block">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none"
+                    >
+                      <FileText className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                      Detalles de Caja
+                    </Button>
+                  </Link>
+                  <div className="hidden lg:block w-px h-4 bg-border/40 mx-1" />
+                  <Link href="/dashboard/pos/dashboard" className="hidden lg:block">
+                    <Button variant="ghost" size="sm" className="h-7 px-3 text-xs font-medium hover:bg-background shadow-none">
+                      <BarChart3 className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                      Reportes
+                    </Button>
+                  </Link>
+                </>
+              )}
+            </div>
 
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={onToggleFullscreen}
-            title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-          >
-            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-          </Button>
-        </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={onToggleFullscreen}
+                title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+              >
+                {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

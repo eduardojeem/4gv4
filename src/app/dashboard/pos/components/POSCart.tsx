@@ -1,5 +1,5 @@
-/**
- * POS Cart Component - Optimización Fase 4
+﻿/**
+ * POS Cart Component - Optimizacion Fase 4
  * Carrito de compras separado y optimizado
  */
 
@@ -22,10 +22,13 @@ import {
   Tag,
   Percent,
   Store,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
+import { resolveProductImageUrl } from '@/lib/images';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -100,6 +103,9 @@ const CartItemRow = memo<{
   const finalTotal = itemTotal - itemDiscountValue;
   
   const [localQty, setLocalQty] = useState(item.quantity.toString());
+  const imageSrc = typeof item.image === 'string' && item.image.trim().length > 0
+    ? resolveProductImageUrl(item.image.trim())
+    : ''
 
   React.useEffect(() => {
     setLocalQty(item.quantity.toString());
@@ -128,8 +134,8 @@ const CartItemRow = memo<{
       )}>
         {/* Image */}
         <div className="h-14 w-14 rounded-md bg-muted/40 border border-border/40 overflow-hidden flex items-center justify-center shrink-0 relative">
-          {item.image ? (
-            <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+          {imageSrc ? (
+            <img src={imageSrc} alt={item.name} className="h-full w-full object-cover" />
           ) : (
             <ShoppingCart className="h-6 w-6 text-muted-foreground/30" />
           )}
@@ -243,7 +249,7 @@ const CartItemRow = memo<{
                   </PopoverTrigger>
                   <PopoverContent className="w-48 p-3" align="end">
                     <div className="space-y-2">
-                      <h5 className="text-xs font-semibold">Descuento por ítem</h5>
+                      <h5 className="text-xs font-semibold">Descuento por item</h5>
                       <div className="flex items-center gap-2">
                         <Input
                           type="number"
@@ -341,6 +347,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
 }) => {
 
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
+  const [showPricingOptions, setShowPricingOptions] = useState(false);
 
   if (items.length === 0) {
     return (
@@ -361,9 +368,9 @@ export const POSCart: React.FC<POSCartProps> = memo(({
             <div className="absolute inset-0 bg-primary/10 rounded-full animate-ping opacity-20" />
             <ShoppingCart className="h-16 w-16 text-primary/40" />
           </motion.div>
-          <h3 className="font-bold text-xl mb-2 text-foreground/80">Carrito vacío</h3>
+          <h3 className="font-bold text-xl mb-2 text-foreground/80">Carrito vacio</h3>
           <p className="text-sm text-muted-foreground max-w-[240px] leading-relaxed">
-            Explora el catálogo o escanea productos para comenzar la venta.
+            Explora el catalogo o escanea productos para comenzar la venta.
           </p>
         </CardContent>
       </Card>
@@ -371,14 +378,14 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   }
 
   return (
-    <Card className="h-full flex flex-col shadow-md border-border/50 overflow-hidden bg-background/50 backdrop-blur-sm">
-      <CardHeader className="py-3 px-4 border-b bg-muted/20">
+    <Card className="h-full flex flex-col shadow-md border-border/50 overflow-hidden bg-background/60 backdrop-blur-sm">
+      <CardHeader className="py-3 px-4 border-b bg-gradient-to-r from-muted/20 to-muted/5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShoppingCart className="h-4 w-4 text-primary" />
             <span className="font-semibold text-sm">Carrito Actual</span>
           </div>
-          <Badge variant="secondary" className="px-2.5 text-xs font-normal">
+          <Badge variant="secondary" className="px-2.5 text-xs font-medium">
             {items.length} {items.length === 1 ? 'item' : 'items'} / {cartItemCount} un.
           </Badge>
         </div>
@@ -402,71 +409,86 @@ export const POSCart: React.FC<POSCartProps> = memo(({
         </div>
 
         {/* Controls & Totals Section */}
-        <div className="sticky bottom-0 bg-card border-t shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.1)] z-10">
+        <div className="bg-card border-t shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.1)] z-10">
+          <div className="max-h-[34vh] overflow-y-auto">
           
-          {/* Controls: Wholesale & Discount */}
-          <div className="px-4 py-3 bg-muted/10 grid grid-cols-2 gap-3 border-b">
-            <div className="flex items-center space-x-2">
-              <Switch 
-                id="wholesale-mode" 
-                checked={isWholesale}
-                onCheckedChange={onToggleWholesale}
-                className="scale-90"
-              />
-              <Label htmlFor="wholesale-mode" className="text-xs font-medium cursor-pointer flex items-center gap-1">
-                <Store className="h-3 w-3" />
-                Mayorista
-              </Label>
-            </div>
-            
-          <div className="flex items-center space-x-2">
-            <Tag className="h-3 w-3 text-muted-foreground" />
-            <div className="relative flex-1">
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                value={discount > 0 ? discount : ''}
-                onChange={(e) => onUpdateDiscount(Number(e.target.value))}
-                placeholder="Desc. %"
-                className="h-7 text-xs pr-6"
-              />
-              <span className="absolute right-2 top-1.5 text-[10px] text-muted-foreground">%</span>
-            </div>
+          {/* Collapsible Controls: Wholesale, Discount, Promo */}
+          <div className="px-4 pt-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowPricingOptions(v => !v)}
+            >
+              Opciones de precio
+              {showPricingOptions ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
+            </Button>
           </div>
-          {typeof onApplyPromoCode === 'function' && (
-            <div className="col-span-2 flex items-center gap-2">
-              <Input
-                id="pos-promo-code"
-                type="text"
-                placeholder="Código promocional"
-                className="h-7 text-xs"
-                onKeyDown={(e) => {
-                  const target = e.target as HTMLInputElement
-                  if (e.key === 'Enter' && target.value.trim()) {
-                    onApplyPromoCode(target.value.trim())
-                    target.value = ''
-                  }
-                }}
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => {
-                  const el = (document.activeElement as HTMLInputElement)
-                  const input = el && el.tagName === 'INPUT' ? el : (document.querySelector('#pos-promo-code') as HTMLInputElement | null)
-                  if (input && input.value.trim()) {
-                    onApplyPromoCode(input.value.trim())
-                    input.value = ''
-                  }
-                }}
-              >
-                Aplicar
-              </Button>
+          {showPricingOptions && (
+            <div className="px-4 py-3 bg-muted/10 grid grid-cols-2 gap-3 border-b">
+              <div className="flex items-center space-x-2">
+                <Switch 
+                  id="wholesale-mode" 
+                  checked={isWholesale}
+                  onCheckedChange={onToggleWholesale}
+                  className="scale-90"
+                />
+                <Label htmlFor="wholesale-mode" className="text-xs font-medium cursor-pointer flex items-center gap-1">
+                  <Store className="h-3 w-3" />
+                  Mayorista
+                </Label>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Tag className="h-3 w-3 text-muted-foreground" />
+                <div className="relative flex-1">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={discount > 0 ? discount : ''}
+                    onChange={(e) => onUpdateDiscount(Number(e.target.value))}
+                    placeholder="Desc. %"
+                    className="h-7 text-xs pr-6"
+                  />
+                  <span className="absolute right-2 top-1.5 text-[10px] text-muted-foreground">%</span>
+                </div>
+              </div>
+              {typeof onApplyPromoCode === 'function' && (
+                <div className="col-span-2 flex items-center gap-2">
+                  <Input
+                    id="pos-promo-code"
+                    type="text"
+                    placeholder="Codigo promocional"
+                    className="h-7 text-xs"
+                    onKeyDown={(e) => {
+                      const target = e.target as HTMLInputElement
+                      if (e.key === 'Enter' && target.value.trim()) {
+                        onApplyPromoCode(target.value.trim())
+                        target.value = ''
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const el = (document.activeElement as HTMLInputElement)
+                      const input = el && el.tagName === 'INPUT' ? el : (document.querySelector('#pos-promo-code') as HTMLInputElement | null)
+                      if (input && input.value.trim()) {
+                        onApplyPromoCode(input.value.trim())
+                        input.value = ''
+                      }
+                    }}
+                  >
+                    Aplicar
+                  </Button>
+                </div>
+              )}
             </div>
           )}
-        </div>
 
           {/* Totals Breakdown */}
           <div className="p-4 space-y-2">
@@ -491,31 +513,33 @@ export const POSCart: React.FC<POSCartProps> = memo(({
 
             <Separator className="my-2" />
 
-            <div className="flex justify-between items-end">
-              <span className="text-lg font-bold">Total</span>
-              <span className="text-2xl font-bold text-primary tracking-tight">
-                {formatCurrency(cartTotal)}
-              </span>
+            <div className="rounded-lg border bg-primary/5 px-3 py-2">
+              <div className="flex justify-between items-end">
+                <span className="text-sm font-semibold text-muted-foreground">Total a cobrar</span>
+                <span className="text-2xl font-bold text-primary tracking-tight">
+                  {formatCurrency(cartTotal)}
+                </span>
+              </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="grid grid-cols-4 gap-2 mt-4">
+            <div className="mt-2 flex justify-end">
               <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
                 <AlertDialogTrigger asChild>
                   <Button
                     variant="outline"
                     disabled={isProcessing}
-                    className="col-span-1 h-12 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    className="h-9 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive"
                     title="Vaciar Carrito"
                   >
-                    <Trash2 className="h-5 w-5" />
+                    <Trash2 className="h-4 w-4 mr-1.5" />
+                    Limpiar
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>¿Vaciar el carrito?</AlertDialogTitle>
+                    <AlertDialogTitle>Vaciar el carrito?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Esta acción eliminará todos los productos del carrito actual. Esta acción no se puede deshacer.
+                      Esta accion eliminara todos los productos del carrito actual. Esta accion no se puede deshacer.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -532,21 +556,29 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-              
+            </div>
+          </div>
+          </div>
+          <div className="sticky bottom-3 z-20 mx-3 mb-3 rounded-xl border bg-background/95 backdrop-blur px-4 py-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total a cobrar</p>
+                <p className="text-lg font-bold text-primary leading-tight">{formatCurrency(cartTotal)}</p>
+              </div>
               <Button
                 onClick={onCheckout}
                 disabled={isProcessing}
-                className="pos-button-primary col-span-3 h-12 text-base font-semibold shadow-md hover:shadow-lg transition-all"
+                className="pos-button-primary ml-auto h-11 px-5 text-sm font-semibold shadow-md hover:shadow-lg transition-all"
               >
                 {isProcessing ? (
                   <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
                     Procesando...
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-5 w-5 mr-2" />
-                    Cobrar {formatCurrency(cartTotal)}
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Cobrar ahora
                   </>
                 )}
               </Button>
@@ -559,3 +591,5 @@ export const POSCart: React.FC<POSCartProps> = memo(({
 });
 
 POSCart.displayName = 'POSCart';
+
+

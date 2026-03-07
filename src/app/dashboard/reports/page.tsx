@@ -1,9 +1,8 @@
-'use client'
+﻿'use client'
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
@@ -34,11 +33,14 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import Link from 'next/link'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { Input } from '@/components/ui/input'
 import { chartColors } from '@/utils/chart-utils'
 import { logger } from '@/lib/logger'
+import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { createClient } from '@/lib/supabase/client'
+import { RealtimeChannel } from '@supabase/supabase-js'
+import { ReportsProductsTab } from '@/components/reports/ReportsProductsTab'
 
 interface SalesData {
   date: string
@@ -62,6 +64,13 @@ interface CategoryData {
   sales: number
   quantity: number
   color: string
+}
+
+interface KpiDelta {
+  sales: number | null
+  orders: number | null
+  customers: number | null
+  aov: number | null
 }
 
 export default function ReportsPage() {
@@ -95,6 +104,10 @@ export default function ReportsPage() {
   const [categoryMinSales, setCategoryMinSales] = useState<number>(0)
   const [saleItemsAll, setSaleItemsAll] = useState<any[]>([])
   const [totalProfit, setTotalProfit] = useState(0)
+  const [kpiDelta, setKpiDelta] = useState<KpiDelta>({ sales: null, orders: null, customers: null, aov: null })
+  
+  // Estado para controlar refrescos por tiempo real
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   // Referencias para exportación
   const salesChartRef = useRef<HTMLDivElement>(null)
@@ -103,6 +116,13 @@ export default function ReportsPage() {
   const productsChartRef = useRef<HTMLDivElement>(null)
   const productTrendRef = useRef<HTMLDivElement>(null)
   const categoriesChartRef = useRef<HTMLDivElement>(null)
+  const toLocalDateKey = useCallback((value: string | Date) => {
+    const d = new Date(value)
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }, [])
 
   const visibleProducts = useMemo(() => {
     const totalProductSales = productData.reduce((s, p) => s + p.sales, 0)
@@ -120,11 +140,11 @@ export default function ReportsPage() {
     (saleItemsAll as any[]).forEach((item: any) => {
       const status = item?.sale?.status
       const created = item?.sale?.created_at ? new Date(item.sale.created_at) : null
-      if (status !== 'completed' || !created) return
+      if (!isCompletedSaleStatus(status) || !created) return
       if (created < dateRange.from || created > dateRange.to) return
-      const key = String(item.product_id || item.product?.name)
-      if (key !== selectedProductId) return
-      const day = created.toISOString().split('T')[0]
+      const key = String(item.product_id || '')
+      if (!key || key !== selectedProductId) return
+      const day = toLocalDateKey(created)
       const qty = Number(item.quantity) || 0
       const sales = Number(item.subtotal ?? qty * Number(item.unit_price ?? 0)) || 0
       if (!byDate[day]) byDate[day] = { sales: 0, qty: 0 }
@@ -135,7 +155,7 @@ export default function ReportsPage() {
       .map(([date, v]) => ({ date, sales: v.sales, qty: v.qty }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     setSelectedProductTrend(trend)
-  }, [saleItemsAll, selectedProductId, dateRange])
+  }, [saleItemsAll, selectedProductId, dateRange, toLocalDateKey])
 
   const categoryComputed = useMemo(() => {
     const aggMap: Record<string, { sales: number; quantity: number; color: string; name: string }> = {}
@@ -143,7 +163,7 @@ export default function ReportsPage() {
     ;(saleItemsAll as any[]).forEach((item: any, idx: number) => {
       const status = item?.sale?.status
       const created = item?.sale?.created_at ? new Date(item.sale.created_at) : null
-      if (status !== 'completed' || !created) return
+      if (!isCompletedSaleStatus(status) || !created) return
       if (created < categoryDateRange.from || created > categoryDateRange.to) return
       const name = item.product?.category?.name || 'Sin categoría'
       const qty = Number(item.quantity) || 0
@@ -183,16 +203,55 @@ export default function ReportsPage() {
   // Estado de carga
   const [loading, setLoading] = useState(true)
 
+  // Configurar suscripciones en tiempo real
+  useEffect(() => {
+    const supabase = createClient()
+    const channels: RealtimeChannel[] = []
+    
+    // Función debounce para evitar múltiples refrescos simultáneos
+    let timeout: NodeJS.Timeout
+    const handleUpdate = () => {
+      if (timeout) clearTimeout(timeout)
+      timeout = setTimeout(() => {
+        setRefreshTrigger(prev => prev + 1)
+      }, 1000)
+    }
+
+    const tables = ['sales', 'sale_items', 'repairs', 'customers']
+    
+    tables.forEach(table => {
+      const channel = supabase
+        .channel(`realtime-reports-${table}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: table },
+          () => {
+            logger.info(`[Reports] Cambio detectado en ${table}`)
+            handleUpdate()
+          }
+        )
+        .subscribe()
+      channels.push(channel)
+    })
+
+    return () => {
+      if (timeout) clearTimeout(timeout)
+      channels.forEach(channel => supabase.removeChannel(channel))
+    }
+  }, [])
+
   // Cargar datos reales de Supabase
   useEffect(() => {
     const fetchReportsData = async () => {
       try {
         setLoading(true)
         setErrorMsg(null)
-        const { createClient } = await import('@/lib/supabase/client')
         const supabase = createClient()
-        
-        // Obtener ventas de los últimos 30 días (o rango seleccionado)
+        const periodMs = Math.max(1, dateRange.to.getTime() - dateRange.from.getTime())
+        const previousTo = new Date(dateRange.from.getTime() - 1)
+        const previousFrom = new Date(previousTo.getTime() - periodMs)
+
+        // Obtener ventas del periodo actual
         const { data: sales, error: salesError } = await supabase
           .from('sales')
           .select('id, created_at, total_amount, status, customer_id')
@@ -201,53 +260,105 @@ export default function ReportsPage() {
           .order('created_at', { ascending: true })
 
         const safeSales = salesError ? [] : (sales ?? [])
+        const completedSales = safeSales.filter(sale => isCompletedSaleStatus((sale as any).status))
 
-        // Obtener items de venta para análisis de productos y categorías
-        const { data: saleItems, error: itemsError } = await supabase
-          .from('sale_items')
-          .select(`
-            product_id,
-            quantity,
-            unit_price,
-            subtotal,
-            product:products (
-              name,
-              purchase_price,
-              category:categories (
-                name
-              )
-            ),
-            sale:sales!inner (
-              created_at,
-              status
-            )
-          `)
-        const safeSaleItemsRaw = itemsError ? [] : (saleItems ?? [])
-        setSaleItemsAll(safeSaleItemsRaw as any[])
-        const safeSaleItems = (safeSaleItemsRaw as any[]).filter((i) => {
-          const created = i?.sale?.created_at ? new Date(i.sale.created_at) : null
-          const status = i?.sale?.status
-          if (!created) return false
-          return created >= dateRange.from && created <= dateRange.to && status === 'completed'
+        // Datos de clientes actual + periodo anterior y ventas periodo anterior
+        const [{ data: previousSales, error: previousSalesError }, { data: newCustomers, error: customersError }, { data: previousCustomers, error: previousCustomersError }] = await Promise.all([
+          supabase
+            .from('sales')
+            .select('id, total_amount, status')
+            .gte('created_at', previousFrom.toISOString())
+            .lte('created_at', previousTo.toISOString()),
+          supabase
+            .from('customers')
+            .select('created_at')
+            .gte('created_at', dateRange.from.toISOString())
+            .lte('created_at', dateRange.to.toISOString()),
+          supabase
+            .from('customers')
+            .select('created_at')
+            .gte('created_at', previousFrom.toISOString())
+            .lte('created_at', previousTo.toISOString())
+        ])
+
+        const safeCustomers = customersError ? [] : (newCustomers ?? [])
+        const safePreviousCustomers = previousCustomersError ? [] : (previousCustomers ?? [])
+        const safePreviousSales = previousSalesError ? [] : (previousSales ?? [])
+        const previousCompletedSales = safePreviousSales.filter((sale: any) => isCompletedSaleStatus(sale.status))
+
+        const sumSales = (rows: any[]) => rows.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0)
+        const currentSalesTotal = sumSales(completedSales as any[])
+        const previousSalesTotal = sumSales(previousCompletedSales as any[])
+        const currentOrdersCount = completedSales.length
+        const previousOrdersCount = previousCompletedSales.length
+        const currentAov = currentOrdersCount > 0 ? currentSalesTotal / currentOrdersCount : 0
+        const previousAov = previousOrdersCount > 0 ? previousSalesTotal / previousOrdersCount : 0
+
+        const pctChange = (current: number, previous: number): number | null => {
+          if (previous <= 0) return null
+          return ((current - previous) / previous) * 100
+        }
+
+        setKpiDelta({
+          sales: pctChange(currentSalesTotal, previousSalesTotal),
+          orders: pctChange(currentOrdersCount, previousOrdersCount),
+          customers: pctChange(safeCustomers.length, safePreviousCustomers.length),
+          aov: pctChange(currentAov, previousAov)
         })
 
-        // Obtener nuevos clientes en el periodo
-        const { data: newCustomers, error: customersError } = await supabase
-          .from('customers')
-          .select('created_at')
-          .gte('created_at', dateRange.from.toISOString())
-          .lte('created_at', dateRange.to.toISOString())
-        const safeCustomers = customersError ? [] : (newCustomers ?? [])
+        // Obtener items de venta para análisis de productos y categorías
+        const itemsFrom = dateRange.from <= categoryDateRange.from ? dateRange.from : categoryDateRange.from
+        const itemsTo = dateRange.to >= categoryDateRange.to ? dateRange.to : categoryDateRange.to
+        const { data: itemSales, error: itemSalesError } = await supabase
+          .from('sales')
+          .select('id, created_at, status')
+          .gte('created_at', itemsFrom.toISOString())
+          .lte('created_at', itemsTo.toISOString())
+        const safeItemSales = itemSalesError ? [] : (itemSales ?? [])
+        const completedSalesForItems = safeItemSales.filter((sale: any) => isCompletedSaleStatus(sale.status))
+        const completedSalesForItemsById = new Map(completedSalesForItems.map((sale: any) => [sale.id, sale]))
 
+        let safeSaleItems: any[] = []
+        if (completedSalesForItems.length > 0) {
+          const saleIds = completedSalesForItems.map((sale: any) => sale.id)
+          const { data: saleItems, error: itemsError } = await supabase
+            .from('sale_items')
+            .select(`
+              sale_id,
+              product_id,
+              quantity,
+              unit_price,
+              subtotal,
+              product:products (
+                id,
+                name,
+                purchase_price,
+                category:categories (
+                  name
+                )
+              )
+            `)
+            .in('sale_id', saleIds)
+
+          const safeSaleItemsRaw = itemsError ? [] : (saleItems ?? [])
+          safeSaleItems = safeSaleItemsRaw.map((item: any) => {
+            const sale = completedSalesForItemsById.get(item.sale_id)
+            return {
+              ...item,
+              sale: sale ? { created_at: sale.created_at, status: sale.status } : null
+            }
+          })
+        }
+        setSaleItemsAll(safeSaleItems as any[])
         // Procesar datos para el gráfico de ventas
         const salesByDate: Record<string, { sales: number; orders: number; customers: number }> = {}
         const ordersByCustomer: Record<string, number> = {}
         
         // Inicializar con ventas
         safeSales.forEach(sale => {
-          if (sale.status !== 'completed') return
+          if (!isCompletedSaleStatus(sale.status)) return
           
-          const date = new Date(sale.created_at).toISOString().split('T')[0]
+          const date = toLocalDateKey(sale.created_at)
           if (!salesByDate[date]) {
             salesByDate[date] = { sales: 0, orders: 0, customers: 0 }
           }
@@ -260,7 +371,7 @@ export default function ReportsPage() {
 
         // Agregar datos de clientes
         safeCustomers.forEach(customer => {
-          const date = new Date(customer.created_at).toISOString().split('T')[0]
+          const date = toLocalDateKey(customer.created_at)
           if (!salesByDate[date]) {
             salesByDate[date] = { sales: 0, orders: 0, customers: 0 }
           }
@@ -303,7 +414,7 @@ export default function ReportsPage() {
 
         safeRepairs.forEach((r: any) => {
           const baseDate = r.received_at || r.created_at
-          const dateKey = baseDate ? new Date(baseDate).toISOString().split('T')[0] : null
+          const dateKey = baseDate ? toLocalDateKey(baseDate) : null
           if (dateKey) trendMap[dateKey] = (trendMap[dateKey] || 0) + 1
 
           const st = r.status || 'desconocido'
@@ -422,7 +533,7 @@ export default function ReportsPage() {
     }
 
     fetchReportsData()
-  }, [dateRange])
+  }, [dateRange, categoryDateRange, refreshTrigger, toLocalDateKey])
 
   useEffect(() => {
     const now = new Date()
@@ -449,6 +560,7 @@ export default function ReportsPage() {
   const totalOrders = salesData.reduce((sum, item) => sum + item.orders, 0)
   const totalCustomers = salesData.reduce((sum, item) => sum + item.customers, 0)
   const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0
+  const formatDelta = (value: number | null) => value === null ? 'N/A' : `${value > 0 ? '+' : ''}${value.toFixed(1)}%`
 
   const exportReport = (type: string) => {
     const BOM = '\uFEFF'
@@ -543,10 +655,14 @@ export default function ReportsPage() {
               </div>
             </div>
             <div className="flex items-center mt-2">
-              <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
-              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-300">+12.5%</span>
+              {(kpiDelta.sales ?? 0) >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+              )}
+              <span className={`text-sm font-medium ${(kpiDelta.sales ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.sales)}</span>
               <span className="text-sm text-emerald-900/70 dark:text-emerald-100/80 ml-1">
-                vs mes anterior
+                vs periodo anterior
               </span>
             </div>
           </CardContent>
@@ -566,10 +682,14 @@ export default function ReportsPage() {
               </div>
             </div>
             <div className="flex items-center mt-2">
-              <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
-              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-300">+8.2%</span>
+              {(kpiDelta.orders ?? 0) >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+              )}
+              <span className={`text-sm font-medium ${(kpiDelta.orders ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.orders)}</span>
               <span className="text-sm text-slate-700/80 dark:text-slate-100/80 ml-1">
-                vs mes anterior
+                vs periodo anterior
               </span>
             </div>
           </CardContent>
@@ -589,10 +709,14 @@ export default function ReportsPage() {
               </div>
             </div>
             <div className="flex items-center mt-2">
-              <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-              <span className="text-sm font-medium text-red-600 dark:text-red-400">-2.1%</span>
+              {(kpiDelta.customers ?? 0) >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+              )}
+              <span className={`text-sm font-medium ${(kpiDelta.customers ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.customers)}</span>
               <span className="text-sm text-slate-700/80 dark:text-slate-100/80 ml-1">
-                vs mes anterior
+                vs periodo anterior
               </span>
             </div>
           </CardContent>
@@ -612,10 +736,14 @@ export default function ReportsPage() {
               </div>
             </div>
             <div className="flex items-center mt-2">
-              <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-300">+5.7%</span>
+              {(kpiDelta.aov ?? 0) >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+              )}
+              <span className={`text-sm font-medium ${(kpiDelta.aov ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.aov)}</span>
               <span className="text-sm text-slate-700/80 dark:text-slate-100/80 ml-1">
-                vs mes anterior
+                vs periodo anterior
               </span>
             </div>
           </CardContent>
@@ -662,7 +790,7 @@ export default function ReportsPage() {
               <div ref={salesChartRef}>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={salesData}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis 
                     dataKey="date" 
                     tickFormatter={(value) => format(new Date(value), 'dd/MM', { locale: es })}
@@ -671,6 +799,9 @@ export default function ReportsPage() {
                   <Tooltip 
                     formatter={(value: number) => [formatFullPrice(value), 'Ventas']}
                     labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })}
+                    contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
+                    itemStyle={{ color: '#1e293b' }}
+                    cursor={{ fill: '#f1f5f9' }}
                   />
                   <Line
                     type="monotone"
@@ -695,10 +826,14 @@ export default function ReportsPage() {
               <div ref={repairsChartRef}>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={repairsTrend}>
-                  <CartesianGrid strokeDasharray="3 3" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="date" tickFormatter={(value) => format(new Date(value), 'dd/MM', { locale: es })} />
                   <YAxis />
-                  <Tooltip labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })} />
+                  <Tooltip labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })} 
+                    contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
+                    itemStyle={{ color: '#1e293b' }}
+                    cursor={{ fill: '#f1f5f9' }}
+                  />
                   <Line
                     type="monotone"
                     dataKey="count"
@@ -725,7 +860,10 @@ export default function ReportsPage() {
                       <Cell key={`cell-r-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
+                    itemStyle={{ color: '#1e293b' }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
               </div>
@@ -745,172 +883,28 @@ export default function ReportsPage() {
             <Button variant="outline" onClick={() => exportReport('reparaciones')}>Exportar Reparaciones (CSV)</Button>
           </div>
         </TabsContent>
-
-        <TabsContent value="products" className="space-y-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            <div className="w-40">
-              <Select value={String(productTopCount)} onValueChange={(v) => setProductTopCount(Number(v))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Top" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">Top 5</SelectItem>
-                  <SelectItem value="10">Top 10</SelectItem>
-                  <SelectItem value="20">Top 20</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-48">
-              <Select value={productSortBy} onValueChange={(v) => setProductSortBy(v as 'sales' | 'quantity')}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Ordenar por" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sales">Ordenar por Ventas</SelectItem>
-                  <SelectItem value="quantity">Ordenar por Cantidad</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-64">
-              <Select value={productCategoryFilter} onValueChange={setProductCategoryFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las categorías</SelectItem>
-                  {categoryData.map((c) => (
-                    <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-64">
-              <Select value={selectedProductId ?? 'none'} onValueChange={(v) => setSelectedProductId(v === 'none' ? null : v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Producto para tendencia" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Ninguno</SelectItem>
-                  {productData.slice(0, productTopCount).map((p) => (
-                    <SelectItem key={p.id || p.name} value={String(p.id || p.name)}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {(() => {
-            // Tendencia del producto seleccionada: memo fuera del render
-
-            return (
-              <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Productos Más Vendidos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div ref={productsChartRef}>
-                  <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={visibleProducts}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis tickFormatter={formatPrice} />
-                  <Tooltip formatter={(value: number, n: any) => [n === 'sales' ? formatFullPrice(Number(value)) : String(value), n === 'sales' ? 'Ventas' : 'Cantidad']} />
-                  <Bar dataKey="sales" name="Ventas" fill={productSalesColor} />
-                  <Bar dataKey="quantity" name="Cantidad" fill={productQuantityColor} />
-                  </BarChart>
-                  </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {selectedProductId && selectedProductTrend.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Tendencia del Producto Seleccionado</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div ref={productTrendRef}>
-                    <ResponsiveContainer width="100%" height={240}>
-                      <LineChart data={selectedProductTrend}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" tickFormatter={(v) => format(new Date(v), 'dd/MM', { locale: es })} />
-                        <YAxis yAxisId="left" tickFormatter={formatPrice} />
-                        <YAxis yAxisId="right" orientation="right" />
-                        <Tooltip formatter={(v: number, n: any) => [n === 'sales' ? formatFullPrice(Number(v)) : String(v), n === 'sales' ? 'Ventas' : 'Unidades']} />
-                        <Line
-                          type="monotone"
-                          dataKey="sales"
-                          yAxisId="left"
-                          stroke={selectedProductSalesColor}
-                          strokeWidth={2}
-                          dot={{ fill: selectedProductSalesColor }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="qty"
-                          yAxisId="right"
-                          stroke={selectedProductQtyColor}
-                          strokeWidth={2}
-                          dot={{ fill: selectedProductQtyColor }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                    </div>
-                    <div className="flex justify-end mt-3">
-                      <Link href={selectedProductId ? `/dashboard/products/${selectedProductId}` : '/dashboard/products'}>
-                        <Button variant="outline">Ver detalle del producto</Button>
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Ranking de Productos</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                {visibleProducts.map((product, index) => (
-                    <div key={product.name} className="flex items-center justify-between p-3 border rounded cursor-pointer" onClick={() => setSelectedProductId(String(product.id || product.name))}>
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline">#{index + 1}</Badge>
-                        <div>
-                          <p className="font-medium">{product.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                          {product.quantity} unidades • {product.category}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold">{formatFullPrice(product.sales)}</p>
-                        <p className="text-xs text-green-600 font-medium">G: {formatFullPrice(product.profit)}</p>
-                      </div>
-                    </div>
-                  ))}
-                  </div>
-                  <div className="flex justify-end mt-4">
-                    <Button variant="outline" onClick={() => {
-                      const BOM = '\uFEFF'
-                      const headers = ['Rank','Producto','Categoría','Ventas','Ganancia','Cantidad','Participación %']
-                      const rows = visibleProducts.map((p, i) => [String(i + 1), p.name, p.category || '', String(p.sales), String(p.profit), String(p.quantity), ((p.share || 0).toFixed(1))])
-                      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
-                      const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' })
-                      const url = window.URL.createObjectURL(blob)
-                      const a = document.createElement('a')
-                      a.href = url
-                      a.download = `top-productos-${new Date().toISOString().slice(0,10)}.csv`
-                      a.click(); window.URL.revokeObjectURL(url)
-                    }}>Exportar Top (CSV)</Button>
-                  </div>
-                </CardContent>
-              </Card>
-              </>
-            )
-          })()}
-        
-          </TabsContent>
+        <ReportsProductsTab
+          productTopCount={productTopCount}
+          setProductTopCount={setProductTopCount}
+          productSortBy={productSortBy}
+          setProductSortBy={setProductSortBy}
+          productCategoryFilter={productCategoryFilter}
+          setProductCategoryFilter={setProductCategoryFilter}
+          categoryData={categoryData}
+          selectedProductId={selectedProductId}
+          setSelectedProductId={setSelectedProductId}
+          productData={productData}
+          visibleProducts={visibleProducts}
+          productsChartRef={productsChartRef}
+          productSalesColor={productSalesColor}
+          productQuantityColor={productQuantityColor}
+          formatPrice={formatPrice}
+          formatFullPrice={formatFullPrice}
+          selectedProductTrend={selectedProductTrend}
+          productTrendRef={productTrendRef}
+          selectedProductSalesColor={selectedProductSalesColor}
+          selectedProductQtyColor={selectedProductQtyColor}
+        />
 
         <TabsContent value="categories" className="space-y-4">
           <div className="flex flex-wrap gap-3 items-center">
@@ -992,14 +986,21 @@ export default function ReportsPage() {
                               <Cell key={`cell-cat-${index}`} fill={entry.color} />
                             ))}
                           </Pie>
-                          <Tooltip />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
+                            itemStyle={{ color: '#1e293b' }}
+                          />
                         </PieChart>
                       ) : (
                         <BarChart data={visible}>
-                          <CartesianGrid strokeDasharray="3 3" />
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                           <XAxis dataKey="name" />
                           <YAxis tickFormatter={categoryMetricBy === 'sales' ? formatPrice : (v: any) => String(v)} />
-                          <Tooltip formatter={(v: number, n: any) => [n === 'sales' ? formatFullPrice(Number(v)) : String(v), n === 'sales' ? 'Ventas' : 'Cantidad']} />
+                          <Tooltip formatter={(v: number, n: any) => [n === 'sales' ? formatFullPrice(Number(v)) : String(v), n === 'sales' ? 'Ventas' : 'Cantidad']} 
+                            contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
+                            itemStyle={{ color: '#1e293b' }}
+                            cursor={{ fill: '#f1f5f9' }}
+                          />
                           <Bar
                             dataKey={categoryMetricBy === 'sales' ? 'sales' : 'quantity'}
                             name={categoryMetricBy === 'sales' ? 'Ventas' : 'Cantidad'}
@@ -1065,3 +1066,9 @@ export default function ReportsPage() {
     </div>
   )
 }
+
+
+
+
+
+

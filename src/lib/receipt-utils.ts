@@ -127,6 +127,24 @@ export interface CompanyInfo {
   ruc?: string
 }
 
+const sanitizeUnsupportedColorFunctions = (raw: string): string => {
+  return raw.replace(/\b(?:oklch|lch|lab)\([^)]+\)/gi, 'rgb(120, 120, 120)')
+}
+
+const sanitizeCloneStylesForHtml2Canvas = (clonedDoc: Document): void => {
+  clonedDoc.querySelectorAll('style').forEach((styleEl) => {
+    const css = styleEl.textContent || ''
+    const sanitized = sanitizeUnsupportedColorFunctions(css)
+    if (sanitized !== css) styleEl.textContent = sanitized
+  })
+
+  clonedDoc.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
+    const inline = el.getAttribute('style') || ''
+    const sanitized = sanitizeUnsupportedColorFunctions(inline)
+    if (sanitized !== inline) el.setAttribute('style', sanitized)
+  })
+}
+
 // Imprimir ticket - Captura el contenido del modal directamente
 export const printReceipt = (receiptData: ReceiptData, companyInfo?: CompanyInfo): void => {
   // Intentar capturar el contenido del modal primero
@@ -750,7 +768,10 @@ export const downloadReceipt = async (receiptData: ReceiptData, companyInfo?: Co
       scale: 2,
       backgroundColor: '#ffffff',
       logging: false,
-      useCORS: true
+      useCORS: true,
+      onclone: (clonedDoc: Document) => {
+        sanitizeCloneStylesForHtml2Canvas(clonedDoc)
+      }
     })
 
     // Crear PDF
@@ -803,7 +824,10 @@ export const shareReceipt = async (receiptData: ReceiptData, companyInfo?: Compa
         scale: 2,
         backgroundColor: '#ffffff',
         logging: false,
-        useCORS: true
+        useCORS: true,
+        onclone: (clonedDoc: Document) => {
+          sanitizeCloneStylesForHtml2Canvas(clonedDoc)
+        }
       })
 
       // Convertir canvas a blob

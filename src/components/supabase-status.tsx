@@ -1,5 +1,5 @@
-/**
- * Componente para mostrar el estado de conexión con Supabase
+﻿/**
+ * Componente para mostrar el estado de conexion con Supabase
  */
 
 'use client'
@@ -34,7 +34,7 @@ export function SupabaseStatus({ mode = 'full', className = '' }: SupabaseStatus
       try {
         const supabase = createClient()
         
-        // Verificar conexión básica
+        // Verificar conexion basica
         const { data, error } = await supabase
           .from('products')
           .select('id', { count: 'exact', head: true })
@@ -57,11 +57,11 @@ export function SupabaseStatus({ mode = 'full', className = '' }: SupabaseStatus
           tablesCount: count || 0
         })
       } catch (err) {
-        console.error('Error verificando conexión Supabase:', err)
+        console.error('Error verificando conexion Supabase:', err)
         setStatus({
           connected: false,
           loading: false,
-          error: err instanceof Error ? err.message : 'Error de conexión',
+          error: err instanceof Error ? err.message : 'Error de conexion',
           tablesCount: 0
         })
       }
@@ -73,7 +73,7 @@ export function SupabaseStatus({ mode = 'full', className = '' }: SupabaseStatus
   if (mode === 'compact' || mode === 'minimal') {
     if (status.loading) {
       return (
-        <div className={`flex items-center gap-1.5 ${className}`} title="Verificando conexión...">
+        <div className={`flex items-center gap-1.5 ${className}`} title="Verificando conexion...">
           <Loader2 className="h-3 w-3 text-muted-foreground animate-spin" />
           {mode === 'compact' && <span className="text-[10px] text-muted-foreground">Conectando...</span>}
         </div>
@@ -108,7 +108,7 @@ export function SupabaseStatus({ mode = 'full', className = '' }: SupabaseStatus
       <Alert className={`mb-4 border-blue-200 bg-blue-50 ${className}`}>
         <Loader2 className="h-4 w-4 text-blue-600 animate-spin" />
         <AlertDescription className="text-blue-800 text-sm">
-          Verificando conexión con base de datos...
+          Verificando conexion con base de datos...
         </AlertDescription>
       </Alert>
     )
@@ -119,10 +119,10 @@ export function SupabaseStatus({ mode = 'full', className = '' }: SupabaseStatus
       <Alert className={`mb-4 border-red-200 bg-red-50 ${className}`}>
         <AlertCircle className="h-4 w-4 text-red-600" />
         <AlertDescription className="text-red-800 text-sm">
-          <strong>Error de conexión:</strong> {status.error}
+          <strong>Error de conexion:</strong> {status.error}
           <br />
           <span className="text-xs mt-1 block">
-            Verifique la configuración de Supabase en .env.local
+            Verifique la configuracion de Supabase en .env.local
           </span>
         </AlertDescription>
       </Alert>
@@ -136,9 +136,10 @@ export function SupabaseStatus({ mode = 'full', className = '' }: SupabaseStatus
         <strong>Conectado a Supabase:</strong> {status.tablesCount} productos disponibles
         <br />
         <span className="text-xs mt-1 block">
-          Sistema funcionando en modo producción
+          Sistema funcionando en modo produccion
         </span>
       </AlertDescription>
     </Alert>
   )
 }
+

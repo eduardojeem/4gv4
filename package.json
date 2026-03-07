@@ -95,6 +95,7 @@
     "jose": "^5.9.6",
     "jspdf": "^4.2.0",
     "jspdf-autotable": "^5.0.2",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.544.0",
     "next": "^16.1.1",
     "qrcode": "^1.5.4",

@@ -1,14 +1,13 @@
 "use client"
 
 import React, { useState } from 'react'
-import { addDays } from 'date-fns'
 import { DateRange } from 'react-day-picker'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { usePosStats } from './hooks/usePosStats'
 import { Button } from '@/components/ui/button'
+import { formatCurrency } from '@/lib/currency'
 
-// Components
 import { PosDashboardHeader } from './components/PosDashboardHeader'
 import { PosStatsGrid } from './components/PosStatsGrid'
 import { SalesTrendChart } from './components/SalesTrendChart'
@@ -26,29 +25,28 @@ export default function POSDashboard() {
   const { stats, loading, error, refetch } = usePosStats(dateRange)
 
   const handleExport = () => {
-    // Basic CSV export functionality
     try {
       if (!stats.recentSales.length) {
         toast.error("No hay datos para exportar")
         return
       }
 
-      const headers = ["ID", "Fecha", "Cliente", "Método Pago", "Total", "Items"]
-      const rows = stats.recentSales.map(sale => [
+      const headers = ["ID", "Fecha", "Cliente", "Metodo Pago", "Total", "Items"]
+      const rows = stats.recentSales.map((sale) => [
         sale.id,
         sale.created_at,
         sale.customer_name,
         sale.payment_method,
-        sale.total,
+        formatCurrency(sale.total || 0),
         sale.items_count
       ])
 
       const csvContent = [
         headers.join(","),
-        ...rows.map(row => row.join(","))
+        ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
       ].join("\n")
 
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const blob = new Blob(['\uFEFF', csvContent], { type: "text/csv;charset=utf-8;" })
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.setAttribute("href", url)
@@ -57,7 +55,7 @@ export default function POSDashboard() {
       link.click()
       document.body.removeChild(link)
 
-      toast.success("Exportación completada")
+      toast.success("Exportacion completada")
     } catch (e) {
       toast.error("Error al exportar datos")
       console.error(e)
@@ -101,17 +99,13 @@ export default function POSDashboard() {
       </div>
 
       <PosStatsGrid stats={stats} />
-      
-      {/* Credit Stats Row */}
       <CreditStatsCards stats={stats} />
 
-      {/* Charts Row */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <SalesTrendChart data={stats.dailySales} />
         <PaymentDistributionChart data={stats.paymentMethods} />
       </div>
 
-      {/* Details Row */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <RecentTransactionsList sales={stats.recentSales} />
         <TopProductsCard products={stats.topProducts} />
@@ -119,3 +113,4 @@ export default function POSDashboard() {
     </div>
   )
 }
+

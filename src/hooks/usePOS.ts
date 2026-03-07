@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { showAddToCartToast } from '@/lib/pos-toasts'
 import { createClient } from '@/lib/supabase/client'
 import type { Product } from '@/types/product-unified'
+import { SALE_STATUS } from '@/lib/sales-status'
 
 export interface CartItem {
     id: string
@@ -269,7 +270,7 @@ export function usePOS() {
                 payment_method: paymentSplits.length > 1 ? 'multiple' : (paymentSplits[0]?.method || 'cash'),
                 payment_status: 'completed',
                 notes: notes,
-                status: 'completed',
+                status: SALE_STATUS.COMPLETED,
                 created_at: new Date().toISOString()
             }
 

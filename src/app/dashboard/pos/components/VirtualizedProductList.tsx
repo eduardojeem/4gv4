@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useMemo, useCallback, useState, useEffect } from 'react'
 import { formatCurrency } from '@/lib/currency'
@@ -106,7 +106,7 @@ export const VirtualizedProductList: React.FC<VirtualizedProductListProps> = ({
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         <div className="text-center">
           <p className="text-lg font-medium">No se encontraron productos</p>
-          <p className="text-sm">Intenta ajustar los filtros de búsqueda</p>
+          <p className="text-sm">Intenta ajustar los filtros de busqueda</p>
         </div>
       </div>
     )
@@ -206,7 +206,7 @@ export const VirtualizedProductGrid: React.FC<VirtualizedProductListProps> = ({
       <div className="flex items-center justify-center h-64 text-muted-foreground">
         <div className="text-center">
           <p className="text-lg font-medium">No se encontraron productos</p>
-          <p className="text-sm">Intenta ajustar los filtros de búsqueda</p>
+          <p className="text-sm">Intenta ajustar los filtros de busqueda</p>
         </div>
       </div>
     )
@@ -256,3 +256,4 @@ export const VirtualizedProductGrid: React.FC<VirtualizedProductListProps> = ({
     </div>
   )
 }
+

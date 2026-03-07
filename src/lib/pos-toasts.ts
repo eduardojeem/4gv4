@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { toast } from "sonner"
 
@@ -9,10 +9,10 @@ export function showAddToCartToast(args: { name: string; quantity?: number; onUn
   const now = Date.now()
 
   // Avoid duplicate notifications caused by rapid/double event firing.
-  if (lastAddToast.name === name && now - lastAddToast.at < 600) return
+  if (lastAddToast.name === name && now - lastAddToast.at < 1200) return
   lastAddToast = { name, at: now }
 
-  const desc = quantity && quantity > 1 ? `${name} ×${quantity} añadido` : `${name} añadido`
+  const desc = quantity && quantity > 1 ? `${name} x${quantity} agregado` : `${name} agregado`
   toast.success("Producto agregado", {
     id: "pos-add-cart",
     description: desc,
@@ -25,3 +25,4 @@ export function showAddToCartToast(args: { name: string; quantity?: number; onUn
       : undefined,
   })
 }
+

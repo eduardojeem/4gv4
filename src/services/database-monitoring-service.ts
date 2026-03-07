@@ -398,6 +398,47 @@ class DatabaseMonitoringService {
     return alerts
   }
 
+  // Obtener estadísticas de índices
+  async getIndexStats(): Promise<IndexStats[]> {
+    try {
+      const { data, error } = await this.supabase.rpc('get_index_stats')
+      
+      if (error) {
+        console.warn('No se pudo obtener estadísticas de índices, usando datos simulados:', error)
+        return this.getMockIndexStats()
+      }
+
+      if (data && Array.isArray(data)) {
+        return data.map((idx: any) => ({
+          tableName: idx.table_name,
+          indexName: idx.index_name,
+          sizeBytes: idx.size_bytes || 0,
+          scans: idx.idx_scan || 0,
+          reads: idx.idx_tup_read || 0,
+          isUnused: (idx.idx_scan || 0) === 0,
+          isMock: false
+        }))
+      }
+
+      return this.getMockIndexStats()
+    } catch (error) {
+      console.warn('Error obteniendo estadísticas de índices:', error)
+      return this.getMockIndexStats()
+    }
+  }
+
+  // Datos simulados para índices
+  private getMockIndexStats(): IndexStats[] {
+    return [
+      { tableName: 'products', indexName: 'products_pkey', sizeBytes: 1024 * 500, scans: 15000, reads: 50000, isUnused: false, isMock: true },
+      { tableName: 'products', indexName: 'products_category_id_idx', sizeBytes: 1024 * 200, scans: 4500, reads: 12000, isUnused: false, isMock: true },
+      { tableName: 'users', indexName: 'users_email_idx', sizeBytes: 1024 * 50, scans: 0, reads: 0, isUnused: true, isMock: true }, // Unused
+      { tableName: 'repairs', indexName: 'repairs_customer_id_idx', sizeBytes: 1024 * 300, scans: 8900, reads: 23000, isUnused: false, isMock: true },
+      { tableName: 'audit_log', indexName: 'audit_log_created_at_idx', sizeBytes: 1024 * 800, scans: 120, reads: 500, isUnused: false, isMock: true },
+      { tableName: 'inventory', indexName: 'inventory_sku_idx', sizeBytes: 1024 * 100, scans: 0, reads: 0, isUnused: true, isMock: true } // Unused
+    ]
+  }
+
   // Obtener historial de crecimiento de la BD
   async getDatabaseGrowthHistory(days: number = 30): Promise<{ date: string; size: number }[]> {
     try {

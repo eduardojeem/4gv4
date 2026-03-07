@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { memo } from 'react'
 import { Plus, Minus, Star, Package, ShoppingCart } from 'lucide-react'
@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/currency'
 import { formatStockStatus } from '@/lib/inventory-manager'
+import { resolveProductImageUrl } from '@/lib/images'
 import type { Product } from '@/types/product-unified'
 
 interface ProductCardProps {
@@ -46,6 +47,7 @@ export const ProductCard = memo(({
   const hasExplicitWholesale = typeof product.wholesale_price === 'number' && product.wholesale_price > 0
   const computedWholesale = Math.round(price * (1 - (wholesaleDiscountRate / 100)))
   const appliedPrice = isWholesale ? (hasExplicitWholesale ? product.wholesale_price! : computedWholesale) : price
+  const imageSrc = product.image ? resolveProductImageUrl(product.image) : ''
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -74,8 +76,12 @@ export const ProductCard = memo(({
         <CardContent className="p-3">
           <div className="flex items-center gap-4">
             {/* Imagen / Icono */}
-            <div className="flex-shrink-0 w-12 h-12 bg-muted/30 rounded-lg flex items-center justify-center text-2xl border border-border/50">
-              {product.image || '📦'}
+            <div className="flex-shrink-0 w-12 h-12 bg-muted/30 rounded-lg flex items-center justify-center text-2xl border border-border/50 overflow-hidden">
+              {imageSrc ? (
+                <img src={imageSrc} alt={product.name} className="h-full w-full object-cover" />
+              ) : (
+                <Package className="h-6 w-6 text-muted-foreground/50" />
+              )}
             </div>
 
             {/* Info Principal */}
@@ -171,7 +177,7 @@ export const ProductCard = memo(({
       role="button"
       aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.`}
     >
-      {/* Badge Flotante de Stock (Solo visible si es bajo o crítico) */}
+      {/* Badge Flotante de Stock (Solo visible si es bajo o critico) */}
       {showStock && stockStatus && (stockStatus.status === 'low' || stockStatus.status === 'critical' || stockStatus.status === 'out') && (
         <div className="absolute top-2 right-2 z-10">
           <Badge 
@@ -200,15 +206,15 @@ export const ProductCard = memo(({
       <CardContent className="p-0 h-full flex flex-col">
         {/* Imagen / Icono Grande */}
         <div className="h-24 bg-muted/20 flex items-center justify-center text-5xl border-b border-border/40 group-hover:bg-muted/40 transition-colors overflow-hidden">
-          {product.image && (product.image.startsWith('http') || product.image.startsWith('/') || product.image.startsWith('data:')) ? (
-             <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+          {imageSrc ? (
+            <img src={imageSrc} alt={product.name} className="w-full h-full object-cover" />
           ) : (
-             product.image || '📦'
+            <Package className="h-10 w-10 text-muted-foreground/40" />
           )}
         </div>
         
         <div className="p-3 flex flex-col flex-1 gap-2">
-          {/* Título y Categoría */}
+          {/* Titulo y Categoria */}
           <div>
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-semibold text-sm leading-tight line-clamp-2 text-foreground/90 group-hover:text-primary transition-colors">
@@ -243,7 +249,7 @@ export const ProductCard = memo(({
               )}
             </div>
 
-            {/* Botones de Acción Rápida (Visibles al hover en desktop, siempre en mobile) */}
+            {/* Botones de Accion Rapida (Visibles al hover en desktop, siempre en mobile) */}
             <div className="grid grid-cols-2 gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-all duration-200 translate-y-0 sm:translate-y-2 sm:group-hover:translate-y-0 sm:group-focus-within:translate-y-0">
               {onQuickAdd && (
                 <Button
@@ -286,3 +292,5 @@ export const ProductCard = memo(({
 })
 
 ProductCard.displayName = 'ProductCard'
+
+
