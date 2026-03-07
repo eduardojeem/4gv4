@@ -378,8 +378,11 @@ export function usePOSProducts() {
       const { data, error: rpcError } = await supabase.rpc('process_pos_sale', payload)
 
       if (rpcError) {
-        if (rpcError.code === 'P0001' || rpcError.message.includes('function process_pos_sale')) {
-          throw new Error('La función de base de datos process_pos_sale no existe. Por favor, ejecutá el SQL proporcionado en el plan de implementación.')
+        console.error('RPC Error details:', JSON.stringify(rpcError, null, 2))
+        
+        // Handle empty error object (which can happen with some Supabase connection errors) or missing function
+        if (Object.keys(rpcError).length === 0 || rpcError.code === 'P0001' || (rpcError.message && rpcError.message.includes('function process_pos_sale'))) {
+          throw new Error('La función de base de datos "process_pos_sale" no existe o ocurrió un error de conexión. Por favor, verificá las migraciones de Supabase.')
         }
         throw rpcError
       }
@@ -390,12 +393,16 @@ export function usePOSProducts() {
 
       return { 
         success: true, 
-        saleId: data.id,
+        saleId: data?.id, // Use optional chaining just in case
         data: data
       }
     } catch (err: any) {
       console.error('Error processing sale:', err)
-      const errorMsg = err.message || 'Error desconocido'
+      if (typeof err === 'object') {
+         console.error('Error details:', JSON.stringify(err, null, 2))
+      }
+
+      const errorMsg = err.message || (typeof err === 'object' && Object.keys(err).length === 0 ? 'Error desconocido (Posible error de red o función faltante)' : 'Error desconocido')
       setError(`Error al procesar venta: ${errorMsg}`)
       return { 
         success: false, 

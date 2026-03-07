@@ -1,6 +1,7 @@
-'use client'
+﻿'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,10 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useCashRegisterContext } from '../contexts/CashRegisterContext'
-import { ZClosureHistoryModal } from '../components/ZClosureHistoryModal'
-import { AuditLogModal } from '../components/AuditLogModal'
 import { CashCountModal } from '../components/CashCountModal'
-import { PermissionsModal } from '../components/PermissionsModal'
 import { useAuth } from '@/contexts/auth-context'
 
 import { CashRegisterHeader } from './components/CashRegisterHeader'
@@ -27,6 +25,7 @@ import { CashRegisterHistory } from './components/CashRegisterHistory'
 import { CashRegisterAudit } from './components/CashRegisterAudit'
 
 export default function CashRegisterPage() {
+  const router = useRouter()
   const {
     registers,
     activeRegisterId,
@@ -34,92 +33,188 @@ export default function CashRegisterPage() {
     openRegister,
     closeRegister,
     addMovement,
-    userPermissions,
-    setUserPermissions,
-    auditLog,
     performCashCount,
-    zClosureHistory,
+    userPermissions,
     getCurrentRegister
   } = useCashRegisterContext()
 
   const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+  const canAccessAudit = user?.role === 'admin' || userPermissions.canViewAuditLog === true
+  const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('simple')
 
   const [isOpenRegisterDialogOpen, setIsOpenRegisterDialogOpen] = useState(false)
-  const [openingAmount, setOpeningAmount] = useState('0')
+  const [openingAmount, setOpeningAmount] = useState('')
   const [openingNote, setOpeningNote] = useState('')
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
 
-  // Movement Dialog State
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
   const [movementType, setMovementType] = useState<'in' | 'out'>('in')
   const [movementAmount, setMovementAmount] = useState('')
   const [movementNote, setMovementNote] = useState('')
 
-  // Modal states
   const [isCashCountModalOpen, setIsCashCountModalOpen] = useState(false)
-  const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState(false)
-  const [isAuditLogModalOpen, setIsAuditLogModalOpen] = useState(false)
-  const [isZClosureHistoryModalOpen, setIsZClosureHistoryModalOpen] = useState(false)
 
-  // Initialize active register if needed
   useEffect(() => {
     if (!activeRegisterId && registers && registers.length > 0) {
       setActiveRegisterId(registers[0].id)
     }
   }, [registers, activeRegisterId, setActiveRegisterId])
 
-  return (
-    <div className="flex flex-col h-full p-6 space-y-6">
-      <CashRegisterHeader
-        onOpenPermissions={() => setIsPermissionsModalOpen(true)}
-        onOpenAudit={() => setIsAuditLogModalOpen(true)}
-      />
+  const parsedOpeningAmount = useMemo(() => {
+    const n = Number(openingAmount)
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  }, [openingAmount])
 
-      <Tabs defaultValue="overview" className="flex-1 flex flex-col">
-        <TabsList className="grid w-full max-w-md grid-cols-4 mb-4">
+  const parsedMovementAmount = useMemo(() => {
+    const n = Number(movementAmount)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  }, [movementAmount])
+
+  const openMovementDialog = (type: 'in' | 'out') => {
+    setMovementType(type)
+    setMovementAmount('')
+    setMovementNote('')
+    setIsMovementDialogOpen(true)
+  }
+
+  const openAuditPage = () => {
+    router.push('/dashboard/pos/caja/auditoria')
+  }
+
+  const openHistoryPage = () => {
+    router.push('/dashboard/pos/caja/historial')
+  }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.altKey) return
+
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+
+      const key = event.key.toLowerCase()
+      if (key === 'e') {
+        event.preventDefault()
+        openMovementDialog('in')
+      } else if (key === 's') {
+        event.preventDefault()
+        openMovementDialog('out')
+      } else if (key === 'a') {
+        event.preventDefault()
+        setIsCashCountModalOpen(true)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  useEffect(() => {
+    if (!canAccessAudit && activeTab === 'audit') {
+      setActiveTab('overview')
+    }
+  }, [canAccessAudit, activeTab])
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setViewMode('simple')
+      return
+    }
+    try {
+      const saved = localStorage.getItem('pos_caja_view_mode')
+      if (saved === 'advanced' || saved === 'simple') {
+        setViewMode(saved)
+      } else {
+        setViewMode('advanced')
+      }
+    } catch {
+      setViewMode('advanced')
+    }
+  }, [isAdmin])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    try {
+      localStorage.setItem('pos_caja_view_mode', viewMode)
+    } catch {
+      // no-op
+    }
+  }, [isAdmin, viewMode])
+
+  return (
+    <div className="flex flex-col h-full p-4 md:p-6 space-y-6">
+      <CashRegisterHeader />
+
+      {isAdmin && (
+        <div className="flex justify-end">
+          <div className="inline-flex rounded-lg border bg-card p-1 gap-1">
+            <Button
+              size="sm"
+              variant={viewMode === 'simple' ? 'default' : 'ghost'}
+              onClick={() => setViewMode('simple')}
+            >
+              Modo simple
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === 'advanced' ? 'default' : 'ghost'}
+              onClick={() => setViewMode('advanced')}
+            >
+              Modo avanzado
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+        <TabsList className={`grid w-full max-w-2xl ${canAccessAudit ? 'grid-cols-4' : 'grid-cols-3'} mb-4`}>
           <TabsTrigger value="overview">Resumen</TabsTrigger>
           <TabsTrigger value="report">Reporte</TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
-          <TabsTrigger value="audit">Auditoría</TabsTrigger>
+          {canAccessAudit && <TabsTrigger value="audit">Auditoria</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          <CashRegisterOverview
-            onOpenRegister={() => setIsOpenRegisterDialogOpen(true)}
-            onCloseRegister={() => setIsCloseDialogOpen(true)}
-            onCashIn={() => {
-              setMovementType('in')
-              setMovementAmount('')
-              setMovementNote('')
-              setIsMovementDialogOpen(true)
-            }}
-            onCashOut={() => {
-              setMovementType('out')
-              setMovementAmount('')
-              setMovementNote('')
-              setIsMovementDialogOpen(true)
-            }}
-            onCashCount={() => setIsCashCountModalOpen(true)}
-          />
+          {activeTab === 'overview' && (
+            <CashRegisterOverview
+              onOpenRegister={() => setIsOpenRegisterDialogOpen(true)}
+              onCloseRegister={() => setIsCloseDialogOpen(true)}
+              onCashIn={() => openMovementDialog('in')}
+              onCashOut={() => openMovementDialog('out')}
+              onCashCount={() => setIsCashCountModalOpen(true)}
+              advancedMode={isAdmin && viewMode === 'advanced'}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="report" className="space-y-4">
-          <CashRegisterReport onCloseRegister={() => setIsCloseDialogOpen(true)} />
+          {activeTab === 'report' && (
+            <CashRegisterReport
+              onCloseRegister={() => setIsCloseDialogOpen(true)}
+              advancedMode={isAdmin && viewMode === 'advanced'}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="history">
-          <CashRegisterHistory
-            onOpenFullHistory={() => setIsZClosureHistoryModalOpen(true)}
-            onOpenAudit={() => setIsAuditLogModalOpen(true)}
-          />
+          {activeTab === 'history' && (
+            <CashRegisterHistory
+              onOpenFullHistory={openHistoryPage}
+              onOpenAudit={openAuditPage}
+            />
+          )}
         </TabsContent>
 
-        <TabsContent value="audit">
-          <CashRegisterAudit onOpenFullAudit={() => setIsAuditLogModalOpen(true)} />
-        </TabsContent>
+        {canAccessAudit && (
+          <TabsContent value="audit">
+            {activeTab === 'audit' && (
+              <CashRegisterAudit onOpenFullAudit={openAuditPage} />
+            )}
+          </TabsContent>
+        )}
       </Tabs>
-
-      {/* --- Modals --- */}
 
       <Dialog open={isOpenRegisterDialogOpen} onOpenChange={setIsOpenRegisterDialogOpen}>
         <DialogContent>
@@ -135,8 +230,10 @@ export default function CashRegisterPage() {
               <Input
                 id="amount"
                 type="number"
+                inputMode="decimal"
                 value={openingAmount}
                 onChange={(e) => setOpeningAmount(e.target.value)}
+                placeholder="0"
               />
             </div>
             <div className="grid gap-2">
@@ -145,17 +242,16 @@ export default function CashRegisterPage() {
                 id="note"
                 value={openingNote}
                 onChange={(e) => setOpeningNote(e.target.value)}
-                placeholder="Ej. Turno mañana"
+                placeholder="Ej. Turno manana"
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsOpenRegisterDialogOpen(false)}>Cancelar</Button>
             <Button onClick={() => {
-              const amount = parseFloat(openingAmount) || 0
-              openRegister(amount, openingNote, user?.id)
+              openRegister(parsedOpeningAmount, openingNote, user?.id)
               setIsOpenRegisterDialogOpen(false)
-              setOpeningAmount('0')
+              setOpeningAmount('')
               setOpeningNote('')
             }}>Abrir Caja</Button>
           </DialogFooter>
@@ -167,7 +263,7 @@ export default function CashRegisterPage() {
           <DialogHeader>
             <DialogTitle>Cerrar Caja</DialogTitle>
             <DialogDescription>
-              Confirmar cierre del turno actual. El saldo permanecerá registrado y podrás ver el detalle en reportes.
+              Confirmar cierre del turno actual. El saldo permanecera registrado y podras ver el detalle en reportes.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -196,9 +292,11 @@ export default function CashRegisterPage() {
               <Input
                 id="mov-amount"
                 type="number"
+                inputMode="decimal"
                 value={movementAmount}
                 onChange={(e) => setMovementAmount(e.target.value)}
                 autoFocus
+                placeholder="0"
               />
               <div className="flex flex-wrap gap-2 mt-1">
                 {[5000, 10000, 20000, 50000, 100000].map((amount) => (
@@ -221,20 +319,22 @@ export default function CashRegisterPage() {
                 id="mov-note"
                 value={movementNote}
                 onChange={(e) => setMovementNote(e.target.value)}
-                placeholder={movementType === 'in' ? "Ej. Cambio inicial" : "Ej. Pago a proveedor"}
+                placeholder={movementType === 'in' ? 'Ej. Cambio inicial' : 'Ej. Pago a proveedor'}
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsMovementDialogOpen(false)}>Cancelar</Button>
             <Button
-              variant={movementType === 'out' ? "destructive" : "default"}
+              variant={movementType === 'out' ? 'destructive' : 'default'}
+              disabled={parsedMovementAmount <= 0}
               onClick={() => {
-                const amount = parseFloat(movementAmount)
-                if (!amount || amount <= 0) {
-                  return
-                }
-                addMovement(movementType, amount, movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso'))
+                if (parsedMovementAmount <= 0) return
+                addMovement(
+                  movementType,
+                  parsedMovementAmount,
+                  movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
+                )
                 setIsMovementDialogOpen(false)
               }}
             >
@@ -255,24 +355,7 @@ export default function CashRegisterPage() {
         systemBalance={getCurrentRegister.balance || 0}
       />
 
-      <PermissionsModal
-        isOpen={isPermissionsModalOpen}
-        onClose={() => setIsPermissionsModalOpen(false)}
-      />
-
-      <AuditLogModal
-        isOpen={isAuditLogModalOpen}
-        onClose={() => setIsAuditLogModalOpen(false)}
-      />
-
-      <ZClosureHistoryModal
-        isOpen={isZClosureHistoryModalOpen}
-        onClose={() => setIsZClosureHistoryModalOpen(false)}
-        onViewDetails={(closure) => {
-          // Optional: Handle viewing details of a closure
-          console.log('View details', closure)
-        }}
-      />
     </div>
   )
 }
+

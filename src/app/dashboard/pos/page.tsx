@@ -1380,6 +1380,54 @@ function POSPageContent() {
     return Math.floor(basePoints * bonusMultiplier)
   }, [])
 
+  const mapSaleMethodToCashMethod = useCallback((method: string): 'cash' | 'card' | 'transfer' | null => {
+    const normalized = String(method || '').toLowerCase()
+    if (normalized === 'cash') return 'cash'
+    if (normalized === 'card') return 'card'
+    if (normalized === 'transfer') return 'transfer'
+    // Ventas a credito no deben sumar a caja en el momento de la venta
+    if (normalized === 'credit') return null
+    return null
+  }, [])
+
+  const syncSaleWithCashRegister = useCallback(async (
+    saleId: string,
+    total: number,
+    method: string,
+    splits?: PaymentSplit[]
+  ): Promise<boolean> => {
+    if (!getCurrentRegister.isOpen) return false
+
+    // Pago mixto: registrar cada tramo por metodo
+    if (String(method).toLowerCase() === 'mixed' && Array.isArray(splits)) {
+      let ok = true
+      for (const split of splits) {
+        const mapped = mapSaleMethodToCashMethod(split.method)
+        if (!mapped) continue
+        if ((split.amount || 0) <= 0) continue
+        try {
+          await registerSale(saleId, split.amount, mapped)
+        } catch {
+          ok = false
+        }
+      }
+      return ok
+    }
+
+    const mappedMethod = mapSaleMethodToCashMethod(method)
+    if (!mappedMethod) {
+      // Ej.: credito. Venta registrada en POS pero sin impacto inmediato en caja.
+      return true
+    }
+
+    try {
+      await registerSale(saleId, total, mappedMethod)
+      return true
+    } catch {
+      return false
+    }
+  }, [getCurrentRegister.isOpen, mapSaleMethodToCashMethod, registerSale])
+
   // Procesar venta
   const processSale = useCallback(async () => {
     return measureSaleProcessing(async () => {
@@ -1513,10 +1561,17 @@ function POSPageContent() {
         addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
         return
       }
-      // Registrar venta en caja (Supabase)
+      // Sincronizar venta con caja (await + validacion por metodo de pago)
       if (getCurrentRegister.isOpen) {
         const sid = (saleResult && (saleResult as any).saleId) ? String((saleResult as any).saleId) : 'POS'
-        registerSale(sid, (cartCalculations as any).total, paymentMethod as any)
+        const synced = await syncSaleWithCashRegister(
+          sid,
+          (cartCalculations as any).total,
+          paymentMethod
+        )
+        if (!synced) {
+          toast.warning('Venta guardada, pero no se pudo registrar correctamente en caja.')
+        }
       }
 
       // Mostrar modal de ticket
@@ -1534,7 +1589,7 @@ function POSPageContent() {
         setPaymentStatus('idle')
       }, 600)
     })
-  }, [combinedCartItems, paymentMethod, cashReceived, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing])
+  }, [combinedCartItems, paymentMethod, cashReceived, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing, getCurrentRegister.isOpen, syncSaleWithCashRegister, notes, markRepairDelivered, selectedRepairIds, normalizePaymentError, resetCheckoutState])
 
 
 
@@ -1671,15 +1726,18 @@ function POSPageContent() {
       return
     }
 
-    // Registrar venta mixta en caja (Supabase)
+    // Sincronizar pago mixto con caja (await)
     if (getCurrentRegister.isOpen) {
       const sid = (saleResult && (saleResult as any).saleId) ? String((saleResult as any).saleId) : 'POS'
-      const cashPaid = paymentSplit.filter(split => split.method === 'cash').reduce((sum, split) => sum + split.amount, 0)
-      const cardPaid = paymentSplit.filter(split => split.method === 'card').reduce((sum, split) => sum + split.amount, 0)
-      const transferPaid = paymentSplit.filter(split => split.method === 'transfer').reduce((sum, split) => sum + split.amount, 0)
-      if (cashPaid > 0) registerSale(sid, cashPaid, 'cash')
-      if (cardPaid > 0) registerSale(sid, cardPaid, 'card')
-      if (transferPaid > 0) registerSale(sid, transferPaid, 'transfer')
+      const synced = await syncSaleWithCashRegister(
+        sid,
+        (cartCalculations as any).total,
+        'mixed',
+        paymentSplit
+      )
+      if (!synced) {
+        toast.warning('Venta guardada, pero no se pudo registrar correctamente en caja.')
+      }
     }
 
     // Mostrar modal de ticket
@@ -1699,7 +1757,7 @@ function POSPageContent() {
       setIsCheckoutOpen(false)
       setPaymentStatus('idle')
     }, 600)
-  }, [combinedCartItems, getTotalPaid, getRemainingAmount, formatCurrency, clearCart, persistSaleToSupabase, processInventorySale])
+  }, [combinedCartItems, getTotalPaid, getRemainingAmount, formatCurrency, clearCart, persistSaleToSupabase, processInventorySale, getCurrentRegister.isOpen, paymentSplit, syncSaleWithCashRegister, normalizePaymentError, markRepairDelivered, selectedRepairIds])
 
 
   // Cerrar sugerencias al hacer clic fuera

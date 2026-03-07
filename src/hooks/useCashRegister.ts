@@ -14,6 +14,7 @@ export interface CashMovement {
     created_at: string
     created_by?: string
     userName?: string
+    userEmail?: string
 }
 
 export interface CashRegisterSession {
@@ -57,6 +58,17 @@ export function useCashRegister() {
     useEffect(() => {
         setInitialized(true)
     }, [])
+
+    const resolveActorId = useCallback(async (explicitUserId?: string) => {
+        if (explicitUserId) return explicitUserId
+        if (!supabase) return undefined
+        try {
+            const { data } = await supabase.auth.getUser()
+            return data.user?.id
+        } catch {
+            return undefined
+        }
+    }, [supabase])
 
     // Always sync state to localStorage
 
@@ -176,24 +188,48 @@ export function useCashRegister() {
         const userIds = [...new Set(movements.map(m => m.created_by).filter(Boolean))] as string[]
         let userMap: Record<string, string> = {}
         
+        let emailMap: Record<string, string> = {}
         if (userIds.length > 0) {
-            const { data: profiles } = await supabase
+            const { data: profilesWithEmail, error: profilesWithEmailError } = await supabase
                 .from('profiles')
-                .select('id, full_name')
+                .select('id, full_name, email')
                 .in('id', userIds)
-            
-            if (profiles) {
-                userMap = profiles.reduce((acc, p) => {
-                    acc[p.id] = p.full_name || 'Usuario'
+
+            if (profilesWithEmailError) {
+                const { data: profilesFallback } = await supabase
+                    .from('profiles')
+                    .select('id, full_name')
+                    .in('id', userIds)
+
+                if (profilesFallback) {
+                    userMap = profilesFallback.reduce((acc, p) => {
+                        acc[p.id] = p.full_name || 'Usuario'
+                        return acc
+                    }, {} as Record<string, string>)
+                }
+            } else if (profilesWithEmail) {
+                userMap = profilesWithEmail.reduce((acc, p) => {
+                    acc[p.id] = p.full_name || ''
+                    return acc
+                }, {} as Record<string, string>)
+
+                emailMap = profilesWithEmail.reduce((acc, p) => {
+                    acc[p.id] = p.email || ''
                     return acc
                 }, {} as Record<string, string>)
             }
         }
 
-        const formatted = movements.map(item => ({
-            ...item,
-            userName: item.created_by ? (userMap[item.created_by] || 'Usuario Desconocido') : 'Sistema'
-        }))
+        const formatted = movements.map(item => {
+            const userId = item.created_by || ''
+            const userName = userId ? (userMap[userId] || '') : ''
+            const userEmail = userId ? (emailMap[userId] || '') : ''
+            return {
+                ...item,
+                userName: userName || userEmail || (userId ? 'Usuario Desconocido' : 'Usuario no identificado'),
+                userEmail
+            }
+        })
 
         setAuditLog(formatted)
         return formatted
@@ -332,6 +368,8 @@ export function useCashRegister() {
 
             if (sessionError) throw sessionError
 
+            const actorId = await resolveActorId(userId)
+
             // Create opening movement
             const { error: movementError } = await supabase
                 .from('cash_movements')
@@ -340,7 +378,7 @@ export function useCashRegister() {
                     type: 'opening',
                     amount: openingBalance,
                     reason: 'Apertura de caja',
-                    created_by: userId,
+                    created_by: actorId,
                     created_at: new Date().toISOString()
                 })
 
@@ -350,7 +388,7 @@ export function useCashRegister() {
                 ...session,
                 id: session.id,
                 register_id: session.register_id,
-                opened_by: session.opened_by || userId || 'system',
+                opened_by: session.opened_by || actorId || 'system',
                 opening_balance: session.opening_balance,
                 status: 'open',
                 opened_at: session.created_at,
@@ -372,7 +410,7 @@ export function useCashRegister() {
         } finally {
             setLoading(false)
         }
-    }, [checkOpenSession, supabase])
+    }, [checkOpenSession, supabase, resolveActorId])
 
     // Close cash register
     const closeRegister = useCallback(async (closingBalance: number, userId?: string) => {
@@ -415,6 +453,8 @@ export function useCashRegister() {
 
             if (updateError) throw updateError
 
+            const actorId = await resolveActorId(userId)
+
             // Create closing movement
             await supabase
                 .from('cash_movements')
@@ -423,7 +463,7 @@ export function useCashRegister() {
                     type: 'closing',
                     amount: closingBalance,
                     reason: 'Cierre de caja',
-                    created_by: userId,
+                    created_by: actorId,
                     created_at: new Date().toISOString()
                 })
 
@@ -444,7 +484,7 @@ export function useCashRegister() {
         } finally {
             setLoading(false)
         }
-    }, [currentSession, supabase])
+    }, [currentSession, supabase, resolveActorId])
 
     // Add cash in
     const addCashIn = useCallback(async (amount: number, reason: string, userId?: string) => {
@@ -459,6 +499,7 @@ export function useCashRegister() {
         }
 
         try {
+            const actorId = await resolveActorId(userId)
             const { data, error } = await supabase
                 .from('cash_movements')
                 .insert({
@@ -466,7 +507,7 @@ export function useCashRegister() {
                     type: 'cash_in',
                     amount,
                     reason,
-                    created_by: userId,
+                    created_by: actorId,
                     created_at: new Date().toISOString()
                 })
                 .select()
@@ -486,7 +527,7 @@ export function useCashRegister() {
             toast.error(`Error al registrar entrada: ${error.message || 'Desconocido'}`)
             return false
         }
-    }, [currentSession, supabase])
+    }, [currentSession, supabase, resolveActorId])
 
     // Add cash out
     const addCashOut = useCallback(async (amount: number, reason: string, userId?: string) => {
@@ -501,6 +542,7 @@ export function useCashRegister() {
         }
 
         try {
+            const actorId = await resolveActorId(userId)
             const { data, error } = await supabase
                 .from('cash_movements')
                 .insert({
@@ -508,7 +550,7 @@ export function useCashRegister() {
                     type: 'cash_out',
                     amount,
                     reason,
-                    created_by: userId,
+                    created_by: actorId,
                     created_at: new Date().toISOString()
                 })
                 .select()
@@ -528,7 +570,7 @@ export function useCashRegister() {
             toast.error('Error al registrar salida de efectivo')
             return false
         }
-    }, [currentSession, supabase])
+    }, [currentSession, supabase, resolveActorId])
 
     // Register sale
     const registerSale = useCallback(async (saleId: string, amount: number, method?: 'cash' | 'card' | 'transfer' | 'mixed') => {
@@ -540,6 +582,7 @@ export function useCashRegister() {
         }
 
         try {
+            const actorId = await resolveActorId()
             const { data, error } = await supabase
                 .from('cash_movements')
                 .insert({
@@ -548,6 +591,7 @@ export function useCashRegister() {
                     amount,
                     reason: `Venta ${saleId}`,
                     payment_method: method,
+                    created_by: actorId,
                     created_at: new Date().toISOString()
                 })
                 .select()
@@ -571,7 +615,7 @@ export function useCashRegister() {
             toast.error(`Error al registrar movimiento de caja para la venta: ${error.message}`)
             return false
         }
-    }, [currentSession, supabase])
+    }, [currentSession, supabase, resolveActorId])
 
     // Get current balance
     const getCurrentBalance = useCallback(() => {

@@ -42,6 +42,16 @@ export interface SlowQuery {
   frequency: number
 }
 
+export interface IndexStats {
+  tableName: string
+  indexName: string
+  sizeBytes: number
+  scans: number
+  reads: number
+  isUnused: boolean
+  isMock?: boolean
+}
+
 export interface StorageBreakdown {
   tables: number
   indexes: number
@@ -93,7 +103,7 @@ class DatabaseMonitoringService {
         queryPerformance,
         storageBreakdown,
         alerts,
-        isMockData: totalSizeInfo.isMock || tablesSizes.some(t => t.isMock) || connectionStats.isMock || queryPerformance.isMock
+        isMockData: totalSizeInfo.isMock || tablesSizes.some(t => t.isMock) || connectionStats.isMock || queryPerformance.isMock,
       }
 
       return { success: true, data: metrics }

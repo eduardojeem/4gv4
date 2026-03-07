@@ -34,6 +34,7 @@ export interface AuditLogEntry {
   timestamp: string
   userId: string
   userName: string
+  userEmail?: string
   action: string
   details: string
   registerId: string
@@ -274,7 +275,8 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
       id: m.id,
       timestamp: m.created_at,
       userId: m.created_by || 'system',
-      userName: m.userName || m.created_by || 'Sistema',
+      userName: m.userName || m.userEmail || m.created_by || 'Sistema',
+      userEmail: m.userEmail,
       action: m.type.toUpperCase(),
       details: m.reason || m.type,
       registerId: activeRegisterId, // Approximation

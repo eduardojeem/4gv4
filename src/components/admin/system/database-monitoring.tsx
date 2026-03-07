@@ -9,6 +9,8 @@ import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { 
   Database, 
   HardDrive, 
@@ -53,7 +55,7 @@ import {
   Legend, 
   ResponsiveContainer 
 } from 'recharts';
-import { databaseMonitoringService, DatabaseMetrics, DatabaseAlert, TableSize } from '@/services/database-monitoring-service'
+import { databaseMonitoringService, DatabaseMetrics, DatabaseAlert, TableSize, IndexStats } from '@/services/database-monitoring-service'
 import { useDatabaseMonitoring } from '@/hooks/use-database-monitoring'
 import { useStorageCleanup } from '@/hooks/use-storage-cleanup'
 import { storageCleanupService } from '@/services/storage-cleanup-service'
@@ -190,18 +192,33 @@ export default function DatabaseMonitoring() {
   const [selectedPeriod, setSelectedPeriod] = useState('7d')
   const [growthHistory, setGrowthHistory] = useState<{ date: string; size: number }[]>([])
   const [recommendations, setRecommendations] = useState<string[]>([])
+  const [indexStats, setIndexStats] = useState<IndexStats[]>([])
+  const [autoRefresh, setAutoRefresh] = useState(false)
+
+  // Auto-refresh logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (autoRefresh) {
+      interval = setInterval(() => {
+        refresh()
+      }, 30000) // 30 seconds
+    }
+    return () => clearInterval(interval)
+  }, [autoRefresh, refresh])
 
   // Cargar datos adicionales
   useEffect(() => {
     const loadAdditionalData = async () => {
       try {
-        const [historyData, recommendationsData] = await Promise.all([
+        const [historyData, recommendationsData, indexData] = await Promise.all([
           databaseMonitoringService.getDatabaseGrowthHistory(30),
-          databaseMonitoringService.getOptimizationRecommendations()
+          databaseMonitoringService.getOptimizationRecommendations(),
+          databaseMonitoringService.getIndexStats()
         ])
 
         setGrowthHistory(historyData)
         setRecommendations(recommendationsData)
+        setIndexStats(indexData)
       } catch (err) {
         console.error('Error cargando datos adicionales:', err)
       }
@@ -323,8 +340,19 @@ export default function DatabaseMonitoring() {
           </div>
           
           <div className="flex items-center gap-2">
+            <div className="flex items-center space-x-2 bg-black/20 p-2 rounded-lg mr-2">
+              <Switch 
+                id="auto-refresh" 
+                checked={autoRefresh}
+                onCheckedChange={setAutoRefresh}
+                className="data-[state=checked]:bg-green-500"
+              />
+              <Label htmlFor="auto-refresh" className="text-xs font-medium cursor-pointer select-none text-indigo-100">
+                Auto-Refresh (30s)
+              </Label>
+            </div>
             <Button 
-              variant="outline" 
+              variant="outline"  
               onClick={exportMetrics}
               className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
             >
@@ -417,6 +445,7 @@ export default function DatabaseMonitoring() {
       <Tabs defaultValue="tables" className="space-y-6">
         <TabsList className="bg-muted/50 p-1 rounded-xl">
           <TabsTrigger value="tables" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Tablas</TabsTrigger>
+          <TabsTrigger value="indexes" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Índices</TabsTrigger>
           <TabsTrigger value="storage" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Almacenamiento</TabsTrigger>
           <TabsTrigger value="performance" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Rendimiento</TabsTrigger>
           <TabsTrigger value="growth" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Crecimiento</TabsTrigger>
@@ -497,6 +526,66 @@ export default function DatabaseMonitoring() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="indexes" className="space-y-4 animate-in fade-in-50">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileSearch className="h-5 w-5 text-primary" />
+                Análisis de Índices
+              </CardTitle>
+              <CardDescription>
+                Identifica índices poco utilizados o ineficientes que consumen espacio
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1 max-h-[500px] overflow-y-auto pr-2">
+                {indexStats.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">Cargando análisis de índices...</div>
+                ) : (
+                  <div className="grid gap-2">
+                    {indexStats.map((idx, i) => (
+                      <div 
+                        key={`${idx.tableName}-${idx.indexName}`} 
+                        className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{idx.indexName}</span>
+                            {idx.isUnused && (
+                              <Badge variant="destructive" className="text-[10px] h-5 px-1.5">Sin uso</Badge>
+                            )}
+                            {idx.isMock && (
+                              <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-muted-foreground">Simulado</Badge>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Tabla: <span className="font-mono text-foreground">{idx.tableName}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-6 text-sm">
+                          <div className="text-right">
+                            <div className="text-xs text-muted-foreground mb-0.5">Escaneos</div>
+                            <div className="font-medium">{idx.scans.toLocaleString()}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-muted-foreground mb-0.5">Lecturas</div>
+                            <div className="font-medium">{idx.reads.toLocaleString()}</div>
+                          </div>
+                          <div className="text-right min-w-[80px]">
+                            <div className="text-xs text-muted-foreground mb-0.5">Tamaño</div>
+                            <div className="font-bold">{formatBytes(idx.sizeBytes)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="storage" className="space-y-4 animate-in fade-in-50">
@@ -799,7 +888,15 @@ export default function DatabaseMonitoring() {
   )
 }
 
-function MaintenanceTaskItem({ title, description, icon, onExecute, loading }: any) {
+interface MaintenanceTaskItemProps {
+  title: string
+  description: string
+  icon: React.ReactNode
+  onExecute: () => void
+  loading: boolean
+}
+
+function MaintenanceTaskItem({ title, description, icon, onExecute, loading }: MaintenanceTaskItemProps) {
   return (
     <div className="flex items-center justify-between p-4 border rounded-xl bg-card hover:bg-muted/30 transition-colors">
       <div className="space-y-1">
@@ -1033,7 +1130,8 @@ function StorageCleanupSection() {
                             alt={file.name} 
                             className="w-full h-full object-cover"
                             onError={(e) => {
-                              (e.target as any).src = "https://placehold.co/100x100?text=Err"
+                              const target = e.target as HTMLImageElement;
+                              target.src = "https://placehold.co/100x100?text=Err"
                             }}
                           />
                         </div>
