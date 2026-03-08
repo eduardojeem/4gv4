@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useTransition, useCallback } from 'react'
+﻿import { useState, useEffect, useMemo, useTransition, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { config } from '@/lib/config'
@@ -12,6 +12,7 @@ export type CreditRow = {
     start_date: string
     status: 'active' | 'completed' | 'defaulted' | 'cancelled'
     customer_name?: string
+    customer_code?: string
 }
 
 export type InstallmentRow = {
@@ -50,6 +51,10 @@ export type InstallmentProgressRow = {
     status_effective: 'pending' | 'paid' | 'late'
 }
 
+export type MarkInstallmentPaidResult =
+    | { success: true; appliedAmount: number; installmentId: string }
+    | { success: false; error: string }
+
 type InstallmentFilters = {
     status: string
     fromDate: string
@@ -59,19 +64,41 @@ type InstallmentFilters = {
     customerName: string
 }
 
+/** Retorna true si la cuota está vencida aunque su status sea 'pending' */
+export const isInstallmentLate = (i: InstallmentRow): boolean =>
+  i.status === 'late' || (i.status === 'pending' && new Date(i.due_date) < new Date())
+
 const fetchData = async (supabase: SupabaseClient) => {
-    const creditsResult = await (supabase.from('credit_details').select('*') as unknown as Promise<{ data?: unknown }>)
-    const installmentsResult = await (supabase.from('credit_installments').select('*') as unknown as Promise<{ data?: unknown }>)
-    const paymentsResult = await (supabase.from('credit_payments').select('*') as unknown as Promise<{ data?: unknown }>)
-    const summaryResult = await (supabase.from('credit_summary').select('*') as unknown as Promise<{ data?: unknown }>)
-    const installmentsProgressResult = await (supabase.from('credit_installments_progress').select('*') as unknown as Promise<{ data?: unknown }>)
-    return {
-        dbCredits: creditsResult.data,
-        dbInstallments: installmentsResult.data,
-        dbPayments: paymentsResult.data,
-        dbSummary: summaryResult.data,
-        dbInstallmentsProgress: installmentsProgressResult.data
-    }
+  const [
+    creditsResult,
+    installmentsResult,
+    paymentsResult,
+    summaryResult,
+    installmentsProgressResult,
+    customersResult
+  ] = await Promise.all([
+    supabase.from('credit_details').select('*') as unknown as Promise<{ data?: unknown }>,
+    supabase
+      .from('credit_installments')
+      .select('*')
+      .order('due_date', { ascending: true })
+      .order('installment_number', { ascending: true }) as unknown as Promise<{ data?: unknown }>,
+    supabase
+      .from('credit_payments')
+      .select('*')
+      .order('created_at', { ascending: false }) as unknown as Promise<{ data?: unknown }>,
+    supabase.from('credit_summary').select('*') as unknown as Promise<{ data?: unknown }>,
+    supabase.from('credit_installments_progress').select('*') as unknown as Promise<{ data?: unknown }>,
+    supabase.from('customers').select('id, customer_code') as unknown as Promise<{ data?: unknown }>
+  ])
+  return {
+    dbCredits: creditsResult.data,
+    dbInstallments: installmentsResult.data,
+    dbPayments: paymentsResult.data,
+    dbSummary: summaryResult.data,
+    dbInstallmentsProgress: installmentsProgressResult.data,
+    dbCustomers: customersResult.data
+  }
 }
 
 export function useCredits() {
@@ -97,7 +124,12 @@ export function useCredits() {
     const loadData = useCallback(async () => {
         setLoading(true)
         try {
-            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress } = await fetchData(supabase as SupabaseClient)
+            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers } = await fetchData(supabase as SupabaseClient)
+
+            const customersMap = ((dbCustomers || []) as any[]).reduce((acc, c) => {
+                acc[c.id] = c.customer_code
+                return acc
+            }, {} as Record<string, string>)
 
             // Normalization Logic (Copied from original page.tsx to maintain logic parity)
             const creditsRaw = (dbCredits || []) as unknown as unknown[]
@@ -117,7 +149,8 @@ export function useCredits() {
                     term_months: Number(o['term_months'] || 0),
                     start_date: String(o['start_date'] || new Date().toISOString()),
                     status,
-                    customer_name: typeof nameVal === 'string' ? nameVal : undefined
+                    customer_name: typeof nameVal === 'string' ? nameVal : undefined,
+                    customer_code: customersMap[String(o['customer_id'] || '')]
                 } as CreditRow
             })
             setCredits(normalizedCredits)
@@ -173,50 +206,74 @@ export function useCredits() {
 
         return () => { channel.unsubscribe() }
     }, [supabase, loadData, refreshData])
+    const markInstallmentPaid = useCallback(async (
+        installmentId: string,
+        method: string,
+        amount: number,
+        notes?: string
+    ): Promise<MarkInstallmentPaidResult> => {
+        const current = installments.find(i => i.id === installmentId)
+        if (!current) {
+            return { success: false, error: 'Cuota no encontrada.' }
+        }
 
+        const now = new Date().toISOString()
+        const baseAmount = Number(current.amount || 0)
+        const currentPaidRaw = Number(current.amount_paid || 0)
+        const currentPaid = Number.isFinite(currentPaidRaw)
+            ? Math.max(0, Math.min(baseAmount, currentPaidRaw))
+            : 0
+        const outstanding = Math.max(baseAmount - currentPaid, 0)
+        const requestedAmount = Number.isFinite(amount) ? Number(amount) : outstanding
+        const selectedAmount = Math.max(0, Math.min(requestedAmount, outstanding))
 
-    const markInstallmentPaid = useCallback((installmentId: string, method: string, amount: number, notes?: string) => {
-        startTransition(async () => {
-            const current = installments.find(i => i.id === installmentId)
-            if (!current) return
+        if (selectedAmount <= 0) {
+            return { success: false, error: 'La cuota ya no tiene saldo pendiente.' }
+        }
 
-            const now = new Date().toISOString()
-            const baseAmount = typeof current.amount === 'number' ? current.amount : Number(current.amount || 0)
+        const accumulated = Math.min(baseAmount, currentPaid + selectedAmount)
+        const isFullyPaid = accumulated >= baseAmount
+        const nextStatus: InstallmentRow['status'] = isFullyPaid
+            ? 'paid'
+            : (isInstallmentLate(current) ? 'late' : 'pending')
 
-            // Validation Logic
-            const selectedAmount = typeof amount === 'number' && !Number.isNaN(amount) ? Math.min(Math.max(amount, 0), baseAmount) : baseAmount
-            const accumulated = Math.min(baseAmount, (typeof current.amount_paid === 'number' ? current.amount_paid : 0) + selectedAmount)
-            const isFullyPaid = accumulated >= baseAmount
-            const nextStatus: InstallmentRow['status'] = isFullyPaid ? 'paid' : (current.status === 'late' ? 'late' : 'pending')
+        if (!config.supabase.isConfigured) {
+            // Actualizacion optimista (entorno sin Supabase)
+            setInstallments(prev =>
+                prev.map(i => (
+                    i.id === installmentId
+                        ? { ...i, status: nextStatus, paid_at: isFullyPaid ? now : i.paid_at, payment_method: method, amount_paid: accumulated }
+                        : i
+                ))
+            )
+            setPayments(prev => ([{
+                id: `p-${Date.now()}`,
+                credit_id: current.credit_id,
+                installment_id: installmentId,
+                amount: selectedAmount,
+                payment_method: method as PaymentRow['payment_method'],
+                created_at: now
+            }, ...prev]))
+            return { success: true, appliedAmount: selectedAmount, installmentId }
+        }
 
-            if (!config.supabase.isConfigured) {
-                // Optimistic / Mock update
-                setInstallments(prev =>
-                    prev.map(i => (i.id === installmentId ? { ...i, status: nextStatus, paid_at: isFullyPaid ? now : i.paid_at, payment_method: method, amount_paid: accumulated } : i))
-                )
-                setPayments(prev => ([...prev, {
-                    id: `p-${Date.now()}`,
-                    credit_id: current.credit_id,
-                    installment_id: installmentId,
-                    amount: selectedAmount,
-                    payment_method: method as PaymentRow['payment_method'],
-                    created_at: now
-                }]))
-                return
-            }
+        const { error } = await (supabase.from('credit_payments')
+            .insert({
+                credit_id: current.credit_id,
+                installment_id: installmentId,
+                amount: selectedAmount,
+                payment_method: method,
+                notes
+            }) as unknown as Promise<{ error: unknown }>)
 
-            // Real update
-            await (supabase.from('credit_payments')
-                .insert({ 
-                    credit_id: current.credit_id, 
-                    installment_id: installmentId, 
-                    amount: selectedAmount, 
-                    payment_method: method,
-                    notes: notes 
-                }) as unknown as Promise<unknown>)
+        if (error) {
+            const message = error instanceof Error ? error.message : 'No se pudo registrar el pago.'
+            console.error('Error al registrar el pago:', error)
+            return { success: false, error: message }
+        }
 
-            await loadData()
-        })
+        await loadData()
+        return { success: true, appliedAmount: selectedAmount, installmentId }
     }, [installments, supabase, loadData])
 
 
@@ -236,7 +293,9 @@ export function useCredits() {
         // Fallback calculation
         for (const i of installments) {
             if (i.status === 'pending' || i.status === 'late') {
-                map[i.credit_id] = (map[i.credit_id] || 0) + (Number(i.amount) || 0)
+                const installmentAmount = Number(i.amount || 0)
+                const paidAmount = Math.max(0, Number(i.amount_paid || 0))
+                map[i.credit_id] = (map[i.credit_id] || 0) + Math.max(0, installmentAmount - paidAmount)
             }
         }
         return map
@@ -257,16 +316,15 @@ export function useCredits() {
 
     const getNextPendingInstallment = useCallback((creditId: string) => {
         return installments
-            .filter(i => i.credit_id === creditId && i.status === 'pending')
+            .filter(i => i.credit_id === creditId && (i.status === 'pending' || i.status === 'late'))
             .sort((a, b) => a.installment_number - b.installment_number)[0]
     }, [installments])
 
     const filteredInstallments = useMemo(() => {
-        const isLate = (i: InstallmentRow) => i.status === 'pending' && new Date(i.due_date) < new Date()
         return installments.filter(i => {
             if (filterValues.status) {
                 if (filterValues.status === 'late') {
-                    if (!(i.status === 'late' || isLate(i))) return false
+                    if (!isInstallmentLate(i)) return false
                 } else {
                     if (i.status !== filterValues.status) return false
                 }
@@ -274,7 +332,11 @@ export function useCredits() {
             if (filterValues.creditId && !String(i.credit_id).toLowerCase().includes(String(filterValues.creditId).toLowerCase())) return false
             if (filterValues.minAmount && Number(i.amount) < Number(filterValues.minAmount)) return false
             if (filterValues.fromDate && new Date(i.due_date) < new Date(filterValues.fromDate)) return false
-            if (filterValues.toDate && new Date(i.due_date) > new Date(filterValues.toDate)) return false
+            if (filterValues.toDate) {
+                const toDate = new Date(filterValues.toDate)
+                toDate.setHours(23, 59, 59, 999)
+                if (new Date(i.due_date) > toDate) return false
+            }
             if (filterValues.customerName) {
                 const name = creditById[i.credit_id]?.customer_name || ''
                 if (!name.toLowerCase().includes(String(filterValues.customerName).toLowerCase())) return false
@@ -302,3 +364,5 @@ export function useCredits() {
         filteredInstallments
     }
 }
+
+

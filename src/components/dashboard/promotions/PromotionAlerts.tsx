@@ -17,8 +17,8 @@ interface PromotionAlertsProps {
     expiringSoon: Promotion[]
     unused: Promotion[]
     expiredActive: Promotion[]
-    onCleanupExpired: () => void
-    onEdit: (promotion: Promotion) => void
+    onCleanupExpired?: () => void
+    onEdit?: (promotion: Promotion) => void
 }
 
 export function PromotionAlerts({
@@ -67,14 +67,16 @@ export function PromotionAlerts({
                                 </CardTitle>
                                 <Badge variant="destructive">{expiredActive.length}</Badge>
                             </div>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={onCleanupExpired}
-                                className="border-red-300 text-red-700 hover:bg-red-100"
-                            >
-                                Desactivar todas
-                            </Button>
+                            {onCleanupExpired && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={onCleanupExpired}
+                                    className="border-red-300 text-red-700 hover:bg-red-100"
+                                >
+                                    Desactivar todas
+                                </Button>
+                            )}
                         </div>
                     </CardHeader>
                     <CardContent>
@@ -91,13 +93,15 @@ export function PromotionAlerts({
                                         <p className="font-medium text-sm">{promo.name}</p>
                                         <p className="text-xs text-muted-foreground">{promo.code}</p>
                                     </div>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => onEdit(promo)}
-                                    >
-                                        Ver
-                                    </Button>
+                                    {onEdit && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => onEdit(promo)}
+                                        >
+                                            Ver
+                                        </Button>
+                                    )}
                                 </div>
                             ))}
                             {expiredActive.length > 3 && (
@@ -138,13 +142,15 @@ export function PromotionAlerts({
                                         <p className="font-medium text-sm">{promo.name}</p>
                                         <p className="text-xs text-muted-foreground">{promo.code}</p>
                                     </div>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => onEdit(promo)}
-                                    >
-                                        Editar
-                                    </Button>
+                                    {onEdit && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => onEdit(promo)}
+                                        >
+                                            Editar
+                                        </Button>
+                                    )}
                                 </div>
                             ))}
                             {expiringSoon.length > 3 && (
@@ -185,13 +191,15 @@ export function PromotionAlerts({
                                         <p className="font-medium text-sm">{promo.name}</p>
                                         <p className="text-xs text-muted-foreground">{promo.code}</p>
                                     </div>
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => onEdit(promo)}
-                                    >
-                                        Revisar
-                                    </Button>
+                                    {onEdit && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => onEdit(promo)}
+                                        >
+                                            Revisar
+                                        </Button>
+                                    )}
                                 </div>
                             ))}
                             {unused.length > 3 && (

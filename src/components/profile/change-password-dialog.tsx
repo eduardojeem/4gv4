@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,20 +13,26 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
-import { Key, Loader2, Eye, EyeOff, Check, X, Clock } from 'lucide-react'
+import { Key, Loader2, Eye, EyeOff, Check, X, Clock, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getSessionIdFromAccessToken } from '@/lib/session-id'
 import { z } from 'zod'
 
 const passwordSchema = z.object({
-  password: z.string().min(8, 'Mínimo 8 caracteres'),
+  password: z.string()
+    .min(8, 'Minimo 8 caracteres')
+    .regex(/[A-Z]/, 'Debe incluir una mayuscula')
+    .regex(/[a-z]/, 'Debe incluir una minuscula')
+    .regex(/[0-9]/, 'Debe incluir un numero')
+    .regex(/[^A-Za-z0-9]/, 'Debe incluir un caracter especial'),
   confirmPassword: z.string()
 }).refine((data) => data.password === data.confirmPassword, {
-  message: "Las contraseñas no coinciden",
+  message: "Las contrasenas no coinciden",
   path: ["confirmPassword"],
 })
 
-const RATE_LIMIT_KEY = 'last_password_change'
 const COOLDOWN_MS = 60000 // 1 minuto
 
 export function ChangePasswordDialog() {
@@ -37,16 +43,44 @@ export function ChangePasswordDialog() {
     password: '',
     confirmPassword: ''
   })
+  const [closeOtherSessions, setCloseOtherSessions] = useState(true)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [cooldownRemaining, setCooldownRemaining] = useState(0)
   const supabase = createClient()
 
-  // Check cooldown on mount and when dialog opens
+  const loadServerCooldown = useCallback(async () => {
+    if (!open) return
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data, error } = await supabase.rpc('get_user_activity', {
+        p_user_id: user.id,
+        p_limit: 50
+      })
+      if (error) return
+
+      const activity = Array.isArray(data) ? data : []
+      const lastPasswordChange = activity
+        .filter((item: any) => item?.action === 'password_change')
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+
+      if (!lastPasswordChange?.created_at) return
+
+      const elapsed = Date.now() - new Date(lastPasswordChange.created_at).getTime()
+      const remaining = COOLDOWN_MS - elapsed
+      setCooldownRemaining(remaining > 0 ? remaining : 0)
+    } catch {
+      // If activity query fails, do not block password update UI.
+    }
+  }, [open, supabase])
+
+  // Check cooldown from server activity when dialog opens
   useEffect(() => {
     if (open) {
-      checkCooldown()
+      loadServerCooldown()
     }
-  }, [open])
+  }, [open, loadServerCooldown])
 
   // Update countdown timer
   useEffect(() => {
@@ -58,20 +92,12 @@ export function ChangePasswordDialog() {
     }
   }, [cooldownRemaining])
 
-  const checkCooldown = () => {
-    try {
-      const lastChange = localStorage.getItem(RATE_LIMIT_KEY)
-      if (lastChange) {
-        const elapsed = Date.now() - parseInt(lastChange)
-        const remaining = COOLDOWN_MS - elapsed
-        if (remaining > 0) {
-          setCooldownRemaining(remaining)
-        }
-      }
-    } catch (error) {
-      // Ignore localStorage errors
+  useEffect(() => {
+    if (!open) {
+      setErrors({})
+      setShowPassword(false)
     }
-  }
+  }, [open])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,7 +106,7 @@ export function ChangePasswordDialog() {
     // Check rate limit
     if (cooldownRemaining > 0) {
       const seconds = Math.ceil(cooldownRemaining / 1000)
-      toast.error(`Debes esperar ${seconds} segundos antes de cambiar la contraseña nuevamente`)
+      toast.error(`Debes esperar ${seconds} segundos antes de cambiar la contrasena nuevamente`)
       return
     }
 
@@ -103,19 +129,41 @@ export function ChangePasswordDialog() {
 
       if (error) throw error
 
-      // Set cooldown
-      try {
-        localStorage.setItem(RATE_LIMIT_KEY, Date.now().toString())
-      } catch (error) {
-        // Ignore localStorage errors
+      await supabase.rpc('log_auth_event', {
+        p_user_id: null,
+        p_action: 'password_change',
+        p_success: true,
+        p_ip_address: null,
+        p_user_agent: typeof window !== 'undefined' ? window.navigator.userAgent : null,
+        p_details: { source: 'dashboard_profile' }
+      })
+
+      if (closeOtherSessions) {
+        try {
+          const [{ data: userData }, { data: sessionData }] = await Promise.all([
+            supabase.auth.getUser(),
+            supabase.auth.getSession()
+          ])
+          const currentUserId = userData.user?.id
+          const currentSessionId = await getSessionIdFromAccessToken(sessionData.session?.access_token)
+
+          if (currentUserId && currentSessionId) {
+            await supabase.rpc('close_all_user_sessions_except_current', {
+              p_user_id: currentUserId,
+              p_current_session_id: currentSessionId
+            })
+          }
+        } catch {
+          toast.warning('Contrasena actualizada, pero no se pudieron cerrar otras sesiones')
+        }
       }
 
-      toast.success('Contraseña actualizada correctamente')
+      toast.success('Contrasena actualizada correctamente')
       setOpen(false)
       setFormData({ password: '', confirmPassword: '' })
       setCooldownRemaining(COOLDOWN_MS)
     } catch (error: any) {
-      toast.error(error.message || 'Error al actualizar contraseña')
+      toast.error(error.message || 'Error al actualizar contrasena')
     } finally {
       setIsLoading(false)
     }
@@ -123,10 +171,11 @@ export function ChangePasswordDialog() {
 
   const checkStrength = (pass: string) => {
     let strength = 0
-    if (pass.length >= 8) strength += 25
-    if (/[A-Z]/.test(pass)) strength += 25
-    if (/[0-9]/.test(pass)) strength += 25
-    if (/[^A-Za-z0-9]/.test(pass)) strength += 25
+    if (pass.length >= 8) strength += 20
+    if (/[A-Z]/.test(pass)) strength += 20
+    if (/[a-z]/.test(pass)) strength += 20
+    if (/[0-9]/.test(pass)) strength += 20
+    if (/[^A-Za-z0-9]/.test(pass)) strength += 20
     return strength
   }
 
@@ -137,6 +186,14 @@ export function ChangePasswordDialog() {
     if (s <= 75) return 'bg-yellow-500'
     return 'bg-green-500'
   }
+
+  const passwordChecks = [
+    { label: 'Minimo 8 caracteres', ok: formData.password.length >= 8 },
+    { label: 'Una mayuscula', ok: /[A-Z]/.test(formData.password) },
+    { label: 'Una minuscula', ok: /[a-z]/.test(formData.password) },
+    { label: 'Un numero', ok: /[0-9]/.test(formData.password) },
+    { label: 'Un caracter especial', ok: /[^A-Za-z0-9]/.test(formData.password) },
+  ]
 
   const isOnCooldown = cooldownRemaining > 0
 
@@ -151,20 +208,20 @@ export function ChangePasswordDialog() {
               Espera {Math.ceil(cooldownRemaining / 1000)}s
             </span>
           ) : (
-            'Cambiar contraseña'
+            'Cambiar contrasena'
           )}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Cambiar Contraseña</DialogTitle>
+          <DialogTitle>Cambiar contrasena</DialogTitle>
           <DialogDescription>
-            Asegúrate de usar una contraseña segura y única.
+            Asegurate de usar una contrasena segura y unica.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-4">
           <div className="space-y-2">
-            <Label htmlFor="new-password">Nueva Contraseña</Label>
+            <Label htmlFor="new-password">Nueva contrasena</Label>
             <div className="relative">
               <Input
                 id="new-password"
@@ -188,7 +245,7 @@ export function ChangePasswordDialog() {
               </Button>
             </div>
             {formData.password && (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
                   <div
                     className={`h-full transition-all duration-300 ${getStrengthColor(strength)}`}
@@ -198,6 +255,20 @@ export function ChangePasswordDialog() {
                 <p className="text-[10px] text-muted-foreground text-right">
                   Fortaleza: {strength}%
                 </p>
+                <div className="grid gap-1">
+                  {passwordChecks.map((rule) => (
+                    <div key={rule.label} className="flex items-center gap-1.5 text-[11px]">
+                      {rule.ok ? (
+                        <Check className="h-3.5 w-3.5 text-green-600" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 text-slate-400" />
+                      )}
+                      <span className={rule.ok ? 'text-green-700 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}>
+                        {rule.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {errors.password && (
@@ -208,10 +279,10 @@ export function ChangePasswordDialog() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirmar Contraseña</Label>
+            <Label htmlFor="confirm-password">Confirmar contrasena</Label>
             <Input
               id="confirm-password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               value={formData.confirmPassword}
               onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
               className={errors.confirmPassword ? 'border-red-500' : ''}
@@ -223,11 +294,28 @@ export function ChangePasswordDialog() {
             )}
           </div>
 
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">Cerrar otras sesiones</p>
+              <p className="text-xs text-muted-foreground">
+                Recomendado despues de cambiar la contrasena
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <LogOut className="h-4 w-4 text-muted-foreground" />
+              <Switch
+                checked={closeOtherSessions}
+                onCheckedChange={setCloseOtherSessions}
+                disabled={isLoading}
+              />
+            </div>
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button type="submit" disabled={isLoading || strength < 60}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Actualizar
             </Button>

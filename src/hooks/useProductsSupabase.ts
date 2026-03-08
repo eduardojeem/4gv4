@@ -69,7 +69,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   })
   const [pagination, setPagination] = useState<PaginationOptions>({
     page: 1,
-    limit: 1000 // Aumentado para soportar filtrado en cliente temporalmente
+    // 0 = sin límite (traer todos los registros que coincidan con filtros)
+    limit: 0
   })
 
   const supabase = createClient()
@@ -198,6 +199,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         if (activeFilters.stockStatus === 'in_stock') {
           query = query.filter('stock_quantity', 'gt', 0)
         } else if (activeFilters.stockStatus === 'low_stock') {
+          // PostgREST no permite comparar columnas directamente (stock_quantity <= min_stock).
+          // Filtramos parcialmente en SQL y completamos en memoria más abajo.
           query = query.filter('stock_quantity', 'gt', 0)
         } else if (activeFilters.stockStatus === 'out_of_stock') {
           query = query.filter('stock_quantity', 'eq', 0)
@@ -218,13 +221,15 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       const sortColumn = sortColumnMap[activeSort.field] || 'created_at'
       query = query.order(sortColumn, { ascending: activeSort.direction === 'asc' })
 
-      // Aplicar paginación
-      const from = (activePagination.page - 1) * activePagination.limit
-      const to = from + activePagination.limit - 1
-      query = query.range(from, to)
-
-      // Log de diagnóstico
-      console.log('Fetching products with filters:', activeFilters)
+      // Aplicar paginación solo cuando corresponda.
+      // Para low_stock evitamos paginar antes del filtro en memoria.
+      const shouldPaginate =
+        activePagination.limit > 0 && activeFilters.stockStatus !== 'low_stock'
+      if (shouldPaginate) {
+        const from = (activePagination.page - 1) * activePagination.limit
+        const to = from + activePagination.limit - 1
+        query = query.range(from, to)
+      }
       
       const { data, error, count } = await query
 
@@ -233,8 +238,6 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         throw error
       }
       
-      console.log(`Fetched ${data?.length || 0} products. Total count: ${count}`)
-
       let resultData = (data || []) as unknown as Product[]
       if (activeFilters.stockStatus === 'low_stock') {
         resultData = resultData.filter(
@@ -875,7 +878,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     setPagination,
     // Variables calculadas adicionales
     totalProducts: totalCount,
-    totalPages: Math.ceil(totalCount / pagination.limit),
+    totalPages: Math.max(1, Math.ceil(totalCount / Math.max(1, pagination.limit || totalCount || 1))),
     currentPage: pagination.page,
     // Funciones de datos
     fetchProducts,

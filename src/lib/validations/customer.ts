@@ -92,7 +92,7 @@ export const createCustomerSchema = z.object({
   
   credit_limit: z.number()
     .min(0, "Límite de crédito no puede ser negativo")
-    .max(1000000, "Límite de crédito no puede exceder 1,000,000")
+    .max(1000000000, "Límite de crédito no puede exceder 1,000,000,000")
     .default(0),
   
   discount_percentage: z.number()
@@ -181,7 +181,7 @@ export const updateCustomerSchema = z.object({
   
   credit_limit: z.number()
     .min(0, "Límite de crédito no puede ser negativo")
-    .max(1000000, "Límite de crédito no puede exceder 1,000,000")
+    .max(1000000000, "Límite de crédito no puede exceder 1,000,000,000")
     .optional(),
   
   discount_percentage: z.number()
@@ -338,7 +338,9 @@ export function preprocessCustomerData(data: any): any {
       const trimmed = value.trim()
       
       // Check if value is invalid
-      if (!trimmed || invalidValues.some(invalid => trimmed.includes(invalid))) {
+      // Allow empty strings (length 0) but filter out known invalid placeholders
+      // We use trimmed !== '' to ensure we don't delete intentional empty strings
+      if (trimmed !== '' && invalidValues.some(invalid => trimmed.includes(invalid))) {
         delete processed[key] // Remove invalid fields completely
       } else {
         processed[key] = trimmed

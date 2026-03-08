@@ -33,10 +33,10 @@ interface PromotionCardProps {
     promotion: Promotion
     status: 'active' | 'scheduled' | 'expired' | 'inactive'
     isExpiringSoon: boolean
-    onEdit: (promotion: Promotion) => void
-    onDelete: (promotion: Promotion) => void
-    onDuplicate: (promotion: Promotion) => void
-    onToggleStatus: (promotion: Promotion) => void
+    onEdit?: (promotion: Promotion) => void
+    onDelete?: (promotion: Promotion) => void
+    onDuplicate?: (promotion: Promotion) => void
+    onToggleStatus?: (promotion: Promotion) => void
 }
 
 export function PromotionCard({
@@ -48,6 +48,8 @@ export function PromotionCard({
     onDuplicate,
     onToggleStatus
 }: PromotionCardProps) {
+    const hasActions = Boolean(onEdit || onDuplicate || onToggleStatus || onDelete)
+
     const statusConfig = {
         active: {
             label: 'Activa',
@@ -91,44 +93,56 @@ export function PromotionCard({
                             </Badge>
                         </div>
                     </div>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => onEdit(promotion)}>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onDuplicate(promotion)}>
-                                <Copy className="h-4 w-4 mr-2" />
-                                Duplicar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onToggleStatus(promotion)}>
-                                {promotion.is_active ? (
-                                    <>
-                                        <PowerOff className="h-4 w-4 mr-2" />
-                                        Desactivar
-                                    </>
-                                ) : (
-                                    <>
-                                        <Power className="h-4 w-4 mr-2" />
-                                        Activar
-                                    </>
+                    {hasActions && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                    <MoreVertical className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                {onEdit && (
+                                    <DropdownMenuItem onClick={() => onEdit(promotion)}>
+                                        <Edit className="h-4 w-4 mr-2" />
+                                        Editar
+                                    </DropdownMenuItem>
                                 )}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                                onClick={() => onDelete(promotion)}
-                                className="text-red-600"
-                            >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Eliminar
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                                {onDuplicate && (
+                                    <DropdownMenuItem onClick={() => onDuplicate(promotion)}>
+                                        <Copy className="h-4 w-4 mr-2" />
+                                        Duplicar
+                                    </DropdownMenuItem>
+                                )}
+                                {onToggleStatus && (
+                                    <DropdownMenuItem onClick={() => onToggleStatus(promotion)}>
+                                        {promotion.is_active ? (
+                                            <>
+                                                <PowerOff className="h-4 w-4 mr-2" />
+                                                Desactivar
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Power className="h-4 w-4 mr-2" />
+                                                Activar
+                                            </>
+                                        )}
+                                    </DropdownMenuItem>
+                                )}
+                                {onDelete && (onEdit || onDuplicate || onToggleStatus) && (
+                                    <DropdownMenuSeparator />
+                                )}
+                                {onDelete && (
+                                    <DropdownMenuItem
+                                        onClick={() => onDelete(promotion)}
+                                        className="text-red-600"
+                                    >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Eliminar
+                                    </DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
                 </div>
             </CardHeader>
 

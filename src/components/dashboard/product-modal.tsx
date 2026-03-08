@@ -61,6 +61,15 @@ interface ProductModalProps {
   suppliers: Supplier[]
 }
 
+const DEFAULT_POST_SALE_VALUES = {
+  warranty_months: 3,
+  warranty_info: 'Cubre defectos de fabrica. No cubre golpes, humedad ni manipulacion.',
+  return_window_days: 7,
+  exchange_window_days: 7,
+  return_policy: 'Devolucion dentro de 7 dias con factura, empaque original y producto sin danos.',
+  exchange_policy: 'Cambio dentro de 7 dias por falla de fabrica o error de entrega, sujeto a stock.',
+} as const
+
 export function ProductModal({
   product,
   isOpen,
@@ -103,6 +112,7 @@ export function ProductModal({
       wholesale_price: 0,
       offer_price: 0,
       has_offer: false,
+      ...DEFAULT_POST_SALE_VALUES,
       stock_quantity: 0,
       min_stock: 0,
       max_stock: 0,
@@ -121,6 +131,9 @@ export function ProductModal({
   const wholesalePrice = watch('wholesale_price')
   const offerPrice = watch('offer_price')
   const hasOffer = watch('has_offer')
+  const warrantyMonths = watch('warranty_months')
+  const returnWindowDays = watch('return_window_days')
+  const exchangeWindowDays = watch('exchange_window_days')
   const stockQuantity = watch('stock_quantity')
   const minStock = watch('min_stock')
   const maxStock = watch('max_stock')
@@ -132,12 +145,14 @@ export function ProductModal({
     const basicFields = ['sku', 'name', 'description', 'category_id', 'brand_id', 'brand', 'supplier_id', 'barcode', 'unit_measure', 'is_active']
     const pricingFields = ['purchase_price', 'sale_price', 'wholesale_price', 'offer_price', 'has_offer']
     const inventoryFields = ['stock_quantity', 'min_stock', 'max_stock']
+    const postSaleFields = ['warranty_months', 'warranty_info', 'return_window_days', 'exchange_window_days', 'return_policy', 'exchange_policy']
     const imagesFields = ['images']
     const errorKeys = Object.keys(errors)
     return {
       basic: errorKeys.some(k => basicFields.includes(k)),
       pricing: errorKeys.some(k => pricingFields.includes(k)),
       inventory: errorKeys.some(k => inventoryFields.includes(k)),
+      postSale: errorKeys.some(k => postSaleFields.includes(k)),
       images: errorKeys.some(k => imagesFields.includes(k)),
     }
   }, [errors])
@@ -148,6 +163,7 @@ export function ProductModal({
     if (tabErrorMap.basic) { setActiveTab('basic'); return }
     if (tabErrorMap.pricing) { setActiveTab('pricing'); return }
     if (tabErrorMap.inventory) { setActiveTab('inventory'); return }
+    if (tabErrorMap.postSale) { setActiveTab('post-sale'); return }
     if (tabErrorMap.images) setActiveTab('images')
   }, [errors, tabErrorMap])
   const barcode = watch('barcode')
@@ -180,6 +196,12 @@ export function ProductModal({
         wholesale_price: product.wholesale_price || 0,
         offer_price: product.offer_price || 0,
         has_offer: product.has_offer || false,
+        warranty_months: (product as any).warranty_months ?? DEFAULT_POST_SALE_VALUES.warranty_months,
+        warranty_info: (product as any).warranty_info ?? DEFAULT_POST_SALE_VALUES.warranty_info,
+        return_window_days: (product as any).return_window_days ?? DEFAULT_POST_SALE_VALUES.return_window_days,
+        exchange_window_days: (product as any).exchange_window_days ?? DEFAULT_POST_SALE_VALUES.exchange_window_days,
+        return_policy: (product as any).return_policy ?? DEFAULT_POST_SALE_VALUES.return_policy,
+        exchange_policy: (product as any).exchange_policy ?? DEFAULT_POST_SALE_VALUES.exchange_policy,
         stock_quantity: product.stock_quantity || 0,
         min_stock: product.min_stock || 0,
         max_stock: product.max_stock || 0,
@@ -202,6 +224,7 @@ export function ProductModal({
         wholesale_price: 0,
         offer_price: 0,
         has_offer: false,
+        ...DEFAULT_POST_SALE_VALUES,
         stock_quantity: 0,
         min_stock: 0,
         max_stock: 0,
@@ -312,6 +335,12 @@ export function ProductModal({
       unit_measure: data.unit_measure?.trim() || 'unidad',
       wholesale_price: (data.wholesale_price ?? 0) > 0 ? data.wholesale_price : null,
       offer_price: data.has_offer && (data.offer_price ?? 0) > 0 ? data.offer_price : null,
+      warranty_months: Number(data.warranty_months ?? 0),
+      warranty_info: data.warranty_info?.trim() || null,
+      return_window_days: Number(data.return_window_days ?? 0),
+      exchange_window_days: Number(data.exchange_window_days ?? 0),
+      return_policy: data.return_policy?.trim() || null,
+      exchange_policy: data.exchange_policy?.trim() || null,
       images: images,
       // Sync legacy image_url field with the first image of the array
       image_url: images.length > 0 ? images[0] : null,
@@ -456,6 +485,17 @@ export function ProductModal({
                     <span className="hidden md:inline">Inventario</span>
                     <span className="md:hidden">Stock</span>
                     {tabErrorMap.inventory && (
+                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="post-sale"
+                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    <span className="hidden md:inline">Postventa</span>
+                    <span className="md:hidden">Postventa</span>
+                    {tabErrorMap.postSale && (
                       <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
                     )}
                   </TabsTrigger>
@@ -1031,6 +1071,153 @@ export function ProductModal({
                       </CardContent>
                     </Card>
                   </div>
+                </TabsContent>
+
+                {/* Post-Sale */}
+                <TabsContent value="post-sale" className="space-y-4 py-4">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                        <RefreshCw className="h-4 w-4" />
+                        Garantia del Producto
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="warranty_months"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Meses de garantia</FormLabel>
+                              <FormControl>
+                                <Input type="number" min={0} max={60} {...field} value={field.value ?? 0} />
+                              </FormControl>
+                              <FormDescription>
+                                0 = sin garantia
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <div className="rounded-lg border p-4 bg-muted/20">
+                          <p className="text-sm text-muted-foreground">Resumen</p>
+                          <p className="text-lg font-semibold mt-1">
+                            {warrantyMonths > 0 ? `${warrantyMonths} meses de garantia` : 'Sin garantia'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="warranty_info"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Condiciones de garantia</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                rows={4}
+                                placeholder="Ej: Cubre fallas de fabrica. No cubre golpes, humedad o manipulacion."
+                                {...field}
+                                value={field.value || ""}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                        <RefreshCw className="h-4 w-4" />
+                        Cambios y Devoluciones
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="return_window_days"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Dias para devolucion</FormLabel>
+                              <FormControl>
+                                <Input type="number" min={0} max={90} {...field} value={field.value ?? 0} />
+                              </FormControl>
+                              <FormDescription>
+                                0 = no permite devolucion
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="exchange_window_days"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Dias para cambio</FormLabel>
+                              <FormControl>
+                                <Input type="number" min={0} max={90} {...field} value={field.value ?? 0} />
+                              </FormControl>
+                              <FormDescription>
+                                0 = no permite cambios
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <div className="rounded-lg border p-4 bg-muted/20 text-sm">
+                        <p className="font-medium">Ventanas activas</p>
+                        <p className="text-muted-foreground mt-1">
+                          Devolucion: {returnWindowDays} dias | Cambio: {exchangeWindowDays} dias
+                        </p>
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="return_policy"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Politica de devolucion</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                rows={4}
+                                placeholder="Ej: Producto sin uso, con caja y factura, dentro del plazo."
+                                {...field}
+                                value={field.value || ""}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="exchange_policy"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Politica de cambio</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                rows={4}
+                                placeholder="Ej: Cambio por mismo producto o equivalente sujeto a stock."
+                                {...field}
+                                value={field.value || ""}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  </Card>
                 </TabsContent>
 
                 {/* Images */}

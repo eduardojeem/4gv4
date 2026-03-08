@@ -43,10 +43,10 @@ interface PromotionListProps {
     loading?: boolean
     getPromotionStatus: (promotion: Promotion) => 'active' | 'scheduled' | 'expired' | 'inactive'
     isPromotionExpiringSoon: (promotion: Promotion) => boolean
-    onEdit: (promotion: Promotion) => void
-    onDelete: (promotion: Promotion) => void
-    onDuplicate: (promotion: Promotion) => void
-    onToggleStatus: (promotion: Promotion) => void
+    onEdit?: (promotion: Promotion) => void
+    onDelete?: (promotion: Promotion) => void
+    onDuplicate?: (promotion: Promotion) => void
+    onToggleStatus?: (promotion: Promotion) => void
 }
 
 export function PromotionList({
@@ -61,6 +61,7 @@ export function PromotionList({
 }: PromotionListProps) {
     const [selectedPromotions, setSelectedPromotions] = useState<Set<string>>(new Set())
     const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
+    const hasActions = Boolean(onEdit || onDuplicate || onToggleStatus || onDelete)
 
     const toggleSelection = (id: string) => {
         const newSelection = new Set(selectedPromotions)
@@ -238,44 +239,56 @@ export function PromotionList({
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" size="sm">
-                                                        <MoreVertical className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => onEdit(promotion)}>
-                                                        <Edit className="h-4 w-4 mr-2" />
-                                                        Editar
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => onDuplicate(promotion)}>
-                                                        <Copy className="h-4 w-4 mr-2" />
-                                                        Duplicar
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => onToggleStatus(promotion)}>
-                                                        {promotion.is_active ? (
-                                                            <>
-                                                                <PowerOff className="h-4 w-4 mr-2" />
-                                                                Desactivar
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Power className="h-4 w-4 mr-2" />
-                                                                Activar
-                                                            </>
+                                            {hasActions && (
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" size="sm">
+                                                            <MoreVertical className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        {onEdit && (
+                                                            <DropdownMenuItem onClick={() => onEdit(promotion)}>
+                                                                <Edit className="h-4 w-4 mr-2" />
+                                                                Editar
+                                                            </DropdownMenuItem>
                                                         )}
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem
-                                                        onClick={() => onDelete(promotion)}
-                                                        className="text-red-600"
-                                                    >
-                                                        <Trash2 className="h-4 w-4 mr-2" />
-                                                        Eliminar
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
+                                                        {onDuplicate && (
+                                                            <DropdownMenuItem onClick={() => onDuplicate(promotion)}>
+                                                                <Copy className="h-4 w-4 mr-2" />
+                                                                Duplicar
+                                                            </DropdownMenuItem>
+                                                        )}
+                                                        {onToggleStatus && (
+                                                            <DropdownMenuItem onClick={() => onToggleStatus(promotion)}>
+                                                                {promotion.is_active ? (
+                                                                    <>
+                                                                        <PowerOff className="h-4 w-4 mr-2" />
+                                                                        Desactivar
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Power className="h-4 w-4 mr-2" />
+                                                                        Activar
+                                                                    </>
+                                                                )}
+                                                            </DropdownMenuItem>
+                                                        )}
+                                                        {onDelete && (onEdit || onDuplicate || onToggleStatus) && (
+                                                            <DropdownMenuSeparator />
+                                                        )}
+                                                        {onDelete && (
+                                                            <DropdownMenuItem
+                                                                onClick={() => onDelete(promotion)}
+                                                                className="text-red-600"
+                                                            >
+                                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                                Eliminar
+                                                            </DropdownMenuItem>
+                                                        )}
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 )

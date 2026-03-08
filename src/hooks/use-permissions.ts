@@ -65,6 +65,14 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionRequirement> = {
     permissions: ['promotions.read'],
     roles: ['admin', 'vendedor'],
     requireAll: false
+  },
+  '/dashboard/credits': {
+    roles: ['admin', 'vendedor'],
+    requireAll: false
+  },
+  '/dashboard/technician': {
+    roles: ['admin', 'tecnico'],
+    requireAll: false
   }
 }
 
@@ -77,7 +85,7 @@ export function usePermissions(): PermissionCheck {
     return ROLE_PERMISSIONS[user.role]?.permissions || []
   }, [user?.role])
 
-  // Verificar un permiso especÃ­fico
+  // Verificar un permiso específico
   const hasPermission = useCallback((permission: string): boolean => {
     return authHasPermission(permission)
   }, [authHasPermission])
@@ -92,7 +100,7 @@ export function usePermissions(): PermissionCheck {
     return permissions.every(permission => hasPermission(permission))
   }, [hasPermission])
 
-  // Verificar acceso a un recurso con una acciÃ³n especÃ­fica
+  // Verificar acceso a un recurso con una acción específica
   const hasResourceAccess = useCallback((resource: string, action: string): boolean => {
     if (!user?.role) return false
 
@@ -102,13 +110,31 @@ export function usePermissions(): PermissionCheck {
     )
   }, [user?.role])
 
-  // Verificar si puede acceder a una ruta especÃ­fica
+  // Verificar si puede acceder a una ruta específica
   const canAccessRoute = useCallback((route: string): boolean => {
     const requirement = ROUTE_PERMISSIONS[route]
     if (!requirement) return true // Si no hay requisitos, permitir acceso
 
-    return isAuthorized(requirement)
-  }, [])
+    if (!user?.role) return false
+
+    const { permissions = [], roles = [], requireAll = false, resource, action } = requirement
+    const hasResourceRequirement = Boolean(resource && action)
+    const hasAnyRequirement = roles.length > 0 || permissions.length > 0 || hasResourceRequirement
+
+    if (!hasAnyRequirement) return true
+
+    if (requireAll) {
+      if (roles.length > 0 && !roles.includes(user.role)) return false
+      if (permissions.length > 0 && !hasAllPermissions(permissions)) return false
+      if (hasResourceRequirement && !hasResourceAccess(resource!, action!)) return false
+      return true
+    }
+
+    if (roles.length > 0 && roles.includes(user.role)) return true
+    if (permissions.length > 0 && hasAnyPermission(permissions)) return true
+    if (hasResourceRequirement) return hasResourceAccess(resource!, action!)
+    return false
+  }, [user?.role, hasAllPermissions, hasAnyPermission, hasResourceAccess])
 
   // Verificar si puede gestionar un usuario
   const canManageUser = useCallback((targetRole: UserRole): boolean => {
@@ -125,7 +151,7 @@ export function usePermissions(): PermissionCheck {
     return userPermissions.filter(p => p.resource === resource)
   }, [userPermissions])
 
-  // Verificar autorizaciÃ³n compleja
+  // Verificar autorización compleja
   const isAuthorized = useCallback((requirements: PermissionRequirement): boolean => {
     if (!user?.role) return false
 
@@ -155,7 +181,7 @@ export function usePermissions(): PermissionCheck {
       if (permissionCheck) return true
     }
 
-    // Verificar acceso a recurso especÃ­fico
+    // Verificar acceso a recurso específico
     if (hasResourceRequirement) {
       return hasResourceAccess(resource, action)
     }
@@ -186,7 +212,7 @@ export function usePermissionGuard(requirements: PermissionRequirement) {
   }), [isAuthorized, requirements])
 }
 
-// Hook para obtener permisos de una lista especÃ­fica
+// Hook para obtener permisos de una lista específica
 export function usePermissionList(permissionIds: string[]) {
   const { hasPermission } = usePermissions()
 

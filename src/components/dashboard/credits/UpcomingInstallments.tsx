@@ -1,4 +1,4 @@
-import { Badge } from '@/components/ui/badge'
+﻿import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CalendarClock, CheckCircle, AlertCircle, Clock, User } from 'lucide-react'
@@ -274,13 +274,14 @@ export function UpcomingInstallments({
                     </div>
                 ) : (
                     <div>
-                        {renderInstallmentGroup('🚨 Vencidas', groupedInstallments.overdue, 'overdue')}
-                        {renderInstallmentGroup('⏰ Vencen Hoy', groupedInstallments.today, 'today')}
-                        {renderInstallmentGroup('📅 Esta Semana', groupedInstallments.thisWeek, 'thisWeek')}
-                        {renderInstallmentGroup('📆 Próximamente', groupedInstallments.later, 'later')}
+                        {renderInstallmentGroup('Vencidas', groupedInstallments.overdue, 'overdue')}
+                        {renderInstallmentGroup('Vencen hoy', groupedInstallments.today, 'today')}
+                        {renderInstallmentGroup('Esta semana', groupedInstallments.thisWeek, 'thisWeek')}
+                        {renderInstallmentGroup('Próximamente', groupedInstallments.later, 'later')}
                     </div>
                 )}
             </CardContent>
         </Card>
     )
 }
+

@@ -58,3 +58,21 @@ export function cleanImageUrl(url: string | null | undefined): string | null {
   if (!url || typeof url !== 'string') return null
   return url.replace(/\)+$/, '').trim()
 }
+
+/**
+ * Convierte un UUID de cliente a un formato visual corto (ej. CLI-A41149)
+ */
+export function formatCustomerId(uuid?: string | null): string {
+  if (!uuid) return ''
+  const shortHex = uuid.split('-')[0].substring(0, 6).toUpperCase()
+  return `CLI-${shortHex}`
+}
+
+/**
+ * Convierte un UUID de crédito a un formato visual corto (ej. CRE-B22391)
+ */
+export function formatCreditId(uuid?: string | null): string {
+  if (!uuid) return ''
+  const shortHex = uuid.split('-')[0].substring(0, 6).toUpperCase()
+  return `CRE-${shortHex}`
+}

@@ -28,6 +28,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireStaff()
+    { const r = getAuthResponse(auth); if (r) return r }
+
     const { id } = await params
 
     const promotion = mockPromotions.find(p => p.id === id)

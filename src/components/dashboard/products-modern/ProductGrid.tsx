@@ -16,6 +16,7 @@ export interface ProductGridProps {
   onProductDelete: (product: Product) => void
   onProductDuplicate: (product: Product) => void
   onProductViewDetails: (product: Product) => void
+  onProductToggleActive?: (product: Product, newValue: boolean) => void
   loading?: boolean
   className?: string
 }
@@ -28,6 +29,7 @@ export function ProductGrid({
   onProductDelete,
   onProductDuplicate,
   onProductViewDetails,
+  onProductToggleActive,
   loading = false,
   className
 }: ProductGridProps) {
@@ -88,6 +90,7 @@ export function ProductGrid({
           onDelete={onProductDelete}
           onDuplicate={onProductDuplicate}
           onViewDetails={onProductViewDetails}
+          onToggleActive={onProductToggleActive}
         />
       ))}
     </div>

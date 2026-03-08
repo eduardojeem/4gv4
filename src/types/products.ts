@@ -39,6 +39,12 @@ export interface ProductFormData {
   wholesale_price?: number | null
   stock_quantity: number
   min_stock: number
+  warranty_months?: number
+  warranty_info?: string | null
+  return_window_days?: number
+  exchange_window_days?: number
+  return_policy?: string | null
+  exchange_policy?: string | null
   max_stock?: number
   unit_measure: string
   barcode?: string | null

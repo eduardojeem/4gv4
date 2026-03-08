@@ -206,8 +206,9 @@ export function PromotionDialog({
             end_date: formData.end_date ? formData.end_date.toISOString() : null,
             is_active: formData.is_active,
             usage_limit: formData.usage_limit || null,
-            applicable_products: selectedProductIds.length > 0 ? selectedProductIds : undefined,
-            applicable_categories: applyToRepairs ? ['service'] : undefined,
+            // Persist explicit empty arrays so edit operations can clear previous values.
+            applicable_products: selectedProductIds,
+            applicable_categories: applyToRepairs ? ['service'] : [],
         }
 
         let success = false

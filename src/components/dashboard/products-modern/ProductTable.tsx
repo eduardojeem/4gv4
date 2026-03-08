@@ -5,7 +5,7 @@
 
 import React from 'react'
 import Image from 'next/image'
-import { ArrowUpDown, ArrowUp, ArrowDown, Edit, Trash2, Copy, Eye, Package, TrendingUp, AlertTriangle, XCircle, Sparkles } from 'lucide-react'
+import { ArrowUpDown, ArrowUp, ArrowDown, Edit, Trash2, Copy, Eye, Package, TrendingUp, AlertTriangle, XCircle, Sparkles, Globe, EyeOff } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import { Product } from '@/types/products'
 import { SortConfig } from '@/types/products-dashboard'
 import { getStockStatus } from '@/lib/products-dashboard-utils'
@@ -33,6 +34,7 @@ export interface ProductTableProps {
   onDelete: (product: Product) => void
   onDuplicate: (product: Product) => void
   onViewDetails: (product: Product) => void
+  onToggleActive?: (product: Product, newValue: boolean) => Promise<void> | void
   loading?: boolean
   className?: string
   viewMode?: 'table' | 'compact'
@@ -49,6 +51,7 @@ export function ProductTable({
   onDelete,
   onDuplicate,
   onViewDetails,
+  onToggleActive,
   loading = false,
   className,
   viewMode = 'table'
@@ -206,6 +209,11 @@ export function ProductTable({
               {/* Status */}
               <TableHead className={cn("font-semibold text-gray-700 dark:text-gray-300", isCompact && "h-8 py-1 text-xs")}>Estado</TableHead>
 
+              {/* Public visibility */}
+              {onToggleActive && (
+                <TableHead className={cn("font-semibold text-gray-700 dark:text-gray-300 text-center", isCompact && "h-8 py-1 text-xs")}>Público</TableHead>
+              )}
+
               {/* Actions */}
               <TableHead className={cn("text-right w-40 font-semibold text-gray-700 dark:text-gray-300", isCompact && "h-8 py-1 text-xs")}>Acciones</TableHead>
             </TableRow>
@@ -218,12 +226,13 @@ export function ProductTable({
               const statusConfig = stockStatusConfig[stockStatus]
               const StatusIcon = statusConfig.icon
               const stockPercentage = Math.min(100, (product.stock_quantity / (product.min_stock * 3)) * 100)
-              
-              const isValidImage = product.image && (
-                product.image.startsWith('data:image') ||
-                product.image.startsWith('/') ||
-                (product.image.startsWith('http') && !product.image.includes('data:image'))
-              )
+
+              // Resolve image from images[] array or legacy image field
+              const imageUrl: string | undefined =
+                ((product as any).images as string[] | null | undefined)?.[0] ||
+                product.image ||
+                undefined
+              const isValidImage = imageUrl && (imageUrl.startsWith('data:image') || imageUrl.startsWith('/') || imageUrl.startsWith('http'))
 
               return (
                 <TableRow
@@ -236,6 +245,13 @@ export function ProductTable({
                   )}
                   onClick={() => onViewDetails(product)}
                   role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onViewDetails(product)
+                    }
+                  }}
                 >
                   {/* Checkbox */}
                   <TableCell className={cn(isCompact && "py-1")}>
@@ -256,7 +272,7 @@ export function ProductTable({
                     )}>
                       {isValidImage ? (
                         <Image
-                          src={product.image!}
+                          src={imageUrl!}
                           alt={product.name}
                           fill
                           className="object-cover transition-transform duration-200 hover:scale-110"
@@ -362,13 +378,32 @@ export function ProductTable({
                         <StatusIcon className={cn(isCompact ? "h-2.5 w-2.5" : "h-3 w-3")} />
                         {statusConfig.label}
                       </div>
-                      {!product.is_active && !isCompact && (
-                        <Badge variant="outline" className="text-xs bg-gray-50 text-gray-500 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 font-medium w-fit">
-                          ⏸ Inactivo
-                        </Badge>
-                      )}
                     </div>
                   </TableCell>
+
+                  {/* Public visibility toggle */}
+                  {onToggleActive && (
+                    <TableCell className={cn("text-center", isCompact && "py-1")} onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-col items-center gap-1">
+                        <Switch
+                          checked={product.is_active}
+                          onCheckedChange={(checked) => onToggleActive(product, checked)}
+                          aria-label={product.is_active ? 'Ocultar del catálogo' : 'Publicar en catálogo'}
+                          className="data-[state=checked]:bg-emerald-500"
+                        />
+                        <span className={cn(
+                          "flex items-center gap-0.5",
+                          isCompact ? "text-[9px]" : "text-[10px]",
+                          product.is_active ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"
+                        )}>
+                          {product.is_active
+                            ? <><Globe className="h-2.5 w-2.5" /> Visible</>
+                            : <><EyeOff className="h-2.5 w-2.5" /> Oculto</>
+                          }
+                        </span>
+                      </div>
+                    </TableCell>
+                  )}
 
                   {/* Actions */}
                   <TableCell className={cn(isCompact && "py-1")}>

@@ -455,11 +455,11 @@ export function usePromotions() {
       description: p.description || '',
       type: p.type,
       value: p.value,
-      min_purchase: p.min_purchase || 0,
+      min_purchase: p.min_purchase ?? 0,
       start_date: p.start_date,
       end_date: p.end_date,
       is_active: p.is_active,
-      usage_count: p.usage_count || 0,
+      usage_count: p.usage_count ?? 0,
       usage_limit: p.usage_limit
     }))
 
@@ -473,9 +473,16 @@ export function usePromotions() {
       URL.revokeObjectURL(url)
     } else if (format === 'csv') {
       const headers = Object.keys(dataToExport[0] || {})
+      const escapeCsvValue = (value: unknown) => {
+        if (value === null || value === undefined) return '""'
+        const serializedValue = Array.isArray(value) ? value.join('|') : String(value)
+        return `"${serializedValue.replace(/"/g, '""')}"`
+      }
       const csvContent = [
         headers.join(','),
-        ...dataToExport.map(row => headers.map(header => `"${row[header as keyof typeof row] || ''}"`).join(','))
+        ...dataToExport.map(row =>
+          headers.map(header => escapeCsvValue(row[header as keyof typeof row])).join(',')
+        )
       ].join('\n')
       
       const blob = new Blob([csvContent], { type: 'text/csv' })

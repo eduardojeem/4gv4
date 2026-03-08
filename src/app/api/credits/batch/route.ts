@@ -1,12 +1,21 @@
-﻿
+
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 
 export async function POST(request: Request) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
+    const authResponse = getAuthResponse(auth)
+    if (authResponse) return authResponse
+
+    const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
+    if (staffAuth.role === 'tecnico') {
+      return NextResponse.json(
+        { error: 'Permisos insuficientes para consultar créditos.' },
+        { status: 403 }
+      )
+    }
 
     const { customerIds } = await request.json()
 

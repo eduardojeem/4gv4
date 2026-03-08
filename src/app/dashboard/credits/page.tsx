@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -6,15 +6,16 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DataTable, FilterPanel } from '@/components/shared'
-import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt } from 'lucide-react'
+import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, LayoutGrid, List, Table2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
-import { useCredits, CreditRow, InstallmentRow } from '@/hooks/use-credits'
+import { useCredits, CreditRow, InstallmentRow, isInstallmentLate } from '@/hooks/use-credits'
 import { CreditStats } from '@/components/dashboard/credits/CreditStats'
 import { CreditList } from '@/components/dashboard/credits/CreditList'
 import { UpcomingInstallments } from '@/components/dashboard/credits/UpcomingInstallments'
-import { CreditPaymentDialog, PaymentMethod } from '@/components/dashboard/credits/CreditPaymentDialog'
+import { CreditPaymentDialog, PaymentMethod, PaymentConfirmResult } from '@/components/dashboard/credits/CreditPaymentDialog'
 import { CreditQuickActions } from '@/components/dashboard/credits/CreditQuickActions'
 import { CreditDetailDialog } from '@/components/dashboard/credits/CreditDetailDialog'
+import { RouteGuard } from '@/components/auth/permission-guard'
 
 export default function CreditsDashboardPage() {
   const {
@@ -41,10 +42,30 @@ export default function CreditsDashboardPage() {
   const [sortField, setSortField] = useState<keyof InstallmentRow | null>(null)
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
   const [activeTab, setActiveTab] = useState('cuotas')
+  const [creditViewMode, setCreditViewMode] = useState<'cards' | 'list' | 'table'>('cards')
+
+  // Sort y paginación de cuotas (memoizado para evitar computation en cada render)
+  const sortedAndPagedInstallments = useMemo(() => {
+    const sorted = [...filteredInstallments].sort((a, b) => {
+      if (!sortField) return 0
+      const av = a[sortField]
+      const bv = b[sortField]
+      if (av === bv) return 0
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return sortDirection === 'asc' ? av - bv : bv - av
+      }
+      const as = String(av)
+      const bs = String(bv)
+      return sortDirection === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as)
+    })
+    return sorted.slice((page - 1) * pageSize, page * pageSize)
+  }, [filteredInstallments, sortField, sortDirection, page, pageSize])
+
 
   // Dialog State
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [dialogCreditId, setDialogCreditId] = useState<string | null>(null)
+  const [dialogInstallmentId, setDialogInstallmentId] = useState<string | null>(null)
   const [dialogInitialAmount, setDialogInitialAmount] = useState<number>(0)
 
   // Detail Dialog State
@@ -57,7 +78,7 @@ export default function CreditsDashboardPage() {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
     const overdue = installments.filter(i =>
-      (i.status === 'pending' || i.status === 'late') && new Date(i.due_date) < today
+      isInstallmentLate(i)
     ).length
 
     const dueToday = installments.filter(i => {
@@ -72,40 +93,94 @@ export default function CreditsDashboardPage() {
   const { pendingCount, paidCount, lateCount } = useMemo(() => {
     const pending = installments.filter(i => i.status === 'pending').length
     const paid = installments.filter(i => i.status === 'paid').length
-    const late = installments.filter(i => i.status === 'late' || (i.status === 'pending' && new Date(i.due_date) < new Date())).length
+    const late = installments.filter(i => isInstallmentLate(i)).length
     return { pendingCount: pending, paidCount: paid, lateCount: late }
   }, [installments])
+  const selectedDialogInstallment = useMemo(() => {
+    if (!dialogInstallmentId) return null
+    return installments.find(i => i.id === dialogInstallmentId) || null
+  }, [dialogInstallmentId, installments])
+
+  const selectedDialogCreditId = selectedDialogInstallment?.credit_id || dialogCreditId
+  const recentPayments = useMemo(() => payments.slice(0, 50), [payments])
+
+  const getInstallmentOutstanding = (installment: InstallmentRow): number => {
+    const installmentAmount = Number(installment.amount || 0)
+    const paidAmount = Math.max(0, Number(installment.amount_paid || 0))
+    return Math.max(0, installmentAmount - paidAmount)
+  }
+
+  const openPaymentDialogForInstallment = (installment: InstallmentRow) => {
+    const outstanding = getInstallmentOutstanding(installment)
+    setDialogCreditId(installment.credit_id)
+    setDialogInstallmentId(installment.id)
+    setDialogInitialAmount(outstanding > 0 ? outstanding : Number(installment.amount))
+    setIsDialogOpen(true)
+  }
 
   // Handlers
   const handleOpenPaymentDialog = (creditId: string) => {
     const next = getNextPendingInstallment(creditId)
-    if (next) {
-      setDialogCreditId(creditId)
-      setDialogInitialAmount(Number(next.amount))
-      setIsDialogOpen(true)
+    if (!next) return
+    openPaymentDialogForInstallment(next)
+  }
+
+  const handleConfirmPayment = async (
+    method: PaymentMethod,
+    amount: number,
+    reference?: string,
+    notes?: string
+  ): Promise<PaymentConfirmResult> => {
+    if (!dialogInstallmentId) {
+      return { success: false, error: 'No hay cuota seleccionada para cobrar.' }
+    }
+
+    const fullNotes = [
+      reference ? `Ref: ${reference}` : null,
+      notes
+    ].filter(Boolean).join(' - ')
+
+    const result = await markInstallmentPaid(dialogInstallmentId, method, amount, fullNotes)
+    if (result.success === false) {
+      return { success: false, error: result.error }
+    }
+
+    return { success: true, appliedAmount: result.appliedAmount }
+  }
+
+  const handlePaymentDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open)
+    if (!open) {
+      setDialogCreditId(null)
+      setDialogInstallmentId(null)
+      setDialogInitialAmount(0)
     }
   }
 
-  const handleConfirmPayment = (method: PaymentMethod, amount: number, reference?: string, notes?: string) => {
-    if (!dialogCreditId) return
-    const next = getNextPendingInstallment(dialogCreditId)
-    if (next) {
-      const fullNotes = [
-        reference ? `Ref: ${reference}` : null,
-        notes
-      ].filter(Boolean).join(' - ')
-      
-      markInstallmentPaid(next.id, method, amount, fullNotes)
-    }
+  // Abre el diálogo de pago para la cuota seleccionada en tabla
+  const handleMarkInstallmentPaidDirectly = (installmentId: string) => {
+    const inst = installments.find(i => i.id === installmentId)
+    if (!inst) return
+    openPaymentDialogForInstallment(inst)
   }
 
-  const handleMarkInstallmentPaidDirectly = (installmentId: string, method: string, amount: number) => {
-    markInstallmentPaid(installmentId, method, amount)
+  // Pago directo desde el bloque de próximas cuotas (con método/monto elegidos inline)
+  const handleQuickPayInstallment = async (installmentId: string, method: string, amount: number) => {
+    const result = await markInstallmentPaid(installmentId, method, amount)
+    if (result.success === false) {
+      console.error('No se pudo registrar el pago:', result.error)
+    }
   }
 
   const handleViewDetail = (creditId: string) => {
     setDetailCreditId(creditId)
     setIsDetailDialogOpen(true)
+  }
+
+  const csvEscape = (value: string | number) => {
+    const text = String(value ?? '').replace(/\r?\n/g, ' ').trim()
+    const escaped = text.replace(/"/g, '""')
+    return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped
   }
 
   const exportInstallmentsCsv = () => {
@@ -120,7 +195,7 @@ export default function CreditsDashboardPage() {
       Cliente: creditById[i.credit_id]?.customer_name || ''
     }))
     const header: Array<keyof CsvRow> = ['Cuota', 'Vence', 'Monto', 'Estado', 'Credito', 'Cliente']
-    const csv = [header.join(','), ...rows.map(r => header.map(h => String(r[h]).replace(/,/g, '')).join(','))].join('\n')
+    const csv = [header.join(','), ...rows.map(r => header.map(h => csvEscape(r[h])).join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -143,7 +218,7 @@ export default function CreditsDashboardPage() {
       }
     })
     const header: Array<keyof PaymentCsvRow> = ['Cliente', 'Credito', 'Cuota', 'Fecha', 'Monto']
-    const csv = [header.join(','), ...rows.map(r => header.map(h => String(r[h]).replace(/,/g, '')).join(','))].join('\n')
+    const csv = [header.join(','), ...rows.map(r => header.map(h => csvEscape(r[h])).join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -154,7 +229,8 @@ export default function CreditsDashboardPage() {
   }
 
   const handleFilterOverdue = () => {
-    setFilterValues({ ...filterValues, status: 'late' })
+    setFilterValues({ ...filterValues, status: 'late', fromDate: '', toDate: '' })
+    setPage(1)
     setActiveTab('cuotas')
   }
 
@@ -163,26 +239,32 @@ export default function CreditsDashboardPage() {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     setFilterValues({
       ...filterValues,
+      status: '',
       fromDate: today.toISOString().split('T')[0],
       toDate: today.toISOString().split('T')[0]
     })
+    setPage(1)
     setActiveTab('cuotas')
   }
   const handleFilterAll = () => {
-    setFilterValues({ ...filterValues, status: '' })
+    setFilterValues({ ...filterValues, status: '', fromDate: '', toDate: '' })
+    setPage(1)
     setActiveTab('cuotas')
   }
   const handleFilterPending = () => {
-    setFilterValues({ ...filterValues, status: 'pending' })
+    setFilterValues({ ...filterValues, status: 'pending', fromDate: '', toDate: '' })
+    setPage(1)
     setActiveTab('cuotas')
   }
   const handleFilterPaid = () => {
-    setFilterValues({ ...filterValues, status: 'paid' })
+    setFilterValues({ ...filterValues, status: 'paid', fromDate: '', toDate: '' })
+    setPage(1)
     setActiveTab('cuotas')
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <RouteGuard route="/dashboard/credits" redirectTo="/dashboard">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header */}
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -237,20 +319,53 @@ export default function CreditsDashboardPage() {
 
         {/* Tab Content: Resumen */}
         <TabsContent value="resumen" className="space-y-6">
+          <Card className="border-0">
+            <CardContent className="pt-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground mr-2">Vista clientes con crédito:</span>
+                <Button
+                  variant={creditViewMode === 'cards' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCreditViewMode('cards')}
+                >
+                  <LayoutGrid className="h-4 w-4 mr-1" />
+                  Tarjetas
+                </Button>
+                <Button
+                  variant={creditViewMode === 'list' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCreditViewMode('list')}
+                >
+                  <List className="h-4 w-4 mr-1" />
+                  Lista
+                </Button>
+                <Button
+                  variant={creditViewMode === 'table' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCreditViewMode('table')}
+                >
+                  <Table2 className="h-4 w-4 mr-1" />
+                  Tabla
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Active Credits List */}
           <CreditList
-            credits={credits}
+            credits={credits.filter(c => c.status === 'active')}
             remainingByCredit={remainingByCredit}
             paidByCredit={paidByCredit}
             onRegisterPayment={handleOpenPaymentDialog}
             onViewDetail={handleViewDetail}
+            viewMode={creditViewMode}
           />
 
           {/* Upcoming Installments */}
           <UpcomingInstallments
-            installments={installments.filter(i => i.status === 'pending' || i.status === 'late').slice(0, 15)}
+            installments={installments.filter(i => isInstallmentLate(i) || i.status === 'pending').slice(0, 15)}
             creditById={creditById}
-            onMarkPaid={handleMarkInstallmentPaidDirectly}
+            onMarkPaid={handleQuickPayInstallment}
           />
         </TabsContent>
 
@@ -321,18 +436,7 @@ export default function CreditsDashboardPage() {
             </CardHeader>
             <CardContent>
               <DataTable
-                data={[...filteredInstallments].sort((a, b) => {
-                  if (!sortField) return 0
-                  const av = a[sortField]
-                  const bv = b[sortField]
-                  if (av === bv) return 0
-                  if (typeof av === 'number' && typeof bv === 'number') {
-                    return sortDirection === 'asc' ? av - bv : bv - av
-                  }
-                  const as = String(av)
-                  const bs = String(bv)
-                  return sortDirection === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as)
-                }).slice((page - 1) * pageSize, page * pageSize)}
+                data={sortedAndPagedInstallments}
                 columns={[
                   { key: 'customer_name', header: 'Cliente', cell: (row) => creditById[row.credit_id]?.customer_name || '', width: '200px' },
                   { key: 'installment_number', header: 'Cuota', accessor: 'installment_number', sortable: true, width: '100px' },
@@ -352,12 +456,10 @@ export default function CreditsDashboardPage() {
                   },
                   {
                     key: 'status', header: 'Estado', cell: (row) => {
-                      const eff = installmentsProgress[row.id]?.status_effective
-                      if (eff) {
-                        return <Badge variant="outline">{eff}</Badge>
-                      }
-                      const isLate = row.status === 'pending' && new Date(row.due_date) < new Date()
-                      return <Badge variant="outline">{isLate ? 'late' : row.status}</Badge>
+                      const effStatus = installmentsProgress[row.id]?.status_effective || (isInstallmentLate(row) ? 'late' : row.status)
+                      const labels: Record<string, string> = { pending: 'Pendiente', paid: 'Pagada', late: 'Atrasada' }
+                      const variants: Record<string, 'outline' | 'destructive' | 'secondary'> = { pending: 'outline', paid: 'secondary', late: 'destructive' }
+                      return <Badge variant={variants[effStatus] || 'outline'}>{labels[effStatus] || effStatus}</Badge>
                     }, sortable: true, width: '140px'
                   },
                   {
@@ -368,12 +470,12 @@ export default function CreditsDashboardPage() {
                           variant="default"
                           size="sm"
                           disabled={disabled}
-                          onClick={() => handleMarkInstallmentPaidDirectly(row.id, 'cash', Number(row.amount))}
+                          onClick={() => handleMarkInstallmentPaidDirectly(row.id)}
                         >
-                          Pagar
+                          Registrar Pago
                         </Button>
                       )
-                    }, width: '120px'
+                    }, width: '140px'
                   },
                 ]}
                 loading={loading || isPending}
@@ -422,8 +524,13 @@ export default function CreditsDashboardPage() {
                   {formatCurrency(payments.reduce((acc, p) => acc + Number(p.amount || 0), 0))}
                 </div>
               </div>
+              {payments.length > 50 && (
+                <p className="text-xs text-muted-foreground mb-3 px-1">
+                  Mostrando los últimos 50 pagos de {payments.length} en total.
+                </p>
+              )}
               <DataTable
-                data={payments.slice(0, 50)}
+                data={recentPayments}
                 columns={[
                   { key: 'customer', header: 'Cliente', cell: (row) => creditById[row.credit_id]?.customer_name || '', width: '200px' },
                   { key: 'credit', header: 'Crédito', cell: (row) => row.credit_id, width: '160px' },
@@ -448,19 +555,20 @@ export default function CreditsDashboardPage() {
       {/* Payment Dialog */}
       <CreditPaymentDialog
         open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
+        onOpenChange={handlePaymentDialogOpenChange}
         onConfirm={handleConfirmPayment}
         initialAmount={dialogInitialAmount}
-        creditInfo={dialogCreditId ? {
-          id: dialogCreditId,
-          customerName: creditById[dialogCreditId]?.customer_name || 'Cliente',
-          customerId: creditById[dialogCreditId]?.customer_id || '',
-          principal: creditById[dialogCreditId]?.principal || 0,
-          interestRate: creditById[dialogCreditId]?.interest_rate || 0,
-          termMonths: creditById[dialogCreditId]?.term_months || 0,
-          remainingBalance: remainingByCredit[dialogCreditId] || 0,
-          nextInstallmentNumber: getNextPendingInstallment(dialogCreditId)?.installment_number,
-          nextDueDate: getNextPendingInstallment(dialogCreditId)?.due_date
+        creditInfo={selectedDialogCreditId ? {
+          id: selectedDialogCreditId,
+          customerName: creditById[selectedDialogCreditId]?.customer_name || 'Cliente',
+          customerId: creditById[selectedDialogCreditId]?.customer_id || '',
+          customerCode: creditById[selectedDialogCreditId]?.customer_code,
+          principal: creditById[selectedDialogCreditId]?.principal || 0,
+          interestRate: creditById[selectedDialogCreditId]?.interest_rate || 0,
+          termMonths: creditById[selectedDialogCreditId]?.term_months || 0,
+          remainingBalance: remainingByCredit[selectedDialogCreditId] || 0,
+          nextInstallmentNumber: selectedDialogInstallment?.installment_number,
+          nextDueDate: selectedDialogInstallment?.due_date
         } : undefined}
       />
 
@@ -470,7 +578,7 @@ export default function CreditsDashboardPage() {
         onOpenChange={setIsDetailDialogOpen}
         credit={detailCreditId ? {
           ...creditById[detailCreditId],
-          customer_name: creditById[detailCreditId].customer_name || 'Desconocido'
+          customer_name: creditById[detailCreditId]?.customer_name || 'Desconocido'
         } : null}
         installments={detailCreditId ? installments.filter(i => i.credit_id === detailCreditId) : []}
         payments={detailCreditId ? payments.filter(p => p.credit_id === detailCreditId).map(p => ({
@@ -481,6 +589,9 @@ export default function CreditsDashboardPage() {
         paidAmount={detailCreditId ? paidByCredit[detailCreditId] || 0 : 0}
       />
 
-    </div>
+      </div>
+    </RouteGuard>
   )
 }
+
+

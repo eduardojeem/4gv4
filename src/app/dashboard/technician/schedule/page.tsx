@@ -8,10 +8,12 @@ import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { useRepairs } from '@/contexts/RepairsContext'
+import { useAuth } from '@/contexts/auth-context'
 import { Repair } from '@/types/repairs'
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { CalendarDays, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
+import { toast } from 'sonner'
 
 type Slot = { start: Date; end: Date }
 
@@ -99,6 +101,7 @@ function DroppableSlot({
 
 export default function TechnicianSchedulePage() {
   const { repairs, refreshRepairs } = useRepairs()
+  const { user } = useAuth()
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
   const [hourStart, setHourStart] = useState(8)
   const [hourEnd, setHourEnd] = useState(18)
@@ -111,9 +114,16 @@ export default function TechnicianSchedulePage() {
     [weekStart]
   )
   const hours = useMemo(() => hoursRange(hourStart, hourEnd), [hourStart, hourEnd])
+  const canViewAllRepairs = user?.role === 'admin'
 
-  const scheduled = useMemo(() => repairs.filter(r => !!r.estimatedCompletion), [repairs])
-  const unscheduled = useMemo(() => repairs.filter(r => !r.estimatedCompletion), [repairs])
+  const scopedRepairs = useMemo(() => {
+    if (canViewAllRepairs) return repairs
+    if (!user?.id) return []
+    return repairs.filter(r => r.technician?.id === user.id)
+  }, [repairs, user?.id, canViewAllRepairs])
+
+  const scheduled = useMemo(() => scopedRepairs.filter(r => !!r.estimatedCompletion), [scopedRepairs])
+  const unscheduled = useMemo(() => scopedRepairs.filter(r => !r.estimatedCompletion), [scopedRepairs])
 
   const filteredUnscheduled = useMemo(() => {
     if (filter === 'urgent') return unscheduled.filter(r => r.urgency === 'urgent')
@@ -132,6 +142,11 @@ export default function TechnicianSchedulePage() {
   }
 
   const persistSlot = async (repairId: string, iso: string) => {
+    if (!canViewAllRepairs && !scopedRepairs.some(r => r.id === repairId)) {
+      toast.error('No tienes permisos para reprogramar esta reparación')
+      return
+    }
+
     setIsSaving(true)
     try {
       const supabase = createSupabaseClient()
@@ -160,10 +175,10 @@ export default function TechnicianSchedulePage() {
   }
 
   useEffect(() => {
-    if (repairs.length && !selectedRepairId) {
+    if (scopedRepairs.length && !selectedRepairId) {
       setSelectedRepairId(unscheduled[0]?.id || null)
     }
-  }, [repairs, selectedRepairId, unscheduled])
+  }, [scopedRepairs, selectedRepairId, unscheduled])
 
   return (
     <div className="space-y-6">

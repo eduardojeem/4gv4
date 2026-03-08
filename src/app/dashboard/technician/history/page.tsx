@@ -1,13 +1,11 @@
-'use client'
+﻿'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
     Table,
@@ -29,8 +27,6 @@ import {
     TrendingUp,
     Award,
     DollarSign,
-    Filter,
-    Download,
     Eye,
     Star,
     Timer,
@@ -291,132 +287,6 @@ export default function TechnicianHistoryPage() {
         }
     }, [myRepairs])
 
-    const RepairTable = ({ repairs, emptyMessage }: { repairs: Repair[], emptyMessage: string }) => {
-        if (repairs.length === 0) {
-            return (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <div className="p-4 bg-slate-100 rounded-full mb-4 dark:bg-slate-800">
-                        <Package className="h-8 w-8 text-slate-400" />
-                    </div>
-                    <p className="text-muted-foreground">{emptyMessage}</p>
-                </div>
-            )
-        }
-
-        return (
-            <div className="rounded-md border">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>ID</TableHead>
-                            <TableHead>Cliente</TableHead>
-                            <TableHead>Dispositivo</TableHead>
-                            <TableHead>Problema</TableHead>
-                            <TableHead>Estado</TableHead>
-                            <TableHead>Duración</TableHead>
-                            <TableHead>Fecha</TableHead>
-                            <TableHead className="text-right">Costo</TableHead>
-                            <TableHead className="text-center">Calificación</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {repairs.map((repair) => {
-                            const repairDuration = repair.completedAt && repair.createdAt 
-                                ? Math.ceil((new Date(repair.completedAt).getTime() - new Date(repair.createdAt).getTime()) / (1000 * 60 * 60 * 24))
-                                : null
-
-                            return (
-                                <TableRow key={repair.id} className="cursor-pointer hover:bg-muted/50">
-                                    <TableCell className="font-mono text-xs">
-                                        {repair.id.slice(0, 8)}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <User className="h-4 w-4 text-muted-foreground" />
-                                            <div>
-                                                <p className="font-medium">{repair.customer.name}</p>
-                                                <p className="text-xs text-muted-foreground">{repair.customer.phone}</p>
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2">
-                                            <Smartphone className="h-4 w-4 text-muted-foreground" />
-                                            <div>
-                                                <p className="font-medium">{repair.brand} {repair.model}</p>
-                                                <p className="text-xs text-muted-foreground capitalize">{repair.deviceType}</p>
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="max-w-xs">
-                                            <p className="truncate text-sm">{repair.issue}</p>
-                                            <div className="flex gap-1 mt-1">
-                                                <Badge variant="outline" className="text-xs">
-                                                    {repair.priority === 'high' ? 'Alta' : repair.priority === 'medium' ? 'Media' : 'Baja'}
-                                                </Badge>
-                                                {repair.urgency === 'urgent' && (
-                                                    <Badge variant="destructive" className="text-xs">Urgente</Badge>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge 
-                                            variant={
-                                                repair.dbStatus === 'entregado' ? 'default' :
-                                                repair.dbStatus === 'listo' ? 'secondary' :
-                                                repair.dbStatus === 'cancelado' ? 'destructive' : 'outline'
-                                            }
-                                            className="text-xs"
-                                        >
-                                            {repair.dbStatus === 'entregado' ? 'Entregado' :
-                                             repair.dbStatus === 'listo' ? 'Listo' :
-                                             repair.dbStatus === 'cancelado' ? 'Cancelado' :
-                                             repair.dbStatus === 'reparacion' ? 'En Reparación' :
-                                             repair.dbStatus === 'diagnostico' ? 'Diagnóstico' :
-                                             'Recibido'}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        {repairDuration && (
-                                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                                <Timer className="h-4 w-4" />
-                                                {repairDuration} días
-                                            </div>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <Calendar className="h-4 w-4" />
-                                            {format(new Date(repair.completedAt || repair.createdAt), 'dd MMM yyyy', { locale: es })}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <div className="flex items-center justify-end gap-1 font-medium">
-                                            <GSIcon className="h-4 w-4" />
-                                            {(repair.finalCost || repair.estimatedCost).toLocaleString()}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        {repair.customerRating ? (
-                                            <div className="flex items-center justify-center gap-1">
-                                                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                                                <span className="text-sm font-medium">{repair.customerRating}</span>
-                                            </div>
-                                        ) : (
-                                            <span className="text-xs text-muted-foreground">Sin calificar</span>
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            )
-                        })}
-                    </TableBody>
-                </Table>
-            </div>
-        )
-    }
-
     if (isLoading) return <div className="p-8 text-center">Cargando historial...</div>
 
     return (
@@ -663,3 +533,5 @@ export default function TechnicianHistoryPage() {
         </div>
     )
 }
+
+

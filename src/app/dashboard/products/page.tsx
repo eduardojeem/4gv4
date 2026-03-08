@@ -5,7 +5,7 @@
 
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,11 @@ export default function ProductsPage() {
     updateProduct,
     deleteProduct,
     refreshData,
+    exportToCSV,
+    setFilters: setServerFilters,
+    setSort: setServerSort,
+    setPagination: setServerPagination,
+    totalProducts,
   } = useProductsSupabase();
 
   const {
@@ -88,6 +93,8 @@ export default function ProductsPage() {
     categories,
     suppliers,
     alerts,
+    serverPaginated: true,
+    serverTotalItems: totalProducts,
   });
 
   const [isPending, startTransition] = useTransition();
@@ -95,6 +102,100 @@ export default function ProductsPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [serverSearch, setServerSearch] = useState("");
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setServerSearch(searchQuery.trim());
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
+  const mappedServerFilters = useMemo(() => {
+    const quickFilterStockStatus =
+      filters.quick_filter === "low_stock"
+        ? "low_stock"
+        : filters.quick_filter === "out_of_stock"
+          ? "out_of_stock"
+          : undefined;
+
+    const quickFilterIsActive =
+      filters.quick_filter === "active" ? true : undefined;
+
+    return {
+      search: serverSearch || "",
+      category: filters.category_id || "",
+      supplier: filters.supplier_id || "",
+      stockStatus:
+        quickFilterStockStatus ||
+        (filters.stock_status as
+          | "all"
+          | "in_stock"
+          | "low_stock"
+          | "out_of_stock"
+          | undefined) ||
+        "all",
+      priceMin: filters.price_min,
+      priceMax: filters.price_max,
+      isActive:
+        quickFilterIsActive !== undefined
+          ? quickFilterIsActive
+          : filters.is_active,
+    };
+  }, [filters, serverSearch]);
+
+  const mappedServerSort = useMemo(() => {
+    const fieldMap: Record<string, "name" | "sku" | "price" | "stock" | "created_at"> = {
+      name: "name",
+      sku: "sku",
+      sale_price: "price",
+      stock_quantity: "stock",
+      created_at: "created_at",
+      updated_at: "created_at",
+    };
+
+    return {
+      field: fieldMap[sortConfig.field] || "name",
+      direction: sortConfig.direction,
+    } as const;
+  }, [sortConfig]);
+
+  useEffect(() => {
+    setServerFilters((prev) => {
+      const next = mappedServerFilters;
+      if (
+        prev.search === next.search &&
+        prev.category === next.category &&
+        prev.supplier === next.supplier &&
+        prev.stockStatus === next.stockStatus &&
+        prev.priceMin === next.priceMin &&
+        prev.priceMax === next.priceMax &&
+        prev.isActive === next.isActive
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [mappedServerFilters, setServerFilters]);
+
+  useEffect(() => {
+    setServerSort((prev) => {
+      if (
+        prev.field === mappedServerSort.field &&
+        prev.direction === mappedServerSort.direction
+      ) {
+        return prev;
+      }
+      return mappedServerSort;
+    });
+  }, [mappedServerSort, setServerSort]);
+
+  useEffect(() => {
+    setServerPagination((prev) => {
+      if (prev.page === currentPage && prev.limit === itemsPerPage) return prev;
+      return { page: currentPage, limit: itemsPerPage };
+    });
+  }, [currentPage, itemsPerPage, setServerPagination]);
 
   const handleSelectAllOnPage = (selected: boolean) => {
     const pageIds = paginatedProducts.map((product) => product.id);
@@ -163,20 +264,25 @@ export default function ProductsPage() {
     router.push(`/dashboard/products/${product.id}`);
   };
 
+  // Handle visibility toggle
+  const handleToggleActive = async (product: Product, newValue: boolean) => {
+    const result = await updateProduct(product.id, { is_active: newValue } as any);
+    if (result.success) {
+      toast.success(newValue ? `"${product.name}" ahora es visible en el catálogo` : `"${product.name}" ocultado del catálogo`);
+    } else {
+      toast.error(result.error || 'Error al actualizar visibilidad');
+      throw new Error(result.error); // lets the card revert optimistic state
+    }
+  };
+
   // Handle export
-  const handleExport = () => {
-    startTransition(() => {
-      const csv = exportProductsToCSV(displayedProducts);
-      if (csv) {
-        downloadCSV(
-          csv,
-          `productos-${new Date().toISOString().split("T")[0]}.csv`,
-        );
-        toast.success(`${displayedProducts.length} productos exportados`);
-      } else {
-        toast.error("No hay productos para exportar");
-      }
-    });
+  const handleExport = async () => {
+    const result = await exportToCSV(mappedServerFilters);
+    if (result.success) {
+      toast.success(`${totalProducts} productos exportados`);
+    } else {
+      toast.error(result.error || "No hay productos para exportar");
+    }
   };
 
   // Handle refresh
@@ -190,18 +296,13 @@ export default function ProductsPage() {
     const selectedProducts = products.filter((p) =>
       selectedProductIds.includes(p.id),
     );
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const product of selectedProducts) {
-      const result = await deleteProduct(product.id);
-      if (result.success) {
-        successCount++;
-      } else {
-        errorCount++;
-      }
-    }
+    const settled = await Promise.allSettled(
+      selectedProducts.map((product) => deleteProduct(product.id)),
+    );
+    const successCount = settled.filter(
+      (r) => r.status === "fulfilled" && r.value.success,
+    ).length;
+    const errorCount = settled.length - successCount;
 
     if (successCount > 0) {
       toast.success(
@@ -221,20 +322,17 @@ export default function ProductsPage() {
     const selectedProducts = products.filter((p) =>
       selectedProductIds.includes(p.id),
     );
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const product of selectedProducts) {
-      const result = await updateProduct(product.id, {
-        is_active: true,
-      } as Database["public"]["Tables"]["products"]["Update"]);
-      if (result.success) {
-        successCount++;
-      } else {
-        errorCount++;
-      }
-    }
+    const settled = await Promise.allSettled(
+      selectedProducts.map((product) =>
+        updateProduct(product.id, {
+          is_active: true,
+        } as Database["public"]["Tables"]["products"]["Update"]),
+      ),
+    );
+    const successCount = settled.filter(
+      (r) => r.status === "fulfilled" && r.value.success,
+    ).length;
+    const errorCount = settled.length - successCount;
 
     if (successCount > 0) {
       toast.success(
@@ -254,20 +352,17 @@ export default function ProductsPage() {
     const selectedProducts = products.filter((p) =>
       selectedProductIds.includes(p.id),
     );
-
-    let successCount = 0;
-    let errorCount = 0;
-
-    for (const product of selectedProducts) {
-      const result = await updateProduct(product.id, {
-        is_active: false,
-      } as Database["public"]["Tables"]["products"]["Update"]);
-      if (result.success) {
-        successCount++;
-      } else {
-        errorCount++;
-      }
-    }
+    const settled = await Promise.allSettled(
+      selectedProducts.map((product) =>
+        updateProduct(product.id, {
+          is_active: false,
+        } as Database["public"]["Tables"]["products"]["Update"]),
+      ),
+    );
+    const successCount = settled.filter(
+      (r) => r.status === "fulfilled" && r.value.success,
+    ).length;
+    const errorCount = settled.length - successCount;
 
     if (successCount > 0) {
       toast.success(
@@ -320,7 +415,7 @@ export default function ProductsPage() {
         break;
       case "value":
         handleQuickFilter("all");
-        toast.info("Mostrando valor total del inventario");
+        toast.info("Mostrando todos los productos para analizar valor total");
         break;
     }
   };
@@ -401,6 +496,7 @@ export default function ProductsPage() {
                 onProductDelete={handleProductDelete}
                 onProductDuplicate={handleProductDuplicate}
                 onProductViewDetails={handleProductViewDetails}
+                onProductToggleActive={handleToggleActive}
                 loading={loading || isPending}
               />
             ) : (
@@ -415,6 +511,7 @@ export default function ProductsPage() {
                 onDelete={handleProductDelete}
                 onDuplicate={handleProductDuplicate}
                 onViewDetails={handleProductViewDetails}
+                onToggleActive={handleToggleActive}
                 loading={loading || isPending}
                 viewMode={viewMode === "compact" ? "compact" : "table"}
               />

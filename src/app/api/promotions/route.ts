@@ -73,6 +73,9 @@ const mockPromotions: Promotion[] = [
 // GET - Obtener promociones con filtros
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireStaff()
+    { const r = getAuthResponse(auth); if (r) return r }
+
     const { searchParams } = new URL(request.url)
     
     // Parámetros de filtrado

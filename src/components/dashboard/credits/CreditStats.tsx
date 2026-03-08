@@ -1,4 +1,4 @@
-import { CreditCard, Banknote, CalendarClock, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react'
+﻿import { CreditCard, Banknote, CalendarClock, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/currency'
 import { CreditRow, InstallmentRow } from '@/hooks/use-credits'
@@ -114,7 +114,7 @@ export function CreditStats({ credits, installments }: CreditStatsProps) {
 
                 return (
                     <Card
-                        key={idx}
+                        key={stat.title}
                         className={`border-2 ${colors.border} bg-gradient-to-br ${colors.bg} shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105`}
                     >
                         <CardContent className="p-6">
@@ -162,3 +162,4 @@ export function CreditStats({ credits, installments }: CreditStatsProps) {
         </div>
     )
 }
+

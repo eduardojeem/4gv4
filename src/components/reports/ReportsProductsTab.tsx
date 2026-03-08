@@ -154,8 +154,8 @@ export function ReportsProductsTab({
                 <YAxis tickFormatter={formatPrice} />
                 <Tooltip
                   formatter={(value: number, n: any) => [n === 'sales' ? formatFullPrice(Number(value)) : String(value), n === 'sales' ? 'Ventas' : 'Cantidad']}
-                  contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
-                  itemStyle={{ color: '#1e293b' }}
+                  contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--popover-foreground))' }}
+                  itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
                   cursor={{ fill: '#f1f5f9' }}
                 />
                 <Bar dataKey="sales" name="Ventas" fill={productSalesColor} />
@@ -181,8 +181,8 @@ export function ReportsProductsTab({
                   <YAxis yAxisId="right" orientation="right" />
                   <Tooltip
                     formatter={(v: number, n: any) => [n === 'sales' ? formatFullPrice(Number(v)) : String(v), n === 'sales' ? 'Ventas' : 'Unidades']}
-                    contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
-                    itemStyle={{ color: '#1e293b' }}
+                    contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--popover-foreground))' }}
+                    itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
                     cursor={{ fill: '#f1f5f9' }}
                   />
                   <Line type="monotone" dataKey="sales" yAxisId="left" stroke={selectedProductSalesColor} strokeWidth={2} dot={{ fill: selectedProductSalesColor }} />

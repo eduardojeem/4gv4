@@ -799,8 +799,8 @@ export default function ReportsPage() {
                   <Tooltip 
                     formatter={(value: number) => [formatFullPrice(value), 'Ventas']}
                     labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })}
-                    contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
-                    itemStyle={{ color: '#1e293b' }}
+                    contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--popover-foreground))' }}
+                    itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
                     cursor={{ fill: '#f1f5f9' }}
                   />
                   <Line
@@ -830,8 +830,8 @@ export default function ReportsPage() {
                   <XAxis dataKey="date" tickFormatter={(value) => format(new Date(value), 'dd/MM', { locale: es })} />
                   <YAxis />
                   <Tooltip labelFormatter={(value) => format(new Date(value), 'dd MMMM yyyy', { locale: es })} 
-                    contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
-                    itemStyle={{ color: '#1e293b' }}
+                    contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--popover-foreground))' }}
+                    itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
                     cursor={{ fill: '#f1f5f9' }}
                   />
                   <Line
@@ -861,8 +861,8 @@ export default function ReportsPage() {
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
-                    itemStyle={{ color: '#1e293b' }}
+                    contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--popover-foreground))' }}
+                    itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -883,6 +883,7 @@ export default function ReportsPage() {
             <Button variant="outline" onClick={() => exportReport('reparaciones')}>Exportar Reparaciones (CSV)</Button>
           </div>
         </TabsContent>
+
         <ReportsProductsTab
           productTopCount={productTopCount}
           setProductTopCount={setProductTopCount}
@@ -987,8 +988,8 @@ export default function ReportsPage() {
                             ))}
                           </Pie>
                           <Tooltip 
-                            contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
-                            itemStyle={{ color: '#1e293b' }}
+                            contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--popover-foreground))' }}
+                            itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
                           />
                         </PieChart>
                       ) : (
@@ -997,8 +998,8 @@ export default function ReportsPage() {
                           <XAxis dataKey="name" />
                           <YAxis tickFormatter={categoryMetricBy === 'sales' ? formatPrice : (v: any) => String(v)} />
                           <Tooltip formatter={(v: number, n: any) => [n === 'sales' ? formatFullPrice(Number(v)) : String(v), n === 'sales' ? 'Ventas' : 'Cantidad']} 
-                            contentStyle={{ backgroundColor: 'white', borderColor: '#e2e8f0', color: '#1e293b' }}
-                            itemStyle={{ color: '#1e293b' }}
+                            contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--popover-foreground))' }}
+                            itemStyle={{ color: 'hsl(var(--popover-foreground))' }}
                             cursor={{ fill: '#f1f5f9' }}
                           />
                           <Bar

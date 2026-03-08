@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import {
     Dialog,
@@ -20,6 +20,7 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import { formatCurrency } from '@/lib/currency'
+import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import {
     CreditCard,
     User,
@@ -31,8 +32,9 @@ import {
     CheckCircle,
     Receipt,
     FileText,
-    Download,
-    X
+    FileDown,
+    X,
+    Printer
 } from 'lucide-react'
 
 interface CreditDetailDialogProps {
@@ -47,6 +49,7 @@ interface CreditDetailDialogProps {
         term_months: number
         start_date: string
         status: 'active' | 'completed' | 'defaulted' | 'cancelled'
+        customer_code?: string
     } | null
     installments: Array<{
         id: string
@@ -93,11 +96,187 @@ export function CreditDetailDialog({
         }
     }
 
+    const getInstallmentStatusLabel = (installment: { status: string; due_date: string }) => {
+        if (installment.status === 'paid') return 'Pagada'
+        if (installment.status === 'late') return 'Atrasada'
+        if (new Date(installment.due_date) < new Date()) return 'Vencida'
+        return 'Pendiente'
+    }
+
     const getInstallmentStatusColor = (installment: any) => {
         if (installment.status === 'paid') return 'text-green-600'
         if (installment.status === 'late') return 'text-red-600'
         if (new Date(installment.due_date) < new Date()) return 'text-orange-600'
         return 'text-blue-600'
+    }
+
+    // CSV: usa tabulación como separador para que Excel abra correctamente cada columna
+    const exportDetailCsv = () => {
+        const esc = (v: string | number) => {
+            const text = String(v ?? '').replace(/\r?\n/g, ' ').replace(/\t/g, ' ').trim()
+            return /^[=+\-@]/.test(text) ? `'${text}` : text
+        }
+        const row = (...cols: (string | number)[]) => cols.map(esc).join('\t') + '\n'
+
+        const statusLabel = credit.status === 'active' ? 'Activo' : credit.status === 'completed' ? 'Completado' : credit.status === 'defaulted' ? 'Moroso' : 'Cancelado'
+
+        let tsv = ''
+
+        // === Info del crédito ===
+        tsv += 'DETALLE DEL CRÉDITO\n'
+        tsv += row('Campo', 'Valor')
+        tsv += row('ID Crédito', formatCreditId(credit.id))
+        tsv += row('Cliente', credit.customer_name)
+        tsv += row('Estado', statusLabel)
+        tsv += row('Principal', credit.principal)
+        tsv += row('Tasa de interés', `${credit.interest_rate}%`)
+        tsv += row('Plazo', `${credit.term_months} meses`)
+        tsv += row('Fecha de inicio', new Date(credit.start_date).toLocaleDateString('es-AR'))
+        tsv += row('Fecha de fin estimada', endDate.toLocaleDateString('es-AR'))
+        tsv += row('Monto pagado', paidAmount)
+        tsv += row('Saldo pendiente', remainingBalance)
+        tsv += row('Progreso', `${progressPct}%`)
+        tsv += '\n'
+
+        // === Cuotas ===
+        tsv += 'CUOTAS\n'
+        tsv += row('N° Cuota', 'Vencimiento', 'Monto Cuota', 'Monto Pagado', 'Estado')
+        installments.forEach(i => {
+            tsv += row(
+                i.installment_number,
+                new Date(i.due_date).toLocaleDateString('es-AR'),
+                i.amount,
+                i.amount_paid ?? 0,
+                getInstallmentStatusLabel(i)
+            )
+        })
+        tsv += '\n'
+
+        // === Pagos ===
+        tsv += 'PAGOS REGISTRADOS\n'
+        tsv += row('Fecha y Hora', 'Método de Pago', 'Monto')
+        if (payments.length === 0) {
+            tsv += row('Sin pagos registrados', '', '')
+        } else {
+            payments.forEach(p => {
+                const methodLabel = p.payment_method === 'cash' ? 'Efectivo' : p.payment_method === 'card' ? 'Tarjeta' : p.payment_method === 'transfer' ? 'Transferencia' : p.payment_method || '-'
+                tsv += row(
+                    p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-',
+                    methodLabel,
+                    p.amount
+                )
+            })
+        }
+
+        const blob = new Blob(['\uFEFF' + tsv], { type: 'text/tab-separated-values;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `credito_${credit.id}_detalle.xls`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
+    // PDF con jsPDF + AutoTable
+    const generateDetailDoc = async () => {
+        const { default: jsPDF } = await import('jspdf')
+        const { default: autoTable } = await import('jspdf-autotable')
+
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+        const pageW = doc.internal.pageSize.getWidth()
+        const statusLabel = credit.status === 'active' ? 'Activo' : credit.status === 'completed' ? 'Completado' : credit.status === 'defaulted' ? 'Moroso' : 'Cancelado'
+
+        // --- Encabezado ---
+        doc.setFontSize(20)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Detalle del Crédito', pageW / 2, 18, { align: 'center' })
+
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(100)
+        doc.text(`Generado el ${new Date().toLocaleString('es-AR')}`, pageW / 2, 24, { align: 'center' })
+        doc.setTextColor(0)
+
+        // --- Info del crédito ---
+        autoTable(doc, {
+            startY: 30,
+            head: [['Campo', 'Valor']],
+            body: [
+                ['ID Crédito', formatCreditId(credit.id)],
+                ['Cliente', credit.customer_name],
+                ['Estado', statusLabel],
+                ['Principal', formatCurrency(credit.principal)],
+                ['Tasa de interés', `${credit.interest_rate}%`],
+                ['Plazo', `${credit.term_months} meses`],
+                ['Fecha de inicio', new Date(credit.start_date).toLocaleDateString('es-AR')],
+                ['Fecha de fin estimada', endDate.toLocaleDateString('es-AR')],
+                ['Monto pagado', formatCurrency(paidAmount)],
+                ['Saldo pendiente', formatCurrency(remainingBalance)],
+                ['Progreso', `${progressPct}%`],
+            ],
+            theme: 'grid',
+            headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
+            margin: { left: 14, right: 14 },
+        })
+
+        // --- Cuotas ---
+        const afterInfo = (doc as any).lastAutoTable.finalY + 10
+        doc.setFontSize(13)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Cuotas', 14, afterInfo)
+
+        autoTable(doc, {
+            startY: afterInfo + 5,
+            head: [['N°', 'Vencimiento', 'Monto Cuota', 'Monto Pagado', 'Estado']],
+            body: installments.map(i => [
+                i.installment_number,
+                new Date(i.due_date).toLocaleDateString('es-AR'),
+                formatCurrency(i.amount),
+                formatCurrency(i.amount_paid ?? 0),
+                getInstallmentStatusLabel(i),
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: [234, 88, 12], textColor: 255, fontStyle: 'bold' },
+            columnStyles: { 0: { halign: 'center', cellWidth: 15 } },
+            margin: { left: 14, right: 14 },
+        })
+
+        // --- Pagos ---
+        const afterInstallments = (doc as any).lastAutoTable.finalY + 10
+        doc.setFontSize(13)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Pagos Registrados', 14, afterInstallments)
+
+        autoTable(doc, {
+            startY: afterInstallments + 5,
+            head: [['Fecha y Hora', 'Método', 'Monto']],
+            body: payments.length === 0
+                ? [['Sin pagos registrados', '', '']]
+                : payments.map(p => [
+                    p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-',
+                    p.payment_method === 'cash' ? 'Efectivo' : p.payment_method === 'card' ? 'Tarjeta' : p.payment_method === 'transfer' ? 'Transferencia' : p.payment_method || '-',
+                    formatCurrency(p.amount),
+                ]),
+            theme: 'striped',
+            headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
+            margin: { left: 14, right: 14 },
+        })
+
+        return doc
+    }
+
+    const exportDetailPdf = async () => {
+        if (!credit) return
+        const doc = await generateDetailDoc()
+        doc.save(`credito_${credit.id}_detalle.pdf`)
+    }
+
+    const printDetailPdf = async () => {
+        if (!credit) return
+        const doc = await generateDetailDoc()
+        doc.autoPrint()
+        doc.output('dataurlnewwindow')
     }
 
     return (
@@ -111,7 +290,7 @@ export function CreditDetailDialog({
                                 Detalle del Crédito
                             </DialogTitle>
                             <DialogDescription className="mt-2">
-                                Información completa del crédito #{credit.id}
+                                Información completa del crédito {formatCreditId(credit.id)}
                             </DialogDescription>
                         </div>
                         <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
@@ -132,7 +311,7 @@ export function CreditDetailDialog({
                                 <div className="flex-1">
                                     <p className="text-xs text-muted-foreground mb-1">Cliente</p>
                                     <p className="font-semibold text-lg">{credit.customer_name}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">ID: {credit.customer_id}</p>
+                                    <p className="text-xs text-muted-foreground mt-1">{credit.customer_code || formatCustomerId(credit.customer_id)}</p>
                                 </div>
                             </div>
                         </div>
@@ -150,7 +329,7 @@ export function CreditDetailDialog({
                                             credit.status === 'completed' ? 'Completado' :
                                                 credit.status === 'defaulted' ? 'Moroso' : 'Cancelado'}
                                     </Badge>
-                                    <p className="text-xs text-muted-foreground mt-2">Crédito #{credit.id}</p>
+                                    <p className="text-xs text-muted-foreground mt-2">{formatCreditId(credit.id)}</p>
                                 </div>
                             </div>
                         </div>
@@ -212,7 +391,7 @@ export function CreditDetailDialog({
                     <Separator />
 
                     {/* Dates */}
-                    <div className="grid grid-cols-1 md:grid-cols2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
                             <Calendar className="h-5 w-5 text-blue-600" />
                             <div>
@@ -368,9 +547,29 @@ export function CreditDetailDialog({
 
                     {/* Actions */}
                     <div className="flex items-center gap-3 pt-4">
-                        <Button variant="outline" className="flex-1" onClick={() => alert('Función en desarrollo')}>
-                            <Download className="h-4 w-4 mr-2" />
-                            Exportar Detalle
+                        <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={exportDetailCsv}
+                        >
+                            <FileText className="h-4 w-4 mr-2" />
+                            Exportar Excel
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="flex-1 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20"
+                            onClick={exportDetailPdf}
+                        >
+                            <FileDown className="h-4 w-4 mr-2" />
+                            PDF
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
+                            onClick={printDetailPdf}
+                        >
+                            <Printer className="h-4 w-4 mr-2" />
+                            Imprimir
                         </Button>
                         <Button className="flex-1 bg-blue-600 hover:bg-blue-700" onClick={() => onOpenChange(false)}>
                             Cerrar
@@ -381,3 +580,4 @@ export function CreditDetailDialog({
         </Dialog>
     )
 }
+

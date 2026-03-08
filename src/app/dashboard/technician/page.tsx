@@ -35,6 +35,7 @@ export default function TechnicianPanel() {
     draggedRepairId,
     showMyRepairsOnly,
     setShowMyRepairsOnly,
+    canViewAllRepairs,
     onDragStart,
     onDropTo,
     updateRepair,
@@ -228,6 +229,7 @@ export default function TechnicianPanel() {
                 setSearchTerm={setSearchTerm}
                 showMyRepairsOnly={showMyRepairsOnly}
                 setShowMyRepairsOnly={setShowMyRepairsOnly}
+                canViewAllRepairs={canViewAllRepairs}
                 onRefresh={refreshRepairs}
                 isLoading={isLoading}
               />

@@ -1,38 +1,32 @@
+
 'use client'
 
-import { useEffect, useMemo, useState, useCallback } from 'react'
-import type { ColorScheme } from '@/contexts/theme-context'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { useTheme } from '@/contexts/theme-context'
-import { RecentActivity } from '@/components/dashboard/recent-activity'
 import {
-  Mail, Phone, User, LogOut, Palette, Shield, Bell, Building2, MapPin,
-  Save, RefreshCw, Settings, Key, Eye, Globe,
-  Smartphone, Monitor, Sun, Moon, Zap, X, Copy,
-  Activity, Clock, Calendar, Award, TrendingUp,
-  AlertCircle, CheckCircle, Briefcase, ChevronRight
+  Activity,
+  ChevronRight,
+  LogOut,
+  RefreshCw,
+  Save,
+  Settings,
+  Shield,
+  Sparkles,
+  User
 } from 'lucide-react'
-import { Progress } from '@/components/ui/progress'
 import { Skeleton, SkeletonCard } from '@/components/ui/skeleton-loader'
-import { Switch } from '@/components/ui/switch'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { AvatarUpload } from '@/components/profile/avatar-upload'
-import { ChangePasswordDialog } from '@/components/profile/change-password-dialog'
 import { SecuritySection } from '@/components/profile/security-section'
+import { DashboardProfileForm } from '@/components/profile/dashboard-profile-form'
+import { DashboardPreferencesForm } from '@/components/profile/dashboard-preferences-form'
+import { DashboardActivitySection } from '@/components/profile/dashboard-activity-section'
 import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
@@ -40,33 +34,27 @@ import { es } from 'date-fns/locale'
 import { logAndTranslateError } from '@/lib/error-translator'
 import { logger } from '@/lib/logger'
 
-// Validaciones con Zod (mejoradas con validación de dominio)
-const profileSchema = z.object({
+export const profileSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
-  email: z.string()
-    .email('Email inválido')
-    .refine((email) => {
-      const [, domain] = email.split('@')
-      return domain && domain.includes('.') && domain.split('.').every(part => part.length > 0)
-    }, 'El dominio del email no es válido'),
-  phone: z.string().optional(),
-  avatarUrl: z.string().optional(),
-  department: z.string().optional(),
-  jobTitle: z.string().optional(),
-  location: z.string().optional(),
-  bio: z.string().max(500, 'Máximo 500 caracteres').optional(),
-  website: z.string().url('URL inválida').optional().or(z.literal('')),
-  timezone: z.string(),
-  socialLinks: z.object({
-    twitter: z.string().url('URL inválida').optional().or(z.literal('')),
-    linkedin: z.string().url('URL inválida').optional().or(z.literal('')),
-    github: z.string().url('URL inválida').optional().or(z.literal(''))
-  }).optional()
+  email: z.string().email('Email invalido').refine((email) => {
+    const [, domain] = email.split('@')
+    return domain && domain.includes('.') && domain.split('.').every(part => part.length > 0)
+  }, 'El dominio del email no es valido'),
+  phone: z.string().nullish().or(z.literal('')),
+  avatarUrl: z.string().nullish().or(z.literal('')),
+  department: z.string().nullish().or(z.literal('')),
+  jobTitle: z.string().nullish().or(z.literal('')),
+  location: z.string().nullish().or(z.literal('')),
+  bio: z.string().max(500, 'Maximo 500 caracteres').nullish().or(z.literal('')),
+  website: z.union([z.string().url('URL invalida'), z.literal(''), z.null(), z.undefined()]).optional(),
+  timezone: z.string().nullish().or(z.literal(''))
 })
 
-type UserProfile = z.infer<typeof profileSchema>
+export type UserProfile = z.infer<typeof profileSchema>
+export type SectionId = 'profile' | 'preferences' | 'security' | 'activity'
+export type NotificationKey = 'notifications' | 'emailNotifications' | 'pushNotifications' | 'marketingEmails'
 
-interface ProfilePreferences {
+export interface ProfilePreferences {
   notifications: boolean
   compactMode: boolean
   language: string
@@ -84,62 +72,62 @@ interface ProfileStats {
   lastActivity: string
 }
 
+const DEFAULT_PROFILE: UserProfile = {
+  name: '',
+  email: '',
+  phone: '',
+  avatarUrl: '',
+  department: '',
+  jobTitle: '',
+  location: '',
+  bio: '',
+  website: '',
+  timezone: 'America/Asuncion'
+}
+
+const DEFAULT_PREFS: ProfilePreferences = {
+  notifications: true,
+  compactMode: false,
+  language: 'es',
+  emailNotifications: true,
+  pushNotifications: true,
+  marketingEmails: false,
+  autoSave: true,
+  darkModeSchedule: false
+}
+
 export default function UserProfilePage() {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
-  const { theme, colorScheme, setTheme, setColorScheme } = useTheme()
 
   const [loading, setLoading] = useState(false)
   const [loadingUser, setLoadingUser] = useState(true)
-  const [activeSection, setActiveSection] = useState('profile') // 'profile', 'preferences', 'security'
+  const [activeSection, setActiveSection] = useState<SectionId>('profile')
 
-  const [profile, setProfile] = useState<UserProfile>({
-    name: '',
-    email: '',
-    phone: '',
-    avatarUrl: '',
-    department: '',
-    jobTitle: '',
-    location: '',
-    bio: '',
-    website: '',
-    timezone: 'America/Asuncion',
-    socialLinks: { twitter: '', linkedin: '', github: '' }
-  })
-
-  const [initialProfile, setInitialProfile] = useState<UserProfile>(profile)
-  const [errors, setErrors] = useState<{ [key: string]: string }>({})
-  const [isDirty, setIsDirty] = useState(false)
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE)
+  const [initialProfile, setInitialProfile] = useState<UserProfile>(DEFAULT_PROFILE)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [userId, setUserId] = useState<string | null>(null)
   const [role, setRole] = useState<string | null>(null)
 
-  const [prefs, setPrefs] = useState<ProfilePreferences>({
-    notifications: true,
-    compactMode: false,
-    language: 'es',
-    emailNotifications: true,
-    pushNotifications: true,
-    marketingEmails: false,
-    autoSave: true,
-    darkModeSchedule: false
-  })
-  const [initialPrefs, setInitialPrefs] = useState<ProfilePreferences>(prefs)
-  const [isDirtyPrefs, setIsDirtyPrefs] = useState(false)
+  const [prefs, setPrefs] = useState<ProfilePreferences>(DEFAULT_PREFS)
+  const [initialPrefs, setInitialPrefs] = useState<ProfilePreferences>(DEFAULT_PREFS)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   const [stats, setStats] = useState<ProfileStats>({
     totalSales: 0,
     completedTasks: 0,
     loginStreak: 0,
-    lastActivity: 'Hace 5 minutos'
+    lastActivity: 'Sin actividad reciente'
   })
 
-  const getRoleLabel = (r: string | null) => {
-    if (!r) return 'Usuario'
+  const roleLabel = useMemo(() => {
+    if (!role) return 'Usuario'
     const map: Record<string, string> = {
       super_admin: 'Super Administrador',
       admin: 'Administrador',
-      technician: 'Técnico',
+      tecnico: 'Tecnico',
+      technician: 'Tecnico',
       vendedor: 'Vendedor',
       manager: 'Gerente',
       employee: 'Empleado',
@@ -147,184 +135,83 @@ export default function UserProfilePage() {
       client_mayorista: 'Cliente Mayorista',
       viewer: 'Visualizador'
     }
-    return map[r] || r.charAt(0).toUpperCase() + r.slice(1)
-  }
+    return map[role] || role.charAt(0).toUpperCase() + role.slice(1)
+  }, [role])
 
-  // Cargar usuario actual y preferencias
+  const isDirty = useMemo(() => JSON.stringify(profile) !== JSON.stringify(initialProfile), [profile, initialProfile])
+  const isDirtyPrefs = useMemo(() => JSON.stringify(prefs) !== JSON.stringify(initialPrefs), [prefs, initialPrefs])
+  const hasPendingChanges = isDirty || isDirtyPrefs
+
   useEffect(() => {
     const loadUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          setUserId(user.id)
-          const baseProfile: UserProfile = {
-            name: (user.user_metadata?.full_name as string) || 'Usuario',
-            email: user.email || '',
-            phone: (user.user_metadata?.phone as string) || '',
-            avatarUrl: (user.user_metadata?.avatar_url as string) || '',
-            department: '',
-            jobTitle: '',
-            location: '',
-            bio: '',
-            website: '',
-            timezone: 'America/Asuncion',
-            socialLinks: { twitter: '', linkedin: '', github: '' }
-          }
+        if (!user) return
 
+        setUserId(user.id)
+
+        const baseProfile: UserProfile = {
+          ...DEFAULT_PROFILE,
+          name: (user.user_metadata?.full_name as string) || 'Usuario',
+          email: user.email || '',
+          phone: (user.user_metadata?.phone as string) || '',
+          avatarUrl: (user.user_metadata?.avatar_url as string) || '',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_PROFILE.timezone
+        }
+
+        if (!config.supabase.isConfigured) {
           setProfile(baseProfile)
           setInitialProfile(baseProfile)
+          return
+        }
 
-          try {
-            const { data: profileRow } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', user.id)
-              .maybeSingle()
+        try {
+          const { data: summary, error } = await supabase.rpc('get_profile_summary', { p_user_id: user.id })
 
-            if (profileRow) {
-              const mergedProfile = {
-                ...baseProfile,
-                name: profileRow.name ?? baseProfile.name,
-                avatarUrl: profileRow.avatar_url ?? baseProfile.avatarUrl,
-                phone: profileRow.phone ?? baseProfile.phone,
-                department: profileRow.department ?? baseProfile.department,
-                jobTitle: profileRow.job_title ?? baseProfile.jobTitle,
-                location: profileRow.location ?? baseProfile.location,
-                bio: profileRow.bio ?? baseProfile.bio,
-                website: profileRow.website ?? baseProfile.website,
-                timezone: profileRow.timezone ?? baseProfile.timezone,
-                socialLinks: {
-                  ...baseProfile.socialLinks,
-                  ...(profileRow.social_links || {})
-                }
-              }
-              setProfile(mergedProfile)
-              setInitialProfile(mergedProfile)
-            }
-          } catch (e) {
-            logger.error('Error loading profile', { error: e })
+          if (error || !summary) {
+            setProfile(baseProfile)
+            setInitialProfile(baseProfile)
+            return
           }
 
-          try {
-            const { data: roleRow } = await supabase
-              .from('user_roles')
-              .select('role')
-              .eq('user_id', user.id)
-              .maybeSingle()
-            if (roleRow?.role) setRole(roleRow.role)
-          } catch { }
+          if (summary.role) setRole(summary.role)
 
-          if (config.supabase.isConfigured) {
-            try {
-              const now = new Date()
-              const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-              const thirtyDaysAgo = new Date(now)
-              thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+          const profileRow = summary.profile
+          const mergedProfile: UserProfile = profileRow ? {
+            ...baseProfile,
+            name: profileRow.full_name ?? profileRow.name ?? baseProfile.name,
+            avatarUrl: profileRow.avatar_url ?? baseProfile.avatarUrl,
+            phone: profileRow.phone ?? baseProfile.phone,
+            department: profileRow.department ?? baseProfile.department,
+            jobTitle: profileRow.job_title ?? baseProfile.jobTitle,
+            location: profileRow.location ?? baseProfile.location,
+            bio: profileRow.bio ?? baseProfile.bio,
+            website: profileRow.website ?? baseProfile.website,
+            timezone: profileRow.timezone ?? baseProfile.timezone
+          } : baseProfile
 
-              const [salesResult, activityResult] = await Promise.all([
-                supabase
-                  .from('sales')
-                  .select('id,created_at,user_id')
-                  .eq('user_id', user.id)
-                  .gte('created_at', thirtyDaysAgo.toISOString()),
-                supabase.rpc('get_user_activity', {
-                  p_user_id: user.id,
-                  p_limit: 500
-                })
-              ])
+          setProfile(mergedProfile)
+          setInitialProfile(mergedProfile)
 
-              const salesRows = (salesResult.data || []) as Array<{ id: string; created_at?: string | null }>
-              const activityRows = (activityResult.data || []) as Array<{
-                id: string
-                action: string
-                created_at: string
-                details?: any
-              }>
-
-              const totalSales = salesRows.length
-
-              const thirtyDaysAgoMs = thirtyDaysAgo.getTime()
-              const taskActions = new Set([
-                'create',
-                'update',
-                'delete',
-                'bulk_operation',
-                'data_export',
-                'password_change',
-                'role_change'
-              ])
-
-              const tasksInPeriod = activityRows.filter(row => {
-                const createdTime = new Date(row.created_at).getTime()
-                if (Number.isNaN(createdTime) || createdTime < thirtyDaysAgoMs) return false
-                if (!row.action) return false
-                if (row.action === 'login' || row.action === 'login_failed') return false
-                if (taskActions.has(row.action)) return true
-                if (row.action.startsWith('create_') || row.action.startsWith('update_') || row.action.startsWith('delete_')) {
-                  return true
-                }
-                return false
-              })
-
-              const loginEvents = activityRows.filter(
-                row => row.action === 'login' || row.action === 'sign_in'
-              )
-              const loginDays = new Set(
-                loginEvents.map(row => {
-                  const d = new Date(row.created_at)
-                  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
-                }).filter((v): v is string => v !== null)
-              )
-
-              let loginStreak = 0
-              const cursor = new Date(todayStart)
-              while (true) {
-                const key = cursor.toISOString().slice(0, 10)
-                if (loginDays.has(key)) {
-                  loginStreak += 1
-                  cursor.setDate(cursor.getDate() - 1)
-                } else {
-                  break
-                }
-              }
-
-              const lastSaleTime = salesRows.reduce<number | null>((acc, row) => {
-                if (!row.created_at) return acc
-                const t = new Date(row.created_at).getTime()
-                if (Number.isNaN(t)) return acc
-                if (acc === null || t > acc) return t
-                return acc
-              }, null)
-
-              const lastActivityTime = activityRows.reduce<number | null>((acc, row) => {
-                const t = new Date(row.created_at).getTime()
-                if (Number.isNaN(t)) return acc
-                if (acc === null || t > acc) return t
-                return acc
-              }, null)
-
-              const latestTs = [lastSaleTime, lastActivityTime].reduce<number | null>((acc, value) => {
-                if (value === null) return acc
-                if (acc === null || value > acc) return value
-                return acc
-              }, null)
-
-              let lastActivityLabel = 'Sin actividad reciente'
-              if (latestTs !== null) {
-                const lastDate = new Date(latestTs)
-                lastActivityLabel = `Hace ${formatDistanceToNow(lastDate, { addSuffix: false, locale: es })}`
-              }
-
-              setStats({
-                totalSales,
-                completedTasks: tasksInPeriod.length,
-                loginStreak,
-                lastActivity: lastActivityLabel
-              })
-            } catch (error) {
-              logger.error('Error loading profile stats', { error })
+          const statsData = summary.stats
+          let lastActivityLabel = 'Sin actividad reciente'
+          if (statsData.lastActivity) {
+            const lastDate = new Date(statsData.lastActivity)
+            if (!isNaN(lastDate.getTime())) {
+              lastActivityLabel = `Hace ${formatDistanceToNow(lastDate, { addSuffix: false, locale: es })}`
             }
           }
+
+          setStats({
+            totalSales: statsData.totalSales || 0,
+            completedTasks: statsData.completedTasks || 0,
+            loginStreak: statsData.loginStreak || 0,
+            lastActivity: lastActivityLabel
+          })
+        } catch (rpcError) {
+          logger.error('Error fetching profile summary', { error: rpcError })
+          setProfile(baseProfile)
+          setInitialProfile(baseProfile)
         }
       } catch (e) {
         logger.error('Error loading user', { error: e })
@@ -336,26 +223,19 @@ export default function UserProfilePage() {
     const loadPrefs = () => {
       try {
         const raw = localStorage.getItem('profile-preferences')
-        if (raw) {
-          const parsed = JSON.parse(raw)
-          setPrefs({ ...prefs, ...parsed })
-          setInitialPrefs({ ...prefs, ...parsed })
-        }
-      } catch { }
+        if (!raw) return
+        const parsed = JSON.parse(raw)
+        const merged = { ...DEFAULT_PREFS, ...parsed }
+        setPrefs(merged)
+        setInitialPrefs(merged)
+      } catch {
+        // no-op
+      }
     }
 
     loadUser()
     loadPrefs()
   }, [supabase])
-
-  // Detectar cambios
-  useEffect(() => {
-    setIsDirty(JSON.stringify(profile) !== JSON.stringify(initialProfile))
-  }, [profile, initialProfile])
-
-  useEffect(() => {
-    setIsDirtyPrefs(JSON.stringify(prefs) !== JSON.stringify(initialPrefs))
-  }, [prefs, initialPrefs])
 
   const validate = useCallback(() => {
     try {
@@ -364,621 +244,300 @@ export default function UserProfilePage() {
       return true
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const newErrors: Record<string, string> = {}
-        error.issues.forEach(err => {
-          const path = err.path.join('.')
-          newErrors[path] = err.message
+        const nextErrors: Record<string, string> = {}
+        error.issues.forEach((err) => {
+          nextErrors[err.path.join('.')] = err.message
         })
-        setErrors(newErrors)
+        setErrors(nextErrors)
       }
       return false
     }
   }, [profile])
 
-  const savePrefs = useCallback(() => {
+  const savePrefs = useCallback((): boolean => {
     try {
       localStorage.setItem('profile-preferences', JSON.stringify(prefs))
-      toast.success('Preferencias guardadas')
       setInitialPrefs(prefs)
-      setIsDirtyPrefs(false)
+      return true
     } catch {
-      toast.error('Error al guardar preferencias')
+      return false
     }
   }, [prefs])
 
-  const handleUpdateProfile = useCallback(async () => {
-    if (!validate()) {
-      toast.error('Por favor, corrige los errores.')
-      return
+  const handleUpdateProfile = useCallback(async (): Promise<boolean> => {
+    if (!userId) {
+      toast.error('No se pudo identificar al usuario. Recarga la pagina.')
+      return false
     }
-    setLoading(true)
+    if (!validate()) return false
+
+    const normalizedProfile = {
+      ...profile,
+      name: profile.name.trim(),
+      phone: profile.phone?.trim() || '',
+      website: profile.website?.trim() || '',
+      department: profile.department?.trim() || '',
+      jobTitle: profile.jobTitle?.trim() || '',
+      location: profile.location?.trim() || '',
+      bio: profile.bio?.trim() || ''
+    }
+
     try {
+      // 1. Actualizar tabla Profiles (Fuente de la verdad para la UI)
+      // Priorizamos esto para que el usuario vea los cambios rápido
+      const payload = {
+        email: normalizedProfile.email,
+        full_name: normalizedProfile.name,
+        avatar_url: normalizedProfile.avatarUrl,
+        phone: normalizedProfile.phone,
+        department: normalizedProfile.department,
+        job_title: normalizedProfile.jobTitle,
+        location: normalizedProfile.location,
+        bio: normalizedProfile.bio,
+        website: normalizedProfile.website,
+        timezone: normalizedProfile.timezone,
+        updated_at: new Date().toISOString()
+      }
+
+      const { error: upsertError } = await supabase
+        .from('profiles')
+        .upsert({ id: userId, ...payload })
+
+      if (upsertError) throw upsertError
+
+      // 2. Actualizar metadatos de Auth en segundo plano (Best Effort)
+      // No bloqueamos la UI si esto tarda o falla, ya que es secundario
       if (config.supabase.isConfigured && 'updateUser' in supabase.auth) {
-        await supabase.auth.updateUser({
-          data: {
-            full_name: profile.name,
-            phone: profile.phone,
-            avatar_url: profile.avatarUrl
-          }
-        })
+        // Solo actualizar si hay cambios relevantes para Auth
+        const hasAuthChanges = 
+           normalizedProfile.name !== initialProfile.name ||
+           normalizedProfile.phone !== initialProfile.phone ||
+           normalizedProfile.avatarUrl !== initialProfile.avatarUrl;
+
+        if (hasAuthChanges) {
+            supabase.auth.updateUser({
+              data: {
+                full_name: normalizedProfile.name,
+                phone: normalizedProfile.phone,
+                avatar_url: normalizedProfile.avatarUrl
+              }
+            }).then(({ error }) => {
+              if (error) {
+                console.warn('Error actualizando metadatos de Auth (no crítico):', error)
+              } else {
+                console.log('Metadatos de Auth actualizados en segundo plano')
+              }
+            }).catch(err => {
+                 console.warn('Error en llamada a updateUser:', err)
+            })
+        }
       }
 
-      if (userId) {
-        const { error: upsertError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: userId,
-            name: profile.name,
-            avatar_url: profile.avatarUrl,
-            phone: profile.phone,
-            department: profile.department,
-            job_title: profile.jobTitle,
-            location: profile.location,
-            bio: profile.bio,
-            website: profile.website,
-            timezone: profile.timezone,
-            social_links: profile.socialLinks
-          })
-        if (upsertError) throw upsertError
-      }
-
-      logger.info('Profile updated successfully')
-      toast.success('Perfil actualizado')
-      setInitialProfile(profile)
-      setIsDirty(false)
-    } catch (error: any) {
+      setInitialProfile(normalizedProfile)
+      return true
+    } catch (error: unknown) {
       const userMessage = logAndTranslateError(error, 'Profile Update')
       toast.error(userMessage)
+      return false
+    }
+  }, [profile, userId, supabase, validate, initialProfile])
+
+  const saveAll = useCallback(async () => {
+    setLoading(true)
+    try {
+      if (!hasPendingChanges) {
+        toast.info('No hay cambios para guardar')
+        return
+      }
+
+      if (isDirty && !validate()) {
+        toast.error('Corrige los errores antes de guardar')
+        return
+      }
+
+      let profileSaved = false
+      let prefsSaved = false
+
+      if (isDirty) profileSaved = await handleUpdateProfile()
+      if (isDirtyPrefs) prefsSaved = savePrefs()
+
+      const allOk = (!isDirty || profileSaved) && (!isDirtyPrefs || prefsSaved)
+      if (allOk) toast.success('Configuracion guardada')
+      else if (profileSaved || prefsSaved) toast.warning('Se guardo parcialmente la configuracion')
+      else toast.error('No se pudieron guardar los cambios')
     } finally {
       setLoading(false)
     }
-  }, [profile, userId, supabase, validate])
+  }, [handleUpdateProfile, hasPendingChanges, isDirty, isDirtyPrefs, savePrefs, validate])
 
   const handleLogout = async () => {
     setLoading(true)
     try {
       await supabase.auth.signOut()
-      toast.success('Sesión cerrada')
+      toast.success('Sesion cerrada')
       router.push('/login')
       router.refresh()
-    } catch (error) {
-      toast.error('Error al cerrar sesión')
+    } catch {
+      toast.error('Error al cerrar sesion')
     } finally {
       setLoading(false)
     }
   }
 
-  const saveAll = useCallback(async () => {
-    const tasks: Promise<void>[] = []
-    if (isDirty) {
-      if (!validate()) {
-        toast.error('Corrige los errores antes de guardar.')
-      } else {
-        tasks.push(handleUpdateProfile())
-      }
-    }
-    if (isDirtyPrefs) {
-      savePrefs()
-    }
-    if (!isDirty && !isDirtyPrefs) {
-      toast.info('No hay cambios para guardar')
-    }
-    await Promise.all(tasks)
-  }, [isDirty, isDirtyPrefs, validate, handleUpdateProfile, savePrefs])
-
-  // Navegación lateral
-  const navItems = [
-    { id: 'profile', label: 'Mi Perfil', icon: User },
-    { id: 'preferences', label: 'Preferencias', icon: Settings },
-    { id: 'security', label: 'Seguridad', icon: Shield },
-    { id: 'activity', label: 'Actividad', icon: Activity },
+  const navItems: { id: SectionId; label: string; icon: typeof User; hint: string }[] = [
+    { id: 'profile', label: 'Mi perfil', icon: User, hint: 'Datos personales y contacto' },
+    { id: 'preferences', label: 'Preferencias', icon: Settings, hint: 'Tema, idioma y alertas' },
+    { id: 'security', label: 'Seguridad', icon: Shield, hint: 'Password y sesiones' },
+    { id: 'activity', label: 'Actividad', icon: Activity, hint: 'Metricas e historial' }
   ]
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/20 dark:from-slate-950 dark:via-blue-950/30 dark:to-purple-950/20">
-      {/* Efectos de fondo decorativos */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-blue-400/20 via-purple-400/20 to-pink-400/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-cyan-400/20 via-teal-400/20 to-emerald-400/20 rounded-full blur-3xl animate-pulse delay-1000" />
-      </div>
-
-      <div className="container max-w-7xl py-8 mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        {/* Header ultra moderno con glassmorphism */}
-        <div className="relative mb-10">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-3xl blur-2xl" />
-          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-6 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl rounded-2xl border border-white/20 dark:border-slate-700/50 shadow-2xl shadow-blue-500/10">
-            <div className="space-y-2">
-              <h1 className="text-4xl md:text-5xl font-bold tracking-tight bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent animate-gradient">
-                Configuración de Cuenta
-              </h1>
-              <p className="text-slate-600 dark:text-slate-400 text-sm md:text-base">
-                Administra tu información personal y preferencias del sistema.
-              </p>
+  if (loadingUser) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+        <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 lg:px-8">
+          <Skeleton className="mb-6 h-28 w-full rounded-2xl" />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
+            <div className="space-y-4">
+              <SkeletonCard />
+              <SkeletonCard />
             </div>
-            <div className="flex items-center gap-3">
-              {(isDirty || isDirtyPrefs) && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-full backdrop-blur-sm">
-                  <div className="h-2 w-2 bg-amber-500 rounded-full animate-pulse" />
-                  <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Cambios sin guardar</span>
-                </div>
-              )}
-              {(isDirty || isDirtyPrefs) && (
-                <Button
-                  onClick={saveAll}
-                  disabled={loading}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transition-all duration-300 hover:scale-105"
-                >
-                  {loading ? (
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  Guardar Cambios
-                </Button>
-              )}
+            <div className="space-y-4">
+              <SkeletonCard />
+              <SkeletonCard />
             </div>
           </div>
         </div>
+      </div>
+    )
+  }
 
-        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8">
-          {/* Sidebar de Navegación ultra moderno */}
-          <div className="space-y-6">
-            {/* Card de perfil con glassmorphism y gradiente vibrante */}
-            <Card className="border-none shadow-2xl bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 backdrop-blur-xl overflow-hidden relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 opacity-50" />
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-yellow-400/30 to-pink-400/30 rounded-full blur-2xl" />
-              <CardContent className="p-6 relative z-10">
-                <div className="flex flex-col items-center text-center gap-4">
-                  <div className="relative group">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 rounded-full blur-lg opacity-75 group-hover:opacity-100 transition duration-300 animate-pulse" />
-                    <Avatar className="relative h-24 w-24 border-4 border-white dark:border-slate-900 shadow-2xl ring-4 ring-blue-500/30">
-                      <AvatarImage src={profile.avatarUrl || ''} />
-                      <AvatarFallback className="text-3xl font-bold bg-gradient-to-br from-blue-600 via-purple-600 to-pink-600 text-white">
-                        {profile.name?.[0] || 'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="absolute -bottom-1 -right-1 h-7 w-7 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full border-4 border-white dark:border-slate-900 shadow-lg flex items-center justify-center">
-                      <div className="h-3 w-3 bg-white rounded-full animate-pulse" />
-                    </div>
-                  </div>
-                  <div className="space-y-2 w-full">
-                    <p className="font-bold text-xl truncate bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
-                      {profile.name || 'Usuario'}
-                    </p>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 truncate font-medium">{profile.email}</p>
-                    {role && (
-                      <Badge className="mt-2 text-xs bg-gradient-to-r from-amber-500 to-orange-500 text-white border-none shadow-lg">
-                        {role === 'super_admin' ? '👑 Super Admin' : role}
-                      </Badge>
-                    )}
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 lg:px-8">
+        <Card className="mb-6 border-slate-200/70 bg-gradient-to-r from-white to-slate-100 dark:from-slate-900 dark:to-slate-900/70">
+          <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-3 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                <Sparkles className="h-3.5 w-3.5" />
+                Dashboard / Cuenta
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+                Perfil y configuracion
+              </h1>
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Administra tus datos, preferencias y seguridad desde un solo lugar.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {hasPendingChanges && (
+                <Badge variant="secondary" className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                  Cambios sin guardar
+                </Badge>
+              )}
+              <Button onClick={saveAll} disabled={loading || !hasPendingChanges}>
+                {loading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Guardar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
+          <aside className="space-y-4 lg:sticky lg:top-20 lg:h-fit">
+            <Card>
+              <CardContent className="space-y-4 p-5">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-14 w-14 border border-slate-200 dark:border-slate-700">
+                    <AvatarImage src={profile.avatarUrl || ''} />
+                    <AvatarFallback>{profile.name?.[0] || 'U'}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{profile.name || 'Usuario'}</p>
+                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{profile.email || 'Sin email'}</p>
                   </div>
                 </div>
+                <Badge variant="outline" className="w-full justify-center py-1.5">
+                  {roleLabel}
+                </Badge>
               </CardContent>
             </Card>
 
-            {/* Navegación con efectos modernos */}
-            <Card className="border-none shadow-xl bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl">
-              <CardContent className="p-3">
-                <nav className="space-y-2">
+            <Card>
+              <CardContent className="p-2">
+                <nav className="space-y-1">
                   {navItems.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => setActiveSection(item.id)}
                       className={cn(
-                        "w-full flex items-center justify-between px-4 py-3.5 text-sm font-semibold rounded-xl transition-all duration-300 group",
+                        'w-full rounded-lg px-3 py-2.5 text-left transition-colors',
                         activeSection === item.id
-                          ? "bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white shadow-xl shadow-blue-500/30 scale-[1.02]"
-                          : "text-slate-600 dark:text-slate-400 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 dark:hover:from-blue-950/50 dark:hover:to-purple-950/50 hover:text-slate-900 dark:hover:text-white hover:scale-[1.01]"
+                          ? 'bg-slate-900 text-slate-50 dark:bg-slate-100 dark:text-slate-900'
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-800'
                       )}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "p-2 rounded-lg transition-all duration-300",
-                          activeSection === item.id
-                            ? "bg-white/20"
-                            : "bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30"
-                        )}>
-                          <item.icon className={cn(
-                            "h-5 w-5 transition-transform duration-300",
-                            activeSection === item.id && "scale-110"
-                          )} />
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <item.icon className="h-4 w-4" />
+                          <span className="text-sm font-medium">{item.label}</span>
                         </div>
-                        {item.label}
+                        {activeSection === item.id && <ChevronRight className="h-4 w-4" />}
                       </div>
-                      {activeSection === item.id && (
-                        <ChevronRight className="h-5 w-5 animate-pulse" />
-                      )}
+                      <p className={cn('mt-1 text-xs', activeSection === item.id ? 'text-slate-200 dark:text-slate-700' : 'text-slate-500 dark:text-slate-400')}>
+                        {item.hint}
+                      </p>
                     </button>
                   ))}
                 </nav>
               </CardContent>
             </Card>
 
-            {/* Botón de cerrar sesión con estilo moderno */}
-            <Card className="border-none shadow-xl bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 backdrop-blur-xl hover:shadow-2xl transition-all duration-300">
-              <CardContent className="p-3">
-                <button
-                  onClick={() => setShowLogoutConfirm(true)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-semibold text-red-600 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-950/50 transition-all duration-300 hover:scale-[1.02] group"
-                >
-                  <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg group-hover:bg-red-200 dark:group-hover:bg-red-900/50 transition-colors">
-                    <LogOut className="h-5 w-5" />
-                  </div>
-                  Cerrar Sesión
-                </button>
-              </CardContent>
-            </Card>
-          </div>
+            <Button variant="destructive" className="w-full" onClick={() => setShowLogoutConfirm(true)}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Cerrar sesion
+            </Button>
+          </aside>
 
-          {/* Contenido Principal con animaciones mejoradas */}
-          <div className="space-y-6">
+          <section className="space-y-6">
             {activeSection === 'profile' && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-700">
-                {/* Información Pública con glassmorphism */}
-                <Card className="border-none shadow-2xl overflow-hidden bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl relative">
-                  <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-blue-400/20 via-purple-400/20 to-pink-400/20 rounded-full blur-3xl" />
-                  <CardHeader className="bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10 border-b border-blue-200/50 dark:border-blue-800/50 relative z-10">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl shadow-lg">
-                        <User className="h-6 w-6 text-white" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-2xl bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                          Información Pública
-                        </CardTitle>
-                        <CardDescription className="text-slate-600 dark:text-slate-400">
-                          Esta información será visible para otros usuarios.
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-6 pt-6 relative z-10">
-                    <div className="flex flex-col sm:flex-row gap-6">
-                      <div className="flex-shrink-0">
-                        <AvatarUpload
-                          currentAvatarUrl={profile.avatarUrl}
-                          userName={profile.name}
-                          userId={userId}
-                          userEmail={profile.email}
-                          onAvatarChange={(url) => setProfile(p => ({ ...p, avatarUrl: url }))}
-                          size="lg"
-                        />
-                      </div>
-                      <div className="grid gap-5 flex-1 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="profile-name" className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                            <div className="p-1 bg-blue-100 dark:bg-blue-900/30 rounded">
-                              <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                            </div>
-                            Nombre Completo
-                          </Label>
-                          <Input
-                            id="profile-name"
-                            value={profile.name}
-                            onChange={(e) => setProfile(p => ({ ...p, name: e.target.value }))}
-                            placeholder="Tu nombre"
-                            aria-label="Nombre completo del usuario"
-                            className="border-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm h-11"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                            <div className="p-1 bg-purple-100 dark:bg-purple-900/30 rounded">
-                              <Briefcase className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                            </div>
-                            Cargo / Título
-                          </Label>
-                          <Input
-                            value={getRoleLabel(role)}
-                            readOnly
-                            disabled
-                            className="border-2 border-slate-200 dark:border-slate-700 bg-slate-100/50 dark:bg-slate-800/50 cursor-not-allowed h-11 font-medium text-slate-600 dark:text-slate-400"
-                          />
-                        </div>
-                        <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="profile-bio" className="text-sm font-bold text-slate-700 dark:text-slate-300">Biografía</Label>
-                          <Textarea
-                            id="profile-bio"
-                            value={profile.bio}
-                            onChange={(e) => {
-                              const newBio = e.target.value.slice(0, 500)
-                              setProfile(p => ({ ...p, bio: newBio }))
-                            }}
-                            placeholder="Escribe algo sobre ti..."
-                            rows={3}
-                            maxLength={500}
-                            aria-label="Biografía personal"
-                            aria-describedby="bio-char-count"
-                            className="resize-none border-2 border-slate-200 dark:border-slate-700 focus:border-pink-500 dark:focus:border-pink-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"
-                          />
-                          <p id="bio-char-count" className="text-xs text-right text-slate-500 dark:text-slate-400 font-medium" aria-live="polite">
-                            {profile.bio?.length || 0}/500 caracteres
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Información de Contacto con colores vibrantes */}
-                <Card className="border-none shadow-2xl overflow-hidden bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl relative">
-                  <div className="absolute bottom-0 left-0 w-96 h-96 bg-gradient-to-tr from-cyan-400/20 via-teal-400/20 to-emerald-400/20 rounded-full blur-3xl" />
-                  <CardHeader className="bg-gradient-to-r from-cyan-500/10 via-teal-500/10 to-emerald-500/10 border-b border-cyan-200/50 dark:border-cyan-800/50 relative z-10">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-xl shadow-lg">
-                        <Mail className="h-6 w-6 text-white" />
-                      </div>
-                      <CardTitle className="text-2xl bg-gradient-to-r from-cyan-600 to-teal-600 bg-clip-text text-transparent">
-                        Información de Contacto
-                      </CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-5 sm:grid-cols-2 pt-6 relative z-10">
-                    <div className="space-y-2">
-                      <Label htmlFor="profile-email" className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                        <div className="p-1 bg-blue-100 dark:bg-blue-900/30 rounded">
-                          <Mail className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        Email
-                      </Label>
-                      <Input
-                        id="profile-email"
-                        value={profile.email}
-                        disabled
-                        aria-label="Email del usuario (no editable)"
-                        className="bg-slate-100/80 dark:bg-slate-800/80 border-2 border-slate-200 dark:border-slate-700 backdrop-blur-sm h-11"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="profile-phone" className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                        <div className="p-1 bg-green-100 dark:bg-green-900/30 rounded">
-                          <Phone className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                        </div>
-                        Teléfono
-                      </Label>
-                      <Input
-                        id="profile-phone"
-                        value={profile.phone}
-                        onChange={(e) => setProfile(p => ({ ...p, phone: e.target.value }))}
-                        placeholder="+595..."
-                        aria-label="Número de teléfono"
-                        className="border-2 border-slate-200 dark:border-slate-700 focus:border-green-500 dark:focus:border-green-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm h-11"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                        <div className="p-1 bg-red-100 dark:bg-red-900/30 rounded">
-                          <MapPin className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
-                        </div>
-                        Ubicación
-                      </Label>
-                      <Input
-                        value={profile.location}
-                        onChange={(e) => setProfile(p => ({ ...p, location: e.target.value }))}
-                        placeholder="Ciudad, País"
-                        className="border-2 border-slate-200 dark:border-slate-700 focus:border-red-500 dark:focus:border-red-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm h-11"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-bold flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                        <div className="p-1 bg-purple-100 dark:bg-purple-900/30 rounded">
-                          <Globe className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                        </div>
-                        Sitio Web
-                      </Label>
-                      <Input
-                        value={profile.website}
-                        onChange={(e) => setProfile(p => ({ ...p, website: e.target.value }))}
-                        placeholder="https://..."
-                        className="border-2 border-slate-200 dark:border-slate-700 focus:border-purple-500 dark:focus:border-purple-500 transition-all duration-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm h-11"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-              </div>
+              <DashboardProfileForm 
+                profile={profile}
+                setProfile={setProfile}
+                errors={errors}
+                userId={userId}
+                roleLabel={roleLabel}
+              />
             )}
 
             {activeSection === 'preferences' && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-700">
-                {/* Apariencia */}
-                <Card className="border-none shadow-xl overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-violet-500/5 to-fuchsia-500/5 border-b">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-violet-500/10 rounded-lg">
-                        <Palette className="h-5 w-5 text-violet-600" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-xl">Apariencia</CardTitle>
-                        <CardDescription>Personaliza cómo se ve la aplicación.</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-6 pt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div className="space-y-3">
-                        <Label className="text-sm font-semibold">Tema</Label>
-                        <div className="grid grid-cols-3 gap-3">
-                          {[
-                            { value: 'light', icon: Sun, label: 'Claro', color: 'from-yellow-400 to-orange-400' },
-                            { value: 'dark', icon: Moon, label: 'Oscuro', color: 'from-indigo-600 to-purple-600' },
-                            { value: 'system', icon: Monitor, label: 'Auto', color: 'from-blue-500 to-cyan-500' }
-                          ].map((m) => (
-                            <button
-                              key={m.value}
-                              onClick={() => setTheme(m.value as any)}
-                              className={cn(
-                                "relative p-4 rounded-xl border-2 text-sm font-medium transition-all duration-200 overflow-hidden group",
-                                theme === m.value
-                                  ? "border-primary shadow-lg shadow-primary/25 scale-105"
-                                  : "border-border hover:border-primary/50 hover:scale-102"
-                              )}
-                            >
-                              <div className={cn(
-                                "absolute inset-0 bg-gradient-to-br opacity-10 group-hover:opacity-20 transition-opacity",
-                                m.color
-                              )} />
-                              <div className="relative flex flex-col items-center gap-2">
-                                <m.icon className={cn(
-                                  "h-6 w-6",
-                                  theme === m.value ? "text-primary" : "text-muted-foreground"
-                                )} />
-                                <span className={cn(
-                                  "text-xs",
-                                  theme === m.value ? "text-primary font-bold" : "text-muted-foreground"
-                                )}>
-                                  {m.label}
-                                </span>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <Label className="text-sm font-semibold">Color de Énfasis</Label>
-                        <Select value={colorScheme} onValueChange={(v: any) => setColorScheme(v)}>
-                          <SelectTrigger className="border-2 h-12">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="default">🎨 Por defecto</SelectItem>
-                            <SelectItem value="blue">💙 Azul</SelectItem>
-                            <SelectItem value="green">💚 Verde</SelectItem>
-                            <SelectItem value="purple">💜 Violeta</SelectItem>
-                            <SelectItem value="orange">🧡 Naranja</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Notificaciones */}
-                <Card className="border-none shadow-xl overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-amber-500/5 to-orange-500/5 border-b">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-amber-500/10 rounded-lg">
-                        <Bell className="h-5 w-5 text-amber-600" />
-                      </div>
-                      <CardTitle className="text-xl">Notificaciones</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3 pt-6">
-                    {[
-                      { key: 'notifications', label: 'Notificaciones en la app', icon: Bell, color: 'text-blue-600' },
-                      { key: 'emailNotifications', label: 'Recibir emails', icon: Mail, color: 'text-green-600' },
-                      { key: 'pushNotifications', label: 'Notificaciones push', icon: Smartphone, color: 'text-purple-600' },
-                      { key: 'marketingEmails', label: 'Correos de marketing', icon: Mail, color: 'text-orange-600' }
-                    ].map((item) => (
-                      <div key={item.key} className="flex items-center justify-between p-4 rounded-xl hover:bg-muted/50 transition-colors border border-transparent hover:border-border">
-                        <div className="flex items-center gap-3">
-                          <div className={cn("p-2 rounded-lg bg-muted", item.color)}>
-                            <item.icon className="h-4 w-4" />
-                          </div>
-                          <Label className="cursor-pointer font-medium" htmlFor={item.key}>{item.label}</Label>
-                        </div>
-                        <Switch
-                          id={item.key}
-                          checked={(prefs as any)[item.key]}
-                          onCheckedChange={(c) => setPrefs(p => ({ ...p, [item.key]: c }))}
-                        />
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-
-                {/* Regional */}
-                <Card className="border-none shadow-xl overflow-hidden">
-                  <CardHeader className="bg-gradient-to-r from-emerald-500/5 to-teal-500/5 border-b">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-emerald-500/10 rounded-lg">
-                        <Globe className="h-5 w-5 text-emerald-600" />
-                      </div>
-                      <CardTitle className="text-xl">Regional</CardTitle>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-4 sm:grid-cols-2 pt-6">
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Idioma</Label>
-                      <Select value={prefs.language} onValueChange={(v) => setPrefs(p => ({ ...p, language: v }))}>
-                        <SelectTrigger className="border-2 h-11">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="es">🇪🇸 Español</SelectItem>
-                          <SelectItem value="en">🇺🇸 English</SelectItem>
-                          <SelectItem value="pt">🇧🇷 Português</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-semibold">Zona Horaria</Label>
-                      <Select value={profile.timezone} onValueChange={(v) => setProfile(p => ({ ...p, timezone: v }))}>
-                        <SelectTrigger className="border-2 h-11">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="America/Asuncion">🇵🇾 Asunción (GMT-4)</SelectItem>
-                          <SelectItem value="America/Buenos_Aires">🇦🇷 Buenos Aires (GMT-3)</SelectItem>
-                          <SelectItem value="UTC">🌍 UTC</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              <DashboardPreferencesForm 
+                prefs={prefs}
+                setPrefs={setPrefs}
+                profile={profile}
+                setProfile={setProfile}
+              />
             )}
 
-            {activeSection === 'security' && (
-              <SecuritySection userId={userId} role={role} />
-            )}
+            {activeSection === 'security' && <SecuritySection userId={userId} role={role} />}
 
-            {activeSection === 'activity' && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { label: 'Ventas', value: stats.totalSales, icon: TrendingUp, color: 'text-green-500' },
-                    { label: 'Tareas', value: stats.completedTasks, icon: CheckCircle, color: 'text-blue-500' },
-                    { label: 'Racha', value: `${stats.loginStreak} días`, icon: Zap, color: 'text-orange-500' },
-                    { label: 'Activo', value: stats.lastActivity, icon: Clock, color: 'text-purple-500' },
-                  ].map((stat, i) => (
-                    <Card key={i}>
-                      <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2">
-                        <stat.icon className={cn("h-6 w-6", stat.color)} />
-                        <div className="text-xl font-bold">{stat.value}</div>
-                        <div className="text-xs text-muted-foreground">{stat.label}</div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Historial Reciente</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <RecentActivity />
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </div>
+            {activeSection === 'activity' && <DashboardActivitySection stats={stats} />}
+          </section>
         </div>
       </div>
 
       <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>¿Cerrar sesión?</DialogTitle>
+            <DialogTitle>Cerrar sesion?</DialogTitle>
             <DialogDescription>
-              Tendrás que volver a ingresar tus credenciales para acceder.
+              Tendras que volver a ingresar tus credenciales para acceder.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowLogoutConfirm(false)} disabled={loading}>Cancelar</Button>
             <Button variant="destructive" onClick={handleLogout} disabled={loading}>
               {loading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
-              Cerrar Sesión
+              Cerrar sesion
             </Button>
           </DialogFooter>
         </DialogContent>

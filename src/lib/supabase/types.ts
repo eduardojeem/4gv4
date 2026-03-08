@@ -140,6 +140,12 @@ export interface Database {
           wholesale_price: number | null
           offer_price: number | null
           has_offer: boolean | null
+          warranty_months: number
+          warranty_info: string | null
+          return_window_days: number
+          exchange_window_days: number
+          return_policy: string | null
+          exchange_policy: string | null
           stock_quantity: number
           min_stock: number
           unit_measure: string
@@ -169,6 +175,12 @@ export interface Database {
           wholesale_price?: number | null
           offer_price?: number | null
           has_offer?: boolean | null
+          warranty_months?: number
+          warranty_info?: string | null
+          return_window_days?: number
+          exchange_window_days?: number
+          return_policy?: string | null
+          exchange_policy?: string | null
           stock_quantity?: number
           min_stock?: number
           unit_measure?: string
@@ -198,6 +210,12 @@ export interface Database {
           wholesale_price?: number | null
           offer_price?: number | null
           has_offer?: boolean | null
+          warranty_months?: number
+          warranty_info?: string | null
+          return_window_days?: number
+          exchange_window_days?: number
+          return_policy?: string | null
+          exchange_policy?: string | null
           stock_quantity?: number
           min_stock?: number
           unit_measure?: string

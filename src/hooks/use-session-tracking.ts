@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { getSessionIdFromAccessToken } from '@/lib/session-id'
 
 interface SessionInfo {
   userAgent: string
@@ -89,12 +90,14 @@ export function useSessionTracking() {
       console.log('📝 Registering session for user:', session.user.id)
 
       const sessionInfo = await getSessionInfo()
+      const sessionId = await getSessionIdFromAccessToken(session.access_token)
+      if (!sessionId) return
       console.log('🌍 Session info:', sessionInfo)
 
       // Registrar o actualizar la sesión en la base de datos
       const sessionData = {
         user_id: session.user.id,
-        session_id: session.access_token.substring(0, 50), // Usar parte del token como ID único
+        session_id: sessionId,
         user_agent: sessionInfo.userAgent,
         device_type: sessionInfo.deviceType,
         browser: sessionInfo.browser,
@@ -130,7 +133,8 @@ export function useSessionTracking() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const sessionId = session.access_token.substring(0, 50)
+      const sessionId = await getSessionIdFromAccessToken(session.access_token)
+      if (!sessionId) return
 
       await supabase
         .from('user_sessions')
@@ -155,7 +159,10 @@ export function useSessionTracking() {
       })
 
       if (error) throw error
-      return data as boolean
+      if (typeof data === 'object' && data !== null && 'success' in (data as Record<string, unknown>)) {
+        return Boolean((data as Record<string, unknown>).success)
+      }
+      return Boolean(data)
     } catch (error) {
       console.error('Error closing session:', error)
       return false
@@ -167,7 +174,8 @@ export function useSessionTracking() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return 0
 
-      const currentSessionId = session.access_token.substring(0, 50)
+      const currentSessionId = await getSessionIdFromAccessToken(session.access_token)
+      if (!currentSessionId) return 0
 
       const { data, error } = await supabase.rpc('close_all_user_sessions_except_current', {
         p_user_id: session.user.id,
@@ -235,7 +243,8 @@ export function useSessionTracking() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const sessionId = session.access_token.substring(0, 50)
+      const sessionId = await getSessionIdFromAccessToken(session.access_token)
+      if (!sessionId) return
 
       // Usar sendBeacon para enviar la petición de forma asíncrona
       navigator.sendBeacon(

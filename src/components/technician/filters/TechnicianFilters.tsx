@@ -12,6 +12,7 @@ interface TechnicianFiltersProps {
     setSearchTerm: (term: string) => void
     showMyRepairsOnly: boolean
     setShowMyRepairsOnly: (show: boolean) => void
+    canViewAllRepairs?: boolean
     onRefresh: () => void
     isLoading: boolean
 }
@@ -21,6 +22,7 @@ export function TechnicianFilters({
     setSearchTerm,
     showMyRepairsOnly,
     setShowMyRepairsOnly,
+    canViewAllRepairs = false,
     onRefresh,
     isLoading
 }: TechnicianFiltersProps) {
@@ -51,25 +53,27 @@ export function TechnicianFilters({
                 {/* Actions */}
                 <div className="flex items-center gap-3">
                     {/* My Repairs Toggle */}
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card hover:bg-accent transition-colors">
-                        <Switch
-                            id="my-repairs"
-                            checked={showMyRepairsOnly}
-                            onCheckedChange={setShowMyRepairsOnly}
-                        />
-                        <Label
-                            htmlFor="my-repairs"
-                            className="flex items-center gap-2 cursor-pointer text-sm font-medium"
-                        >
-                            <User className="h-4 w-4 text-primary" />
-                            Mis Reparaciones
-                            {showMyRepairsOnly && (
-                                <Badge variant="secondary" className="ml-1">
-                                    Activo
-                                </Badge>
-                            )}
-                        </Label>
-                    </div>
+                    {canViewAllRepairs && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-card hover:bg-accent transition-colors">
+                            <Switch
+                                id="my-repairs"
+                                checked={showMyRepairsOnly}
+                                onCheckedChange={setShowMyRepairsOnly}
+                            />
+                            <Label
+                                htmlFor="my-repairs"
+                                className="flex items-center gap-2 cursor-pointer text-sm font-medium"
+                            >
+                                <User className="h-4 w-4 text-primary" />
+                                Mis Reparaciones
+                                {showMyRepairsOnly && (
+                                    <Badge variant="secondary" className="ml-1">
+                                        Activo
+                                    </Badge>
+                                )}
+                            </Label>
+                        </div>
+                    )}
 
                     {/* Refresh Button */}
                     <Button

@@ -18,6 +18,7 @@ export function useTechnicianBoardV2() {
     } = useRepairs()
     
     const { user } = useAuth()
+    const canViewAllRepairs = user?.role === 'admin'
     
     // Estado específico del dashboard técnico
     const [kanbanOrder, setKanbanOrder] = useState<Record<DbRepairStatus, string[]>>({
@@ -34,9 +35,16 @@ export function useTechnicianBoardV2() {
 
     // Filtrar reparaciones para el técnico actual
     const repairs = useMemo(() => {
-        if (!showMyRepairsOnly || !user?.id) return allRepairs
+        if (!showMyRepairsOnly && canViewAllRepairs) return allRepairs
+        if (!user?.id) return []
         return allRepairs.filter(r => r.technician?.id === user.id)
-    }, [allRepairs, showMyRepairsOnly, user?.id])
+    }, [allRepairs, showMyRepairsOnly, user?.id, canViewAllRepairs])
+
+    useEffect(() => {
+        if (!canViewAllRepairs && !showMyRepairsOnly) {
+            setShowMyRepairsOnly(true)
+        }
+    }, [canViewAllRepairs, showMyRepairsOnly])
 
     // Inicializar orden del Kanban cuando cambien las reparaciones
     useEffect(() => {
@@ -56,6 +64,14 @@ export function useTechnicianBoardV2() {
 
     // Funciones específicas del dashboard técnico
     const onDragStart = (id: string) => setDraggedRepairId(id)
+
+    const setScopeToMyRepairs = (show: boolean) => {
+        if (!canViewAllRepairs) {
+            setShowMyRepairsOnly(true)
+            return
+        }
+        setShowMyRepairsOnly(show)
+    }
 
     const onDropTo = async (status: DbRepairStatus) => {
         if (!draggedRepairId) return
@@ -168,7 +184,8 @@ interface RepairCreateData {
         isLoading,
         draggedRepairId,
         showMyRepairsOnly,
-        setShowMyRepairsOnly,
+        setShowMyRepairsOnly: setScopeToMyRepairs,
+        canViewAllRepairs,
         onDragStart,
         onDropTo,
         updateRepair,

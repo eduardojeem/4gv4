@@ -55,10 +55,11 @@ import { isCompletedSaleStatus } from '@/lib/sales-status'
 // Datos mock eliminados
 
 export default function ProductReportsPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [pdfFeedback, setPdfFeedback] = useState<string | null>(null)
   
   // Datos para gráficas
   const [salesTrendData, setSalesTrendData] = useState<any[]>([])
@@ -394,7 +395,8 @@ export default function ProductReportsPage() {
           ])
           
           // PDF export disabled — requires jspdf-autotable with real jsPDF
-          showDisabledFeatureMessage('Exportar PDF')
+          setPdfFeedback('⚠️ La exportación PDF está temporalmente deshabilitada. Usá CSV o Excel.')
+          setTimeout(() => setPdfFeedback(null), 5000)
           
         } catch (error) {
           console.error('❌ Error al generar PDF de productos:', error)
@@ -413,6 +415,11 @@ export default function ProductReportsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950">
+      {pdfFeedback && (
+        <div className="fixed bottom-4 right-4 z-50 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm shadow-lg max-w-sm">
+          {pdfFeedback}
+        </div>
+      )}
       {/* Header mejorado */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
@@ -555,8 +562,9 @@ export default function ProductReportsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas las categorías</SelectItem>
-                    <SelectItem value="Smartphones">Smartphones</SelectItem>
-                    <SelectItem value="Accesorios">Accesorios</SelectItem>
+                    {categoryData.map((cat) => (
+                      <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -750,7 +758,11 @@ export default function ProductReportsPage() {
                         cy="50%"
                         outerRadius={80}
                         dataKey="value"
-                        label={({ name, value }) => `${name}: ${value}%`}
+                        label={({ name, value }) => {
+                          const total = categoryData.reduce((s, c) => s + c.value, 0)
+                          const pct = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
+                          return `${name}: ${pct}%`
+                        }}
                       >
                         {categoryData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />

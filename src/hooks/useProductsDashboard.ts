@@ -18,6 +18,8 @@ interface UseProductsDashboardProps {
   categories: Category[]
   suppliers: Supplier[]
   alerts: ProductAlert[]
+  serverPaginated?: boolean
+  serverTotalItems?: number
 }
 
 interface UseProductsDashboardReturn {
@@ -61,12 +63,14 @@ export function useProductsDashboard({
   products,
   categories,
   suppliers,
-  alerts
+  alerts,
+  serverPaginated = false,
+  serverTotalItems = 0,
 }: UseProductsDashboardProps): UseProductsDashboardReturn {
   // UI State
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(100) // Aumentado a 100 para mejor visibilidad inicial
+  const [itemsPerPage, setItemsPerPage] = useState(20)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [filters, setFilters] = useState<DashboardFilters>({})
@@ -113,16 +117,19 @@ export function useProductsDashboard({
 
   // Apply pagination
   const paginatedProducts = useMemo(() => {
+    if (serverPaginated) return displayedProducts
     const startIndex = (currentPage - 1) * itemsPerPage
     return displayedProducts.slice(startIndex, startIndex + itemsPerPage)
-  }, [displayedProducts, currentPage, itemsPerPage])
+  }, [displayedProducts, currentPage, itemsPerPage, serverPaginated])
 
-  const totalPages = Math.ceil(displayedProducts.length / itemsPerPage)
+  const totalPages = serverPaginated
+    ? Math.max(1, Math.ceil((serverTotalItems || 0) / Math.max(1, itemsPerPage)))
+    : Math.max(1, Math.ceil(displayedProducts.length / Math.max(1, itemsPerPage)))
 
-  // Calculate metrics from all products
+  // Calculate metrics from filtered products to keep numbers aligned with current view
   const metrics = useMemo(() => {
-    return calculateMetrics(products)
-  }, [products])
+    return calculateMetrics(displayedProducts)
+  }, [displayedProducts])
 
   // Handle filter changes
   const handleFilterChange = useCallback((newFilters: Partial<DashboardFilters>) => {
@@ -189,7 +196,7 @@ export function useProductsDashboard({
     itemsPerPage,
     setItemsPerPage,
     totalPages,
-    totalItems: displayedProducts.length,
+    totalItems: serverPaginated ? serverTotalItems : displayedProducts.length,
     searchQuery,
     setSearchQuery,
     filters,

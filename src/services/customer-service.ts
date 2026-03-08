@@ -180,11 +180,16 @@ class CustomerService {
   async createCustomer(customerData: CreateCustomerRequest): Promise<CustomerResponse> {
     try {
       // Validate input data
-      const validation = validateCustomerData(createCustomerSchema, customerData)
+      const validation = createCustomerSchema.safeParse(customerData)
       
       if (!validation.success) {
-        const errors = getValidationErrors((validation as any).errors)
-        const errorMessage = Object.values(errors).join(', ')
+        const errors = validation.error.flatten().fieldErrors
+        const formErrors = validation.error.flatten().formErrors
+        const errorMessage = [
+          ...Object.entries(errors).map(([k, v]) => `${k}: ${v?.join(', ')}`),
+          ...formErrors
+        ].join('; ')
+        console.error('Validation errors detailed:', validation.error)
         return {
           success: false,
           error: `Validación fallida: ${errorMessage}`
@@ -285,19 +290,23 @@ class CustomerService {
 
       // Only proceed if we have valid data to update
       if (Object.keys(cleanedData).length === 0) {
+        console.warn('Update aborted: No valid data after cleaning. Original:', customerData, 'Preprocessed:', preprocessedData, 'Cleaned:', cleanedData)
         return {
           success: false,
-          error: 'No hay datos válidos para actualizar'
+          error: 'No hay datos válidos para actualizar. Verifique que los campos no contengan valores inválidos.'
         }
       }
 
-      // Validate input data
-      const validation = validateCustomerData(updateCustomerSchema, cleanedData)
+      const validation = updateCustomerSchema.safeParse(cleanedData)
       
       if (!validation.success) {
-        const errors = getValidationErrors((validation as any).errors)
-        const errorMessage = Object.values(errors).join(', ')
-        console.error('Validation errors:', errors) // Debug log
+        const errors = validation.error.flatten().fieldErrors
+        const formErrors = validation.error.flatten().formErrors
+        const errorMessage = [
+          ...Object.entries(errors).map(([k, v]) => `${k}: ${v?.join(', ')}`),
+          ...formErrors
+        ].join('; ')
+        console.error('Validation errors detailed:', validation.error) // Debug log
         return {
           success: false,
           error: `Validación fallida: ${errorMessage}`
