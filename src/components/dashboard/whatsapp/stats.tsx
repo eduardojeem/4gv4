@@ -1,69 +1,70 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { BarChart3, TrendingUp, Users, MessageCircle, Calendar, Clock } from 'lucide-react'
+import { BarChart3, TrendingUp, Users, MessageCircle, Calendar, Clock, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from 'recharts'
+import {
+  DashboardWhatsAppChartPoint,
+  DashboardWhatsAppStats,
+  fetchDashboardWhatsAppStats,
+  subscribeDashboardWhatsAppUpdates,
+} from '@/lib/dashboard-whatsapp-api'
+
+const EMPTY_STATS: DashboardWhatsAppStats = {
+  total: 0,
+  today: 0,
+  thisWeek: 0,
+  thisMonth: 0,
+  uniqueContacts: 0,
+  avgPerDay: 0,
+}
 
 export function WhatsAppStats() {
-  const [stats, setStats] = useState({
-    total: 0,
-    today: 0,
-    thisWeek: 0,
-    thisMonth: 0,
-    uniqueContacts: 0,
-    avgPerDay: 0
-  })
+  const [stats, setStats] = useState<DashboardWhatsAppStats>(EMPTY_STATS)
+  const [chartData, setChartData] = useState<DashboardWhatsAppChartPoint[]>([])
+  const [breakdown, setBreakdown] = useState<{
+    byStatus: Record<string, number>
+    bySource: Record<string, number>
+  }>({ byStatus: {}, bySource: {} })
+  const [loading, setLoading] = useState(false)
 
-  const [chartData, setChartData] = useState<any[]>([])
+  const loadStats = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await fetchDashboardWhatsAppStats()
+      setStats(data.stats || EMPTY_STATS)
+      setChartData(data.chartData || [])
+      setBreakdown(data.breakdown || { byStatus: {}, bySource: {} })
+    } catch (error) {
+      console.error('WhatsApp stats load error:', error)
+      setStats(EMPTY_STATS)
+      setChartData([])
+      setBreakdown({ byStatus: {}, bySource: {} })
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     loadStats()
-  }, [])
+  }, [loadStats])
 
-  const loadStats = () => {
-    const history = JSON.parse(localStorage.getItem('whatsapp_history') || '[]')
-    
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+  useEffect(() => {
+    return subscribeDashboardWhatsAppUpdates(loadStats)
+  }, [loadStats])
 
-    const todayMessages = history.filter((m: any) => new Date(m.timestamp) >= today)
-    const weekMessages = history.filter((m: any) => new Date(m.timestamp) >= weekAgo)
-    const monthMessages = history.filter((m: any) => new Date(m.timestamp) >= monthAgo)
-    const uniqueContacts = new Set(history.map((m: any) => m.phone)).size
+  const sentCount = Number(breakdown.byStatus.sent || 0)
+  const failedCount = Number(breakdown.byStatus.failed || 0)
 
-    setStats({
-      total: history.length,
-      today: todayMessages.length,
-      thisWeek: weekMessages.length,
-      thisMonth: monthMessages.length,
-      uniqueContacts,
-      avgPerDay: history.length > 0 ? Math.round(history.length / 30) : 0
-    })
-
-    // Preparar datos para el gráfico (últimos 7 días)
-    const last7Days = []
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(today.getTime() - i * 24 * 60 * 60 * 1000)
-      const dayMessages = history.filter((m: any) => {
-        const msgDate = new Date(m.timestamp)
-        return msgDate.toDateString() === date.toDateString()
-      })
-      
-      last7Days.push({
-        name: date.toLocaleDateString('es-PY', { weekday: 'short' }),
-        mensajes: dayMessages.length
-      })
-    }
-    setChartData(last7Days)
-  }
+  const deliveryRate = useMemo(() => {
+    if (stats.total <= 0) return 0
+    return Math.round((sentCount / stats.total) * 100)
+  }, [sentCount, stats.total])
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Mensajes</CardTitle>
@@ -71,9 +72,7 @@ export function WhatsAppStats() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.total}</div>
-            <p className="text-xs text-muted-foreground">
-              Todos los mensajes enviados
-            </p>
+            <p className="text-xs text-muted-foreground">Todos los mensajes enviados</p>
           </CardContent>
         </Card>
 
@@ -84,9 +83,7 @@ export function WhatsAppStats() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.today}</div>
-            <p className="text-xs text-muted-foreground">
-              Mensajes enviados hoy
-            </p>
+            <p className="text-xs text-muted-foreground">Mensajes enviados hoy</p>
           </CardContent>
         </Card>
 
@@ -97,9 +94,7 @@ export function WhatsAppStats() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.thisWeek}</div>
-            <p className="text-xs text-muted-foreground">
-              Últimos 7 días
-            </p>
+            <p className="text-xs text-muted-foreground">Ultimos 7 dias</p>
           </CardContent>
         </Card>
 
@@ -110,22 +105,18 @@ export function WhatsAppStats() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.thisMonth}</div>
-            <p className="text-xs text-muted-foreground">
-              Últimos 30 días
-            </p>
+            <p className="text-xs text-muted-foreground">Ultimos 30 dias</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Contactos Únicos</CardTitle>
+            <CardTitle className="text-sm font-medium">Contactos Unicos</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.uniqueContacts}</div>
-            <p className="text-xs text-muted-foreground">
-              Clientes diferentes
-            </p>
+            <p className="text-xs text-muted-foreground">Clientes diferentes</p>
           </CardContent>
         </Card>
 
@@ -136,31 +127,52 @@ export function WhatsAppStats() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.avgPerDay}</div>
-            <p className="text-xs text-muted-foreground">
-              Mensajes por día
-            </p>
+            <p className="text-xs text-muted-foreground">Mensajes por dia</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Tasa de Entrega</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{deliveryRate}%</div>
+            <p className="text-xs text-muted-foreground">{sentCount} enviados correctamente</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Fallidos</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{failedCount}</div>
+            <p className="text-xs text-muted-foreground">Mensajes con error</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Mensajes por Día</CardTitle>
-          <CardDescription>
-            Últimos 7 días
-          </CardDescription>
+          <CardTitle>Mensajes por Dia</CardTitle>
+          <CardDescription>Ultimos 7 dias</CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="mensajes" fill="#25D366" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {loading ? (
+            <div className="h-[300px] flex items-center justify-center text-muted-foreground">Cargando metricas...</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={chartData}>
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="mensajes" fill="#25D366" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
     </div>

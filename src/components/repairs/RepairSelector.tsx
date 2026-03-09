@@ -1,18 +1,10 @@
-
-"use client"
+﻿"use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown, User, Smartphone, Hash } from "lucide-react"
+import { Check, ChevronsUpDown, User, Smartphone, Hash, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
+import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
@@ -48,35 +40,36 @@ export function RepairSelector({
       .trim()
   }, [])
 
-  const selectedRepair = React.useMemo(
-    () => repairs.find((r) => r.id === selectedRepairId),
-    [repairs, selectedRepairId]
-  )
+  const selectedRepair = React.useMemo(() => {
+    if (!selectedRepairId) return undefined
+    const normalized = selectedRepairId.toLowerCase()
+    return repairs.find((repair) => repair.id.toLowerCase() === normalized)
+  }, [repairs, selectedRepairId])
 
-  // Filter repairs client-side based on search query
   const filteredRepairs = React.useMemo(() => {
-    if (!searchQuery) return repairs.slice(0, 50)
+    if (!searchQuery) return repairs.slice(0, 80)
+
     const queryParts = normalize(searchQuery).split(/\s+/).filter(Boolean)
-    if (queryParts.length === 0) return repairs.slice(0, 50)
+    if (queryParts.length === 0) return repairs.slice(0, 80)
 
     return repairs
-      .filter((r) => {
+      .filter((repair) => {
         const searchableText = normalize(
           [
-            r.customer?.name || "",
-            r.device || "",
-            r.brand || "",
-            r.model || "",
-            r.issue || "",
-            r.status || "",
-            r.ticketNumber || "",
-            r.id || "",
+            repair.customer?.name || "",
+            repair.device || "",
+            repair.brand || "",
+            repair.model || "",
+            repair.issue || "",
+            repair.status || "",
+            repair.ticketNumber || "",
+            repair.id || "",
           ].join(" ")
         )
 
         return queryParts.every((part) => searchableText.includes(part))
       })
-      .slice(0, 50)
+      .slice(0, 80)
   }, [repairs, searchQuery, normalize])
 
   const handleSelect = React.useCallback((repairId: string) => {
@@ -112,63 +105,69 @@ export function RepairSelector({
             </div>
           ) : (
             <span className="text-muted-foreground">
-              {isLoading ? "Cargando reparaciones..." : "Seleccionar reparación..."}
+              {isLoading ? "Cargando reparaciones..." : "Seleccionar reparacion..."}
             </span>
           )}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="start">
-        <Command shouldFilter={false}>
-          <CommandInput 
-            placeholder="Buscar por cliente, equipo, ticket..." 
-            value={searchQuery}
-            onValueChange={setSearchQuery}
-          />
-          <CommandList>
-            <CommandEmpty>No se encontraron reparaciones.</CommandEmpty>
-            <CommandGroup>
-              {filteredRepairs.map((repair) => (
-                <CommandItem
+
+      <PopoverContent className="w-[340px] p-0" align="start">
+        <div className="border-b p-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por cliente, equipo, ticket..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="max-h-80 overflow-y-auto p-1">
+          {filteredRepairs.length === 0 ? (
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+              No se encontraron reparaciones.
+            </div>
+          ) : (
+            filteredRepairs.map((repair) => {
+              const isSelected = selectedRepairId?.toLowerCase() === repair.id.toLowerCase()
+
+              return (
+                <button
                   key={repair.id}
-                  value={repair.id}
-                  onSelect={() => {
-                    handleSelect(repair.id)
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    handleSelect(repair.id)
-                  }}
-                  className="flex flex-col items-start gap-1 py-3 px-3 cursor-pointer"
+                  type="button"
+                  onClick={() => handleSelect(repair.id)}
+                  className="w-full text-left rounded-md px-3 py-2.5 hover:bg-accent transition-colors"
                 >
-                  <div className="flex items-center justify-between w-full pointer-events-none">
-                    <div className="flex items-center gap-2 font-medium">
-                      <User className="h-3.5 w-3.5 text-muted-foreground" />
-                      {repair.customer?.name || "Cliente sin nombre"}
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-2 font-medium truncate pr-3">
+                      <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="truncate">{repair.customer?.name || "Cliente sin nombre"}</span>
                     </div>
-                    {selectedRepairId === repair.id && (
-                      <Check className="h-4 w-4 text-primary shrink-0" />
-                    )}
+                    {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
                   </div>
-                  
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground w-full pl-5.5 pointer-events-none">
-                    <div className="flex items-center gap-1">
-                      <Smartphone className="h-3 w-3" />
-                      <span className="truncate max-w-[120px]">{repair.device}</span>
+
+                  <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground pl-5">
+                    <div className="flex items-center gap-1 min-w-0">
+                      <Smartphone className="h-3 w-3 shrink-0" />
+                      <span className="truncate max-w-[130px]">{repair.device}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                       <Hash className="h-3 w-3" />
                       <span>{repair.ticketNumber || repair.id.slice(0, 8)}</span>
                     </div>
-                    <Badge variant="outline" className="ml-auto text-[10px] h-4">
+                    <Badge variant="outline" className="ml-auto text-[10px] h-4 shrink-0">
                       {repair.status}
                     </Badge>
                   </div>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
+                </button>
+              )
+            })
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   )

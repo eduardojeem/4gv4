@@ -34,6 +34,14 @@ export default function RepairsCommunicationsPage() {
     [repairs, selectedRepairId]
   )
 
+  const repairsWithContact = useMemo(
+    () => repairs.filter((repair) => Boolean(repair.customer?.phone || repair.customer?.email)),
+    [repairs]
+  )
+
+  const hasRepairsWithoutContactData =
+    !repairsLoading && repairs.length > 0 && repairsWithContact.length === 0
+
   const { messages, sendMessage, loading: messagesLoading } = useRepairCommunications(
     selectedRepairId || undefined
   )
@@ -255,6 +263,50 @@ export default function RepairsCommunicationsPage() {
               isLoading={repairsLoading}
               className="flex-1 max-w-xl"
             />
+
+            {repairsLoading && (
+              <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                Cargando reparaciones disponibles...
+              </div>
+            )}
+
+            {!repairsLoading && repairs.length === 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  No hay reparaciones disponibles para seleccionar.
+                </p>
+                <p className="mt-1 text-xs text-amber-700/90 dark:text-amber-400/90">
+                  Crea una reparacion primero para habilitar la seleccion en comunicaciones.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => router.push('/dashboard/repairs')}
+                >
+                  Ir a Reparaciones
+                </Button>
+              </div>
+            )}
+
+            {hasRepairsWithoutContactData && (
+              <div className="rounded-md border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-900 dark:bg-orange-950/20">
+                <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
+                  Hay reparaciones, pero los clientes no tienen telefono ni email.
+                </p>
+                <p className="mt-1 text-xs text-orange-700/90 dark:text-orange-400/90">
+                  Completa los datos de contacto del cliente para habilitar WhatsApp, SMS o Email.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => router.push('/dashboard/customers')}
+                >
+                  Ir a Clientes
+                </Button>
+              </div>
+            )}
 
             {selectedRepair && (
               <div className="flex flex-wrap gap-2 pt-2 border-t">

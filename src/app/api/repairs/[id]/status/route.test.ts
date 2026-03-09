@@ -1,8 +1,17 @@
-import { describe, it, expect } from 'vitest'
-import { PATCH } from './route'
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('@/lib/auth/require-auth', () => ({
+  requireStaff: vi.fn(async () => ({
+    authenticated: true,
+    user: { id: 'test-user' },
+    role: 'admin',
+  })),
+  getAuthResponse: vi.fn(() => null),
+}))
 
 describe('PATCH /api/repairs/:id/status', () => {
-  it('returns ok and echoes stage in demo mode', async () => {
+  it('returns ok and normalizes stage in demo mode', async () => {
+    const { PATCH } = await import('./route')
     process.env.NEXT_PUBLIC_SUPABASE_URL = ''
     process.env.SUPABASE_SERVICE_ROLE_KEY = ''
     const req = { json: async () => ({ stage: 'ready' }) } as any
@@ -11,6 +20,6 @@ describe('PATCH /api/repairs/:id/status', () => {
     const data = await res.json()
     expect(data.ok).toBe(true)
     expect(data.id).toBe('K-001')
-    expect(data.stage).toBe('ready')
+    expect(data.stage).toBe('listo')
   })
 })

@@ -265,12 +265,22 @@ export function useSecurityLogs() {
         if (userIds.length > 0) {
           const { data: profiles, error: profileError } = await supabase
             .from('profiles')
-            .select('id, email, name')
+            .select('id, email, full_name')
             .in('id', userIds)
           
           if (!profileError && profiles) {
             userEmails = profiles.reduce((acc, profile) => {
-              acc[profile.id] = profile.email || profile.name || 'Usuario desconocido'
+              const name = profile.full_name || ''
+              const email = profile.email || ''
+              
+              if (name && email) {
+                acc[profile.id] = `${name} (${email})`
+              } else if (name || email) {
+                acc[profile.id] = name || email
+              } else {
+                acc[profile.id] = 'Usuario desconocido'
+              }
+              
               return acc
             }, {} as Record<string, string>)
           }

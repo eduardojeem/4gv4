@@ -46,6 +46,12 @@ import {
 } from '@/lib/warranty-utils'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { logger } from '@/lib/logger'
+import { formatWhatsAppPhone, getWhatsAppLink } from '@/lib/whatsapp'
+import {
+  notifyDashboardWhatsAppUpdated,
+  sendDashboardWhatsAppMessage,
+  updateDashboardWhatsAppMessage,
+} from '@/lib/dashboard-whatsapp-api'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -66,6 +72,7 @@ export function RepairDetailDialog({
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
   const [showSensitiveData, setShowSensitiveData] = useState(false)
+  const [isSendingStatusWhatsApp, setIsSendingStatusWhatsApp] = useState(false)
   const { settings } = useSharedSettings()
   const [verificationHash, setVerificationHash] = useState<string | undefined>(undefined)
 
@@ -205,6 +212,152 @@ export function RepairDetailDialog({
       } else {
         toast.error('Tu dispositivo no soporta compartir nativo')
       }
+    }
+  }
+
+  const buildStatusWhatsAppMessage = () => {
+    const ticket = repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()
+    const statusLabel = statusConfig[repair.status]?.label || repair.status
+    const deviceLabel = [repair.brand, repair.model].filter(Boolean).join(' ') || repair.device
+
+    if (repair.status === 'listo') {
+      const amount =
+        repair.finalCost !== null && repair.finalCost !== undefined
+          ? `\nCosto final: ${formatCurrency(repair.finalCost)}`
+          : ''
+      return [
+        `Hola ${repair.customer.name},`,
+        '',
+        `Tu ${deviceLabel} (reparacion #${ticket}) ya esta *${statusLabel}*.`,
+        'Puedes pasar por el local para retirarlo.',
+        amount,
+        '',
+        'Si tienes dudas, responde este mensaje y te ayudamos.',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    }
+
+    return [
+      `Hola ${repair.customer.name},`,
+      '',
+      `Actualizamos el estado de tu reparacion #${ticket}: *${statusLabel}*.`,
+      `Equipo: ${deviceLabel}.`,
+      '',
+      'Cualquier consulta estamos a disposicion.',
+    ].join('\n')
+  }
+
+  const openManualWhatsApp = (phone: string, message: string): boolean => {
+    const url = getWhatsAppLink({ phone, message })
+    const popup = window.open(url, '_blank', 'noopener,noreferrer')
+    if (popup) return true
+    window.location.href = url
+    return true
+  }
+
+  const handleSendStatusByWhatsApp = async () => {
+    const rawPhone = repair.customer?.phone?.trim()
+    if (!rawPhone) {
+      toast.error('El cliente no tiene telefono registrado')
+      return
+    }
+
+    const normalizedPhone = formatWhatsAppPhone(rawPhone).replace(/\D/g, '')
+    if (normalizedPhone.length < 6) {
+      toast.error('El telefono del cliente no es valido')
+      return
+    }
+
+    const message = buildStatusWhatsAppMessage()
+    setIsSendingStatusWhatsApp(true)
+
+    try {
+      const result = await sendDashboardWhatsAppMessage({
+        phone: normalizedPhone,
+        message,
+        source: 'manual',
+        transport: 'cloud',
+        customerId: repair.customer?.id || null,
+        recipientName: repair.customer?.name || null,
+        metadata: {
+          context: 'repair_detail_status',
+          repairId: repair.id,
+          ticketNumber: repair.ticketNumber || null,
+          status: repair.status,
+        },
+      })
+
+      if (result.sent) {
+        toast.success('Estado enviado por WhatsApp Cloud')
+        notifyDashboardWhatsAppUpdated()
+        return
+      }
+
+      const opened = openManualWhatsApp(normalizedPhone, message)
+      if (!opened) {
+        toast.error('No se pudo abrir WhatsApp manualmente')
+        return
+      }
+
+      if (result.message?.id) {
+        await updateDashboardWhatsAppMessage({
+          id: result.message.id,
+          status: 'sent',
+          provider: 'wa.me',
+          providerReason: 'manual_fallback',
+        })
+      } else {
+        await sendDashboardWhatsAppMessage({
+          phone: normalizedPhone,
+          message,
+          source: 'manual',
+          transport: 'manual',
+          customerId: repair.customer?.id || null,
+          recipientName: repair.customer?.name || null,
+          metadata: {
+            context: 'repair_detail_status',
+            repairId: repair.id,
+            ticketNumber: repair.ticketNumber || null,
+            status: repair.status,
+          },
+        })
+      }
+
+      notifyDashboardWhatsAppUpdated()
+      toast.success('Cloud no disponible. Se abrio WhatsApp manualmente')
+    } catch (error) {
+      logger.error('Failed to send repair status via WhatsApp', { error, repairId: repair.id })
+
+      const opened = openManualWhatsApp(normalizedPhone, message)
+      if (opened) {
+        try {
+          await sendDashboardWhatsAppMessage({
+            phone: normalizedPhone,
+            message,
+            source: 'manual',
+            transport: 'manual',
+            customerId: repair.customer?.id || null,
+            recipientName: repair.customer?.name || null,
+            metadata: {
+              context: 'repair_detail_status',
+              repairId: repair.id,
+              ticketNumber: repair.ticketNumber || null,
+              status: repair.status,
+              reason: 'manual_on_error',
+            },
+          })
+          notifyDashboardWhatsAppUpdated()
+        } catch (fallbackError) {
+          logger.error('Failed to log manual WhatsApp fallback', { error: fallbackError, repairId: repair.id })
+        }
+        toast.success('No se pudo enviar por Cloud. Se abrio WhatsApp manualmente')
+        return
+      }
+
+      toast.error('No se pudo enviar el aviso por WhatsApp')
+    } finally {
+      setIsSendingStatusWhatsApp(false)
     }
   }
 
@@ -436,6 +589,18 @@ export function RepairDetailDialog({
                           <Phone className="h-4 w-4 text-muted-foreground" />
                           <p className="text-sm">{repair.customer.phone}</p>
                         </div>
+                      )}
+                      {repair.customer.phone && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full sm:w-auto gap-2"
+                          onClick={handleSendStatusByWhatsApp}
+                          disabled={isSendingStatusWhatsApp}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          {isSendingStatusWhatsApp ? 'Enviando estado...' : 'Avisar estado por WhatsApp'}
+                        </Button>
                       )}
                       {repair.customer.email && (
                         <div className="flex items-center gap-3">

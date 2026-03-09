@@ -11,46 +11,46 @@ import { toast } from 'sonner'
 const templatesList = [
   {
     id: 'repair_status',
-    name: 'Estado de Reparación',
-    description: 'Notifica cambios en el estado de una reparación',
-    example: Templates.repairStatus('REP-001', 'Juan Pérez', 'En reparación'),
-    variables: ['repairId', 'customerName', 'status']
+    name: 'Estado de Reparacion',
+    description: 'Notifica cambios en el estado de una reparacion',
+    example: Templates.repairStatus('REP-001', 'Juan Perez', 'En reparacion'),
+    variables: ['repairId', 'customerName', 'status'],
   },
   {
     id: 'repair_ready',
-    name: 'Reparación Lista',
-    description: 'Notifica que una reparación está lista para retirar',
-    example: Templates.repairReady('REP-001', 'Juan Pérez', 'iPhone 12'),
-    variables: ['repairId', 'customerName', 'device']
+    name: 'Reparacion Lista',
+    description: 'Notifica que una reparacion esta lista para retirar',
+    example: Templates.repairReady('REP-001', 'Juan Perez', 'iPhone 12'),
+    variables: ['repairId', 'customerName', 'device'],
   },
   {
     id: 'payment_reminder',
     name: 'Recordatorio de Pago',
     description: 'Recuerda al cliente sobre un pago pendiente',
-    example: Templates.paymentReminder('Juan Pérez', 500000, 'REP-001'),
-    variables: ['customerName', 'amount', 'repairId']
+    example: Templates.paymentReminder('Juan Perez', 500000, 'REP-001'),
+    variables: ['customerName', 'amount', 'repairId'],
   },
   {
     id: 'welcome',
     name: 'Mensaje de Bienvenida',
     description: 'Saluda a un nuevo cliente',
-    example: Templates.welcomeMessage('Juan Pérez'),
-    variables: ['customerName']
+    example: Templates.welcomeMessage('Juan Perez'),
+    variables: ['customerName'],
   },
   {
     id: 'track_repair',
-    name: 'Rastrear Reparación',
-    description: 'Cliente consulta sobre su reparación',
+    name: 'Rastrear Reparacion',
+    description: 'Cliente consulta sobre su reparacion',
     example: Templates.trackRepair('REP-001'),
-    variables: ['repairId']
+    variables: ['repairId'],
   },
   {
     id: 'price_inquiry',
     name: 'Consulta de Precio',
-    description: 'Cliente consulta precio de un producto/servicio',
+    description: 'Cliente consulta precio de un producto o servicio',
     example: Templates.priceInquiry('Cambio de pantalla iPhone'),
-    variables: ['productOrService']
-  }
+    variables: ['productOrService'],
+  },
 ]
 
 export function WhatsAppTemplates() {
@@ -71,9 +71,7 @@ export function WhatsAppTemplates() {
             <MessageCircle className="h-5 w-5" />
             Plantillas de Mensajes
           </CardTitle>
-          <CardDescription>
-            Plantillas predefinidas para diferentes situaciones
-          </CardDescription>
+          <CardDescription>Plantillas predefinidas para diferentes situaciones</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
@@ -83,15 +81,9 @@ export function WhatsAppTemplates() {
                   <div className="flex items-start justify-between">
                     <div>
                       <CardTitle className="text-base">{template.name}</CardTitle>
-                      <CardDescription className="text-xs mt-1">
-                        {template.description}
-                      </CardDescription>
+                      <CardDescription className="text-xs mt-1">{template.description}</CardDescription>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyTemplate(template.example, template.id)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => copyTemplate(template.example, template.id)}>
                       {copiedId === template.id ? (
                         <Check className="h-4 w-4 text-green-600" />
                       ) : (

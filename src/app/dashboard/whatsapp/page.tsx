@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MessageCircle, Send, History, Settings, BarChart3, Users } from 'lucide-react'
 import { WhatsAppSendMessage } from '@/components/dashboard/whatsapp/send-message'
@@ -16,7 +15,6 @@ export default function WhatsAppDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
@@ -26,12 +24,11 @@ export default function WhatsAppDashboardPage() {
             WhatsApp Business
           </h1>
           <p className="text-muted-foreground mt-1">
-            Gestiona la comunicación con tus clientes por WhatsApp
+            Gestiona la comunicacion con tus clientes por WhatsApp
           </p>
         </div>
       </div>
 
-      {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto">
           <TabsTrigger value="send" className="gap-2">
@@ -52,11 +49,11 @@ export default function WhatsAppDashboardPage() {
           </TabsTrigger>
           <TabsTrigger value="stats" className="gap-2">
             <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">Estadísticas</span>
+            <span className="hidden sm:inline">Estadisticas</span>
           </TabsTrigger>
           <TabsTrigger value="settings" className="gap-2">
             <Settings className="h-4 w-4" />
-            <span className="hidden sm:inline">Configuración</span>
+            <span className="hidden sm:inline">Configuracion</span>
           </TabsTrigger>
         </TabsList>
 

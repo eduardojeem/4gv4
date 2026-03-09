@@ -9,6 +9,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { isWholesale as checkIsWholesale } from '@/lib/auth/role-utils'
+import { PublicRepairReadyNotifications } from '@/components/public/PublicRepairReadyNotifications'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -235,6 +236,8 @@ export function PublicHeader() {
         <div className="flex items-center gap-2">
           {/* Theme toggle - visible on all screens */}
           {mounted && <ThemeToggle />}
+
+          {user?.id && <PublicRepairReadyNotifications userId={user.id} />}
 
           {/* Desktop CTA */}
           <Button

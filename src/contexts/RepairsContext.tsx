@@ -79,21 +79,58 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
 
     const supabase = createClient()
 
+    const fetchRepairsWithCustomerFallback = useCallback(async () => {
+        const selectVariants = [
+            `
+          *,
+          customer:customers(id, customer_code, name, first_name, last_name, phone, email),
+          technician:profiles(id, full_name),
+          images:repair_images(id, image_url, description)
+        `,
+            `
+          *,
+          customer:customers(id, name, phone, email),
+          technician:profiles(id, full_name),
+          images:repair_images(id, image_url, description)
+        `,
+            `
+          *,
+          customer:customers(id, first_name, last_name, phone, email),
+          technician:profiles(id, full_name),
+          images:repair_images(id, image_url, description)
+        `,
+        ]
+
+        let lastError: any = null
+
+        for (const selectExpr of selectVariants) {
+            const { data, error: fetchError } = await supabase
+                .from('repairs')
+                .select(selectExpr)
+                .order('created_at', { ascending: false })
+
+            if (!fetchError) {
+                return { data: data || [], error: null }
+            }
+
+            lastError = fetchError
+            const message = String(fetchError.message || '').toLowerCase()
+            const isSchemaError = message.includes('column') || message.includes('does not exist')
+            if (!isSchemaError) {
+                break
+            }
+        }
+
+        return { data: [], error: lastError }
+    }, [supabase])
+
     // Fetch all repairs
     const fetchRepairs = useCallback(async () => {
         try {
             setIsLoading(true)
             setError(null)
 
-            const { data, error: fetchError } = await supabase
-                .from('repairs')
-                .select(`
-          *,
-          customer:customers(id, name, phone, email),
-          technician:profiles(id, full_name),
-          images:repair_images(id, image_url, description)
-        `)
-                .order('created_at', { ascending: false })
+            const { data, error: fetchError } = await fetchRepairsWithCustomerFallback()
 
             if (fetchError) throw fetchError
 
@@ -111,7 +148,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         } finally {
             setIsLoading(false)
         }
-    }, [supabase])
+    }, [fetchRepairsWithCustomerFallback])
 
     // Create repair
     const createRepair = useCallback(async (data: RepairFormData): Promise<Repair | null> => {
@@ -436,29 +473,29 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         try {
             setError(null)
 
-            const updateData: any = { status }
+            const response = await fetch(`/api/repairs/${id}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stage: status }),
+            })
+            const payload = await response.json().catch(() => null)
 
-            // Auto-set dates based on status
-            if (status === 'listo') {
-                updateData.completed_at = new Date().toISOString()
-            }
-            if (status === 'entregado') {
-                updateData.delivered_at = new Date().toISOString()
+            if (!response.ok || payload?.ok === false) {
+                throw new Error(payload?.error || 'No se pudo actualizar estado')
             }
 
             const { data: updatedRepair, error: updateError } = await supabase
                 .from('repairs')
-                .update(updateData)
-                .eq('id', id)
                 .select(`
           *,
           customer:customers(name, phone, email),
           technician:profiles(id, full_name),
           images:repair_images(id, image_url, description)
         `)
+                .eq('id', id)
                 .single()
 
-            if (updateError) throw updateError
+            if (updateError || !updatedRepair) throw updateError || new Error('No se pudo recargar la reparacion')
 
             const mapped = mapSupabaseRepairToUi(updatedRepair)
             const transformed = { ...mapped, dbStatus: mapped.status }

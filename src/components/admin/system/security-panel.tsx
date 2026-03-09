@@ -32,6 +32,8 @@ import {
 import { useSecurityLogs, type SecurityLog } from '@/hooks/use-security-logs'
 import { useToast } from '@/components/ui/use-toast'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useAuth } from '@/contexts/auth-context'
+import { createClient } from '@/lib/supabase/client'
 
 interface SecurityPanelProps {
   // Props opcionales para compatibilidad hacia atrás
@@ -56,6 +58,53 @@ export function SecurityPanel({}: SecurityPanelProps) {
   } = useSecurityLogs()
   
   const { toast } = useToast()
+  
+  const { user, isAdmin, isSuperAdmin } = useAuth()
+  const [locations, setLocations] = useState<Record<string, string>>({})
+  const [isBlocking, setIsBlocking] = useState<string | null>(null)
+  const supabase = createClient()
+
+  // Function to fetch location from IP
+  const fetchLocation = async (ip: string) => {
+    if (!ip || ip === 'N/A' || locations[ip]) return
+    try {
+      const res = await fetch(`https://ipapi.co/${ip}/json/`)
+      const data = await res.json()
+      if (data && data.city) {
+        setLocations(prev => ({ ...prev, [ip]: `${data.city}, ${data.country_name}` }))
+      } else {
+        setLocations(prev => ({ ...prev, [ip]: 'Desconocida' }))
+      }
+    } catch {
+      setLocations(prev => ({ ...prev, [ip]: 'Error al obtener' }))
+    }
+  }
+
+  // Function to block user
+  const blockUser = async (userId: string | undefined) => {
+    if (!userId) {
+      toast({ title: "Error", description: "No se encontró el ID del usuario.", variant: "destructive" })
+      return
+    }
+    if (!isAdmin && !isSuperAdmin) {
+      toast({ title: "Sin permisos", description: "Solo los administradores pueden bloquear usuarios.", variant: "destructive" })
+      return
+    }
+    
+    try {
+      setIsBlocking(userId)
+      // Bloquear usuario actualizando su perfil (si tienes una columna is_active) o a través de RPC
+      const { error } = await supabase.from('profiles').update({ is_active: false }).eq('id', userId)
+      if (error) throw error
+      
+      toast({ title: "Usuario bloqueado", description: "El usuario ha sido bloqueado exitosamente." })
+      fetchSecurityLogs(requestFilters)
+    } catch (err: any) {
+      toast({ title: "Error al bloquear", description: err.message || "No se pudo bloquear al usuario.", variant: "destructive" })
+    } finally {
+      setIsBlocking(null)
+    }
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearchTerm(searchTerm), 250)
@@ -147,7 +196,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
           `"${log.user}"`,
           log.timestamp,
           log.ip,
-          log.severity,
+          translateSeverity(log.severity),
           `"${log.details || ''}"`
         ].join(','))
       ].join('\n')
@@ -181,6 +230,16 @@ export function SecurityPanel({}: SecurityPanelProps) {
     setTimeFilter('24h')
     setUserFilter('all')
     setLocationFilter('all')
+  }
+
+  const translateSeverity = (severity: SecurityLog['severity']) => {
+    switch (severity) {
+      case 'low': return 'Baja'
+      case 'medium': return 'Media'
+      case 'high': return 'Alta'
+      case 'critical': return 'Crítica'
+      default: return severity
+    }
   }
 
   const getSeverityColor = (severity: SecurityLog['severity']) => {
@@ -468,6 +527,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
                   <TableHead className="dark:text-gray-400">Ubicación</TableHead>
                   <TableHead className="dark:text-gray-400">Severidad</TableHead>
                   <TableHead className="dark:text-gray-400">Fecha/Hora</TableHead>
+                  <TableHead className="dark:text-gray-400 text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -495,14 +555,30 @@ export function SecurityPanel({}: SecurityPanelProps) {
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           <MapPin className="h-4 w-4 text-muted-foreground dark:text-gray-500" />
-                          <span className="font-mono text-sm dark:text-gray-300">{log.ip}</span>
+                          <div className="flex flex-col">
+                            <span className="font-mono text-sm dark:text-gray-300">{log.ip}</span>
+                            {log.ip !== 'N/A' && (
+                              <span className="text-xs text-muted-foreground mt-0.5">
+                                {locations[log.ip] ? (
+                                  locations[log.ip]
+                                ) : (
+                                  <button 
+                                    onClick={() => fetchLocation(log.ip)}
+                                    className="text-blue-500 hover:text-blue-700 hover:underline inline-flex items-center"
+                                  >
+                                    Ver ubicación
+                                  </button>
+                                )}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <Badge className={getSeverityColor(log.severity)}>
                           <span className="flex items-center space-x-1">
                             {getSeverityIcon(log.severity)}
-                            <span className="capitalize">{log.severity}</span>
+                            <span className="capitalize">{translateSeverity(log.severity)}</span>
                           </span>
                         </Badge>
                       </TableCell>
@@ -514,6 +590,31 @@ export function SecurityPanel({}: SecurityPanelProps) {
                             <div className="text-muted-foreground dark:text-gray-500">{time}</div>
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {log.user_id && (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:hover:bg-red-900/30"
+                            onClick={() => blockUser(log.user_id)}
+                            disabled={isBlocking === log.user_id || log.user_id === user?.id || (!isAdmin && !isSuperAdmin)}
+                            title={
+                              log.user_id === user?.id 
+                                ? "No puedes bloquearte a ti mismo" 
+                                : (!isAdmin && !isSuperAdmin 
+                                    ? "Solo administradores pueden bloquear usuarios" 
+                                    : "Bloquear usuario")
+                            }
+                          >
+                            {isBlocking === log.user_id ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Ban className="h-3 w-3 mr-1" />
+                            )}
+                            Bloquear
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   )
