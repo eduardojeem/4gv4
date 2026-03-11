@@ -107,7 +107,7 @@ beforeAll(() => {
       takeRecords: vi.fn(() => []),
       // Simular callback para tests
       _callback: callback,
-      _triggerCallback: (entries: any[]) => {
+      _triggerCallback: (entries: PerformanceEntry[]) => {
         if (callback) {
           callback({ 
             getEntries: () => entries,
@@ -141,7 +141,9 @@ beforeAll(() => {
   })
 
   // Hacer disponibles los mocks para tests específicos
-  ;(global as any).createMockWebVitalEntry = createMockWebVitalEntry
+  ;(globalThis as typeof globalThis & {
+    createMockWebVitalEntry: typeof createMockWebVitalEntry
+  }).createMockWebVitalEntry = createMockWebVitalEntry
 
   // Mock de IntersectionObserver
   global.IntersectionObserver = vi.fn().mockImplementation(() => ({
@@ -248,10 +250,11 @@ expect.extend({
 })
 
 // Declaración de tipos para TypeScript
-declare global {
-  namespace Vi {
-    interface JestAssertion<T = any> {
-      toBeWithinPerformanceThreshold(threshold: number): T
-    }
+declare module 'vitest' {
+  interface Assertion<T = unknown> {
+    toBeWithinPerformanceThreshold(threshold: number): T
+  }
+  interface AsymmetricMatchersContaining {
+    toBeWithinPerformanceThreshold(threshold: number): unknown
   }
 }

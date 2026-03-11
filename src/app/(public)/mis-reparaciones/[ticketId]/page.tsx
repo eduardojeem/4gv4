@@ -155,12 +155,17 @@ export default function RepairDetailPage({ params }: { params: Promise<{ ticketI
 
   useEffect(() => {
     if (!verifyHash || !repair || hasShownVerifiedToast.current) return
-    setQrVerified(true)
-    toast.success('Comprobante verificado correctamente', {
-      description: 'Este es un comprobante autentico',
-      duration: 5000
-    })
-    hasShownVerifiedToast.current = true
+
+    const timeoutId = setTimeout(() => {
+      setQrVerified(true)
+      toast.success('Comprobante verificado correctamente', {
+        description: 'Este es un comprobante autentico',
+        duration: 5000
+      })
+      hasShownVerifiedToast.current = true
+    }, 0)
+
+    return () => clearTimeout(timeoutId)
   }, [verifyHash, repair])
 
   const formatPrice = useMemo(() => {

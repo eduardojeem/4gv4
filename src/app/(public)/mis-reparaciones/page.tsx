@@ -8,6 +8,20 @@ import { formatCurrency } from '@/lib/currency'
 import { RepairSearchForm } from './components'
 import { ArrowRight, Wrench } from 'lucide-react'
 
+type RepairRow = {
+  id: string
+  ticket_number: string | null
+  device_type: string | null
+  device_brand: string | null
+  device_model: string | null
+  problem_description: string | null
+  status: string
+  created_at: string | null
+  final_cost: number | null
+  estimated_cost: number | null
+  location: string | null
+}
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
     recibido: { label: 'Recibido', variant: 'secondary' },
@@ -27,8 +41,8 @@ export default async function MisReparacionesPage() {
   const { data: auth } = await supabase.auth.getUser()
   const user = auth?.user
 
-  let repairs: any[] = []
-  let customer = null
+  let repairs: RepairRow[] = []
+  let customer: { id: string } | null = null
 
   if (user) {
     const { data: customerData } = await supabase
@@ -46,7 +60,7 @@ export default async function MisReparacionesPage() {
         .eq('customer_id', customer.id)
         .order('created_at', { ascending: false })
       
-      repairs = repairsData || []
+      repairs = (repairsData as RepairRow[] | null) ?? []
     }
   }
 

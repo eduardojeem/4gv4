@@ -66,18 +66,7 @@ export const shallowEqual = (a: Record<string, unknown>, b: Record<string, unkno
 }
 
 // Custom hook for memoized values with custom equality
-export const useMemoizedValue = <T>(
-  value: T,
-  equalityFn: (a: T, b: T) => boolean = Object.is
-): T => {
-  const ref = useRef<T>(value)
-  
-  if (!equalityFn(ref.current, value)) {
-    ref.current = value
-  }
-  
-  return ref.current
-}
+export const useMemoizedValue = <T>(value: T): T => value
 
 // Custom hook for stable callbacks
 export const useStableCallback = <T extends (...args: unknown[]) => unknown>(
@@ -117,21 +106,22 @@ export const useDebouncedValue = <T>(value: T, delay: number): T => {
 // Throttled value hook
 export const useThrottledValue = <T>(value: T, delay: number): T => {
   const [throttledValue, setThrottledValue] = useState<T>(value)
-  const lastExecuted = useRef<number>(Date.now())
+  const lastExecuted = useRef<number>(0)
   
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
     const now = Date.now()
-    
-    if (now >= lastExecuted.current + delay) {
+    const remaining = Math.max(0, lastExecuted.current + delay - now)
+
+    timer = setTimeout(() => {
       setThrottledValue(value)
-      lastExecuted.current = now
-    } else {
-      const timer = setTimeout(() => {
-        setThrottledValue(value)
-        lastExecuted.current = Date.now()
-      }, delay - (now - lastExecuted.current))
-      
-      return () => clearTimeout(timer)
+      lastExecuted.current = Date.now()
+    }, remaining)
+
+    return () => {
+      if (timer) {
+        clearTimeout(timer)
+      }
     }
   }, [value, delay])
   
@@ -141,13 +131,9 @@ export const useThrottledValue = <T>(value: T, delay: number): T => {
 // Memoized computation hook
 export const useMemoizedComputation = <T, R>(
   computation: (input: T) => R,
-  input: T,
-  equalityFn?: (a: T, b: T) => boolean
+  input: T
 ): R => {
-  const compare = equalityFn || ((a: T, b: T) => shallowEqual(a as Record<string, unknown>, b as Record<string, unknown>))
-  const memoizedInput = useMemoizedValue(input, compare)
-  
-  return useMemo(() => computation(memoizedInput), [computation, memoizedInput])
+  return useMemo(() => computation(input), [computation, input])
 }
 
 // Virtual list utilities
@@ -250,12 +236,21 @@ export const usePerformanceMonitor = (name: string) => {
 
 // Memory usage monitoring
 export const useMemoryMonitor = () => {
-  const [memoryInfo, setMemoryInfo] = useState<any>(null)
+  interface PerformanceMemoryInfo {
+    jsHeapSizeLimit: number
+    totalJSHeapSize: number
+    usedJSHeapSize: number
+  }
+
+  type PerformanceWithMemory = Performance & { memory?: PerformanceMemoryInfo }
+
+  const [memoryInfo, setMemoryInfo] = useState<PerformanceMemoryInfo | null>(null)
   
   useEffect(() => {
     const updateMemoryInfo = () => {
-      if ('memory' in performance) {
-        setMemoryInfo((performance as any).memory)
+      const perfWithMemory = performance as PerformanceWithMemory
+      if (perfWithMemory.memory) {
+        setMemoryInfo(perfWithMemory.memory)
       }
     }
     
@@ -315,7 +310,7 @@ export const withPerformanceMonitoring = <P extends object>(
   const WrappedComponent = (props: P) => {
     const { measure } = usePerformanceMonitor(componentName || Component.name)
     
-    return measure(() => React.createElement(Component, props as any))
+    return measure(() => React.createElement(Component, props))
   }
   
   WrappedComponent.displayName = `withPerformanceMonitoring(${Component.displayName || Component.name})`

@@ -435,7 +435,7 @@ export default function HomePage() {
                     goToOffer(activeOfferIndex + 1)
                   }
                 }}
-                onScroll={(event) => {
+                onScroll={() => {
                   const next = findNearestOfferIndex()
                   setActiveOfferIndex(Math.max(0, Math.min(displayedOffers.length - 1, next)))
                 }}
@@ -645,7 +645,7 @@ export default function HomePage() {
                     ))}
                   </div>
                   <p className="mt-4 text-sm text-muted-foreground">
-                    "{testimonial.comment}"
+                    &ldquo;{testimonial.comment}&rdquo;
                   </p>
                   <p className="mt-4 text-sm font-semibold">{testimonial.name}</p>
                 </CardContent>
