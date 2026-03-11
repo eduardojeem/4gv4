@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { isWholesale as checkIsWholesale } from '@/lib/auth/role-utils'
+import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/roles-permissions'
 import { PublicRepairReadyNotifications } from '@/components/public/PublicRepairReadyNotifications'
 import {
   DropdownMenu,
@@ -38,7 +38,7 @@ export function PublicHeader() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const { user, signOut } = useAuth()
+  const { user, signOut, hasPermission } = useAuth()
   const { settings } = useWebsiteSettings()
   const router = useRouter()
   const pathname = usePathname()
@@ -55,8 +55,8 @@ export function PublicHeader() {
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
   const emailDisplay = companyInfo?.email || envSupportEmail
   const showTopBar = companyInfo?.showTopBar !== false
-  const canAccessDashboard = user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'
-  const isWholesaleUser = checkIsWholesale(user?.user_metadata?.role as string | undefined)
+  const canAccessDashboard = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'
+  const isWholesaleUser = hasPermission(WHOLESALE_PRICE_PERMISSION)
 
   // Scroll detection for shadow
   useEffect(() => {

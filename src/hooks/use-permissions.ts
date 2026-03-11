@@ -80,10 +80,30 @@ export function usePermissions(): PermissionCheck {
   const { user, hasPermission: authHasPermission, canManageUser: authCanManageUser } = useAuth()
 
   // Obtener permisos del usuario actual
-  const userPermissions = useMemo(() => {
+  const rolePermissions = useMemo(() => {
     if (!user?.role) return []
     return ROLE_PERMISSIONS[user.role]?.permissions || []
-  }, [user?.role])
+  }, [user])
+
+  const directKnownPermissions = useMemo(() => {
+    const direct = Array.isArray(user?.permissions) ? user.permissions : []
+    return direct
+      .map((permissionId) => PERMISSIONS[permissionId])
+      .filter((permission): permission is Permission => Boolean(permission))
+  }, [user])
+
+  const userPermissions = useMemo(() => {
+    const merged = new Map<string, Permission>()
+    rolePermissions.forEach((permission) => merged.set(permission.id, permission))
+    directKnownPermissions.forEach((permission) => merged.set(permission.id, permission))
+    return Array.from(merged.values())
+  }, [rolePermissions, directKnownPermissions])
+
+  const roleMatches = useCallback((roles: UserRole[]) => {
+    if (!user?.role) return false
+    if (roles.includes(user.role)) return true
+    return user.role === 'super_admin' && roles.includes('admin')
+  }, [user])
 
   // Verificar un permiso específico
   const hasPermission = useCallback((permission: string): boolean => {
@@ -102,13 +122,11 @@ export function usePermissions(): PermissionCheck {
 
   // Verificar acceso a un recurso con una acción específica
   const hasResourceAccess = useCallback((resource: string, action: string): boolean => {
-    if (!user?.role) return false
-
-    const rolePermissions = ROLE_PERMISSIONS[user.role]
-    return rolePermissions.permissions.some(p =>
+    if (userPermissions.length === 0) return false
+    return userPermissions.some(p =>
       p.resource === resource && (p.action === action || p.action === 'manage')
     )
-  }, [user?.role])
+  }, [userPermissions])
 
   // Verificar si puede acceder a una ruta específica
   const canAccessRoute = useCallback((route: string): boolean => {
@@ -124,17 +142,17 @@ export function usePermissions(): PermissionCheck {
     if (!hasAnyRequirement) return true
 
     if (requireAll) {
-      if (roles.length > 0 && !roles.includes(user.role)) return false
+      if (roles.length > 0 && !roleMatches(roles)) return false
       if (permissions.length > 0 && !hasAllPermissions(permissions)) return false
       if (hasResourceRequirement && !hasResourceAccess(resource!, action!)) return false
       return true
     }
 
-    if (roles.length > 0 && roles.includes(user.role)) return true
+    if (roles.length > 0 && roleMatches(roles)) return true
     if (permissions.length > 0 && hasAnyPermission(permissions)) return true
     if (hasResourceRequirement) return hasResourceAccess(resource!, action!)
     return false
-  }, [user?.role, hasAllPermissions, hasAnyPermission, hasResourceAccess])
+  }, [user?.role, roleMatches, hasAllPermissions, hasAnyPermission, hasResourceAccess])
 
   // Verificar si puede gestionar un usuario
   const canManageUser = useCallback((targetRole: UserRole): boolean => {
@@ -162,7 +180,7 @@ export function usePermissions(): PermissionCheck {
     if (!hasAnyRequirement) return true
 
     if (requireAll) {
-      if (roles.length > 0 && !roles.includes(user.role)) return false
+      if (roles.length > 0 && !roleMatches(roles)) return false
       if (permissions.length > 0 && !hasAllPermissions(permissions)) return false
       if (hasResourceRequirement && !hasResourceAccess(resource!, action!)) return false
       return true
@@ -170,7 +188,7 @@ export function usePermissions(): PermissionCheck {
 
     // Verificar roles si se especifican
     if (roles.length > 0) {
-      const hasRole = roles.includes(user.role)
+      const hasRole = roleMatches(roles)
       if (hasRole) return true
     }
 
@@ -187,7 +205,7 @@ export function usePermissions(): PermissionCheck {
     }
 
     return false
-  }, [user?.role, hasAllPermissions, hasAnyPermission, hasResourceAccess])
+  }, [user?.role, roleMatches, hasAllPermissions, hasAnyPermission, hasResourceAccess])
 
   return {
     hasPermission,

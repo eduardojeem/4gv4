@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
+import { resolveWholesaleStatus } from '@/lib/api/products-server'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -33,18 +34,11 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient()
 
-    // Only check wholesale status if user has a session (skip 2 queries for anonymous)
-    let isWholesale = false
     const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .maybeSingle()
-      const role = profile?.role || session.user.user_metadata?.role
-      isWholesale = role === 'mayorista' || role === 'client_mayorista'
-    }
+    const { isWholesale } = await resolveWholesaleStatus({
+      supabase,
+      user: session?.user ?? null,
+    })
 
     // Build query - only active products, never select wholesale_price for non-wholesale
     const selectFields = isWholesale
@@ -55,6 +49,14 @@ export async function GET(request: NextRequest) {
     let queryBuilder: any = productsTable
       .select(selectFields, { count: 'exact' })
       .eq('is_active', true)
+
+    // Apply visibility by customer type.
+    // Retail users only see public products; wholesale users can also see wholesale-only products.
+    if (isWholesale) {
+      queryBuilder = queryBuilder.in('visibility', ['public', 'wholesale'])
+    } else {
+      queryBuilder = queryBuilder.eq('visibility', 'public')
+    }
 
     // Apply search filter with sanitized input
     if (query) {

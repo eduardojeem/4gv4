@@ -71,14 +71,14 @@ export async function proxy(request: NextRequest) {
 
   const effectiveRole = normalizedRole ?? 'cliente'
   const isClientOrViewer = effectiveRole === 'cliente'
-  const isAdmin = effectiveRole === 'admin'
+  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'super_admin'
 
   // Rutas protegidas (dashboard) - requieren autenticacion y rol no-cliente
   if (isProtectedRoute && (!user || isClientOrViewer)) {
     return NextResponse.redirect(new URL('/inicio', request.url))
   }
 
-  // Rutas admin - requieren autenticacion y rol admin
+  // Rutas admin - requieren autenticacion y rol admin/super_admin
   if (isAdminRoute) {
     if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))

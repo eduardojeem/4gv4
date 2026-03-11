@@ -8,6 +8,7 @@ import { PublicProduct } from '@/types/public'
 import { useAuth } from '@/contexts/auth-context'
 import { formatPrice } from '@/lib/utils'
 import { resolveProductImageUrl } from '@/lib/images'
+import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/roles-permissions'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -17,14 +18,13 @@ interface ProductCardProps {
 
 export function ProductCard(props: ProductCardProps) {
   const { product, priority = false } = props
-  const { user } = useAuth()
+  const { hasPermission } = useAuth()
   const [imageError, setImageError] = useState(false)
 
-  // Use prop if provided (Server Component), otherwise fall back to client auth
-  const isWholesale = props.isWholesale ?? (
-    user?.user_metadata?.customer_type === 'mayorista' ||
-    user?.user_metadata?.customer_type === 'client_mayorista'
-  )
+  const hasWholesalePermission = hasPermission(WHOLESALE_PRICE_PERMISSION)
+
+  // Use prop if provided (Server Component), otherwise fall back to client auth permissions.
+  const isWholesale = props.isWholesale ?? hasWholesalePermission
 
   const displayPrice =
     isWholesale && product.wholesale_price
@@ -72,7 +72,7 @@ export function ProductCard(props: ProductCardProps) {
                   className="object-contain transition-all duration-500 group-hover:scale-110"
                   priority={priority}
                   quality={80}
-                  onError={(e) => {
+                  onError={() => {
                     // console.error('Image failed to load:', imageSrc, 'for product:', product.name)
                     setImageError(true)
                   }}

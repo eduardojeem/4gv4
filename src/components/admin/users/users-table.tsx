@@ -44,12 +44,12 @@ export function UsersTable({
   onDelete,
   onView
 }: UsersTableProps) {
-  const totalPages = Math.ceil(totalCount / pageSize)
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
+      case 'super_admin': return 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800'
       case 'admin': return 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800'
-      case 'supervisor': return 'bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800'
       case 'tecnico': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
       case 'vendedor': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
       default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
@@ -62,6 +62,23 @@ export function UsersTable({
       case 'inactive': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
       case 'suspended': return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800'
       default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+    }
+  }
+
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'super_admin':
+        return 'Super Admin'
+      case 'admin':
+        return 'Administrador'
+      case 'vendedor':
+        return 'Vendedor'
+      case 'tecnico':
+        return 'Tecnico'
+      case 'cliente':
+        return 'Cliente'
+      default:
+        return role
     }
   }
 
@@ -121,7 +138,7 @@ export function UsersTable({
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`capitalize font-normal ${getRoleBadgeColor(user.role)}`}>
-                      {user.role}
+                      {getRoleLabel(user.role)}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -176,7 +193,9 @@ export function UsersTable({
       {/* Pagination */}
       <div className="flex items-center justify-between px-2">
         <div className="text-sm text-muted-foreground">
-          Mostrando {((page - 1) * pageSize) + 1} a {Math.min(page * pageSize, totalCount)} de {totalCount} usuarios
+          {totalCount === 0
+            ? 'Mostrando 0 de 0 usuarios'
+            : `Mostrando ${((page - 1) * pageSize) + 1} a ${Math.min(page * pageSize, totalCount)} de ${totalCount} usuarios`}
         </div>
         <div className="flex gap-2">
           <Button

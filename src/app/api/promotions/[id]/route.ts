@@ -1,74 +1,111 @@
 import { NextRequest, NextResponse } from 'next/server'
-import type { Promotion } from '@/types/promotion'
 import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 
-// Mock data - en producción esto vendría de la base de datos
-const mockPromotions: Promotion[] = [
-  {
-    id: 'promo-1',
-    code: 'WELCOME10',
-    name: 'Descuento de Bienvenida',
-    description: '10% de descuento en tu primera compra',
-    type: 'percentage',
-    value: 10,
-    min_purchase: 50000,
-    start_date: '2024-01-01T00:00:00Z',
-    end_date: '2024-12-31T23:59:59Z',
-    is_active: true,
-    usage_count: 25,
-    usage_limit: 100,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
+type PromotionRow = {
+  id: string
+  code: string
+  name: string
+  description: string | null
+  type: string
+  value: number | null
+  min_purchase: number | null
+  max_discount: number | null
+  applicable_products: string[] | null
+  applicable_categories: string[] | null
+  start_date: string | null
+  end_date: string | null
+  is_active: boolean | null
+  usage_count: number | null
+  usage_limit: number | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+function toSafeNumber(value: unknown, fallback = 0): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function mapPromotionRow(row: PromotionRow) {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    description: row.description ?? '',
+    type: row.type,
+    value: toSafeNumber(row.value, 0),
+    min_purchase: row.min_purchase == null ? undefined : toSafeNumber(row.min_purchase, 0),
+    max_discount: row.max_discount == null ? undefined : toSafeNumber(row.max_discount, 0),
+    applicable_products: Array.isArray(row.applicable_products) ? row.applicable_products : undefined,
+    applicable_categories: Array.isArray(row.applicable_categories) ? row.applicable_categories : undefined,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    is_active: row.is_active !== false,
+    usage_count: toSafeNumber(row.usage_count, 0),
+    usage_limit: row.usage_limit,
+    created_at: row.created_at ?? undefined,
+    updated_at: row.updated_at ?? undefined,
   }
-]
+}
 
 // GET - Obtener promoción específica
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
-
-    const { id } = await params
-
-    const promotion = mockPromotions.find(p => p.id === id)
-
-    if (!promotion) {
-      return NextResponse.json(
-        { error: 'Promoción no encontrada' },
-        { status: 404 }
-      )
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
     }
 
-    // Calcular estadísticas adicionales
+    const { id } = await params
+    const supabase = await createClient()
+
+    const { data, error } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (error) {
+      logger.error('Failed to fetch promotion by id', { promotionId: id, error: error.message })
+      throw error
+    }
+
+    if (!data) {
+      return NextResponse.json({ error: 'Promoción no encontrada' }, { status: 404 })
+    }
+
+    const promotion = mapPromotionRow(data as PromotionRow)
+    const now = new Date()
+    const start = promotion.start_date ? new Date(promotion.start_date) : null
+    const end = promotion.end_date ? new Date(promotion.end_date) : null
+
     const stats = {
-      usage_percentage: promotion.usage_limit 
-        ? ((promotion.usage_count || 0) / promotion.usage_limit) * 100 
-        : 0,
-      is_expired: promotion.end_date 
-        ? new Date() > new Date(promotion.end_date)
-        : false,
-      is_active_now: promotion.is_active && 
-        promotion.start_date && new Date() >= new Date(promotion.start_date) &&
-        (!promotion.end_date || new Date() <= new Date(promotion.end_date)),
-      days_remaining: promotion.end_date
-        ? Math.max(0, Math.ceil((new Date(promotion.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))
-        : null
+      usage_percentage:
+        promotion.usage_limit && promotion.usage_limit > 0
+          ? ((promotion.usage_count || 0) / promotion.usage_limit) * 100
+          : 0,
+      is_expired: Boolean(end && now.getTime() > end.getTime()),
+      is_active_now:
+        promotion.is_active &&
+        (!start || now.getTime() >= start.getTime()) &&
+        (!end || now.getTime() <= end.getTime()),
+      days_remaining:
+        end == null ? null : Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))),
     }
 
     return NextResponse.json({
       ...promotion,
-      stats
+      stats,
     })
-
   } catch (error) {
-    console.error('Error fetching promotion:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
+    logger.error('Promotions [id] GET API error', { error })
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }
 
@@ -79,26 +116,47 @@ export async function PUT(
 ) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
-    const { id } = await params
-    const body = await request.json()
-
-    const index = mockPromotions.findIndex(p => p.id === id)
-
-    if (index === -1) {
-      return NextResponse.json(
-        { error: 'Promoción no encontrada' },
-        { status: 404 }
-      )
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
     }
 
-    // Validaciones
+    const { id } = await params
+    const body = await request.json()
+    const supabase = await createClient()
+
+    const { data: existing, error: existingError } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (existingError) {
+      logger.error('Failed to load promotion before update', { promotionId: id, error: existingError.message })
+      throw existingError
+    }
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Promoción no encontrada' }, { status: 404 })
+    }
+
     if (body.name) {
-      // Verificar nombre único (excluyendo la promoción actual)
-      const existingPromotion = mockPromotions.find(p => 
-        p.id !== id && p.name.toLowerCase() === body.name.toLowerCase()
-      )
-      if (existingPromotion) {
+      const { data: duplicate, error: duplicateError } = await supabase
+        .from('promotions')
+        .select('id')
+        .neq('id', id)
+        .eq('name', String(body.name))
+        .maybeSingle()
+
+      if (duplicateError) {
+        logger.error('Failed to validate promotion name uniqueness', {
+          promotionId: id,
+          error: duplicateError.message,
+        })
+        throw duplicateError
+      }
+
+      if (duplicate) {
         return NextResponse.json(
           { error: 'Ya existe otra promoción con ese nombre' },
           { status: 409 }
@@ -106,87 +164,131 @@ export async function PUT(
       }
     }
 
-    // Validar fechas
-    const startDate = body.start_date || mockPromotions[index].start_date
-    const endDate = body.end_date || mockPromotions[index].end_date
-    
-    if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
-      return NextResponse.json(
-        { error: 'La fecha de fin debe ser posterior a la fecha de inicio' },
-        { status: 400 }
-      )
+    const startDate = body.start_date ?? existing.start_date
+    const endDate = body.end_date ?? existing.end_date
+    if (startDate && endDate) {
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      if (start.getTime() >= end.getTime()) {
+        return NextResponse.json(
+          { error: 'La fecha de fin debe ser posterior a la fecha de inicio' },
+          { status: 400 }
+        )
+      }
     }
 
-    // Actualizar promoción
-    const updatedPromotion = {
-      ...mockPromotions[index],
-      ...body,
-      id, // Asegurar que el ID no cambie
-      updated_at: new Date().toISOString()
+    const patch: Record<string, unknown> = {}
+    const allowedKeys = [
+      'name',
+      'code',
+      'description',
+      'type',
+      'value',
+      'min_purchase',
+      'max_discount',
+      'applicable_products',
+      'applicable_categories',
+      'start_date',
+      'end_date',
+      'is_active',
+      'usage_count',
+      'usage_limit',
+    ]
+
+    for (const key of allowedKeys) {
+      if (body[key] !== undefined) {
+        patch[key] = body[key]
+      }
     }
 
-    mockPromotions[index] = updatedPromotion
+    const { data: updated, error } = await supabase
+      .from('promotions')
+      .update(patch)
+      .eq('id', id)
+      .select('*')
+      .maybeSingle()
 
-    return NextResponse.json(updatedPromotion)
+    if (error) {
+      logger.error('Failed to update promotion by id', { promotionId: id, error: error.message })
+      throw error
+    }
 
+    if (!updated) {
+      return NextResponse.json({ error: 'Promoción no encontrada' }, { status: 404 })
+    }
+
+    return NextResponse.json(mapPromotionRow(updated as PromotionRow))
   } catch (error) {
-    console.error('Error updating promotion:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
+    logger.error('Promotions [id] PUT API error', { error })
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }
 
 // DELETE - Eliminar promoción específica (staff only)
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
-    const { id } = await params
-
-    const index = mockPromotions.findIndex(p => p.id === id)
-
-    if (index === -1) {
-      return NextResponse.json(
-        { error: 'Promoción no encontrada' },
-        { status: 404 }
-      )
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
     }
 
-    // Verificar si la promoción está siendo utilizada activamente
-    const promotion = mockPromotions[index]
-    if ((promotion.usage_count || 0) > 0) {
-      // En lugar de eliminar, desactivar la promoción
-      mockPromotions[index] = {
-        ...promotion,
-        is_active: false,
-        updated_at: new Date().toISOString()
+    const { id } = await params
+    const supabase = await createClient()
+
+    const { data: existing, error: existingError } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (existingError) {
+      logger.error('Failed to load promotion before delete', { promotionId: id, error: existingError.message })
+      throw existingError
+    }
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Promoción no encontrada' }, { status: 404 })
+    }
+
+    if (toSafeNumber(existing.usage_count, 0) > 0) {
+      const { data: deactivated, error: deactivateError } = await supabase
+        .from('promotions')
+        .update({ is_active: false })
+        .eq('id', id)
+        .select('*')
+        .single()
+
+      if (deactivateError) {
+        logger.error('Failed to deactivate promotion with usage before delete', {
+          promotionId: id,
+          error: deactivateError.message,
+        })
+        throw deactivateError
       }
 
       return NextResponse.json({
         message: 'Promoción desactivada debido a uso existente',
-        promotion: mockPromotions[index]
+        promotion: mapPromotionRow(deactivated as PromotionRow),
       })
     }
 
-    // Eliminar promoción si no tiene uso
-    const deletedPromotion = mockPromotions.splice(index, 1)[0]
+    const { error } = await supabase.from('promotions').delete().eq('id', id)
+    if (error) {
+      logger.error('Failed to delete promotion by id', { promotionId: id, error: error.message })
+      throw error
+    }
 
     return NextResponse.json({
       message: 'Promoción eliminada exitosamente',
-      promotion: deletedPromotion
+      promotion: mapPromotionRow(existing as PromotionRow),
     })
-
   } catch (error) {
-    console.error('Error deleting promotion:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
+    logger.error('Promotions [id] DELETE API error', { error })
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }
 
@@ -197,97 +299,93 @@ export async function PATCH(
 ) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
-    const { id } = await params
-    const body = await request.json()
-
-    const index = mockPromotions.findIndex(p => p.id === id)
-
-    if (index === -1) {
-      return NextResponse.json(
-        { error: 'Promoción no encontrada' },
-        { status: 404 }
-      )
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
     }
 
-    const promotion = mockPromotions[index]
+    const { id } = await params
+    const body = await request.json()
+    const operation = String(body?.operation || '').trim()
+    const supabase = await createClient()
 
-    // Operaciones específicas
-    switch (body.operation) {
-      case 'increment_usage':
-        const incrementAmount = body.amount || 1
-        const newUsage = (promotion.usage_count || 0) + incrementAmount
-        
-        // Verificar límite de uso
-        if (promotion.usage_limit && newUsage > promotion.usage_limit) {
-          return NextResponse.json(
-            { error: 'Se excedería el límite de uso de la promoción' },
-            { status: 400 }
-          )
-        }
+    const { data: existing, error: existingError } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
 
-        mockPromotions[index] = {
-          ...promotion,
-          usage_count: newUsage,
-          updated_at: new Date().toISOString()
-        }
-        break
+    if (existingError) {
+      logger.error('Failed to load promotion before patch operation', {
+        promotionId: id,
+        error: existingError.message,
+      })
+      throw existingError
+    }
 
-      case 'reset_usage':
-        mockPromotions[index] = {
-          ...promotion,
-          usage_count: 0,
-          updated_at: new Date().toISOString()
-        }
-        break
+    if (!existing) {
+      return NextResponse.json({ error: 'Promoción no encontrada' }, { status: 404 })
+    }
 
-      case 'toggle_active':
-        mockPromotions[index] = {
-          ...promotion,
-          is_active: !promotion.is_active,
-          updated_at: new Date().toISOString()
-        }
-        break
+    let patch: Record<string, unknown> | null = null
 
-      case 'extend_date':
-        if (!body.new_end_date) {
-          return NextResponse.json(
-            { error: 'Se requiere new_end_date para extender la promoción' },
-            { status: 400 }
-          )
-        }
-
-        if (new Date(body.new_end_date) <= new Date(promotion.start_date || new Date())) {
-          return NextResponse.json(
-            { error: 'La nueva fecha de fin debe ser posterior a la fecha de inicio' },
-            { status: 400 }
-          )
-        }
-
-        mockPromotions[index] = {
-          ...promotion,
-          end_date: body.new_end_date,
-          updated_at: new Date().toISOString()
-        }
-        break
-
-      default:
+    if (operation === 'increment_usage') {
+      const increment = Math.max(1, toSafeNumber(body?.amount, 1))
+      const nextUsage = toSafeNumber(existing.usage_count, 0) + increment
+      if (existing.usage_limit && nextUsage > existing.usage_limit) {
         return NextResponse.json(
-          { error: 'Operación no válida' },
+          { error: 'Se excedería el límite de uso de la promoción' },
           { status: 400 }
         )
+      }
+      patch = { usage_count: nextUsage }
+    } else if (operation === 'reset_usage') {
+      patch = { usage_count: 0 }
+    } else if (operation === 'toggle_active') {
+      patch = { is_active: existing.is_active === false }
+    } else if (operation === 'extend_date') {
+      const newEndDate = body?.new_end_date
+      if (!newEndDate) {
+        return NextResponse.json(
+          { error: 'Se requiere new_end_date para extender la promoción' },
+          { status: 400 }
+        )
+      }
+      const startDate = existing.start_date ? new Date(existing.start_date) : null
+      const nextEnd = new Date(newEndDate)
+      if (startDate && nextEnd.getTime() <= startDate.getTime()) {
+        return NextResponse.json(
+          { error: 'La nueva fecha de fin debe ser posterior a la fecha de inicio' },
+          { status: 400 }
+        )
+      }
+      patch = { end_date: newEndDate }
+    } else {
+      return NextResponse.json({ error: 'Operación no válida' }, { status: 400 })
+    }
+
+    const { data: updated, error } = await supabase
+      .from('promotions')
+      .update(patch)
+      .eq('id', id)
+      .select('*')
+      .single()
+
+    if (error) {
+      logger.error('Failed to apply patch operation to promotion', {
+        promotionId: id,
+        operation,
+        error: error.message,
+      })
+      throw error
     }
 
     return NextResponse.json({
       message: 'Operación completada exitosamente',
-      promotion: mockPromotions[index]
+      promotion: mapPromotionRow(updated as PromotionRow),
     })
-
   } catch (error) {
-    console.error('Error in promotion operation:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
+    logger.error('Promotions [id] PATCH API error', { error })
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }

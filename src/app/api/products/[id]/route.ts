@@ -1,55 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ProductWithVariants } from '@/types/product-variants'
-import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { createClient } from '@/lib/supabase/server'
+import { requireAuth, requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { productUpdateSchema } from '@/lib/validation/schemas'
+import { logger } from '@/lib/logger'
 
-// Mock data - En producción esto vendría de la base de datos
-const mockProducts: ProductWithVariants[] = [
-  {
-    id: 'prod-1',
-    name: 'Camiseta Básica',
-    description: 'Camiseta de algodón básica disponible en varios colores y tallas',
-    category_id: 'cat-1',
-    brand: 'BasicWear',
-    has_variants: true,
-    variant_attributes: ['attr-1', 'attr-2'],
-    variants: [
-      {
-        id: 'var-1',
-        product_id: 'prod-1',
-        sku: 'CAM-ROJO-S',
-        name: 'Camiseta Básica - Rojo S',
-        attributes: [
-          { attribute_id: 'attr-1', attribute_name: 'Color', option_id: 'opt-1', value: 'Rojo', color_hex: '#FF0000' },
-          { attribute_id: 'attr-2', attribute_name: 'Talla', option_id: 'opt-5', value: 'S' }
-        ],
-        price: 25.00,
-        wholesale_price: 18.00,
-        cost_price: 12.00,
-        stock: 15,
-        min_stock: 5,
-        active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
-    ],
-    images: ['/products/camiseta-basica.jpg'],
-    tags: ['ropa', 'casual', 'algodón'],
-    active: true,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }
-]
-
-// GET /api/products/[id] - Obtener producto específico
+// GET /api/products/[id] - Obtener producto especifico (usuario autenticado)
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuth()
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
+    }
+
     const { id } = await params
-    
-    const product = mockProducts.find(p => p.id === id)
-    
+    const supabase = await createClient()
+
+    const { data: product, error } = await supabase
+      .from('products')
+      .select('*, category:categories(id, name)')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (error) {
+      logger.error('Failed to fetch product by id', { productId: id, error: error.message })
+      throw error
+    }
+
     if (!product) {
       return NextResponse.json(
         { success: false, error: 'Producto no encontrado' },
@@ -59,11 +39,10 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: product
+      data: product,
     })
-
   } catch (error) {
-    console.error('Error fetching product:', error)
+    logger.error('Product detail API error', { error })
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }
@@ -71,43 +50,96 @@ export async function GET(
   }
 }
 
-// PUT /api/products/[id] - Actualizar producto específico (staff only)
+// PUT /api/products/[id] - Actualizar producto especifico (staff only)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
+    }
+
     const { id } = await params
     const body = await request.json()
-    
-    const productIndex = mockProducts.findIndex(p => p.id === id)
-    
-    if (productIndex === -1) {
+    const supabase = await createClient()
+
+    const validationResult = productUpdateSchema.safeParse({
+      ...body,
+      id,
+    })
+
+    if (!validationResult.success) {
+      const details = validationResult.error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }))
+
+      return NextResponse.json(
+        { success: false, error: 'Validation failed', details },
+        { status: 400 }
+      )
+    }
+
+    const validated = validationResult.data
+    const updatePayload: Record<string, unknown> = {}
+
+    const allowedKeys: Array<keyof typeof validated> = [
+      'name',
+      'description',
+      'category_id',
+      'supplier_id',
+      'brand',
+      'stock_quantity',
+      'min_stock',
+      'purchase_price',
+      'sale_price',
+      'is_active',
+      'barcode',
+      'unit_measure',
+    ]
+
+    for (const key of allowedKeys) {
+      const value = validated[key]
+      if (value !== undefined) {
+        updatePayload[key] = value
+      }
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No hay campos para actualizar' },
+        { status: 400 }
+      )
+    }
+
+    const { data: updatedProduct, error } = await supabase
+      .from('products')
+      .update(updatePayload)
+      .eq('id', id)
+      .select('*, category:categories(id, name)')
+      .maybeSingle()
+
+    if (error) {
+      logger.error('Failed to update product by id', { productId: id, error: error.message })
+      throw error
+    }
+
+    if (!updatedProduct) {
       return NextResponse.json(
         { success: false, error: 'Producto no encontrado' },
         { status: 404 }
       )
     }
 
-    // Actualizar producto
-    const updatedProduct = {
-      ...mockProducts[productIndex],
-      ...body,
-      id, // Mantener el ID original
-      updated_at: new Date().toISOString()
-    }
-
-    mockProducts[productIndex] = updatedProduct
-
     return NextResponse.json({
       success: true,
-      data: updatedProduct
+      data: updatedProduct,
     })
-
   } catch (error) {
-    console.error('Error updating product:', error)
+    logger.error('Product update by id API error', { error })
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }
@@ -115,38 +147,55 @@ export async function PUT(
   }
 }
 
-// DELETE /api/products/[id] - Eliminar producto específico (staff only)
+// DELETE /api/products/[id] - Eliminar producto especifico (staff only)
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
+    }
+
     const { id } = await params
-    
-    const productIndex = mockProducts.findIndex(p => p.id === id)
-    
-    if (productIndex === -1) {
+    const supabase = await createClient()
+
+    const { data: existing, error: existingError } = await supabase
+      .from('products')
+      .select('id,name,sku')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (existingError) {
+      logger.error('Failed to verify product before delete', { productId: id, error: existingError.message })
+      throw existingError
+    }
+
+    if (!existing) {
       return NextResponse.json(
         { success: false, error: 'Producto no encontrado' },
         { status: 404 }
       )
     }
 
-    const deletedProduct = mockProducts[productIndex]
-    mockProducts.splice(productIndex, 1)
+    const { error } = await supabase.from('products').delete().eq('id', id)
+
+    if (error) {
+      logger.error('Failed to delete product by id', { productId: id, error: error.message })
+      throw error
+    }
 
     return NextResponse.json({
       success: true,
       data: {
         message: 'Producto eliminado exitosamente',
-        deleted_product: deletedProduct
-      }
+        deleted_product: existing,
+      },
     })
-
   } catch (error) {
-    console.error('Error deleting product:', error)
+    logger.error('Product delete by id API error', { error })
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }

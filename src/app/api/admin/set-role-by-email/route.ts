@@ -51,7 +51,14 @@ export async function POST(request: Request) {
       )
     }
 
-    const dbRole = mapUiRoleToDbRole(uiRole) ?? 'viewer'
+    const dbRole = mapUiRoleToDbRole(uiRole)
+    if (!dbRole) {
+      return NextResponse.json({ error: `Rol invalido: ${uiRole}` }, { status: 400 })
+    }
+
+    if (dbRole === 'super_admin' && auth.user.role !== 'super_admin') {
+      return NextResponse.json({ error: 'No tienes permisos para asignar super_admin' }, { status: 403 })
+    }
 
     const { error: upsertError } = await admin
       .from('user_roles')
@@ -60,6 +67,11 @@ export async function POST(request: Request) {
     if (upsertError) {
       return NextResponse.json({ error: upsertError.message }, { status: 500 })
     }
+
+    await admin
+      .from('profiles')
+      .update({ role: dbRole, updated_at: new Date().toISOString() })
+      .eq('id', targetUser.id)
 
     // Audit log
     await admin.from('audit_log').insert({

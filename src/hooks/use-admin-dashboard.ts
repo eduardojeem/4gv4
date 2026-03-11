@@ -11,7 +11,7 @@ export interface User {
   id: string
   name: string
   email: string
-  role: 'admin' | 'vendedor' | 'tecnico' | 'cliente' | 'supervisor'
+  role: 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
   status: 'active' | 'inactive' | 'suspended'
   lastLogin: string
   createdAt: string

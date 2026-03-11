@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUsersSupabase, SupabaseUser } from '@/hooks/use-users-supabase'
 import { useAuth } from '@/contexts/auth-context'
@@ -18,14 +18,7 @@ import {
   ShieldAlert,
   Activity,
   Users,
-  AlertTriangle,
-  Edit,
-  Trash2,
-  Mail,
-  Eye,
-  Search,
-  ChevronLeft,
-  ChevronRight
+  AlertTriangle
 } from 'lucide-react'
 import { UserStatsCards } from './user-stats-cards'
 import { UserAvatarUpload } from './user-avatar-upload'
@@ -36,14 +29,12 @@ import { UsersFilters } from './users-filters'
 import { UserDetailDialog } from './user-detail-dialog'
 import { useDebounce } from '@/hooks/use-debounce'
 import { toast } from 'sonner'
-
-import { Checkbox } from "@/components/ui/checkbox"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { EditUserForm } from './EditUserForm'
 
 export function UserManagement() {
   const router = useRouter()
-  const { user, isAdmin, loading: authLoading } = useAuth()
+  const { user, isAdmin, isSuperAdmin, loading: authLoading } = useAuth()
+  const supabase = useMemo(() => createClient(), [])
 
   // Estados de filtros y paginación
   const [page, setPage] = useState(1)
@@ -59,7 +50,6 @@ export function UserManagement() {
   const {
     users,
     totalCount,
-    totalPages,
     stats,
     isLoading: dataLoading,
     refreshUsers,
@@ -95,6 +85,8 @@ export function UserManagement() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoadingEditPermissions, setIsLoadingEditPermissions] = useState(false)
+  const [isUpdatingStatusFromDetail, setIsUpdatingStatusFromDetail] = useState(false)
 
   // Form Data
   const [formData, setFormData] = useState({
@@ -107,24 +99,6 @@ export function UserManagement() {
     notes: '',
     permissions: [] as string[]
   })
-
-  // Permission groups are imported
-
-  const handlePermissionChange = (permissionId: string, checked: boolean) => {
-    setFormData(prev => {
-      const currentPermissions = prev.permissions || []
-      if (checked) {
-        return { ...prev, permissions: [...currentPermissions, permissionId] }
-      } else {
-        return { ...prev, permissions: currentPermissions.filter(p => p !== permissionId) }
-      }
-    })
-  }
-
-  // Helper to check if permission is active (mocked for now, assumes role based defaults if empty)
-  const isPermissionActive = (permissionId: string) => {
-    return formData.permissions?.includes(permissionId)
-  }
 
   // Reset page when filters change
   useEffect(() => {
@@ -139,9 +113,6 @@ export function UserManagement() {
     adminsCount: stats.admins,
     newUsersThisMonth: stats.newThisMonth
   }
-
-  // No need to calculate totalPages manually anymore, use the one from hook
-  // const totalPages = Math.ceil(totalCount / pageSize)
 
   if (authLoading) {
     return (
@@ -190,25 +161,6 @@ export function UserManagement() {
     }
   }
 
-  const handleUpdateSubmit = async () => {
-    if (!selectedUser) return
-    setIsSubmitting(true)
-    try {
-      const result = await updateUser(selectedUser.id, formData)
-      if (result.success) {
-        setIsEditDialogOpen(false)
-        setSelectedUser(null)
-        refreshUsers()
-      } else {
-        if (result.error) {
-          toast.error(result.error)
-        }
-      }
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
   const handleDeleteSubmit = async () => {
     if (!selectedUser) return
     setIsSubmitting(true)
@@ -232,6 +184,70 @@ export function UserManagement() {
     }
     return result
   }
+
+  const openEditDialog = useCallback((targetUser: SupabaseUser) => {
+    const merged = { ...targetUser, permissions: targetUser.permissions || [] }
+    setSelectedUser(merged)
+    setIsEditDialogOpen(true)
+    setIsLoadingEditPermissions(true)
+
+    void (async () => {
+      let specificPerms: string[] = []
+      try {
+        const { data, error } = await supabase
+          .from('user_permissions')
+          .select('permission')
+          .eq('user_id', targetUser.id)
+          .eq('is_active', true)
+
+        if (!error && data) {
+          specificPerms = data.map((row) => row.permission as string)
+        }
+      } catch {
+        specificPerms = []
+      } finally {
+        setIsLoadingEditPermissions(false)
+      }
+
+      setSelectedUser((current) => {
+        if (!current || current.id !== targetUser.id) return current
+        return {
+          ...current,
+          permissions: specificPerms.length > 0 ? specificPerms : current.permissions || [],
+        }
+      })
+    })()
+  }, [supabase])
+
+  const handleSetStatusFromDetail = useCallback(async (
+    targetUser: SupabaseUser,
+    nextStatus: SupabaseUser['status'],
+  ) => {
+    if (targetUser.status === nextStatus) return
+    if (targetUser.id === user?.id && nextStatus !== 'active') {
+      toast.error('No puedes desactivar tu propia cuenta desde este modal')
+      return
+    }
+
+    setIsUpdatingStatusFromDetail(true)
+    try {
+      const result = await updateUser(targetUser.id, { status: nextStatus })
+      if (!result.success) {
+        toast.error(result.error || 'No se pudo actualizar el estado del usuario')
+        return
+      }
+
+      setSelectedUser((current) => {
+        if (!current || current.id !== targetUser.id) return current
+        return { ...current, status: nextStatus }
+      })
+
+      toast.success(nextStatus === 'active' ? 'Usuario reactivado correctamente' : 'Usuario desactivado correctamente')
+      refreshUsers()
+    } finally {
+      setIsUpdatingStatusFromDetail(false)
+    }
+  }, [refreshUsers, updateUser, user?.id])
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -291,32 +307,7 @@ export function UserManagement() {
                 pageSize={pageSize}
                 totalCount={totalCount}
                 onPageChange={setPage}
-                onEdit={async (user) => {
-                  const supabase = createClient()
-                  let specificPerms: string[] = []
-                  try {
-                    const { data, error } = await supabase
-                      .from('user_permissions')
-                      .select('permission')
-                      .eq('user_id', user.id)
-                      .eq('is_active', true)
-                    if (!error && data) specificPerms = data.map(d => d.permission as string)
-                  } catch {}
-
-                  const merged = { ...user, permissions: specificPerms.length ? specificPerms : (user.permissions || []) }
-                  setSelectedUser(merged)
-                  setFormData({
-                    name: user.name,
-                    email: user.email,
-                    phone: user.phone || '',
-                    role: user.role,
-                    department: user.department || '',
-                    status: user.status,
-                    notes: user.notes || '',
-                    permissions: merged.permissions || []
-                  })
-                  setIsEditDialogOpen(true)
-                }}
+                onEdit={openEditDialog}
                 onDelete={(user) => {
                   setSelectedUser(user)
                   setIsDeleteDialogOpen(true)
@@ -376,8 +367,8 @@ export function UserManagement() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    {isSuperAdmin ? <SelectItem value="super_admin">Super Admin</SelectItem> : null}
                     <SelectItem value="admin">Administrador</SelectItem>
-                    <SelectItem value="supervisor">Supervisor</SelectItem>
                     <SelectItem value="vendedor">Vendedor</SelectItem>
                     <SelectItem value="tecnico">Técnico</SelectItem>
                     <SelectItem value="cliente">Cliente</SelectItem>
@@ -394,8 +385,8 @@ export function UserManagement() {
             </div>
             <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 text-sm text-yellow-800">
               <AlertTriangle className="h-4 w-4 inline mr-2" />
-              Nota: Para crear un usuario con acceso al sistema, es recomendable usar el proceso de invitación o registro.
-              Esta acción solo creará el perfil en la base de datos.
+              Nota: Esta accion crea la cuenta en autenticacion y sincroniza perfil/rol automaticamente.
+              Verifica email, rol y estado antes de confirmar.
             </div>
           </div>
           <DialogFooter>
@@ -418,6 +409,11 @@ export function UserManagement() {
           <div className="flex-1 overflow-auto px-6">
             {selectedUser && (
               <div className="grid gap-6 py-4">
+                {isLoadingEditPermissions ? (
+                  <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    Cargando permisos especificos...
+                  </div>
+                ) : null}
                 <div className="flex justify-center">
                   <UserAvatarUpload
                     userName={selectedUser.name}
@@ -428,13 +424,20 @@ export function UserManagement() {
                 <EditUserForm
                   user={selectedUser}
                   isSubmitting={isSubmitting}
+                  canAssignSuperAdmin={isSuperAdmin}
                   onSubmit={async (values) => {
                     setIsSubmitting(true)
                     try {
                       const result = await updateUser(selectedUser.id, values)
                       if (result.success) {
                         setIsEditDialogOpen(false)
-                        setSelectedUser(null)
+                        setSelectedUser((current) => {
+                          if (!current || current.id !== selectedUser.id) return current
+                          return {
+                            ...current,
+                            ...values,
+                          }
+                        })
                         refreshUsers()
                       } else if (result.error) {
                         toast.error(result.error)
@@ -476,6 +479,11 @@ export function UserManagement() {
         user={selectedUser}
         open={isViewDialogOpen}
         onOpenChange={setIsViewDialogOpen}
+        onEdit={openEditDialog}
+        onDeactivate={(targetUser) => handleSetStatusFromDetail(targetUser, 'inactive')}
+        onReactivate={(targetUser) => handleSetStatusFromDetail(targetUser, 'active')}
+        isUpdatingStatus={isUpdatingStatusFromDetail}
+        currentUserId={user?.id}
       />
     </div>
   )

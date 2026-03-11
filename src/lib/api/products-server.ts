@@ -1,6 +1,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { PublicProduct } from '@/types/public'
+import { resolveWholesaleAccessForUser } from '@/lib/auth/wholesale-access'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -9,19 +10,25 @@ function sanitizeSearch(input: string): string {
 }
 
 /** Resolve whether the current session belongs to a wholesale customer.
- *  Accepts an optional pre-fetched supabase client to avoid creating a new one. */
-export async function resolveWholesaleStatus(): Promise<{ isWholesale: boolean }> {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) return { isWholesale: false }
+ *  Supports both legacy roles and explicit per-user permission. */
+export async function resolveWholesaleStatus(options?: {
+  supabase?: any
+  user?: { id: string; user_metadata?: Record<string, unknown> | null } | null
+}): Promise<{ isWholesale: boolean }> {
+  const supabase = options?.supabase ?? (await createClient())
+  const user =
+    options?.user ??
+    (await supabase.auth.getSession()).data.session?.user ??
+    null
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', session.user.id)
-    .maybeSingle()
-  const role = profile?.role || session.user.user_metadata?.role
-  const isWholesale = role === 'mayorista' || role === 'client_mayorista'
+  if (!user?.id) return { isWholesale: false }
+
+  const metadataRole =
+    user.user_metadata && typeof user.user_metadata.role === 'string'
+      ? user.user_metadata.role
+      : undefined
+
+  const isWholesale = await resolveWholesaleAccessForUser(supabase, user.id, metadataRole)
   return { isWholesale }
 }
 

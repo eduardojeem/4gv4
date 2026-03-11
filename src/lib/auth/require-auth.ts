@@ -66,7 +66,7 @@ export async function requireAdmin(): Promise<AuthResult> {
 
   if (!result.authenticated) return result
 
-  if (result.role !== 'admin') {
+  if (result.role !== 'admin' && result.role !== 'super_admin') {
     return {
       authenticated: false,
       response: NextResponse.json(
@@ -88,7 +88,7 @@ export async function requireStaff(): Promise<AuthResult> {
 
   if (!result.authenticated) return result
 
-  const staffRoles: AppRole[] = ['admin', 'vendedor', 'tecnico']
+  const staffRoles: AppRole[] = ['super_admin', 'admin', 'vendedor', 'tecnico']
   if (!staffRoles.includes(result.role)) {
     return {
       authenticated: false,

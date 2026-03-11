@@ -1,16 +1,19 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback, useMemo } from 'react'
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo } from 'react'
 import { createClient as createSupabaseClient } from '../lib/supabase/client'
 import { User as SupabaseUser, Session } from '@supabase/supabase-js'
-import { UserRole, Permission, hasPermission, canManageUser, getRoleLevel } from '../lib/auth/roles-permissions'
+import { UserRole, hasEffectivePermission, canManageUser } from '../lib/auth/roles-permissions'
 import { normalizeRole } from '../lib/auth/role-utils'
 import { useToast } from '../components/ui/use-toast'
+
+type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
 // Tipos para el contexto de autenticación
 export interface AuthUser extends SupabaseUser {
   role?: UserRole
-  permissions?: Permission[]
+  status?: ProfileStatus
+  permissions?: string[]
   profile?: {
     name?: string
     avatar_url?: string
@@ -25,7 +28,7 @@ export interface AuthContextType {
   session: Session | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error?: string }>
-  signUp: (email: string, password: string, metadata?: any) => Promise<{ error?: string }>
+  signUp: (email: string, password: string, metadata?: SignUpMetadata) => Promise<{ error?: string }>
   signOut: () => Promise<void>
   updateProfile: (updates: Partial<AuthUser['profile']>) => Promise<{ error?: string }>
   updateUserRole: (userId: string, role: UserRole) => Promise<{ error?: string }>
@@ -39,11 +42,29 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+type SignUpMetadata = {
+  name?: string
+  avatar_url?: string
+  department?: string
+  phone?: string
+  location?: string
+  [key: string]: unknown
+}
+
 // Helper: validar y castear cadenas a UserRole
-const VALID_ROLES: UserRole[] = ['admin', 'vendedor', 'tecnico', 'cliente']
-const toUserRole = (value: any): UserRole => {
+const toUserRole = (value: unknown): UserRole => {
+  if (typeof value === 'string' && value.toLowerCase().trim() === 'super_admin') {
+    return 'super_admin'
+  }
   const n = normalizeRole(typeof value === 'string' ? value : undefined)
   return (n as UserRole) || 'cliente'
+}
+
+const toProfileStatus = (value: unknown): ProfileStatus => {
+  if (value === 'active' || value === 'inactive' || value === 'suspended') {
+    return value
+  }
+  return 'active'
 }
 
 // Hook para usar el contexto de autenticación
@@ -71,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Valores por defecto seguros
     const defaultProfile: Partial<AuthUser> = {
       role: toUserRole('cliente'),
+      status: 'active',
       profile: {},
       permissions: []
     }
@@ -94,23 +116,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 2. Obtener perfil para datos de display
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('full_name, role, avatar_url, phone, email')
+        .select('full_name, avatar_url, phone, status')
         .eq('id', userId)
         .maybeSingle()
 
-      // Prioridad de rol: user_roles > profiles > metadata > 'cliente'
-      const resolvedRole = toUserRole(
-        roleRow?.role ?? profileData?.role ?? undefined
-      )
+      // 3. Obtener permisos directos del usuario (fuente para permisos extra por encima del rol)
+      let directPermissions: string[] = []
+      const { data: directPermissionsWithStatus, error: directPermissionsError } = await supabase
+        .from('user_permissions')
+        .select('permission,is_active')
+        .eq('user_id', userId)
+
+      if (!directPermissionsError) {
+        directPermissions = (directPermissionsWithStatus || [])
+          .filter((row) => row?.is_active !== false)
+          .map((row) => row?.permission)
+          .filter((permission): permission is string => typeof permission === 'string' && permission.length > 0)
+      } else if (directPermissionsError.message?.includes('is_active')) {
+        // Compatibilidad con esquemas antiguos sin user_permissions.is_active
+        const { data: directPermissionsOnly } = await supabase
+          .from('user_permissions')
+          .select('permission')
+          .eq('user_id', userId)
+
+        directPermissions = (directPermissionsOnly || [])
+          .map((row) => row?.permission)
+          .filter((permission): permission is string => typeof permission === 'string' && permission.length > 0)
+      }
+
+      // user_roles is the trusted role source for permissions.
+      const resolvedRole = toUserRole(roleRow?.role ?? undefined)
+      const resolvedStatus = toProfileStatus(profileData?.status)
 
       return {
         role: resolvedRole,
+        status: resolvedStatus,
         profile: {
           name: profileData?.full_name || '',
           avatar_url: profileData?.avatar_url || '',
           phone: profileData?.phone || ''
         },
-        permissions: []
+        permissions: Array.from(new Set(directPermissions))
       }
     } catch {
       return defaultProfile
@@ -126,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser({
         ...session.user,
         role: userProfile.role,
+        status: userProfile.status,
         permissions: userProfile.permissions,
         profile: userProfile.profile
       } as AuthUser)
@@ -187,7 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   // Función para registrarse
-  const signUp = useCallback(async (email: string, password: string, metadata?: any) => {
+  const signUp = useCallback(async (email: string, password: string, metadata?: SignUpMetadata) => {
     try {
       setLoading(true)
       const { data, error } = await supabase.auth.signUp({
@@ -207,7 +254,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Crear perfil
         await supabase.from('profiles').insert({
           id: data.user.id,
-          name: metadata?.name,
+          full_name: metadata?.name,
           avatar_url: metadata?.avatar_url,
           department: metadata?.department,
           phone: metadata?.phone,
@@ -315,7 +362,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Función para actualizar el rol de un usuario
   const updateUserRole = useCallback(async (userId: string, role: UserRole) => {
-    if (!user || !hasPermission(user.role || 'cliente', 'users.update')) {
+    if (!user || !hasEffectivePermission(user.role || 'cliente', 'users.update', user.permissions)) {
       return { error: 'Sin permisos para actualizar roles' }
     }
 
@@ -351,8 +398,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Funciones de verificación de permisos
   const checkPermission = useCallback((permission: string): boolean => {
     if (!user?.role) return false
-    return hasPermission(user.role, permission)
-  }, [user?.role])
+    return hasEffectivePermission(user.role, permission, user.permissions)
+  }, [user?.role, user?.permissions])
 
   const checkCanManageUser = useCallback((targetRole: UserRole): boolean => {
     if (!user?.role) return false
@@ -360,9 +407,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user?.role])
 
   // Propiedades computadas
-  const isAdmin = user?.role === 'admin'
-  const isSuperAdmin = user?.role === 'admin' // En este sistema, admin es el rol más alto
-  const isManager = user?.role === 'admin' || user?.role === 'vendedor'
+  const isActiveUser = user?.status !== 'inactive' && user?.status !== 'suspended'
+  const isAdmin = Boolean(isActiveUser && (user?.role === 'admin' || user?.role === 'super_admin'))
+  const isSuperAdmin = Boolean(isActiveUser && user?.role === 'super_admin')
+  const isManager = Boolean(
+    isActiveUser && (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'vendedor')
+  )
 
   // Auto-promocion a admin completamente deshabilitada.
   // Para promover un usuario a admin, usa la API /api/admin/set-role-by-email
@@ -381,6 +431,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser({
               ...session.user,
               role: userProfile.role,
+              status: userProfile.status,
               permissions: userProfile.permissions,
               profile: userProfile.profile
             } as AuthUser)
@@ -415,6 +466,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser({
                 ...session.user,
                 role: userProfile.role,
+                status: userProfile.status,
                 permissions: userProfile.permissions,
                 profile: userProfile.profile
               } as AuthUser)

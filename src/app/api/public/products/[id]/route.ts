@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
+import { resolveWholesaleStatus } from '@/lib/api/products-server'
 
 /**
  * GET /api/public/products/[id]
@@ -18,28 +19,29 @@ export async function GET(
 
     const supabase = await createClient()
 
-    // Only check wholesale status if user has a session
-    let isWholesale = false
     const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .maybeSingle()
-      const role = profile?.role || session.user.user_metadata?.role
-      isWholesale = role === 'mayorista' || role === 'client_mayorista'
-    }
+    const { isWholesale } = await resolveWholesaleStatus({
+      supabase,
+      user: session?.user ?? null,
+    })
 
-    // No supplier in public query
-    const selectFields = 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+    const selectFields = isWholesale
+      ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
 
-    const { data: product, error } = await supabase
+    let byIdQuery: any = supabase
       .from('products')
       .select(selectFields)
       .eq('id', productId)
       .eq('is_active', true)
-      .maybeSingle()
+
+    if (isWholesale) {
+      byIdQuery = byIdQuery.in('visibility', ['public', 'wholesale'])
+    } else {
+      byIdQuery = byIdQuery.eq('visibility', 'public')
+    }
+
+    const { data: product, error } = await byIdQuery.maybeSingle()
 
     if (error) {
       logger.error('Failed to fetch public product', { error: error.message, productId })
@@ -49,12 +51,19 @@ export async function GET(
     // Fallback: try by SKU if UUID lookup returned nothing
     let finalProduct = product
     if (!finalProduct) {
-      const { data: bySku, error: skuErr } = await supabase
+      let bySkuQuery: any = supabase
         .from('products')
         .select(selectFields)
         .eq('sku', productId)
         .eq('is_active', true)
-        .maybeSingle()
+
+      if (isWholesale) {
+        bySkuQuery = bySkuQuery.in('visibility', ['public', 'wholesale'])
+      } else {
+        bySkuQuery = bySkuQuery.eq('visibility', 'public')
+      }
+
+      const { data: bySku, error: skuErr } = await bySkuQuery.maybeSingle()
       if (skuErr) {
         logger.error('Failed SKU lookup for public product', { error: skuErr.message, productId })
       }

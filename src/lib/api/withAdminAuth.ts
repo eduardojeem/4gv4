@@ -49,46 +49,83 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
         )
       }
       
-      // Obtener rol del usuario - user_roles es la fuente de verdad (misma que middleware)
-      let userRole: string | null = null
-
-      const { data: userRoleData, error: userRoleError } = await supabase
+      // user_roles is the only trusted source for privileged role checks.
+      let userRoleData: { role: string; is_active?: boolean } | null = null
+      const { data: roleWithStatus, error: roleWithStatusError } = await supabase
         .from('user_roles')
-        .select('role')
+        .select('role,is_active')
         .eq('user_id', user.id)
         .maybeSingle()
-      
-      if (userRoleError) {
+
+      if (!roleWithStatusError) {
+        userRoleData = roleWithStatus as { role: string; is_active?: boolean } | null
+      } else if (roleWithStatusError.message?.includes('is_active')) {
+        // Backwards compatibility for older schemas without user_roles.is_active
+        const { data: roleOnly, error: roleOnlyError } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (roleOnlyError) {
+          logger.error('Failed to fetch user_roles fallback role', {
+            userId: user.id,
+            error: roleOnlyError.message,
+          })
+        } else {
+          userRoleData = roleOnly ? { role: roleOnly.role, is_active: true } : null
+        }
+      } else {
         logger.error('Failed to fetch user_roles', {
           userId: user.id,
-          error: userRoleError.message
+          error: roleWithStatusError.message,
         })
-      }
-      
-      if (userRoleData) {
-        userRole = userRoleData.role
       }
 
-      // Fallback a profiles solo si user_roles no tiene registro
-      if (!userRole) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle()
-        
-        if (profile) {
-          userRole = profile.role
-        }
+      let profileData: { status?: string | null } | null = null
+      const { data: profileWithStatus, error: profileStatusError } = await supabase
+        .from('profiles')
+        .select('status')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (!profileStatusError) {
+        profileData = profileWithStatus as { status?: string | null } | null
+      } else if (!profileStatusError.message?.includes('status')) {
+        logger.error('Failed to fetch profile status', {
+          userId: user.id,
+          error: profileStatusError.message,
+        })
       }
-      
-      if (!userRole) {
-        logger.error('No role found for user', {
+
+      if (!userRoleData?.role) {
+        logger.error('No user_roles record found for user', {
           userId: user.id,
         })
-        
+
         return NextResponse.json(
-          { error: 'Forbidden', message: 'No role assigned to user' },
+          { error: 'Forbidden', message: 'No role assigned in user_roles' },
+          { status: 403 }
+        )
+      }
+
+      const userRole = userRoleData.role
+      const roleIsActive = userRoleData.is_active !== false
+      const profileIsActive = !profileData?.status || profileData.status === 'active'
+
+      if (!roleIsActive || !profileIsActive) {
+        logger.warn('Inactive user attempted admin API access', {
+          path: request.nextUrl.pathname,
+          userId: user.id,
+          roleIsActive,
+          profileStatus: profileData?.status ?? null,
+        })
+
+        return NextResponse.json(
+          {
+            error: 'Forbidden',
+            message: 'User account is inactive or suspended',
+          },
           { status: 403 }
         )
       }

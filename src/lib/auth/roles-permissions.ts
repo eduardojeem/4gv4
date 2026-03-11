@@ -1,6 +1,6 @@
 // Sistema de roles y permisos con Row Level Security (RLS)
-// Roles que coinciden con la base de datos: 'admin', 'vendedor', 'tecnico', 'cliente'
-export type UserRole = 'admin' | 'vendedor' | 'tecnico' | 'cliente'
+// Roles que coinciden con la base de datos: 'super_admin', 'admin', 'vendedor', 'tecnico', 'cliente'
+export type UserRole = 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
 
 export interface Permission {
   id: string
@@ -9,6 +9,8 @@ export interface Permission {
   resource: string
   action: 'create' | 'read' | 'update' | 'delete' | 'manage'
 }
+
+export const WHOLESALE_PRICE_PERMISSION = 'products.read_wholesale_prices'
 
 export interface RolePermissions {
   role: UserRole
@@ -31,6 +33,13 @@ export const PERMISSIONS: Record<string, Permission> = {
     id: 'products.read',
     name: 'Ver Productos',
     description: 'Permite ver la lista de productos',
+    resource: 'products',
+    action: 'read'
+  },
+  [WHOLESALE_PRICE_PERMISSION]: {
+    id: WHOLESALE_PRICE_PERMISSION,
+    name: 'Ver Precios Mayoristas',
+    description: 'Permite visualizar precios mayoristas en la tienda pública',
     resource: 'products',
     action: 'read'
   },
@@ -202,6 +211,12 @@ export const PERMISSIONS: Record<string, Permission> = {
 
 // Configuración de roles con sus permisos
 export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
+  super_admin: {
+    role: 'super_admin',
+    description: 'Super administrador con control total del sistema',
+    level: 5,
+    permissions: Object.values(PERMISSIONS)
+  },
   admin: {
     role: 'admin',
     description: 'Administrador con acceso completo al sistema',
@@ -253,6 +268,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
 export function hasPermission(userRole: UserRole, permission: string): boolean {
   const rolePermissions = ROLE_PERMISSIONS[userRole]
   return rolePermissions.permissions.some(p => p.id === permission)
+}
+
+export function hasEffectivePermission(
+  userRole: UserRole,
+  permission: string,
+  directPermissions?: string[] | null
+): boolean {
+  if (hasPermission(userRole, permission)) return true
+  if (!Array.isArray(directPermissions)) return false
+  return directPermissions.includes(permission)
 }
 
 export function hasResourceAccess(userRole: UserRole, resource: string, action: string): boolean {

@@ -1,154 +1,139 @@
-﻿import { NextRequest, NextResponse } from 'next/server'
-import type { Promotion, PromotionType } from '@/types/promotion'
+import { NextRequest, NextResponse } from 'next/server'
+import type { PromotionType } from '@/types/promotion'
 import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/logger'
 
-// Mock data para desarrollo
-const mockPromotions: Promotion[] = [
-  {
-    id: 'promo-1',
-    code: 'WELCOME10',
-    name: 'Descuento de Bienvenida',
-    description: '10% de descuento en tu primera compra',
-    type: 'percentage',
-    value: 10,
-    min_purchase: 50000,
-    start_date: '2024-01-01T00:00:00Z',
-    end_date: '2024-12-31T23:59:59Z',
-    is_active: true,
-    usage_count: 25,
-    usage_limit: 100,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: 'promo-2',
-    code: 'BUY2GET1',
-    name: 'Compra 2 lleva 3',
-    description: 'Lleva 3 productos pagando solo 2',
-    type: 'fixed',
-    value: 0,
-    applicable_categories: ['Electrónicos'],
-    start_date: '2024-01-15T00:00:00Z',
-    end_date: '2024-02-15T23:59:59Z',
-    is_active: true,
-    usage_count: 12,
-    usage_limit: 50,
-    created_at: '2024-01-15T00:00:00Z',
-    updated_at: '2024-01-15T00:00:00Z'
-  },
-  {
-    id: 'promo-3',
-    code: 'BULK15',
-    name: 'Descuento por Volumen',
-    description: '15% de descuento en compras mayores a $200.000',
-    type: 'percentage',
-    value: 15,
-    min_purchase: 200000,
-    start_date: '2024-01-01T00:00:00Z',
-    end_date: '2024-12-31T23:59:59Z',
-    is_active: true,
-    usage_count: 45,
-    usage_limit: 200,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: 'promo-4',
-    code: 'FREESHIP',
-    name: 'Envío Gratis',
-    description: 'Envío gratuito en compras superiores a $100.000',
-    type: 'fixed',
-    value: 0,
-    min_purchase: 100000,
-    start_date: '2024-01-01T00:00:00Z',
-    end_date: '2024-12-31T23:59:59Z',
-    is_active: true,
-    usage_count: 78,
-    usage_limit: null,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
+type PromotionRow = {
+  id: string
+  code: string
+  name: string
+  description: string | null
+  type: string
+  value: number | null
+  min_purchase: number | null
+  max_discount: number | null
+  applicable_products: string[] | null
+  applicable_categories: string[] | null
+  start_date: string | null
+  end_date: string | null
+  is_active: boolean | null
+  usage_count: number | null
+  usage_limit: number | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+function normalizePromotionType(value: unknown): PromotionType | null {
+  if (value === 'percentage' || value === 'fixed') return value
+  return null
+}
+
+function toSafeNumber(value: unknown, fallback = 0): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function mapPromotionRow(row: PromotionRow) {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    description: row.description ?? '',
+    type: row.type as PromotionType,
+    value: toSafeNumber(row.value, 0),
+    min_purchase: row.min_purchase == null ? undefined : toSafeNumber(row.min_purchase, 0),
+    max_discount: row.max_discount == null ? undefined : toSafeNumber(row.max_discount, 0),
+    applicable_products: Array.isArray(row.applicable_products) ? row.applicable_products : undefined,
+    applicable_categories: Array.isArray(row.applicable_categories) ? row.applicable_categories : undefined,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    is_active: row.is_active !== false,
+    usage_count: toSafeNumber(row.usage_count, 0),
+    usage_limit: row.usage_limit,
+    created_at: row.created_at ?? undefined,
+    updated_at: row.updated_at ?? undefined,
   }
-]
+}
 
 // GET - Obtener promociones con filtros
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
+    }
 
     const { searchParams } = new URL(request.url)
-    
-    // Parámetros de filtrado
     const active = searchParams.get('active')
-    const type = searchParams.get('type') as PromotionType | null
+    const type = searchParams.get('type')
     const category = searchParams.get('category')
-    const product_id = searchParams.get('product_id')
-    const current_date = searchParams.get('current_date')
-    
-    // Parámetros de paginación
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '10')
-    const offset = (page - 1) * limit
+    const productId = searchParams.get('product_id')
+    const currentDate = searchParams.get('current_date')
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+    const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '10', 10)))
 
-    let filteredPromotions = [...mockPromotions]
+    const supabase = await createClient()
+    let query = supabase
+      .from('promotions')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-    // Aplicar filtros
     if (active !== null) {
-      const isActive = active === 'true'
-      filteredPromotions = filteredPromotions.filter(p => p.is_active === isActive)
+      query = query.eq('is_active', active === 'true')
     }
 
     if (type) {
-      filteredPromotions = filteredPromotions.filter(p => p.type === type)
+      query = query.eq('type', type)
     }
+
+    const { data, error } = await query
+
+    if (error) {
+      logger.error('Failed to fetch promotions', { error: error.message })
+      throw error
+    }
+
+    let rows = (data || []) as PromotionRow[]
 
     if (category) {
-      filteredPromotions = filteredPromotions.filter(p => 
-        p.applicable_categories?.includes(category)
-      )
+      rows = rows.filter((row) => Array.isArray(row.applicable_categories) && row.applicable_categories.includes(category))
     }
 
-    if (product_id) {
-      filteredPromotions = filteredPromotions.filter(p => 
-        p.applicable_products?.includes(product_id)
-      )
+    if (productId) {
+      rows = rows.filter((row) => Array.isArray(row.applicable_products) && row.applicable_products.includes(productId))
     }
 
-    // Filtrar por fecha actual (promociones válidas)
-    if (current_date) {
-      const checkDate = new Date(current_date)
-      filteredPromotions = filteredPromotions.filter(p => {
-        const startDate = p.start_date ? new Date(p.start_date) : null
-        const endDate = p.end_date ? new Date(p.end_date) : null
-        
-        return (!startDate || checkDate >= startDate) && (!endDate || checkDate <= endDate)
-      })
+    if (currentDate) {
+      const date = new Date(currentDate)
+      if (Number.isFinite(date.getTime())) {
+        rows = rows.filter((row) => {
+          const start = row.start_date ? new Date(row.start_date) : null
+          const end = row.end_date ? new Date(row.end_date) : null
+          const startsBefore = !start || start.getTime() <= date.getTime()
+          const endsAfter = !end || end.getTime() >= date.getTime()
+          return startsBefore && endsAfter
+        })
+      }
     }
 
-    // Ordenar por fecha de creación (más recientes primero)
-    filteredPromotions.sort((a, b) => 
-      new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()
-    )
-
-    // Aplicar paginación
-    const paginatedPromotions = filteredPromotions.slice(offset, offset + limit)
+    const total = rows.length
+    const offset = (page - 1) * limit
+    const promotions = rows.slice(offset, offset + limit).map(mapPromotionRow)
 
     return NextResponse.json({
-      promotions: paginatedPromotions,
+      promotions,
       pagination: {
         page,
         limit,
-        total: filteredPromotions.length,
-        pages: Math.ceil(filteredPromotions.length / limit)
-      }
+        total,
+        pages: Math.ceil(total / limit),
+      },
     })
-
   } catch (error) {
-    console.error('Error fetching promotions:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
+    logger.error('Promotions GET API error', { error })
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }
 
@@ -156,111 +141,157 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
+    }
+
     const body = await request.json()
-    
-    // Validaciones básicas
-    if (!body.name || !body.type || !body.code) {
+    const type = normalizePromotionType(body?.type)
+
+    if (!body?.name || !body?.code || !type) {
       return NextResponse.json(
-        { error: 'Faltan campos requeridos: name, type, code' },
+        { error: 'Faltan campos requeridos: name, code, type (percentage|fixed)' },
         { status: 400 }
       )
     }
 
-    // Validar fechas
-    if (body.start_date && body.end_date && new Date(body.start_date) >= new Date(body.end_date)) {
-      return NextResponse.json(
-        { error: 'La fecha de fin debe ser posterior a la fecha de inicio' },
-        { status: 400 }
-      )
+    if (body.start_date && body.end_date) {
+      const start = new Date(body.start_date)
+      const end = new Date(body.end_date)
+      if (start.getTime() >= end.getTime()) {
+        return NextResponse.json(
+          { error: 'La fecha de fin debe ser posterior a la fecha de inicio' },
+          { status: 400 }
+        )
+      }
     }
 
-    // Verificar código único
-    const existingPromotion = mockPromotions.find(p => 
-      p.code.toLowerCase() === body.code.toLowerCase()
-    )
-    if (existingPromotion) {
-      return NextResponse.json(
-        { error: 'Ya existe una promoción con ese código' },
-        { status: 409 }
-      )
+    const supabase = await createClient()
+
+    const { data: existingByCode, error: existingError } = await supabase
+      .from('promotions')
+      .select('id')
+      .eq('code', String(body.code))
+      .maybeSingle()
+
+    if (existingError) {
+      logger.error('Failed to validate promotion code uniqueness', { error: existingError.message })
+      throw existingError
     }
 
-    // Crear nueva promoción
-    const newPromotion: Promotion = {
-      id: `promo-${Date.now()}`,
-      code: body.code,
-      name: body.name,
-      description: body.description || '',
-      type: body.type,
-      value: body.value || 0,
-      min_purchase: body.min_purchase,
-      max_discount: body.max_discount,
-      applicable_products: body.applicable_products,
-      applicable_categories: body.applicable_categories,
-      start_date: body.start_date,
-      end_date: body.end_date,
-      is_active: body.is_active ?? true,
+    if (existingByCode) {
+      return NextResponse.json({ error: 'Ya existe una promoción con ese código' }, { status: 409 })
+    }
+
+    const insertPayload = {
+      code: String(body.code).trim(),
+      name: String(body.name).trim(),
+      description: body.description ? String(body.description) : null,
+      type,
+      value: toSafeNumber(body.value, 0),
+      min_purchase: body.min_purchase == null ? 0 : toSafeNumber(body.min_purchase, 0),
+      max_discount: body.max_discount == null ? null : toSafeNumber(body.max_discount, 0),
+      applicable_products: Array.isArray(body.applicable_products) ? body.applicable_products : null,
+      applicable_categories: Array.isArray(body.applicable_categories) ? body.applicable_categories : null,
+      start_date: body.start_date || null,
+      end_date: body.end_date || null,
+      is_active: body.is_active !== false,
       usage_count: 0,
-      usage_limit: body.usage_limit,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      usage_limit: body.usage_limit == null ? null : toSafeNumber(body.usage_limit, 0),
     }
 
-    // En producción, guardar en base de datos
-    mockPromotions.push(newPromotion)
+    const { data: created, error } = await supabase
+      .from('promotions')
+      .insert(insertPayload)
+      .select('*')
+      .single()
 
-    return NextResponse.json(newPromotion, { status: 201 })
+    if (error) {
+      logger.error('Failed to create promotion', { error: error.message })
+      throw error
+    }
 
+    return NextResponse.json(mapPromotionRow(created as PromotionRow), { status: 201 })
   } catch (error) {
-    console.error('Error creating promotion:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
+    logger.error('Promotions POST API error', { error })
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }
 
-// PUT - Actualizar múltiples promociones (staff only)
+// PUT - Actualización masiva de promociones (staff only)
 export async function PUT(request: NextRequest) {
   try {
     const auth = await requireStaff()
-    { const r = getAuthResponse(auth); if (r) return r }
-    const body = await request.json()
-    
-    if (!Array.isArray(body.promotions)) {
-      return NextResponse.json(
-        { error: 'Se requiere un array de promociones' },
-        { status: 400 }
-      )
+    {
+      const response = getAuthResponse(auth)
+      if (response) return response
     }
 
-    const updatedPromotions: Promotion[] = []
+    const body = await request.json()
+    const promotions = Array.isArray(body?.promotions) ? body.promotions : null
 
-    for (const promotionUpdate of body.promotions) {
-      const index = mockPromotions.findIndex(p => p.id === promotionUpdate.id)
-      
-      if (index !== -1) {
-        mockPromotions[index] = {
-          ...mockPromotions[index],
-          ...promotionUpdate,
-          updated_at: new Date().toISOString()
+    if (!promotions) {
+      return NextResponse.json({ error: 'Se requiere un array de promociones' }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const updatedRows: PromotionRow[] = []
+
+    for (const promotion of promotions) {
+      if (!promotion?.id) continue
+
+      const patch: Record<string, unknown> = {}
+      if (promotion.name !== undefined) patch.name = String(promotion.name)
+      if (promotion.description !== undefined) patch.description = promotion.description ? String(promotion.description) : null
+      if (promotion.code !== undefined) patch.code = String(promotion.code)
+      if (promotion.type !== undefined) {
+        const normalized = normalizePromotionType(promotion.type)
+        if (!normalized) {
+          return NextResponse.json(
+            { error: `Tipo de promoción inválido para ${promotion.id}` },
+            { status: 400 }
+          )
         }
-        updatedPromotions.push(mockPromotions[index])
+        patch.type = normalized
+      }
+      if (promotion.value !== undefined) patch.value = toSafeNumber(promotion.value, 0)
+      if (promotion.min_purchase !== undefined) patch.min_purchase = promotion.min_purchase == null ? 0 : toSafeNumber(promotion.min_purchase, 0)
+      if (promotion.max_discount !== undefined) patch.max_discount = promotion.max_discount == null ? null : toSafeNumber(promotion.max_discount, 0)
+      if (promotion.applicable_products !== undefined) patch.applicable_products = Array.isArray(promotion.applicable_products) ? promotion.applicable_products : null
+      if (promotion.applicable_categories !== undefined) patch.applicable_categories = Array.isArray(promotion.applicable_categories) ? promotion.applicable_categories : null
+      if (promotion.start_date !== undefined) patch.start_date = promotion.start_date || null
+      if (promotion.end_date !== undefined) patch.end_date = promotion.end_date || null
+      if (promotion.is_active !== undefined) patch.is_active = Boolean(promotion.is_active)
+      if (promotion.usage_count !== undefined) patch.usage_count = toSafeNumber(promotion.usage_count, 0)
+      if (promotion.usage_limit !== undefined) patch.usage_limit = promotion.usage_limit == null ? null : toSafeNumber(promotion.usage_limit, 0)
+
+      const { data: updated, error } = await supabase
+        .from('promotions')
+        .update(patch)
+        .eq('id', String(promotion.id))
+        .select('*')
+        .maybeSingle()
+
+      if (error) {
+        logger.error('Failed to update promotion in bulk', {
+          promotionId: promotion.id,
+          error: error.message,
+        })
+        throw error
+      }
+
+      if (updated) {
+        updatedRows.push(updated as PromotionRow)
       }
     }
 
     return NextResponse.json({
-      updated: updatedPromotions,
-      count: updatedPromotions.length
+      updated: updatedRows.map(mapPromotionRow),
+      count: updatedRows.length,
     })
-
   } catch (error) {
-    console.error('Error updating promotions:', error)
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    )
+    logger.error('Promotions PUT API error', { error })
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }
-
