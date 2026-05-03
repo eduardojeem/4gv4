@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useTransition, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useTransition, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { config } from '@/lib/config'
@@ -77,18 +77,31 @@ const fetchData = async (supabase: SupabaseClient) => {
     installmentsProgressResult,
     customersResult
   ] = await Promise.all([
+    // Credits: all records (usually small dataset)
     supabase.from('credit_details').select('*') as unknown as Promise<{ data?: unknown }>,
+
+    // Installments: all for active/defaulted credits — limited to 1000 rows as safety net
     supabase
       .from('credit_installments')
       .select('*')
       .order('due_date', { ascending: true })
-      .order('installment_number', { ascending: true }) as unknown as Promise<{ data?: unknown }>,
+      .order('installment_number', { ascending: true })
+      .limit(1000) as unknown as Promise<{ data?: unknown }>,
+
+    // Payments: most recent 300 only — history tab paginates the rest
     supabase
       .from('credit_payments')
       .select('*')
-      .order('created_at', { ascending: false }) as unknown as Promise<{ data?: unknown }>,
+      .order('created_at', { ascending: false })
+      .limit(300) as unknown as Promise<{ data?: unknown }>,
+
+    // Summary view: aggregated per credit — small dataset
     supabase.from('credit_summary').select('*') as unknown as Promise<{ data?: unknown }>,
-    supabase.from('credit_installments_progress').select('*') as unknown as Promise<{ data?: unknown }>,
+
+    // Progress view: limited to 1000 rows matching the installments limit
+    supabase.from('credit_installments_progress').select('*').limit(1000) as unknown as Promise<{ data?: unknown }>,
+
+    // Customers: only id + code needed for display
     supabase.from('customers').select('id, customer_code') as unknown as Promise<{ data?: unknown }>
   ])
   return {
@@ -105,6 +118,8 @@ export function useCredits() {
     const supabase = useMemo(() => createClient(), [])
     const [isPending, startTransition] = useTransition()
     const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const channelRef = useRef<ReturnType<SupabaseClient['channel']> | null>(null)
     const [credits, setCredits] = useState<CreditRow[]>([])
     const [installments, setInstallments] = useState<InstallmentRow[]>([])
     const [payments, setPayments] = useState<PaymentRow[]>([])
@@ -123,15 +138,16 @@ export function useCredits() {
 
     const loadData = useCallback(async () => {
         setLoading(true)
+        setError(null)
         try {
             const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers } = await fetchData(supabase as SupabaseClient)
 
-            const customersMap = ((dbCustomers || []) as any[]).reduce((acc, c) => {
-                acc[c.id] = c.customer_code
+            const customersMap = ((dbCustomers || []) as Array<{ id: string; customer_code?: string }>).reduce((acc, c) => {
+                acc[c.id] = c.customer_code ?? ''
                 return acc
             }, {} as Record<string, string>)
 
-            // Normalization Logic (Copied from original page.tsx to maintain logic parity)
+            // Normalization Logic
             const creditsRaw = (dbCredits || []) as unknown as unknown[]
             const normalizedCredits = (creditsRaw || []).map((c) => {
                 const o = c as Record<string, unknown>
@@ -181,6 +197,10 @@ export function useCredits() {
             }, {} as Record<string, InstallmentProgressRow>)
             setInstallmentsProgress(ip)
 
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'Error al cargar los créditos.'
+            console.error('[useCredits] loadData error:', err)
+            setError(message)
         } finally {
             setLoading(false)
         }
@@ -192,20 +212,34 @@ export function useCredits() {
         })
     }, [loadData])
 
+    // Initial data load
     useEffect(() => {
         startTransition(() => { loadData() })
+    }, [loadData])
 
-        // Realtime subscription
+    // Realtime subscription — separate effect with ref guard to avoid duplicate channels
+    useEffect(() => {
         if (!config.supabase.isConfigured) return
+
+        // Unsubscribe any existing channel before creating a new one
+        if (channelRef.current) {
+            channelRef.current.unsubscribe()
+        }
+
         const channel = supabase
             .channel('credits_realtime_hook')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'customer_credits' }, () => { refreshData() })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_installments' }, () => { refreshData() })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_payments' }, () => { refreshData() })
-        channel.subscribe()
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'customer_credits' }, () => refreshData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_installments' }, () => refreshData())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_payments' }, () => refreshData())
 
-        return () => { channel.unsubscribe() }
-    }, [supabase, loadData, refreshData])
+        channel.subscribe()
+        channelRef.current = channel
+
+        return () => {
+            channel.unsubscribe()
+            channelRef.current = null
+        }
+    }, [supabase, refreshData])
     const markInstallmentPaid = useCallback(async (
         installmentId: string,
         method: string,
@@ -348,6 +382,7 @@ export function useCredits() {
     return {
         loading,
         isPending,
+        error,
         refreshData,
         credits,
         installments,

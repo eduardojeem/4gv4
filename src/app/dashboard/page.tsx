@@ -22,8 +22,7 @@ import {
   Wrench,
   TrendingUp,
   TrendingDown,
-  Minus,
-  Inbox
+  Minus
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -412,7 +411,10 @@ export default function DashboardPage() {
 // Wrapper that adds empty state and skeleton while RecentActivity loads
 function RecentActivityWithEmptyState() {
   const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => { 
+    const t = setTimeout(() => setMounted(true), 0)
+    return () => clearTimeout(t)
+  }, [])
   if (!mounted) {
     return (
       <div className="space-y-3">

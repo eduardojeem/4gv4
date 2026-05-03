@@ -1,9 +1,9 @@
-﻿import { CreditCard, Banknote, CalendarClock, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react'
+'use client'
+import { CreditCard, Banknote, CalendarClock, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatCurrency } from '@/lib/currency'
-import { CreditRow, InstallmentRow } from '@/hooks/use-credits'
+import { CreditRow, InstallmentRow, isInstallmentLate } from '@/hooks/use-credits'
 import { useMemo } from 'react'
-import { Progress } from '@/components/ui/progress'
 
 interface CreditStatsProps {
     credits: CreditRow[]
@@ -12,146 +12,143 @@ interface CreditStatsProps {
 
 export function CreditStats({ credits, installments }: CreditStatsProps) {
     const stats = useMemo(() => {
-        const isLate = (i: InstallmentRow) => i.status === 'pending' && new Date(i.due_date) < new Date()
-
-        // Active Credits
         const activeCreditsCount = credits.filter(c => c.status === 'active').length
         const totalCreditsCount = credits.length
 
-        // Pending Installments Count
         const pendingInstallmentsCount = installments.filter(i => i.status === 'pending').length
+        // Use shared helper — consistent with the rest of the module
+        const lateInstallmentsCount = installments.filter(i => isInstallmentLate(i)).length
 
-        // Late Installments Count
-        const lateInstallmentsCount = installments.filter(i => i.status === 'late' || isLate(i)).length
-
-        // Total Remaining Amount (Balance)
         const remainingAmount = installments
-            .filter(i => i.status === 'pending' || i.status === 'late' || isLate(i))
+            .filter(i => i.status === 'pending' || i.status === 'late' || isInstallmentLate(i))
             .reduce((sum, i) => sum + (Number(i.amount) || 0), 0)
 
-        // Total amount (paid + pending)
         const totalAmount = installments.reduce((sum, i) => sum + (Number(i.amount) || 0), 0)
         const paidAmount = totalAmount - remainingAmount
 
-        // Collection rate
         const collectionRate = totalAmount > 0 ? (paidAmount / totalAmount) * 100 : 0
-
-        // Late rate
         const lateRate = installments.length > 0 ? (lateInstallmentsCount / installments.length) * 100 : 0
 
         return [
             {
                 title: 'Créditos Activos',
                 value: String(activeCreditsCount),
-                subtitle: `de ${totalCreditsCount} totales`,
+                subtitle: `de ${totalCreditsCount} total${totalCreditsCount !== 1 ? 'es' : ''}`,
                 icon: CreditCard,
-                color: 'blue',
+                color: 'blue' as const,
                 progress: totalCreditsCount > 0 ? (activeCreditsCount / totalCreditsCount) * 100 : 0,
-                trend: null
+                trend: null,
+                progressLabel: 'Activos vs total'
             },
             {
                 title: 'Saldo Pendiente',
                 value: formatCurrency(remainingAmount),
                 subtitle: `${collectionRate.toFixed(1)}% cobrado`,
                 icon: Banknote,
-                color: 'green',
+                color: 'green' as const,
                 progress: collectionRate,
-                trend: collectionRate > 70 ? 'up' : 'down'
+                trend: (collectionRate > 70 ? 'up' : 'down') as 'up' | 'down',
+                progressLabel: 'Tasa de cobranza'
             },
             {
                 title: 'Cuotas Pendientes',
                 value: String(pendingInstallmentsCount),
                 subtitle: `${installments.filter(i => i.status === 'paid').length} pagadas`,
                 icon: CalendarClock,
-                color: 'orange',
+                color: 'orange' as const,
                 progress: installments.length > 0 ? ((installments.length - pendingInstallmentsCount) / installments.length) * 100 : 0,
-                trend: null
+                trend: null,
+                progressLabel: 'Completadas vs total'
             },
             {
                 title: 'Cuotas Atrasadas',
                 value: String(lateInstallmentsCount),
                 subtitle: `${lateRate.toFixed(1)}% de morosidad`,
                 icon: AlertTriangle,
-                color: 'red',
+                color: 'red' as const,
                 progress: 100 - lateRate,
-                trend: lateRate < 10 ? 'up' : 'down'
+                trend: (lateRate < 10 ? 'up' : 'down') as 'up' | 'down',
+                progressLabel: 'Salud de cartera'
             }
         ]
     }, [credits, installments])
 
     const colorClasses = {
         blue: {
-            bg: 'from-blue-500/10 to-blue-600/5 dark:from-blue-500/20 dark:to-blue-600/10',
+            card: 'border-blue-200/80 dark:border-blue-800/60',
+            iconWrap: 'bg-blue-100 dark:bg-blue-900/40',
             icon: 'text-blue-600 dark:text-blue-400',
-            progress: 'bg-blue-600',
-            border: 'border-blue-200 dark:border-blue-800'
+            bar: 'bg-blue-500',
+            barTrack: 'bg-blue-100 dark:bg-blue-900/30',
+            value: 'text-blue-700 dark:text-blue-300',
         },
         green: {
-            bg: 'from-green-500/10 to-green-600/5 dark:from-green-500/20 dark:to-green-600/10',
+            card: 'border-green-200/80 dark:border-green-800/60',
+            iconWrap: 'bg-green-100 dark:bg-green-900/40',
             icon: 'text-green-600 dark:text-green-400',
-            progress: 'bg-green-600',
-            border: 'border-green-200 dark:border-green-800'
+            bar: 'bg-green-500',
+            barTrack: 'bg-green-100 dark:bg-green-900/30',
+            value: 'text-green-700 dark:text-green-300',
         },
         orange: {
-            bg: 'from-orange-500/10 to-orange-600/5 dark:from-orange-500/20 dark:to-orange-600/10',
+            card: 'border-orange-200/80 dark:border-orange-800/60',
+            iconWrap: 'bg-orange-100 dark:bg-orange-900/40',
             icon: 'text-orange-600 dark:text-orange-400',
-            progress: 'bg-orange-600',
-            border: 'border-orange-200 dark:border-orange-800'
+            bar: 'bg-orange-500',
+            barTrack: 'bg-orange-100 dark:bg-orange-900/30',
+            value: 'text-orange-700 dark:text-orange-300',
         },
         red: {
-            bg: 'from-red-500/10 to-red-600/5 dark:from-red-500/20 dark:to-red-600/10',
+            card: 'border-red-200/80 dark:border-red-800/60',
+            iconWrap: 'bg-red-100 dark:bg-red-900/40',
             icon: 'text-red-600 dark:text-red-400',
-            progress: 'bg-red-600',
-            border: 'border-red-200 dark:border-red-800'
+            bar: 'bg-red-500',
+            barTrack: 'bg-red-100 dark:bg-red-900/30',
+            value: 'text-red-700 dark:text-red-300',
         }
     }
 
     return (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {stats.map((stat, idx) => {
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {stats.map((stat) => {
                 const Icon = stat.icon
-                const colors = colorClasses[stat.color as keyof typeof colorClasses]
+                const c = colorClasses[stat.color]
+                const pct = Math.round(stat.progress)
 
                 return (
                     <Card
                         key={stat.title}
-                        className={`border-2 ${colors.border} bg-gradient-to-br ${colors.bg} shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105`}
+                        className={`border ${c.card} bg-white dark:bg-white/[0.03] shadow-sm hover:shadow-md transition-shadow duration-200`}
                     >
-                        <CardContent className="p-6">
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                    <p className="text-sm font-medium text-muted-foreground mb-1">
-                                        {stat.title}
-                                    </p>
-                                    <div className="flex items-baseline gap-2">
-                                        <h3 className="text-3xl font-bold tracking-tight">
-                                            {stat.value}
-                                        </h3>
-                                        {stat.trend && (
-                                            <span className={`flex items-center text-xs ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-                                                {stat.trend === 'up' ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        {stat.subtitle}
-                                    </p>
+                        <CardContent className="p-5">
+                            <div className="flex items-start justify-between mb-4">
+                                <div className={`p-2.5 rounded-xl ${c.iconWrap}`}>
+                                    <Icon className={`h-5 w-5 ${c.icon}`} />
                                 </div>
-                                <div className={`p-3 rounded-xl bg-white/50 dark:bg-black/20 ${colors.icon}`}>
-                                    <Icon className="h-6 w-6" />
-                                </div>
+                                {stat.trend && (
+                                    <span className={`inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full ${stat.trend === 'up' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                                        {stat.trend === 'up'
+                                            ? <TrendingUp className="h-3 w-3" />
+                                            : <TrendingDown className="h-3 w-3" />}
+                                        {stat.trend === 'up' ? 'Bien' : 'Revisar'}
+                                    </span>
+                                )}
                             </div>
 
-                            {/* Visual Progress Bar */}
-                            <div className="mt-4 space-y-2">
-                                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                    <span>Progreso</span>
-                                    <span className="font-medium">{Math.round(stat.progress)}%</span>
+                            <p className="text-xs font-medium text-muted-foreground mb-1 uppercase tracking-wide">{stat.title}</p>
+                            <p className={`text-2xl font-bold tracking-tight mb-0.5 ${c.value}`}>{stat.value}</p>
+                            <p className="text-xs text-muted-foreground">{stat.subtitle}</p>
+
+                            {/* Progress bar */}
+                            <div className="mt-4 space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{stat.progressLabel}</span>
+                                    <span className="text-[11px] font-semibold tabular-nums text-muted-foreground">{pct}%</span>
                                 </div>
-                                <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div className={`h-1.5 rounded-full overflow-hidden ${c.barTrack}`}>
                                     <div
-                                        className={`h-full ${colors.progress} transition-all duration-500 ease-out rounded-full`}
-                                        style={{ width: `${stat.progress}%` }}
+                                        className={`h-full ${c.bar} rounded-full transition-all duration-700 ease-out`}
+                                        style={{ width: `${pct}%` }}
                                     />
                                 </div>
                             </div>
@@ -162,4 +159,3 @@ export function CreditStats({ credits, installments }: CreditStatsProps) {
         </div>
     )
 }
-

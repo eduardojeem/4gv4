@@ -1,7 +1,8 @@
-﻿import { Badge } from '@/components/ui/badge'
+'use client'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { CalendarClock, CheckCircle, AlertCircle, Clock, User } from 'lucide-react'
+import { CalendarClock, CheckCircle, AlertCircle, Clock } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { InstallmentRow, CreditRow } from '@/hooks/use-credits'
 import {
@@ -20,11 +21,50 @@ interface UpcomingInstallmentsProps {
     onMarkPaid: (id: string, method: string, amount: number) => void
 }
 
-type GroupedInstallments = {
-    overdue: InstallmentRow[]
-    today: InstallmentRow[]
-    thisWeek: InstallmentRow[]
-    later: InstallmentRow[]
+type GroupKey = 'overdue' | 'today' | 'thisWeek' | 'later'
+
+type GroupedInstallments = Record<GroupKey, InstallmentRow[]>
+
+const groupConfig: Record<GroupKey, {
+    label: string
+    Icon: typeof AlertCircle
+    iconColor: string
+    headerBg: string
+    rowBorder: string
+    dotColor: string
+}> = {
+    overdue: {
+        label: 'Vencidas',
+        Icon: AlertCircle,
+        iconColor: 'text-red-600 dark:text-red-400',
+        headerBg: 'bg-red-50/60 dark:bg-red-900/10 border-red-200 dark:border-red-800',
+        rowBorder: 'border-red-200/60 dark:border-red-800/40 hover:border-red-300 dark:hover:border-red-700',
+        dotColor: 'bg-red-500',
+    },
+    today: {
+        label: 'Vencen hoy',
+        Icon: Clock,
+        iconColor: 'text-orange-600 dark:text-orange-400',
+        headerBg: 'bg-orange-50/60 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800',
+        rowBorder: 'border-orange-200/60 dark:border-orange-800/40 hover:border-orange-300 dark:hover:border-orange-700',
+        dotColor: 'bg-orange-500',
+    },
+    thisWeek: {
+        label: 'Esta semana',
+        Icon: CalendarClock,
+        iconColor: 'text-amber-600 dark:text-amber-400',
+        headerBg: 'bg-amber-50/60 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800',
+        rowBorder: 'border-amber-200/60 dark:border-amber-800/40 hover:border-amber-300 dark:hover:border-amber-700',
+        dotColor: 'bg-amber-500',
+    },
+    later: {
+        label: 'Próximamente',
+        Icon: CalendarClock,
+        iconColor: 'text-blue-600 dark:text-blue-400',
+        headerBg: 'bg-blue-50/60 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800',
+        rowBorder: 'border-blue-200/60 dark:border-blue-800/40 hover:border-blue-300 dark:hover:border-blue-700',
+        dotColor: 'bg-blue-500',
+    },
 }
 
 export function UpcomingInstallments({
@@ -32,218 +72,153 @@ export function UpcomingInstallments({
     creditById,
     onMarkPaid,
 }: UpcomingInstallmentsProps) {
-    // Local state for inline inputs in the list
-    const [paymentMethodByInstallment, setPaymentMethodByInstallment] = useState<
-        Record<string, string>
-    >({})
-    const [amountPaidByInstallment, setAmountPaidByInstallment] = useState<
-        Record<string, number>
-    >({})
+    const [methodByInstallment, setMethodByInstallment] = useState<Record<string, string>>({})
+    const [amountByInstallment, setAmountByInstallment] = useState<Record<string, string>>({})
+    const [errorById, setErrorById] = useState<Record<string, string>>({})
 
-    // Group installments by urgency
-    const groupedInstallments = useMemo<GroupedInstallments>(() => {
+    const grouped = useMemo<GroupedInstallments>(() => {
         const now = new Date()
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
         const endOfWeek = new Date(today)
         endOfWeek.setDate(today.getDate() + 7)
 
-        const groups: GroupedInstallments = {
-            overdue: [],
-            today: [],
-            thisWeek: [],
-            later: []
-        }
-
+        const groups: GroupedInstallments = { overdue: [], today: [], thisWeek: [], later: [] }
         installments.forEach(i => {
-            const dueDate = new Date(i.due_date)
-            dueDate.setHours(0, 0, 0, 0)
-
-            if (dueDate < today) {
-                groups.overdue.push(i)
-            } else if (dueDate.getTime() === today.getTime()) {
-                groups.today.push(i)
-            } else if (dueDate <= endOfWeek) {
-                groups.thisWeek.push(i)
-            } else {
-                groups.later.push(i)
-            }
+            const d = new Date(i.due_date); d.setHours(0, 0, 0, 0)
+            if (d < today) groups.overdue.push(i)
+            else if (d.getTime() === today.getTime()) groups.today.push(i)
+            else if (d <= endOfWeek) groups.thisWeek.push(i)
+            else groups.later.push(i)
         })
-
         return groups
     }, [installments])
 
-    const getUrgencyStyle = (group: keyof GroupedInstallments) => {
-        switch (group) {
-            case 'overdue':
-                return {
-                    badge: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border-red-300',
-                    border: 'border-red-300 dark:border-red-700',
-                    icon: AlertCircle,
-                    iconColor: 'text-red-600'
-                }
-            case 'today':
-                return {
-                    badge: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 border-orange-300',
-                    border: 'border-orange-300 dark:border-orange-700',
-                    icon: Clock,
-                    iconColor: 'text-orange-600'
-                }
-            case 'thisWeek':
-                return {
-                    badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-300',
-                    border: 'border-yellow-300 dark:border-yellow-700',
-                    icon: CalendarClock,
-                    iconColor: 'text-yellow-600'
-                }
-            default:
-                return {
-                    badge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 border-blue-300',
-                    border: 'border-blue-300 dark:border-blue-700',
-                    icon: CalendarClock,
-                    iconColor: 'text-blue-600'
-                }
+    const handlePay = (i: InstallmentRow) => {
+        const rawAmount = amountByInstallment[i.id]
+        const amount = rawAmount !== undefined && rawAmount !== '' ? Number(rawAmount) : i.amount
+        const method = methodByInstallment[i.id] || 'cash'
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setErrorById(prev => ({ ...prev, [i.id]: 'El monto debe ser mayor a 0' }))
+            return
         }
+        setErrorById(prev => ({ ...prev, [i.id]: '' }))
+        onMarkPaid(i.id, method, amount)
     }
 
-    const renderInstallmentGroup = (
-        title: string,
-        items: InstallmentRow[],
-        group: keyof GroupedInstallments
-    ) => {
+    const renderGroup = (key: GroupKey) => {
+        const items = grouped[key]
         if (items.length === 0) return null
-
-        const style = getUrgencyStyle(group)
-        const UrgencyIcon = style.icon
+        const cfg = groupConfig[key]
+        const Icon = cfg.Icon
+        const groupTotal = items
+            .filter(i => i.status !== 'paid')
+            .reduce((sum, i) => sum + (Number(i.amount || 0) - Math.min(Number(i.amount_paid || 0), Number(i.amount || 0))), 0)
 
         return (
-            <div key={group} className="mb-6">
-                <div className="flex items-center gap-2 mb-3">
-                    <UrgencyIcon className={`h-5 w-5 ${style.iconColor}`} />
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
-                        {title}
-                    </h3>
-                    <Badge variant="secondary" className="ml-auto">{items.length}</Badge>
+            <div key={key} className="space-y-2">
+                {/* Group header */}
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${cfg.headerBg}`}>
+                    <Icon className={`h-4 w-4 ${cfg.iconColor} flex-shrink-0`} />
+                    <span className={`text-xs font-semibold uppercase tracking-wide ${cfg.iconColor}`}>{cfg.label}</span>
+                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{items.length}</Badge>
+                    <span className="ml-auto text-xs font-bold tabular-nums text-foreground">{formatCurrency(groupTotal)}</span>
                 </div>
-                <div className="space-y-3">
-                    {items.map((i) => {
-                        const progressPct = typeof i.amount_paid === 'number' && i.amount > 0
-                            ? Math.min(100, Math.round((Number(i.amount_paid) / Number(i.amount)) * 100))
-                            : 0
+
+                {/* Installment rows */}
+                <div className="space-y-1.5 pl-2">
+                    {items.map(i => {
+                        const paid = Number(i.amount_paid || 0)
+                        const amt = Number(i.amount || 0)
+                        const pct = amt > 0 ? Math.min(100, Math.round((paid / amt) * 100)) : 0
+                        const customerName = creditById[i.credit_id]?.customer_name || 'Cliente'
+                        const isPaid = i.status === 'paid'
+                        const errorMsg = errorById[i.id]
 
                         return (
                             <div
                                 key={i.id}
-                                className={`border-2 ${style.border} rounded-xl bg-white dark:bg-gray-800/50 hover:shadow-md transition-all duration-300 overflow-hidden`}
+                                className={`rounded-xl border bg-white dark:bg-white/[0.03] transition-all duration-150 overflow-hidden ${cfg.rowBorder} ${isPaid ? 'opacity-60' : ''}`}
                             >
                                 <div className="p-4">
-                                    <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
-                                        {/* Left: Installment Info */}
-                                        <div className="flex-1 min-w-0 w-full">
-                                            <div className="flex items-start justify-between mb-2">
+                                    <div className="flex flex-col lg:flex-row items-start lg:items-center gap-3">
+                                        {/* Left info */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between gap-2 mb-1">
                                                 <div>
-                                                    <div className="flex items-center gap-1.5 mb-1">
-                                                        <User className="h-3.5 w-3.5 text-muted-foreground" />
-                                                        <span className="font-medium text-sm truncate max-w-[200px]" title={creditById[i.credit_id]?.customer_name}>
-                                                            {creditById[i.credit_id]?.customer_name || 'Cliente desconocido'}
-                                                        </span>
-                                                    </div>
-                                                    <p className="font-semibold text-base">
-                                                        Cuota #{i.installment_number}
-                                                    </p>
-                                                    <p className="text-xs text-muted-foreground mt-1">
-                                                        Vence: {new Date(i.due_date).toLocaleDateString('es-AR', {
-                                                            weekday: 'short',
-                                                            year: 'numeric',
-                                                            month: 'short',
-                                                            day: 'numeric'
-                                                        })}
+                                                    <p className="text-sm font-semibold truncate leading-tight">{customerName}</p>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                                        Cuota <span className="font-mono font-bold">#{i.installment_number}</span>
+                                                        {' · '}
+                                                        {new Date(i.due_date).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })}
                                                     </p>
                                                 </div>
-                                                <div className="flex flex-col items-end gap-1">
-                                                    <p className="font-bold text-lg">
-                                                        {formatCurrency(i.amount)}
-                                                    </p>
-                                                    {typeof i.amount_paid === 'number' && i.amount_paid > 0 && (
-                                                        <p className="text-xs text-green-600 dark:text-green-400">
-                                                            {formatCurrency(i.amount_paid)} pagado
-                                                        </p>
-                                                    )}
+                                                <div className="text-right shrink-0">
+                                                    <p className="text-base font-bold tabular-nums">{formatCurrency(i.amount)}</p>
+                                                    {paid > 0 && <p className="text-[11px] text-green-600 dark:text-green-400 tabular-nums">{formatCurrency(paid)} pag.</p>}
                                                 </div>
                                             </div>
 
-                                            {/* Progress Bar */}
-                                            {progressPct > 0 && (
-                                                <div className="mt-3">
-                                                    <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                                                        <span>Progreso del pago</span>
-                                                        <span className="font-medium">{progressPct}%</span>
+                                            {/* Progress bar (only if partial payment) */}
+                                            {pct > 0 && pct < 100 && (
+                                                <div className="mt-2 space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[10px] text-muted-foreground">Progreso parcial</span>
+                                                        <span className="text-[10px] font-medium text-muted-foreground tabular-nums">{pct}%</span>
                                                     </div>
-                                                    <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
-                                                            style={{ width: `${progressPct}%` }}
-                                                        />
+                                                    <div className="h-1.5 w-full bg-muted/60 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
 
-                                        {/* Right: Actions */}
-                                        <div className="w-full lg:w-auto">
-                                            {i.status === 'pending' || i.status === 'late' ? (
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <Select
-                                                        value={paymentMethodByInstallment[i.id] || 'cash'}
-                                                        onValueChange={(v) =>
-                                                            setPaymentMethodByInstallment((prev) => ({
-                                                                ...prev,
-                                                                [i.id]: v,
-                                                            }))
-                                                        }
-                                                    >
-                                                        <SelectTrigger className="w-[120px] h-9 text-sm">
-                                                            <SelectValue placeholder="Método" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="cash">Efectivo</SelectItem>
-                                                            <SelectItem value="card">Tarjeta</SelectItem>
-                                                            <SelectItem value="transfer">Transferencia</SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <Input
-                                                        type="number"
-                                                        className="w-[120px] h-9 text-sm"
-                                                        value={
-                                                            typeof amountPaidByInstallment[i.id] === 'number'
-                                                                ? String(amountPaidByInstallment[i.id])
-                                                                : ''
-                                                        }
-                                                        placeholder={String(i.amount)}
-                                                        onChange={(e) => {
-                                                            const v = Number(e.target.value)
-                                                            setAmountPaidByInstallment((prev) => ({
-                                                                ...prev,
-                                                                [i.id]: v,
-                                                            }))
-                                                        }}
-                                                    />
-                                                    <Button
-                                                        variant="default"
-                                                        size="sm"
-                                                        className="h-9 bg-green-600 hover:bg-green-700 px-4"
-                                                        onClick={() => {
-                                                            const method = paymentMethodByInstallment[i.id] || 'cash'
-                                                            const amount = amountPaidByInstallment[i.id] !== undefined ? amountPaidByInstallment[i.id] : i.amount
-                                                            onMarkPaid(i.id, method, amount)
-                                                        }}
-                                                    >
-                                                        Pagar
-                                                    </Button>
+                                        {/* Right: action */}
+                                        <div className="w-full lg:w-auto shrink-0">
+                                            {isPaid ? (
+                                                <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 text-sm font-medium">
+                                                    <CheckCircle className="h-4 w-4" />
+                                                    Pagada
                                                 </div>
                                             ) : (
-                                                <div className="flex items-center justify-center text-green-600 gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                                                    <CheckCircle className="h-5 w-5" />
-                                                    <span className="text-sm font-medium">Pagada</span>
+                                                <div className="space-y-1.5">
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <Select
+                                                            value={methodByInstallment[i.id] || 'cash'}
+                                                            onValueChange={v => setMethodByInstallment(prev => ({ ...prev, [i.id]: v }))}
+                                                        >
+                                                            <SelectTrigger className="w-[130px] h-8 text-xs">
+                                                                <SelectValue placeholder="Método" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="cash">Efectivo</SelectItem>
+                                                                <SelectItem value="card">Tarjeta</SelectItem>
+                                                                <SelectItem value="transfer">Transferencia</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Input
+                                                            type="number"
+                                                            min={0.01}
+                                                            step={0.01}
+                                                            className={`w-[110px] h-8 text-xs ${errorMsg ? 'border-red-400' : ''}`}
+                                                            value={amountByInstallment[i.id] ?? ''}
+                                                            placeholder={String(i.amount)}
+                                                            onChange={e => {
+                                                                setAmountByInstallment(prev => ({ ...prev, [i.id]: e.target.value }))
+                                                                if (errorMsg) setErrorById(prev => ({ ...prev, [i.id]: '' }))
+                                                            }}
+                                                        />
+                                                        <Button
+                                                            size="sm"
+                                                            className="h-8 px-4 bg-green-600 hover:bg-green-700 text-white text-xs"
+                                                            onClick={() => handlePay(i)}
+                                                        >
+                                                            Cobrar
+                                                        </Button>
+                                                    </div>
+                                                    {errorMsg && (
+                                                        <p className="text-[11px] text-red-500 dark:text-red-400">{errorMsg}</p>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -257,31 +232,37 @@ export function UpcomingInstallments({
         )
     }
 
+    const hasContent = Object.values(grouped).some(g => g.length > 0)
+
     return (
-        <Card className="border-0 shadow-lg bg-gradient-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <CalendarClock className="h-5 w-5 text-orange-600" />
+        <Card className="border border-border/60 shadow-sm bg-white dark:bg-white/[0.02]">
+            <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                    <CalendarClock className="h-4.5 w-4.5 text-orange-600" />
                     Próximas Cuotas
-                    <Badge variant="secondary" className="ml-2">{installments.length}</Badge>
+                    <Badge variant="secondary" className="ml-1 text-xs">{installments.length}</Badge>
+                    {grouped.overdue.length > 0 && (
+                        <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800 animate-pulse">
+                            {grouped.overdue.length} vencida{grouped.overdue.length > 1 ? 's' : ''}
+                        </span>
+                    )}
                 </CardTitle>
             </CardHeader>
-            <CardContent>
-                {installments.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                        <CalendarClock className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No hay cuotas pendientes</p>
+            <CardContent className="pt-0">
+                {!hasContent ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center rounded-xl border border-dashed border-border">
+                        <div className="p-3 rounded-full bg-muted/50 mb-2">
+                            <CalendarClock className="h-7 w-7 text-muted-foreground/50" />
+                        </div>
+                        <p className="text-sm font-medium text-muted-foreground">Sin cuotas pendientes</p>
+                        <p className="text-xs text-muted-foreground/70 mt-1">Todas las cuotas están al día</p>
                     </div>
                 ) : (
-                    <div>
-                        {renderInstallmentGroup('Vencidas', groupedInstallments.overdue, 'overdue')}
-                        {renderInstallmentGroup('Vencen hoy', groupedInstallments.today, 'today')}
-                        {renderInstallmentGroup('Esta semana', groupedInstallments.thisWeek, 'thisWeek')}
-                        {renderInstallmentGroup('Próximamente', groupedInstallments.later, 'later')}
+                    <div className="space-y-6">
+                        {(Object.keys(groupConfig) as GroupKey[]).map(key => renderGroup(key))}
                     </div>
                 )}
             </CardContent>
         </Card>
     )
 }
-

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import {
     Dialog,
@@ -7,35 +7,33 @@ import {
     DialogTitle,
     DialogDescription,
 } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table'
 import { formatCurrency } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
 import {
-    CreditCard,
-    User,
-    Calendar,
-    DollarSign,
-    Percent,
-    TrendingUp,
-    Clock,
-    CheckCircle,
-    Receipt,
-    FileText,
-    FileDown,
-    X,
-    Printer
+    Calendar, DollarSign, Percent, TrendingUp,
+    Clock, CheckCircle, Receipt, FileText, FileDown, Printer,
+    AlertCircle, CalendarClock
 } from 'lucide-react'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface InstallmentItem {
+    id: string
+    installment_number: number
+    due_date: string
+    amount: number
+    status: 'pending' | 'paid' | 'late'
+    paid_at?: string | null
+    amount_paid?: number | null
+}
+
+interface PaymentItem {
+    id: string
+    amount: number
+    payment_method?: string
+    created_at?: string
+}
 
 interface CreditDetailDialogProps {
     open: boolean
@@ -51,527 +49,339 @@ interface CreditDetailDialogProps {
         status: 'active' | 'completed' | 'defaulted' | 'cancelled'
         customer_code?: string
     } | null
-    installments: Array<{
-        id: string
-        installment_number: number
-        due_date: string
-        amount: number
-        status: 'pending' | 'paid' | 'late'
-        paid_at?: string | null
-        amount_paid?: number | null
-    }>
-    payments: Array<{
-        id: string
-        amount: number
-        payment_method?: string
-        created_at?: string
-    }>
+    installments: InstallmentItem[]
+    payments: PaymentItem[]
     remainingBalance: number
     paidAmount: number
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const STATUS_LABEL: Record<string, string> = {
+    active: 'Activo', completed: 'Completado', defaulted: 'Moroso', cancelled: 'Cancelado'
+}
+const STATUS_STYLE: Record<string, string> = {
+    active:    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800',
+    completed: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800',
+    defaulted: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800',
+    cancelled: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+}
+const METHOD_LABEL: Record<string, string> = {
+    cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia'
+}
+const METHOD_STYLE: Record<string, string> = {
+    cash:     'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    card:     'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    transfer: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+}
+
+function getInstallmentStatus(inst: InstallmentItem): 'paid' | 'late' | 'overdue' | 'pending' {
+    if (inst.status === 'paid') return 'paid'
+    if (inst.status === 'late') return 'late'
+    if (new Date(inst.due_date) < new Date()) return 'overdue'
+    return 'pending'
+}
+
+const INST_STATUS_CONFIG = {
+    paid:    { label: 'Pagada',    Icon: CheckCircle,   color: 'text-green-600 dark:text-green-400',  rowBg: '' },
+    late:    { label: 'Atrasada',  Icon: AlertCircle,   color: 'text-red-600 dark:text-red-400',      rowBg: 'bg-red-50/40 dark:bg-red-900/10' },
+    overdue: { label: 'Vencida',   Icon: Clock,         color: 'text-orange-600 dark:text-orange-400',rowBg: 'bg-orange-50/40 dark:bg-orange-900/10' },
+    pending: { label: 'Pendiente', Icon: CalendarClock, color: 'text-blue-600 dark:text-blue-400',    rowBg: '' },
+}
+
+function avatarGradient(name: string) {
+    const g = ['from-blue-500 to-blue-700','from-violet-500 to-violet-700','from-emerald-500 to-emerald-700',
+               'from-rose-500 to-rose-700','from-amber-500 to-amber-700','from-cyan-500 to-cyan-700']
+    let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff
+    return g[Math.abs(h) % g.length]
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 export function CreditDetailDialog({
-    open,
-    onOpenChange,
-    credit,
-    installments,
-    payments,
-    remainingBalance,
-    paidAmount
+    open, onOpenChange, credit, installments, payments, remainingBalance, paidAmount
 }: CreditDetailDialogProps) {
     if (!credit) return null
 
     const totalAmount = paidAmount + remainingBalance
     const progressPct = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0
-
     const endDate = new Date(credit.start_date)
     endDate.setMonth(endDate.getMonth() + credit.term_months)
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'active': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-            case 'completed': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-            case 'defaulted': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-            case 'cancelled': return 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
-        }
-    }
+    const initials = credit.customer_name.split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    const gradient = avatarGradient(credit.customer_name)
+    const lateCount = installments.filter(i => getInstallmentStatus(i) === 'late' || getInstallmentStatus(i) === 'overdue').length
 
-    const getInstallmentStatusLabel = (installment: { status: string; due_date: string }) => {
-        if (installment.status === 'paid') return 'Pagada'
-        if (installment.status === 'late') return 'Atrasada'
-        if (new Date(installment.due_date) < new Date()) return 'Vencida'
-        return 'Pendiente'
-    }
-
-    const getInstallmentStatusColor = (installment: any) => {
-        if (installment.status === 'paid') return 'text-green-600'
-        if (installment.status === 'late') return 'text-red-600'
-        if (new Date(installment.due_date) < new Date()) return 'text-orange-600'
-        return 'text-blue-600'
-    }
-
-    // CSV: usa tabulación como separador para que Excel abra correctamente cada columna
+    // ─── Export helpers ───────────────────────────────────────────────────────
     const exportDetailCsv = () => {
         const esc = (v: string | number) => {
-            const text = String(v ?? '').replace(/\r?\n/g, ' ').replace(/\t/g, ' ').trim()
-            return /^[=+\-@]/.test(text) ? `'${text}` : text
+            const t = String(v ?? '').replace(/\r?\n/g, ' ').replace(/\t/g, ' ').trim()
+            return /^[=+\-@]/.test(t) ? `'${t}` : t
         }
         const row = (...cols: (string | number)[]) => cols.map(esc).join('\t') + '\n'
-
-        const statusLabel = credit.status === 'active' ? 'Activo' : credit.status === 'completed' ? 'Completado' : credit.status === 'defaulted' ? 'Moroso' : 'Cancelado'
-
-        let tsv = ''
-
-        // === Info del crédito ===
-        tsv += 'DETALLE DEL CRÉDITO\n'
-        tsv += row('Campo', 'Valor')
+        let tsv = 'DETALLE DEL CRÉDITO\n'
+        tsv += row('Campo','Valor')
         tsv += row('ID Crédito', formatCreditId(credit.id))
         tsv += row('Cliente', credit.customer_name)
-        tsv += row('Estado', statusLabel)
+        tsv += row('Estado', STATUS_LABEL[credit.status] ?? credit.status)
         tsv += row('Principal', credit.principal)
-        tsv += row('Tasa de interés', `${credit.interest_rate}%`)
+        tsv += row('Tasa', `${credit.interest_rate}%`)
         tsv += row('Plazo', `${credit.term_months} meses`)
-        tsv += row('Fecha de inicio', new Date(credit.start_date).toLocaleDateString('es-AR'))
-        tsv += row('Fecha de fin estimada', endDate.toLocaleDateString('es-AR'))
-        tsv += row('Monto pagado', paidAmount)
-        tsv += row('Saldo pendiente', remainingBalance)
+        tsv += row('Inicio', new Date(credit.start_date).toLocaleDateString('es-AR'))
+        tsv += row('Fin estimado', endDate.toLocaleDateString('es-AR'))
+        tsv += row('Pagado', paidAmount)
+        tsv += row('Pendiente', remainingBalance)
         tsv += row('Progreso', `${progressPct}%`)
-        tsv += '\n'
-
-        // === Cuotas ===
-        tsv += 'CUOTAS\n'
-        tsv += row('N° Cuota', 'Vencimiento', 'Monto Cuota', 'Monto Pagado', 'Estado')
-        installments.forEach(i => {
-            tsv += row(
-                i.installment_number,
-                new Date(i.due_date).toLocaleDateString('es-AR'),
-                i.amount,
-                i.amount_paid ?? 0,
-                getInstallmentStatusLabel(i)
-            )
-        })
-        tsv += '\n'
-
-        // === Pagos ===
-        tsv += 'PAGOS REGISTRADOS\n'
-        tsv += row('Fecha y Hora', 'Método de Pago', 'Monto')
-        if (payments.length === 0) {
-            tsv += row('Sin pagos registrados', '', '')
-        } else {
-            payments.forEach(p => {
-                const methodLabel = p.payment_method === 'cash' ? 'Efectivo' : p.payment_method === 'card' ? 'Tarjeta' : p.payment_method === 'transfer' ? 'Transferencia' : p.payment_method || '-'
-                tsv += row(
-                    p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-',
-                    methodLabel,
-                    p.amount
-                )
-            })
-        }
-
+        tsv += '\nCUOTAS\n' + row('N°','Vencimiento','Monto','Pagado','Estado')
+        installments.forEach(i => tsv += row(i.installment_number, new Date(i.due_date).toLocaleDateString('es-AR'), i.amount, i.amount_paid ?? 0, INST_STATUS_CONFIG[getInstallmentStatus(i)].label))
+        tsv += '\nPAGOS\n' + row('Fecha','Método','Monto')
+        if (payments.length === 0) tsv += row('Sin pagos','','')
+        else payments.forEach(p => tsv += row(p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-', METHOD_LABEL[p.payment_method ?? ''] ?? p.payment_method ?? '-', p.amount))
         const blob = new Blob(['\uFEFF' + tsv], { type: 'text/tab-separated-values;charset=utf-8;' })
         const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `credito_${credit.id}_detalle.xls`
-        a.click()
+        const a = document.createElement('a'); a.href = url; a.download = `credito_${credit.id}_detalle.xls`; a.click()
         URL.revokeObjectURL(url)
     }
 
-    // PDF con jsPDF + AutoTable
     const generateDetailDoc = async () => {
         const { default: jsPDF } = await import('jspdf')
         const { default: autoTable } = await import('jspdf-autotable')
-
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
         const pageW = doc.internal.pageSize.getWidth()
-        const statusLabel = credit.status === 'active' ? 'Activo' : credit.status === 'completed' ? 'Completado' : credit.status === 'defaulted' ? 'Moroso' : 'Cancelado'
-
-        // --- Encabezado ---
-        doc.setFontSize(20)
-        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(18); doc.setFont('helvetica','bold')
         doc.text('Detalle del Crédito', pageW / 2, 18, { align: 'center' })
-
-        doc.setFontSize(10)
-        doc.setFont('helvetica', 'normal')
-        doc.setTextColor(100)
+        doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100)
         doc.text(`Generado el ${new Date().toLocaleString('es-AR')}`, pageW / 2, 24, { align: 'center' })
         doc.setTextColor(0)
-
-        // --- Info del crédito ---
-        autoTable(doc, {
-            startY: 30,
-            head: [['Campo', 'Valor']],
-            body: [
-                ['ID Crédito', formatCreditId(credit.id)],
-                ['Cliente', credit.customer_name],
-                ['Estado', statusLabel],
-                ['Principal', formatCurrency(credit.principal)],
-                ['Tasa de interés', `${credit.interest_rate}%`],
-                ['Plazo', `${credit.term_months} meses`],
-                ['Fecha de inicio', new Date(credit.start_date).toLocaleDateString('es-AR')],
-                ['Fecha de fin estimada', endDate.toLocaleDateString('es-AR')],
-                ['Monto pagado', formatCurrency(paidAmount)],
-                ['Saldo pendiente', formatCurrency(remainingBalance)],
-                ['Progreso', `${progressPct}%`],
-            ],
-            theme: 'grid',
-            headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
-            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 60 } },
-            margin: { left: 14, right: 14 },
-        })
-
-        // --- Cuotas ---
-        const afterInfo = (doc as any).lastAutoTable.finalY + 10
-        doc.setFontSize(13)
-        doc.setFont('helvetica', 'bold')
-        doc.text('Cuotas', 14, afterInfo)
-
-        autoTable(doc, {
-            startY: afterInfo + 5,
-            head: [['N°', 'Vencimiento', 'Monto Cuota', 'Monto Pagado', 'Estado']],
-            body: installments.map(i => [
-                i.installment_number,
-                new Date(i.due_date).toLocaleDateString('es-AR'),
-                formatCurrency(i.amount),
-                formatCurrency(i.amount_paid ?? 0),
-                getInstallmentStatusLabel(i),
-            ]),
-            theme: 'striped',
-            headStyles: { fillColor: [234, 88, 12], textColor: 255, fontStyle: 'bold' },
-            columnStyles: { 0: { halign: 'center', cellWidth: 15 } },
-            margin: { left: 14, right: 14 },
-        })
-
-        // --- Pagos ---
-        const afterInstallments = (doc as any).lastAutoTable.finalY + 10
-        doc.setFontSize(13)
-        doc.setFont('helvetica', 'bold')
-        doc.text('Pagos Registrados', 14, afterInstallments)
-
-        autoTable(doc, {
-            startY: afterInstallments + 5,
-            head: [['Fecha y Hora', 'Método', 'Monto']],
-            body: payments.length === 0
-                ? [['Sin pagos registrados', '', '']]
-                : payments.map(p => [
-                    p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-',
-                    p.payment_method === 'cash' ? 'Efectivo' : p.payment_method === 'card' ? 'Tarjeta' : p.payment_method === 'transfer' ? 'Transferencia' : p.payment_method || '-',
-                    formatCurrency(p.amount),
-                ]),
-            theme: 'striped',
-            headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
-            margin: { left: 14, right: 14 },
-        })
-
+        autoTable(doc, { startY: 30, head:[['Campo','Valor']], body:[
+            ['ID', formatCreditId(credit.id)],['Cliente', credit.customer_name],
+            ['Estado', STATUS_LABEL[credit.status] ?? credit.status],
+            ['Principal', formatCurrency(credit.principal)],['Tasa', `${credit.interest_rate}%`],
+            ['Plazo', `${credit.term_months} meses`],
+            ['Inicio', new Date(credit.start_date).toLocaleDateString('es-AR')],
+            ['Fin estimado', endDate.toLocaleDateString('es-AR')],
+            ['Pagado', formatCurrency(paidAmount)],['Pendiente', formatCurrency(remainingBalance)],
+            ['Progreso', `${progressPct}%`],
+        ], theme:'grid', headStyles:{fillColor:[37,99,235],textColor:255,fontStyle:'bold'},
+           columnStyles:{0:{fontStyle:'bold',cellWidth:60}}, margin:{left:14,right:14} })
+        const y1 = (doc as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
+        doc.setFontSize(12); doc.setFont('helvetica','bold'); doc.text('Cuotas', 14, y1)
+        autoTable(doc, { startY: y1+4, head:[['N°','Vencimiento','Monto','Pagado','Estado']],
+            body: installments.map(i => [i.installment_number, new Date(i.due_date).toLocaleDateString('es-AR'),
+                formatCurrency(i.amount), formatCurrency(i.amount_paid ?? 0), INST_STATUS_CONFIG[getInstallmentStatus(i)].label]),
+            theme:'striped', headStyles:{fillColor:[234,88,12],textColor:255,fontStyle:'bold'}, margin:{left:14,right:14} })
+        const y2 = (doc as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
+        doc.setFontSize(12); doc.setFont('helvetica','bold'); doc.text('Pagos Registrados', 14, y2)
+        autoTable(doc, { startY: y2+4, head:[['Fecha','Método','Monto']],
+            body: payments.length === 0 ? [['Sin pagos','-','-']] : payments.map(p => [
+                p.created_at ? new Date(p.created_at).toLocaleString('es-AR') : '-',
+                METHOD_LABEL[p.payment_method ?? ''] ?? p.payment_method ?? '-',
+                formatCurrency(p.amount)]),
+            theme:'striped', headStyles:{fillColor:[22,163,74],textColor:255,fontStyle:'bold'}, margin:{left:14,right:14} })
         return doc
     }
 
-    const exportDetailPdf = async () => {
-        if (!credit) return
-        const doc = await generateDetailDoc()
-        doc.save(`credito_${credit.id}_detalle.pdf`)
-    }
+    const exportDetailPdf = async () => { const doc = await generateDetailDoc(); doc.save(`credito_${credit.id}_detalle.pdf`) }
+    const printDetailPdf = async () => { const doc = await generateDetailDoc(); doc.autoPrint(); doc.output('dataurlnewwindow') }
 
-    const printDetailPdf = async () => {
-        if (!credit) return
-        const doc = await generateDetailDoc()
-        doc.autoPrint()
-        doc.output('dataurlnewwindow')
-    }
-
+    // ─── Render ───────────────────────────────────────────────────────────────
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <div className="flex items-start justify-between">
-                        <div>
-                            <DialogTitle className="flex items-center gap-2 text-2xl">
-                                <CreditCard className="h-6 w-6 text-blue-600" />
-                                Detalle del Crédito
-                            </DialogTitle>
-                            <DialogDescription className="mt-2">
-                                Información completa del crédito {formatCreditId(credit.id)}
-                            </DialogDescription>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
-                            <X className="h-4 w-4" />
-                        </Button>
-                    </div>
-                </DialogHeader>
+            <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0 gap-0">
 
-                <div className="space-y-6">
-                    {/* Credit Header Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Customer Info */}
-                        <div className="p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                                    <User className="h-5 w-5 text-blue-600" />
+                {/* ── Hero header ── */}
+                <div className="relative px-6 pt-6 pb-5 border-b border-border/60 bg-gradient-to-br from-blue-50/60 to-slate-50/40 dark:from-blue-900/10 dark:to-slate-800/20">
+                    <DialogHeader>
+                        <div className="flex items-start gap-4">
+                            {/* Avatar */}
+                            <div className={`flex-shrink-0 h-14 w-14 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-lg font-bold shadow-md select-none`}>
+                                {initials}
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <DialogTitle className="text-xl font-bold leading-tight">{credit.customer_name}</DialogTitle>
+                                        <DialogDescription className="text-xs font-mono mt-0.5">{formatCreditId(credit.id)} · {credit.customer_code || formatCustomerId(credit.customer_id)}</DialogDescription>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_STYLE[credit.status] ?? STATUS_STYLE.cancelled}`}>
+                                            {STATUS_LABEL[credit.status]}
+                                        </span>
+                                        {lateCount > 0 && (
+                                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 animate-pulse">
+                                                {lateCount} atrasada{lateCount > 1 ? 's' : ''}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="flex-1">
-                                    <p className="text-xs text-muted-foreground mb-1">Cliente</p>
-                                    <p className="font-semibold text-lg">{credit.customer_name}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">{credit.customer_code || formatCustomerId(credit.customer_id)}</p>
+
+                                {/* Progress bar */}
+                                <div className="mt-3 space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-green-600 dark:text-green-400 font-medium tabular-nums">{formatCurrency(paidAmount)} pagado</span>
+                                        <span className="font-bold tabular-nums">{progressPct}%</span>
+                                        <span className="text-muted-foreground tabular-nums">{formatCurrency(remainingBalance)} pendiente</span>
+                                    </div>
+                                    <div className="h-2.5 bg-white/60 dark:bg-black/20 rounded-full overflow-hidden border border-white/40">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full transition-all duration-700"
+                                            style={{ width: `${progressPct}%` }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                    </DialogHeader>
+                </div>
 
-                        {/* Credit Status */}
-                        <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
-                            <div className="flex items-start gap-3">
-                                <div className="p-2 bg-gray-100 dark:bg-gray-900/30 rounded-lg">
-                                    <FileText className="h-5 w-5 text-gray-600" />
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-xs text-muted-foreground mb-1">Estado</p>
-                                    <Badge className={`${getStatusColor(credit.status)} font-semibold mt-1`}>
-                                        {credit.status === 'active' ? 'Activo' :
-                                            credit.status === 'completed' ? 'Completado' :
-                                                credit.status === 'defaulted' ? 'Moroso' : 'Cancelado'}
-                                    </Badge>
-                                    <p className="text-xs text-muted-foreground mt-2">{formatCreditId(credit.id)}</p>
-                                </div>
+                <div className="p-6 space-y-5">
+                    {/* ── Metrics grid ── */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                            { label: 'Principal', value: formatCurrency(credit.principal), Icon: DollarSign, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' },
+                            { label: 'Tasa de interés', value: `${credit.interest_rate}%`, Icon: Percent, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800' },
+                            { label: 'Plazo', value: `${credit.term_months} m.`, Icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800' },
+                            { label: 'Progreso', value: `${progressPct}%`, Icon: TrendingUp, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' },
+                        ].map(({ label, value, Icon, color, bg }) => (
+                            <div key={label} className={`rounded-xl border p-3 ${bg}`}>
+                                <Icon className={`h-4 w-4 ${color} mb-1.5`} />
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+                                <p className={`text-base font-bold tabular-nums ${color}`}>{value}</p>
                             </div>
-                        </div>
+                        ))}
                     </div>
 
-                    {/* Financial Summary */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="text-center p-4 rounded-lg bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/20 dark:to-green-900/10 border border-green-200 dark:border-green-800">
-                            <DollarSign className="h-5 w-5 text-green-600 mx-auto mb-2" />
-                            <p className="text-xs text-muted-foreground">Principal</p>
-                            <p className="text-lg font-bold text-green-700 dark:text-green-400">
-                                {formatCurrency(credit.principal)}
-                            </p>
-                        </div>
-
-                        <div className="text-center p-4 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-900/10 border border-blue-200 dark:border-blue-800">
-                            <Percent className="h-5 w-5 text-blue-600 mx-auto mb-2" />
-                            <p className="text-xs text-muted-foreground">Tasa de Interés</p>
-                            <p className="text-lg font-bold text-blue-700 dark:text-blue-400">
-                                {credit.interest_rate}%
-                            </p>
-                        </div>
-
-                        <div className="text-center p-4 rounded-lg bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/20 dark:to-purple-900/10 border border-purple-200 dark:border-purple-800">
-                            <Calendar className="h-5 w-5 text-purple-600 mx-auto mb-2" />
-                            <p className="text-xs text-muted-foreground">Plazo</p>
-                            <p className="text-lg font-bold text-purple-700 dark:text-purple-400">
-                                {credit.term_months} meses
-                            </p>
-                        </div>
-
-                        <div className="text-center p-4 rounded-lg bg-gradient-to-br from-orange-50 to-orange-100/50 dark:from-orange-950/20 dark:to-orange-900/10 border border-orange-200 dark:border-orange-800">
-                            <TrendingUp className="h-5 w-5 text-orange-600 mx-auto mb-2" />
-                            <p className="text-xs text-muted-foreground">Progreso</p>
-                            <p className="text-lg font-bold text-orange-700 dark:text-orange-400">
-                                {progressPct}%
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Progress Bar */}
-                    <div>
-                        <div className="flex items-center justify-between mb-2 text-sm">
-                            <span className="font-medium">Progreso del Crédito</span>
-                            <span className="text-muted-foreground">{progressPct}%</span>
-                        </div>
-                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-500"
-                                style={{ width: `${progressPct}%` }}
-                            />
-                        </div>
-                        <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-                            <span>Pagado: {formatCurrency(paidAmount)}</span>
-                            <span>Pendiente: {formatCurrency(remainingBalance)}</span>
-                        </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Dates */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                            <Calendar className="h-5 w-5 text-blue-600" />
+                    {/* ── Dates row ── */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/30">
+                            <Calendar className="h-4 w-4 text-blue-600 shrink-0" />
                             <div>
-                                <p className="text-xs text-muted-foreground">Fecha de Inicio</p>
-                                <p className="font-semibold">
-                                    {new Date(credit.start_date).toLocaleDateString('es-AR', {
-                                        day: '2-digit',
-                                        month: 'long',
-                                        year: 'numeric'
-                                    })}
-                                </p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Inicio</p>
+                                <p className="text-sm font-semibold">{new Date(credit.start_date).toLocaleDateString('es-AR', { day:'2-digit', month:'long', year:'numeric' })}</p>
                             </div>
                         </div>
-
-                        <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                            <Clock className="h-5 w-5 text-orange-600" />
+                        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/30">
+                            <Clock className="h-4 w-4 text-orange-600 shrink-0" />
                             <div>
-                                <p className="text-xs text-muted-foreground">Fecha de Finalización</p>
-                                <p className="font-semibold">
-                                    {endDate.toLocaleDateString('es-AR', {
-                                        day: '2-digit',
-                                        month: 'long',
-                                        year: 'numeric'
-                                    })}
-                                </p>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Fin estimado</p>
+                                <p className="text-sm font-semibold">{endDate.toLocaleDateString('es-AR', { day:'2-digit', month:'long', year:'numeric' })}</p>
                             </div>
                         </div>
                     </div>
 
-                    <Separator />
-
-                    {/* Tabs for Installments and Payments */}
+                    {/* ── Tabs ── */}
                     <Tabs defaultValue="installments" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2">
-                            <TabsTrigger value="installments">
-                                <Receipt className="h-4 w-4 mr-2" />
-                                Cuotas ({installments.length})
+                        <TabsList className="grid w-full grid-cols-2 h-9">
+                            <TabsTrigger value="installments" className="text-xs gap-1.5">
+                                <Receipt className="h-3.5 w-3.5" />
+                                Cuotas
+                                <span className="ml-1 text-[10px] font-bold bg-muted rounded-full px-1.5">{installments.length}</span>
                             </TabsTrigger>
-                            <TabsTrigger value="payments">
-                                <DollarSign className="h-4 w-4 mr-2" />
-                                Pagos ({payments.length})
+                            <TabsTrigger value="payments" className="text-xs gap-1.5">
+                                <DollarSign className="h-3.5 w-3.5" />
+                                Pagos
+                                <span className="ml-1 text-[10px] font-bold bg-muted rounded-full px-1.5">{payments.length}</span>
                             </TabsTrigger>
                         </TabsList>
 
-                        {/* Installments Tab */}
-                        <TabsContent value="installments" className="mt-4">
-                            <div className="border rounded-lg overflow-hidden">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="w-16">#</TableHead>
-                                            <TableHead>Vencimiento</TableHead>
-                                            <TableHead className="text-right">Monto</TableHead>
-                                            <TableHead className="text-right">Pagado</TableHead>
-                                            <TableHead className="text-center">Estado</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {installments.map((inst) => (
-                                            <TableRow key={inst.id}>
-                                                <TableCell className="font-medium">{inst.installment_number}</TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                                                        {new Date(inst.due_date).toLocaleDateString('es-AR')}
+                        {/* Installments */}
+                        <TabsContent value="installments" className="mt-3">
+                            <div className="rounded-xl border border-border/50 overflow-hidden">
+                                {/* Header */}
+                                <div className="hidden sm:grid grid-cols-[auto_1fr_auto_auto_140px] gap-3 items-center px-4 py-2 bg-muted/40 border-b border-border/40 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                    <span className="w-8 text-center">#</span>
+                                    <span>Vencimiento</span>
+                                    <span className="text-right w-24">Monto</span>
+                                    <span className="text-right w-24">Pagado</span>
+                                    <span className="text-center">Estado / Progreso</span>
+                                </div>
+                                {installments.map((inst, idx) => {
+                                    const s = getInstallmentStatus(inst)
+                                    const cfg = INST_STATUS_CONFIG[s]
+                                    const StatusIcon = cfg.Icon
+                                    const paid = Number(inst.amount_paid || 0)
+                                    const amt = Number(inst.amount || 0)
+                                    const pct = amt > 0 ? Math.min(100, Math.round((paid / amt) * 100)) : 0
+                                    const rowBg = cfg.rowBg || (idx % 2 === 0 ? 'bg-white dark:bg-white/[0.02]' : 'bg-slate-50/50 dark:bg-white/[0.01]')
+                                    return (
+                                        <div key={inst.id} className={`grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto_140px] gap-2 sm:gap-3 items-center px-4 py-3 border-b border-border/30 last:border-0 transition-colors ${rowBg}`}>
+                                            <span className="w-8 text-center text-sm font-mono font-bold text-muted-foreground">#{inst.installment_number}</span>
+                                            <div>
+                                                <p className="text-sm font-medium">{new Date(inst.due_date).toLocaleDateString('es-AR', { day:'2-digit', month:'short', year:'numeric' })}</p>
+                                                {/* Mobile: amount inline */}
+                                                <p className="text-xs text-muted-foreground sm:hidden tabular-nums">{formatCurrency(inst.amount)}</p>
+                                            </div>
+                                            <div className="hidden sm:block text-right w-24">
+                                                <p className="text-sm font-semibold tabular-nums">{formatCurrency(inst.amount)}</p>
+                                            </div>
+                                            <div className="hidden sm:block text-right w-24">
+                                                <p className={`text-sm tabular-nums ${paid > 0 ? 'text-green-600 dark:text-green-400 font-medium' : 'text-muted-foreground'}`}>
+                                                    {formatCurrency(paid)}
+                                                </p>
+                                            </div>
+                                            <div className="col-span-2 sm:col-span-1 w-full sm:w-[140px] space-y-1">
+                                                <div className={`flex items-center gap-1 ${cfg.color}`}>
+                                                    <StatusIcon className="h-3 w-3 shrink-0" />
+                                                    <span className="text-[11px] font-semibold">{cfg.label}</span>
+                                                </div>
+                                                {pct > 0 && (
+                                                    <div className="h-1.5 bg-muted/60 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
                                                     </div>
-                                                </TableCell>
-                                                <TableCell className="text-right font-semibold">
-                                                    {formatCurrency(inst.amount)}
-                                                </TableCell>
-                                                <TableCell className="text-right text-green-600">
-                                                    {formatCurrency(inst.amount_paid || 0)}
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <div className={`flex items-center justify-center gap-1 ${getInstallmentStatusColor(inst)}`}>
-                                                        {inst.status === 'paid' ? (
-                                                            <>
-                                                                <CheckCircle className="h-3 w-3" />
-                                                                <span className="text-xs font-medium">Pagada</span>
-                                                            </>
-                                                        ) : inst.status === 'late' ? (
-                                                            <>
-                                                                <X className="h-3 w-3" />
-                                                                <span className="text-xs font-medium">Atrasada</span>
-                                                            </>
-                                                        ) : new Date(inst.due_date) < new Date() ? (
-                                                            <>
-                                                                <Clock className="h-3 w-3" />
-                                                                <span className="text-xs font-medium">Vencida</span>
-                                                            </>
-                                                        ) : (
-                                                            <span className="text-xs font-medium">Pendiente</span>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )
+                                })}
                             </div>
                         </TabsContent>
 
-                        {/* Payments Tab */}
-                        <TabsContent value="payments" className="mt-4">
+                        {/* Payments */}
+                        <TabsContent value="payments" className="mt-3">
                             {payments.length === 0 ? (
-                                <div className="text-center py-12 text-muted-foreground">
-                                    <Receipt className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                                    <p>No hay pagos registrados</p>
+                                <div className="flex flex-col items-center justify-center py-14 rounded-xl border border-dashed border-border text-center">
+                                    <div className="p-3 rounded-full bg-muted/50 mb-2"><Receipt className="h-6 w-6 text-muted-foreground/50" /></div>
+                                    <p className="text-sm font-medium text-muted-foreground">Sin pagos registrados</p>
                                 </div>
                             ) : (
-                                <div className="border rounded-lg overflow-hidden">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Fecha</TableHead>
-                                                <TableHead>Método</TableHead>
-                                                <TableHead className="text-right">Monto</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {payments.map((payment) => (
-                                                <TableRow key={payment.id}>
-                                                    <TableCell>
-                                                        {payment.created_at
-                                                            ? new Date(payment.created_at).toLocaleString('es-AR', {
-                                                                day: '2-digit',
-                                                                month: 'short',
-                                                                year: 'numeric',
-                                                                hour: '2-digit',
-                                                                minute: '2-digit'
-                                                            })
-                                                            : '-'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline" className="text-xs">
-                                                            {payment.payment_method === 'cash' ? '💵 Efectivo' :
-                                                                payment.payment_method === 'card' ? '💳 Tarjeta' :
-                                                                    payment.payment_method === 'transfer' ? '🏦 Transferencia' :
-                                                                        payment.payment_method || '-'}
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="text-right font-semibold text-green-600">
-                                                        {formatCurrency(payment.amount)}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
+                                <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/30">
+                                    {payments.map((p, idx) => {
+                                        const mStyle = METHOD_STYLE[p.payment_method ?? ''] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                        const mLabel = METHOD_LABEL[p.payment_method ?? ''] ?? p.payment_method ?? '—'
+                                        const rowBg = idx % 2 === 0 ? 'bg-white dark:bg-white/[0.02]' : 'bg-slate-50/50 dark:bg-white/[0.01]'
+                                        return (
+                                            <div key={p.id} className={`flex items-center gap-3 px-4 py-3 hover:bg-green-50/20 dark:hover:bg-green-900/10 transition-colors ${rowBg}`}>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium">{p.created_at ? new Date(p.created_at).toLocaleString('es-AR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'}</p>
+                                                </div>
+                                                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${mStyle}`}>{mLabel}</span>
+                                                <p className="text-sm font-bold text-green-600 dark:text-green-400 tabular-nums shrink-0">+{formatCurrency(p.amount)}</p>
+                                            </div>
+                                        )
+                                    })}
+                                    {/* Total row */}
+                                    <div className="flex items-center justify-between px-4 py-3 bg-muted/40">
+                                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total recibido</span>
+                                        <span className="text-base font-bold text-green-600 dark:text-green-400 tabular-nums">
+                                            {formatCurrency(payments.reduce((s, p) => s + Number(p.amount || 0), 0))}
+                                        </span>
+                                    </div>
                                 </div>
                             )}
                         </TabsContent>
                     </Tabs>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-3 pt-4">
-                        <Button
-                            variant="outline"
-                            className="flex-1"
-                            onClick={exportDetailCsv}
-                        >
-                            <FileText className="h-4 w-4 mr-2" />
-                            Exportar Excel
+                    {/* ── Actions ── */}
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/40">
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={exportDetailCsv}>
+                            <FileText className="h-3.5 w-3.5" /> Excel
                         </Button>
-                        <Button
-                            variant="outline"
-                            className="flex-1 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/20"
-                            onClick={exportDetailPdf}
-                        >
-                            <FileDown className="h-4 w-4 mr-2" />
-                            PDF
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5 border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400" onClick={exportDetailPdf}>
+                            <FileDown className="h-3.5 w-3.5" /> PDF
                         </Button>
-                        <Button
-                            variant="outline"
-                            className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/20"
-                            onClick={printDetailPdf}
-                        >
-                            <Printer className="h-4 w-4 mr-2" />
-                            Imprimir
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400" onClick={printDetailPdf}>
+                            <Printer className="h-3.5 w-3.5" /> Imprimir
                         </Button>
-                        <Button className="flex-1 bg-blue-600 hover:bg-blue-700" onClick={() => onOpenChange(false)}>
+                        <Button size="sm" className="h-8 ml-auto" onClick={() => onOpenChange(false)}>
                             Cerrar
                         </Button>
                     </div>
@@ -580,4 +390,3 @@ export function CreditDetailDialog({
         </Dialog>
     )
 }
-

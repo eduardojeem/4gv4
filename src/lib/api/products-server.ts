@@ -1,6 +1,6 @@
 
 import { createClient } from '@/lib/supabase/server'
-import { PublicProduct, Category as PublicCategory } from '@/types/public'
+import { PublicProduct } from '@/types/public'
 import { resolveWholesaleAccessForUser } from '@/lib/auth/wholesale-access'
 import { SupabaseClient } from '@supabase/supabase-js'
 
@@ -209,7 +209,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
   const uniqueBrands = new Set<string>()
   productsData?.forEach((p) => {
-    const brandName = (p.brand_details as { name: string } | null)?.name || (p.brand as string)
+    const brandName = (p.brand_details as { name: string }[] | null)?.[0]?.name || (p.brand as string)
     if (brandName) uniqueBrands.add(brandName)
   })
 
@@ -319,7 +319,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
   if (error || !data) return null
 
   // Transform
-  const p = data as unknown as DBProduct
+  const p = data as unknown as { id: string; name: string; sku: string; description: string; brand: string; sale_price: number; wholesale_price?: number; stock_quantity: number; is_active: boolean; featured: boolean; image_url: string | null; images: string[] | null; unit_measure: string | null; barcode: string | null; category: { id: string; name: string } | { id: string; name: string }[] | null; brand_details: { name: string }[] | null }
   const category = Array.isArray(p.category) ? p.category[0] : p.category
   const cat = category as { id: string; name: string } | null
 
@@ -328,7 +328,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     name: p.name,
     sku: p.sku,
     description: p.description,
-    brand: p.brand_details?.name || p.brand,
+    brand: p.brand_details?.[0]?.name || p.brand,
     category: cat ? { id: cat.id, name: cat.name } : undefined,
     sale_price: p.sale_price,
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
