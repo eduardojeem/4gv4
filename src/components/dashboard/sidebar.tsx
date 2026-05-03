@@ -10,7 +10,8 @@ import { config } from '@/lib/config'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { LogoutDialog } from '@/components/profile/logout-dialog'
+import type { LucideIcon } from 'lucide-react'
 import {
   LayoutDashboard,
   Users,
@@ -18,7 +19,6 @@ import {
   Truck,
   ShoppingCart,
   Wrench,
-  UserCheck,
   BarChart3,
   Settings,
   Palette,
@@ -34,8 +34,9 @@ import {
   LogOut
 } from 'lucide-react'
 
+type UserRole = 'admin' | 'vendedor' | 'tecnico'
+type NavItem = { name: string; href: string; icon: LucideIcon; roles: UserRole[]; description?: string }
 
-type NavItem = { name: string; href: string; icon: any; roles: Array<'admin' | 'vendedor' | 'tecnico'>; description?: string }
 const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: 'Principal',
@@ -79,18 +80,14 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
 export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { sidebarCollapsed: collapsed, toggleSidebar, userRole, setUserRole } = useDashboardLayout()
+  const { sidebarCollapsed: collapsed, toggleSidebar } = useDashboardLayout()
   const { user, signOut } = useAuth()
   const [sidebarBadges, setSidebarBadges] = useState({ repairs: 0, lowStock: 0 })
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
 
-  // Load user role from AuthContext (which reads from user_roles — the source of truth)
-  useEffect(() => {
-    if (user?.role) {
-      setUserRole(user.role as typeof userRole)
-    }
-  }, [user?.role, setUserRole])
+  // Read role directly from auth context — single source of truth
+  const userRole = (user?.role ?? 'vendedor') as UserRole
 
   // Load dynamic badge counts
   useEffect(() => {
@@ -122,22 +119,29 @@ export const Sidebar = memo(function Sidebar() {
     }
   }
 
+  // Development mode check
+  const isDev = process.env.NODE_ENV === 'development'
+
   const filteredGroups = useMemo(() => {
-    const effectiveRole = userRole as 'admin' | 'vendedor' | 'tecnico'
-    const filterFn = (item: NavItem) => item.roles.includes(effectiveRole)
+    const filterFn = (item: NavItem) => (isDev ? true : item.roles.includes(userRole))
     return NAV_GROUPS.map(group => ({
       label: group.label,
       items: group.items.filter(filterFn)
     })).filter(group => group.items.length > 0)
-  }, [userRole])
+  }, [userRole, isDev])
 
   return (
     <>
       {/* Mobile Overlay */}
       {!collapsed && (
-        <button
+        <div
           className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={toggleSidebar}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') toggleSidebar()
+          }}
+          role="button"
+          tabIndex={0}
           aria-label="Cerrar menú"
         />
       )}
@@ -156,7 +160,7 @@ export const Sidebar = memo(function Sidebar() {
                 <Smartphone className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-foreground">{config.company.name}</h1>
+                <h1 className="text-lg font-bold text-foreground">4G celulares</h1>
                 <p className="text-xs text-muted-foreground">Sistema POS</p>
               </div>
             </div>
@@ -177,7 +181,7 @@ export const Sidebar = memo(function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-4 overflow-y-auto scroll-smooth" aria-label="Navegación del dashboard">
+        <nav className="flex-1 p-4 space-y-4 overflow-y-auto scroll-smooth">
           {filteredGroups.map(group => (
             <div key={group.label} className="space-y-2">
               {!collapsed && (
@@ -243,7 +247,7 @@ export const Sidebar = memo(function Sidebar() {
                   {user?.profile?.name || 'Usuario'}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {userRole}
+                  {isDev ? 'todos (dev)' : userRole}
                 </p>
               </div>
               <Button
@@ -261,29 +265,14 @@ export const Sidebar = memo(function Sidebar() {
         )}
       </div>
 
-      {/* Logout confirmation dialog */}
-      <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
-        <AlertDialogContent className="max-w-sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Cerrar sesión?</AlertDialogTitle>
-            <AlertDialogDescription>
-              ¿Estás seguro que quieres salir del sistema?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSigningOut}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleQuickLogout}
-              disabled={isSigningOut}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {isSigningOut ? 'Cerrando...' : 'Sí, cerrar sesión'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Shared logout dialog */}
+      <LogoutDialog
+        open={logoutOpen}
+        loading={isSigningOut}
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={handleQuickLogout}
+      />
     </>
   )
 })
 export default Sidebar
-

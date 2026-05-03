@@ -1,7 +1,8 @@
 
 import { createClient } from '@/lib/supabase/server'
-import { PublicProduct } from '@/types/public'
+import { PublicProduct, Category as PublicCategory } from '@/types/public'
 import { resolveWholesaleAccessForUser } from '@/lib/auth/wholesale-access'
+import { SupabaseClient } from '@supabase/supabase-js'
 
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 
@@ -14,7 +15,7 @@ function sanitizeSearch(input: string): string {
 /** Resolve whether the current session belongs to a wholesale customer.
  *  Supports both legacy roles and explicit per-user permission. */
 export async function resolveWholesaleStatus(options?: {
-  supabase?: any
+  supabase?: SupabaseClient
   user?: { id: string; user_metadata?: Record<string, unknown> | null } | null
 }): Promise<{ isWholesale: boolean }> {
   const supabase = options?.supabase ?? (await createClient())
@@ -77,6 +78,25 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   } = filters
 
   const query = sanitizeSearch(rawQuery)
+
+  interface DBProduct {
+    id: string
+    name: string
+    sku: string
+    description: string | null
+    brand: string | null
+    sale_price: number
+    wholesale_price: number | null
+    stock_quantity: number
+    is_active: boolean
+    featured: boolean
+    image_url: string | null
+    images: string[] | null
+    unit_measure: string
+    barcode: string | null
+    category: { id: string; name: string } | { id: string; name: string }[] | null
+    brand_details: { name: string } | null
+  }
 
   // Resolve wholesale status — use caller-supplied value if available to avoid re-querying.
   let isWholesale = filters.isWholesale ?? false
@@ -154,7 +174,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   }
 
   // Transform to PublicProduct type - hide sensitive data
-  const publicProducts: PublicProduct[] = (products || []).map((p: any) => {
+  const publicProducts: PublicProduct[] = ((products as unknown as DBProduct[]) || []).map((p) => {
     const category = Array.isArray(p.category) ? p.category[0] : p.category
     const cat = category as { id: string; name: string } | null
     return {
@@ -166,7 +186,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       category: cat ? { id: cat.id, name: cat.name } : undefined,
       sale_price: p.sale_price as number,
       wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-      in_stock: (p.stock_quantity as number) > 0,
+      stock_quantity: (p.stock_quantity as number) ?? 0,
       is_active: p.is_active as boolean,
       featured: (p.featured as boolean) || false,
       image: Array.isArray(p.images)
@@ -188,8 +208,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     .or(isWholesale ? 'visibility.in.(public,wholesale)' : 'visibility.eq.public')
 
   const uniqueBrands = new Set<string>()
-  productsData?.forEach((p: any) => {
-    const brandName = p.brand_details?.name || p.brand
+  productsData?.forEach((p) => {
+    const brandName = (p.brand_details as { name: string } | null)?.name || (p.brand as string)
     if (brandName) uniqueBrands.add(brandName)
   })
 
@@ -205,7 +225,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     // Also apply visibility filter
     .or(isWholesale ? 'visibility.in.(public,wholesale)' : 'visibility.eq.public')
 
-  const prices = priceData?.map((p: any) => p[priceCol]).filter((p: number) => p > 0) || []
+  const prices = priceData?.map((p) => p[priceCol] as number).filter((p: number) => p > 0) || []
   const metaMinPrice = prices.length > 0 ? Math.floor(Math.min(...prices) / 5000) * 5000 : 0
   const metaMaxPrice = prices.length > 0 ? Math.ceil(Math.max(...prices) / 5000) * 5000 : MAX_PRICE
 
@@ -221,18 +241,28 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   }
 }
 
-export async function getPublicCategories() {
+interface DBCategory {
+  id: string
+  name: string
+  parent_id: string | null
+}
+
+interface CategoryWithSub extends DBCategory {
+  subcategories: CategoryWithSub[]
+}
+
+export async function getPublicCategories(): Promise<CategoryWithSub[]> {
   const supabase = await createClient()
   const { data } = await supabase
     .from('categories')
     .select('id, name, parent_id')
     .order('name')
   
-  const categories = data || []
+  const categories = (data as DBCategory[]) || []
   
   // Organizar categorías en jerarquía
-  const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, subcategories: [] as any[] }]))
-  const rootCategories: any[] = []
+  const categoryMap = new Map(categories.map(cat => [cat.id, { ...cat, subcategories: [] } as CategoryWithSub]))
+  const rootCategories: CategoryWithSub[] = []
   
   categoryMap.forEach(category => {
     if (category.parent_id) {
@@ -289,7 +319,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
   if (error || !data) return null
 
   // Transform
-  const p = data as any
+  const p = data as unknown as DBProduct
   const category = Array.isArray(p.category) ? p.category[0] : p.category
   const cat = category as { id: string; name: string } | null
 
@@ -302,7 +332,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     category: cat ? { id: cat.id, name: cat.name } : undefined,
     sale_price: p.sale_price,
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-    in_stock: (p.stock_quantity as number) > 0,
+    stock_quantity: (p.stock_quantity as number) ?? 0,
     is_active: p.is_active,
     featured: p.featured || false,
     image: Array.isArray(p.images)

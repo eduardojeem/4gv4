@@ -16,11 +16,12 @@ import {
 import { useAuth } from '@/contexts/auth-context'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { Button } from '@/components/ui/button'
+import type { LucideIcon } from 'lucide-react'
 
 type NavItem = {
   name: string
   href: string
-  icon: any
+  icon: LucideIcon
   roles: Array<'admin' | 'vendedor' | 'tecnico'>
 }
 
@@ -39,11 +40,14 @@ export const MobileNav = memo(function MobileNav() {
   const { toggleSidebar } = useDashboardLayout()
   const userRole = (user?.role || 'vendedor') as 'admin' | 'vendedor' | 'tecnico'
 
+  // Development mode check
+  const isDev = process.env.NODE_ENV === 'development'
+
   const filteredItems = useMemo(() => {
     return MOBILE_NAV_ITEMS.filter(item => 
-      item.roles.includes(userRole)
-    ).slice(0, 5)
-  }, [userRole])
+      isDev ? true : item.roles.includes(userRole)
+    ).slice(0, 5) // Show max 5 items + menu button
+  }, [userRole, isDev])
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-border bg-background/95 backdrop-blur-sm supports-backdrop-filter:bg-background/80 shadow-lg">

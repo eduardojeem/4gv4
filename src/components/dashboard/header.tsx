@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, memo } from 'react'
+import { useEffect, useMemo, useState, useCallback, memo } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { usePathname, useRouter } from 'next/navigation'
@@ -16,13 +16,14 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Search, LogOut, User, Settings, Menu, Shield } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { NotificationSystem, useNotifications } from '@/components/dashboard/notification-system'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
+import { LogoutDialog } from '@/components/profile/logout-dialog'
 import { useAuth } from '@/contexts/auth-context'
-import { useProducts } from '@/hooks/useProducts'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useDashboardSearch } from '@/hooks/use-dashboard-search'
+import { createClient } from '@/lib/supabase/client'
+import { config } from '@/lib/config'
 import { cn } from '@/lib/utils'
 
 const GlobalSearch = dynamic(() => import('@/components/ui/global-search').then(mod => mod.GlobalSearch), { 
@@ -39,9 +40,6 @@ export const Header = memo(function Header() {
   const { toggleSidebar } = useDashboardLayout()
   const { search } = useDashboardSearch()
   const { user, signOut } = useAuth()
-  
-  // Products logic for notifications
-  const { products, loadProducts } = useProducts()
 
   // Notifications logic
   const { 
@@ -54,27 +52,29 @@ export const Header = memo(function Header() {
   } = useNotifications()
   const shouldTrackStock = user?.role === 'admin' || user?.role === 'vendedor'
 
-  // Load products periodically to check for low stock
+  // Lean low-stock check — only fetches aggregate data, not all products
+  const fetchLowStockNotifications = useCallback(async () => {
+    if (!shouldTrackStock || !config.supabase.isConfigured) return
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('products')
+        .select('id, name, stock_quantity, min_stock')
+        .eq('is_active', true)
+        .lte('stock_quantity', 10) // pre-filter: only potentially low-stock products
+      if (data && data.length > 0) {
+        generateStockNotifications(data as Parameters<typeof generateStockNotifications>[0])
+      }
+    } catch { /* ignore */ }
+  }, [shouldTrackStock, generateStockNotifications])
+
+  // Check low stock periodically
   useEffect(() => {
     if (!shouldTrackStock) return
-
-    // Initial load
-    loadProducts({ is_active: true })
-
-    // Check every 10 minutes
-    const interval = setInterval(() => {
-      loadProducts({ is_active: true })
-    }, 10 * 60 * 1000)
-
+    fetchLowStockNotifications()
+    const interval = setInterval(fetchLowStockNotifications, 10 * 60 * 1000)
     return () => clearInterval(interval)
-  }, [loadProducts, shouldTrackStock])
-
-  // Generate notifications when products change
-  useEffect(() => {
-    if (shouldTrackStock && products.length > 0) {
-      generateStockNotifications(products)
-    }
-  }, [products, generateStockNotifications, shouldTrackStock])
+  }, [fetchLowStockNotifications, shouldTrackStock])
 
   // Prefetch critical routes
   useEffect(() => {
@@ -344,62 +344,12 @@ export const Header = memo(function Header() {
         </div>
       </div>
 
-      {/* Modern Logout Modal */}
-      <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
-        <AlertDialogContent className="max-w-[400px] p-0 overflow-hidden border-none shadow-2xl">
-          <div className="bg-white dark:bg-zinc-950 p-6 flex flex-col items-center text-center">
-
-            {/* Enhanced Icon Header */}
-            <div className="relative w-24 h-24 mb-6 group cursor-default">
-              {/* Outer animated ring */}
-              <div className="absolute inset-0 bg-red-500/10 rounded-full animate-[ping_2s_ease-out_infinite]" />
-
-              {/* Background layers */}
-              <div className="absolute inset-0 bg-linear-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-900/10 rounded-full transition-transform duration-500 group-hover:scale-105" />
-
-              {/* Icon container */}
-              <div className="absolute inset-2 bg-white dark:bg-zinc-900 rounded-full flex items-center justify-center border-4 border-red-50 dark:border-red-900/30 shadow-inner">
-                <LogOut className="h-10 w-10 text-red-500 dark:text-red-400 ml-1 transition-all duration-300 group-hover:translate-x-1 group-hover:text-red-600" />
-              </div>
-
-              {/* Status indicator */}
-              <div className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full border-[3px] border-white dark:border-zinc-950 shadow-sm" />
-            </div>
-
-            <AlertDialogHeader className="mb-2">
-              <AlertDialogTitle className="text-2xl font-bold text-center">
-                ¿Cerrar sesión?
-              </AlertDialogTitle>
-              <AlertDialogDescription className="text-center text-muted-foreground text-base mt-2">
-                Hola <span className="font-semibold text-foreground">{user?.profile?.name?.split(' ')[0] || 'Usuario'}</span>, ¿estás seguro que quieres salir? Tendrás que iniciar sesión nuevamente para acceder.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-
-            <AlertDialogFooter className="w-full sm:justify-center gap-3 mt-6 flex-col-reverse sm:flex-row">
-              <AlertDialogCancel
-                className="w-full sm:w-auto mt-0 border-gray-200 hover:bg-gray-50 hover:text-gray-900"
-                disabled={loading}
-              >
-                Cancelar
-              </AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleLogout}
-                disabled={loading}
-                className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white shadow-md shadow-red-500/20"
-              >
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Cerrando...</span>
-                  </div>
-                ) : (
-                  'Sí, cerrar sesión'
-                )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <LogoutDialog
+        open={logoutOpen}
+        loading={loading}
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={handleLogout}
+      />
     </header>
   )
 })

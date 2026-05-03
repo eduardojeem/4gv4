@@ -167,7 +167,7 @@ export function StatsOverview() {
           supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
           supabase.from('repairs').select('id', { count: 'exact' }).in('status', ['recibido', 'diagnostico', 'reparacion']),
           supabase.from('products').select('stock_quantity'),
-          supabase.from('products').select('id', { count: 'exact' }).lte('stock_quantity', 5) // Asumiendo 5 como bajo stock genérico o usar min_stock si es posible
+          supabase.from('products').select('stock_quantity, min_stock').gt('stock_quantity', 0) // for correct low-stock calculation
         ])
 
         // Calculate Sales
@@ -227,7 +227,7 @@ export function StatsOverview() {
           },
           {
             title: 'Stock Bajo',
-            value: (lowStock.count || 0).toString(),
+            value: (lowStock.data || []).filter(p => Number(p.stock_quantity ?? 0) <= Number(p.min_stock ?? 5)).length.toString(),
             change: 'Requiere reabastecer',
             changeType: 'decrease' as const,
             icon: <AlertTriangle className="h-4 w-4" />

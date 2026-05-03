@@ -6,8 +6,6 @@ interface DashboardLayoutContextValue {
     sidebarCollapsed: boolean
     toggleSidebar: () => void
     setSidebarCollapsed: (collapsed: boolean) => void
-    userRole: 'admin' | 'vendedor' | 'tecnico' | 'cliente'
-    setUserRole: (role: 'admin' | 'vendedor' | 'tecnico' | 'cliente') => void
 }
 
 const DashboardLayoutContext = createContext<DashboardLayoutContextValue | null>(null)
@@ -21,11 +19,7 @@ export function useDashboardLayout() {
 }
 
 export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
-    // Sidebar collapsed state with localStorage persistence
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-
-    // User role state
-    const [userRole, setUserRole] = useState<'admin' | 'vendedor' | 'tecnico' | 'cliente'>('vendedor')
 
     // Load preferences from localStorage on mount
     useEffect(() => {
@@ -57,9 +51,7 @@ export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
         sidebarCollapsed,
         toggleSidebar,
         setSidebarCollapsed,
-        userRole,
-        setUserRole,
-    }), [sidebarCollapsed, toggleSidebar, userRole])
+    }), [sidebarCollapsed, toggleSidebar])
 
     return (
         <DashboardLayoutContext.Provider value={value}>

@@ -170,7 +170,7 @@ export default function DashboardPage() {
   const [isPending, startTransition] = useTransition()
   const supabase = useMemo(() => createClient(), [])
   const [loadingStats, setLoadingStats] = useState(true)
-  const [lastRefresh, setLastRefresh] = useState<number>(0)
+  const [lastRefresh, setLastRefresh] = useState<number>(-Infinity)
   const [stats, setStats] = useState<KpiStat[]>([
     { title: "Ventas del Día", value: "-", change: { value: 0, label: "cargando...", type: "increase" }, icon: Banknote, color: "green", href: "/dashboard/reports" },
     { title: "Órdenes Activas", value: "-", change: { value: 0, label: "cargando...", type: "increase" }, icon: ShoppingCart, color: "blue", href: "/dashboard/pos" },
@@ -232,7 +232,7 @@ export default function DashboardPage() {
       const lowStockCount = (productsStock || []).filter(p => {
         const sq = Number(p.stock_quantity ?? 0)
         const ms = Number(p.min_stock ?? 5)
-        return sq <= ms
+        return sq > 0 && sq <= ms
       }).length
 
       // Build 7-day trend

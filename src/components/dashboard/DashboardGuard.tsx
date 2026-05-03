@@ -23,7 +23,10 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
   const isClientOrNoRole = !role || role === 'cliente'
 
   useEffect(() => {
-    if (!loading && (!user || isClientOrNoRole)) {
+    if (loading) return
+    if (!user) {
+      router.replace('/login')
+    } else if (isClientOrNoRole) {
       router.replace('/inicio')
     }
   }, [user, loading, isClientOrNoRole, router])
