@@ -28,7 +28,7 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function checkUser() {
-    const email = 'jeem101595@gmail.com';
+    const email = 'admin@example.com'; // Replace with actual admin email
     console.log(`Checking user: ${email}`);
 
     // 1. Get Profile

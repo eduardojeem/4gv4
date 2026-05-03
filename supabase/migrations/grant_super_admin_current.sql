@@ -3,7 +3,7 @@ DO $$
 DECLARE
   target_user_id UUID;
 BEGIN
-  SELECT id INTO target_user_id FROM auth.users WHERE lower(email) = lower('jeem101595@gmail.com');
+  SELECT id INTO target_user_id FROM auth.users WHERE lower(email) = lower('admin@example.com'); -- Replace with actual admin email
 
   IF target_user_id IS NOT NULL THEN
     -- Upsert rol en user_roles

@@ -13,7 +13,7 @@ async function main() {
 
   const args = process.argv.slice(2)
   const emailArg = args.find(a => a.startsWith('--email='))
-  const email = emailArg ? emailArg.split('=')[1] : 'jeem101595@gmail.com'
+  const email = emailArg ? emailArg.split('=')[1] : 'admin@example.com'
 
   if (!email || !email.includes('@')) {
     console.error('Email inválido. Usa: node scripts/grant-super-admin.js --email=usuario@example.com')

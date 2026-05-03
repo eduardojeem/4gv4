@@ -7,7 +7,7 @@ export default function CheckUserPage() {
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [email, setEmail] = useState('jeem101595@gmail.com')
+  const [email, setEmail] = useState('admin@example.com')
 
   const checkUser = useCallback(async () => {
     setLoading(true)

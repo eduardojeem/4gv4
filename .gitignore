@@ -182,3 +182,15 @@ next.config.*.ts
 public/sw.js
 public/workbox-*.js
 public/worker-*.js
+
+# Temporary analysis/debug files at root
+/chunk-analysis.json
+/current_schema.sql
+/current_schema_dump.sql
+/tsc_output.txt
+/test-wa.cjs
+/test-zod.ts
+/IMPLEMENTACION_QR_COMPLETA.md
+
+# Duplicate middleware (already tracked at root)
+# middleware.ts is tracked — this prevents accidental duplicates
