@@ -85,36 +85,12 @@ export const Sidebar = memo(function Sidebar() {
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
 
-  // Load user role from Supabase on mount
+  // Load user role from AuthContext (which reads from user_roles — the source of truth)
   useEffect(() => {
-    // Only run on client side and if role is not already set or is default
-    if (typeof window === 'undefined') return
-    
-    const loadRole = async () => {
-      try {
-        const supabase = createClient()
-        // Check session first to avoid unnecessary calls
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session?.user) return
-
-        const user = session.user
-        // Fallback to metadata role if present
-        let role = (user?.user_metadata?.role as any) as typeof userRole | undefined
-        if (config.supabase.isConfigured && user?.id) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .maybeSingle()
-          role = (profile?.role as any) || role
-        }
-        setUserRole((role as any) || 'vendedor')
-      } catch {
-        // In demo mode or if error, keep default
-      }
+    if (user?.role) {
+      setUserRole(user.role as typeof userRole)
     }
-    loadRole()
-  }, [setUserRole])
+  }, [user?.role, setUserRole])
 
   // Load dynamic badge counts
   useEffect(() => {
@@ -146,29 +122,22 @@ export const Sidebar = memo(function Sidebar() {
     }
   }
 
-  // Development mode check
-  const isDev = process.env.NODE_ENV === 'development'
-  
   const filteredGroups = useMemo(() => {
-    const filterFn = (item: NavItem) => (isDev ? true : item.roles.includes(userRole as 'admin' | 'vendedor' | 'tecnico'))
+    const effectiveRole = userRole as 'admin' | 'vendedor' | 'tecnico'
+    const filterFn = (item: NavItem) => item.roles.includes(effectiveRole)
     return NAV_GROUPS.map(group => ({
       label: group.label,
       items: group.items.filter(filterFn)
     })).filter(group => group.items.length > 0)
-  }, [userRole, isDev])
+  }, [userRole])
 
   return (
     <>
       {/* Mobile Overlay */}
       {!collapsed && (
-        <div
+        <button
           className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={toggleSidebar}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') toggleSidebar()
-          }}
-          role="button"
-          tabIndex={0}
           aria-label="Cerrar menú"
         />
       )}
@@ -187,7 +156,7 @@ export const Sidebar = memo(function Sidebar() {
                 <Smartphone className="h-6 w-6 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-foreground">4G celulares</h1>
+                <h1 className="text-lg font-bold text-foreground">{config.company.name}</h1>
                 <p className="text-xs text-muted-foreground">Sistema POS</p>
               </div>
             </div>
@@ -208,7 +177,7 @@ export const Sidebar = memo(function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-4 overflow-y-auto scroll-smooth">
+        <nav className="flex-1 p-4 space-y-4 overflow-y-auto scroll-smooth" aria-label="Navegación del dashboard">
           {filteredGroups.map(group => (
             <div key={group.label} className="space-y-2">
               {!collapsed && (
@@ -274,7 +243,7 @@ export const Sidebar = memo(function Sidebar() {
                   {user?.profile?.name || 'Usuario'}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {isDev ? 'todos (dev)' : userRole}
+                  {userRole}
                 </p>
               </div>
               <Button

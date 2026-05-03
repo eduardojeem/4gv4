@@ -12,12 +12,8 @@ export function DemoBanner() {
     <Alert className="mb-4 border-blue-200 bg-blue-50 py-2">
       <Info className="h-4 w-4 text-blue-600" />
       <AlertDescription className="text-blue-800 text-sm">
-        <strong>Modo Demo:</strong> Esta es una demostración del sistema 4G celulares. 
+        <strong>Modo Demo:</strong> Esta es una demostración del sistema. 
         Para usar todas las funcionalidades, configura Supabase en el archivo .env.local
-        <br />
-        <span className="text-sm mt-1 block">
-          Credenciales demo: admin@demo.com / demo123
-        </span>
       </AlertDescription>
     </Alert>
   )

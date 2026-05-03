@@ -15,20 +15,24 @@ export function ScrollRestoration({ containerId = 'dashboard-main' }: ScrollRest
     if (!container) return
 
     // Restore scroll position on mount
-    const savedPosition = sessionStorage.getItem(`scroll-${pathname}`)
-    if (savedPosition) {
-      // Use setTimeout to ensure DOM is ready
-      setTimeout(() => {
-        container.scrollTop = parseInt(savedPosition, 10)
-      }, 0)
-    } else {
-      // Scroll to top for new pages
+    try {
+      const savedPosition = sessionStorage.getItem(`scroll-${pathname}`)
+      if (savedPosition) {
+        setTimeout(() => {
+          container.scrollTop = parseInt(savedPosition, 10)
+        }, 0)
+      } else {
+        container.scrollTop = 0
+      }
+    } catch {
       container.scrollTop = 0
     }
 
     // Save scroll position on scroll
     const handleScroll = () => {
-      sessionStorage.setItem(`scroll-${pathname}`, container.scrollTop.toString())
+      try {
+        sessionStorage.setItem(`scroll-${pathname}`, container.scrollTop.toString())
+      } catch { /* sessionStorage may be unavailable in private mode */ }
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })

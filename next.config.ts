@@ -119,9 +119,6 @@ const nextConfig: NextConfig = {
   // Configuración de compresión
   compress: true,
   
-  // Configuración de output para optimización (solo en producción para no penalizar el dev server)
-  ...(process.env.NODE_ENV === 'production' ? { output: 'standalone' } : {}),
-  
   // Configuración de PoweredByHeader
   poweredByHeader: false,
 
