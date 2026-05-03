@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from 'next/server'
 import { createAdminSupabase, mapUiRoleToDbRole } from '@/lib/supabase/admin'
 import { requireAdmin, getAuthResponse } from '@/lib/auth/require-auth'
+import { isValidEmail } from '@/lib/auth/password-validation'
 
 export async function POST(request: Request) {
   try {
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
       .trim()
       .toLowerCase()
 
-    if (!email || !/.+@.+\..+/.test(email)) {
+    if (!email || !isValidEmail(email)) {
       return NextResponse.json({ error: 'Email invalido' }, { status: 400 })
     }
 

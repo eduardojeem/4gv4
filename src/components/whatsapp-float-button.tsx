@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { MessageCircle, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
@@ -17,7 +18,9 @@ export function WhatsAppFloatButton({
 }: WhatsAppFloatButtonProps = {}) {
   const [isVisible, setIsVisible] = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
+  const [pingDone, setPingDone] = useState(false)
   const { contactBusiness } = useWhatsApp()
+  const pathname = usePathname()
 
   useEffect(() => {
     // Show button after a delay for better UX
@@ -37,16 +40,21 @@ export function WhatsAppFloatButton({
     }
   }, [isVisible])
 
+  // Stop ping animation after a few seconds to save GPU
+  useEffect(() => {
+    const timer = setTimeout(() => setPingDone(true), 4000)
+    return () => clearTimeout(timer)
+  }, [])
+
   // Check if button should be shown on current page
   const shouldShow = () => {
-    if (typeof window === 'undefined') return false
-    const currentPath = window.location.pathname
+    if (!pathname) return false
 
-    if (hideOnPages && hideOnPages.some(path => currentPath.startsWith(path))) {
+    if (hideOnPages && hideOnPages.some(path => pathname.startsWith(path))) {
       return false
     }
 
-    if (showOnPages && !showOnPages.some(path => currentPath.startsWith(path))) {
+    if (showOnPages && !showOnPages.some(path => pathname.startsWith(path))) {
       return false
     }
 
@@ -108,8 +116,10 @@ export function WhatsAppFloatButton({
             )}
             aria-label="Contactar por WhatsApp"
           >
-            {/* Pulse animation */}
-            <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-75" />
+            {/* Pulse animation — stops after a few seconds */}
+            {!pingDone && (
+              <span className="absolute inset-0 rounded-full bg-[#25D366] animate-ping opacity-75" />
+            )}
             
             {/* Icon */}
             <MessageCircle className="h-7 w-7 lg:h-8 lg:w-8 relative z-10" />

@@ -21,7 +21,7 @@ export const config = {
     name: process.env.NEXT_PUBLIC_COMPANY_NAME || '4G Celulares',
     phone: process.env.NEXT_PUBLIC_COMPANY_PHONE || '+595-21-123456',
     address: process.env.NEXT_PUBLIC_COMPANY_ADDRESS || 'Asunción, Paraguay',
-    email: 'info@4gcelulares.com',
+    email: process.env.NEXT_PUBLIC_COMPANY_EMAIL || '',
     logo: process.env.NEXT_PUBLIC_COMPANY_LOGO || undefined
   },
   

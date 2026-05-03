@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatCurrency } from '@/lib/currency'
+import { getRepairStatusConfig } from '@/lib/constants/repair-status'
 import { RepairSearchForm } from './components'
 import { ArrowRight, Wrench } from 'lucide-react'
 
@@ -23,17 +24,8 @@ type RepairRow = {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-    recibido: { label: 'Recibido', variant: 'secondary' },
-    diagnostico: { label: 'Diagnóstico', variant: 'secondary' },
-    reparacion: { label: 'En reparación', variant: 'default' },
-    pausado: { label: 'Pausado', variant: 'secondary' },
-    listo: { label: 'Listo', variant: 'default' },
-    entregado: { label: 'Entregado', variant: 'secondary' },
-    cancelado: { label: 'Cancelado', variant: 'destructive' },
-  }
-  const cfg = map[status.toLowerCase()] ?? { label: status, variant: 'outline' }
-  return <Badge variant={cfg.variant}>{cfg.label}</Badge>
+  const cfg = getRepairStatusConfig(status)
+  return <Badge variant={cfg.badgeVariant}>{cfg.label}</Badge>
 }
 
 export default async function MisReparacionesPage() {
@@ -59,6 +51,7 @@ export default async function MisReparacionesPage() {
         .select('id, ticket_number, device_type, device_brand, device_model, problem_description, status, created_at, final_cost, estimated_cost, location')
         .eq('customer_id', customer.id)
         .order('created_at', { ascending: false })
+        .limit(20)
       
       repairs = (repairsData as RepairRow[] | null) ?? []
     }
@@ -107,7 +100,7 @@ export default async function MisReparacionesPage() {
               
               <Card>
                 <CardContent className="p-0">
-                  <Table>
+                  <Table aria-label="Historial de reparaciones">
                     <TableHeader>
                       <TableRow className="bg-muted/30">
                         <TableHead className="w-[120px]">Ticket</TableHead>

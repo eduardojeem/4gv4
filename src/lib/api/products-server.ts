@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { PublicProduct } from '@/types/public'
 import { resolveWholesaleAccessForUser } from '@/lib/auth/wholesale-access'
 
+import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
+
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
   // Remove PostgREST special characters: . , ( ) : ! < > = & | %
@@ -57,7 +59,7 @@ export type ProductsResponse = {
   isWholesale: boolean
 }
 
-const MAX_PRICE = 50_000_000
+const MAX_PRICE = PRODUCTS_MAX_PRICE
 
 export async function getPublicProducts(filters: ProductFilters): Promise<ProductsResponse> {
   const supabase = await createClient()
@@ -164,8 +166,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       category: cat ? { id: cat.id, name: cat.name } : undefined,
       sale_price: p.sale_price as number,
       wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-      // Expose real stock quantity — UI can decide how to format it
-      stock_quantity: p.stock_quantity as number,
+      in_stock: (p.stock_quantity as number) > 0,
       is_active: p.is_active as boolean,
       featured: (p.featured as boolean) || false,
       image: Array.isArray(p.images)
@@ -301,8 +302,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     category: cat ? { id: cat.id, name: cat.name } : undefined,
     sale_price: p.sale_price,
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-    // Real stock quantity exposed
-    stock_quantity: p.stock_quantity as number,
+    in_stock: (p.stock_quantity as number) > 0,
     is_active: p.is_active,
     featured: p.featured || false,
     image: Array.isArray(p.images)

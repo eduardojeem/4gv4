@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,11 +9,12 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Eye, EyeOff, ArrowRight, Cpu, Shield } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, ArrowLeft, Cpu, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { config } from '@/lib/config'
+import { sanitizeRedirectPath, isValidEmail } from '@/lib/auth/password-validation'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -28,6 +29,7 @@ export default function LoginPage() {
   const [resendLoading, setResendLoading] = useState(false)
 
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
   const reduceMotion = useReducedMotion()
 
@@ -54,7 +56,7 @@ export default function LoginPage() {
             p_success: false,
             p_ip_address: undefined,
             p_user_agent: userAgent,
-            p_details: { email, error: msg },
+            p_details: { error: msg },
           })
         } catch (logError) {
           console.error('Error logging failed login from page:', logError)
@@ -62,13 +64,13 @@ export default function LoginPage() {
 
         if (/email not confirmed/i.test(msg)) {
           setUnconfirmed(true)
-          setError('Tu correo no esta confirmado. Reenvia el email de verificacion para acceder.')
+          setError('Credenciales incorrectas o cuenta no confirmada.')
         } else if (msg.includes('Invalid login credentials')) {
-          setError('Credenciales incorrectas. Verifica tu correo y contrasena.')
+          setError('Credenciales incorrectas o cuenta no confirmada.')
         } else if (/Failed to fetch|Network|fetch/i.test(msg)) {
           setError('No se pudo conectar con el servidor. Verifica tu conexion a internet.')
         } else {
-          setError(msg)
+          setError('Credenciales incorrectas o cuenta no confirmada.')
         }
       } else {
         if (data?.user) {
@@ -80,18 +82,16 @@ export default function LoginPage() {
               p_success: true,
               p_ip_address: undefined,
               p_user_agent: userAgent,
-              p_details: { email },
+              p_details: {},
             })
           } catch (logError) {
             console.error('Error logging auth event from login page:', logError)
           }
         }
 
-        try {
-          localStorage.setItem('auth.rememberMe', rememberMe ? '1' : '0')
-        } catch {}
         toast.success('Bienvenido de nuevo')
-        router.push('/dashboard')
+        const redirectTo = sanitizeRedirectPath(searchParams.get('redirect'))
+        router.push(redirectTo)
         router.refresh()
       }
     } catch (err) {
@@ -108,7 +108,7 @@ export default function LoginPage() {
       toast.error('Ingresa tu correo para reenviar la confirmacion')
       return
     }
-    const emailValid = /.+@.+\..+/.test(targetEmail)
+    const emailValid = isValidEmail(targetEmail)
     if (!emailValid) {
       toast.error('Correo invalido')
       return
@@ -170,13 +170,22 @@ export default function LoginPage() {
         >
           <Card className="border-slate-800/80 bg-slate-900/80 shadow-2xl backdrop-blur-xl">
             <CardHeader className="space-y-4 pb-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-900/30">
-                  <Cpu className="h-5 w-5 text-white" />
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-900/30">
+                    <Cpu className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">{config.company.name}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-200">{config.company.name}</p>
-                </div>
+                <Link
+                  href="/inicio"
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Inicio
+                </Link>
               </div>
               <div>
                 <CardTitle className="text-2xl font-bold text-white">Iniciar sesion</CardTitle>
@@ -200,6 +209,7 @@ export default function LoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete="email"
+                    autoFocus
                     className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
                     disabled={loading}
                   />

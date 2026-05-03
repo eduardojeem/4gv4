@@ -4,6 +4,24 @@ import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
 
+type ProductRow = {
+  id: string
+  name: string
+  sku: string
+  description: string | null
+  brand: string | null
+  sale_price: number
+  wholesale_price: number | null
+  stock_quantity: number
+  is_active: boolean
+  featured: boolean
+  image_url: string | null
+  images: string[] | null
+  unit_measure: string
+  barcode: string | null
+  category: { id: string; name: string }[] | { id: string; name: string } | null
+}
+
 /**
  * GET /api/public/products/[id]
  * Public endpoint - No authentication required
@@ -29,7 +47,7 @@ export async function GET(
       ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
       : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
 
-    let byIdQuery: any = supabase
+    let byIdQuery = supabase
       .from('products')
       .select(selectFields)
       .eq('id', productId)
@@ -49,9 +67,11 @@ export async function GET(
     }
 
     // Fallback: try by SKU if UUID lookup returned nothing
-    let finalProduct = product
+    let finalProduct = product as unknown as ProductRow | null
     if (!finalProduct) {
-      let bySkuQuery: any = supabase
+      logger.info('Product UUID lookup returned nothing, trying SKU fallback', { productId })
+
+      let bySkuQuery = supabase
         .from('products')
         .select(selectFields)
         .eq('sku', productId)
@@ -67,7 +87,7 @@ export async function GET(
       if (skuErr) {
         logger.error('Failed SKU lookup for public product', { error: skuErr.message, productId })
       }
-      finalProduct = bySku || null
+      finalProduct = (bySku as unknown as ProductRow) || null
     }
 
     if (!finalProduct) {
@@ -88,8 +108,7 @@ export async function GET(
       category: category ? { id: category.id, name: category.name } : undefined,
       sale_price: finalProduct.sale_price,
       wholesale_price: isWholesale ? finalProduct.wholesale_price : null,
-      // Only expose stock status, not exact quantity
-      stock_quantity: finalProduct.stock_quantity > 0 ? finalProduct.stock_quantity : 0,
+      in_stock: finalProduct.stock_quantity > 0,
       is_active: finalProduct.is_active,
       featured: finalProduct.featured || false,
       image: finalProduct.image_url || (Array.isArray(finalProduct.images) && finalProduct.images.length > 0 ? finalProduct.images[0] : null),

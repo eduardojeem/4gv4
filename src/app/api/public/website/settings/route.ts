@@ -71,10 +71,12 @@ export async function GET() {
       settingsObj.testimonials = []
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: settingsObj
     })
+    response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=60')
+    return response
   } catch (error) {
     return NextResponse.json(
       { success: false, error: 'Failed to fetch website settings' },

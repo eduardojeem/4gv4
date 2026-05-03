@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { isValidEmail } from '@/lib/auth/password-validation'
 
 export interface SimpleCustomerFormData {
   firstName: string
@@ -66,7 +67,7 @@ function validateForm(data: SimpleCustomerFormData): ValidationErrors {
     errors.phone = 'Teléfono inválido'
   }
 
-  if (data.email && !/.+@.+\..+/.test(data.email)) {
+  if (data.email && !isValidEmail(data.email)) {
     errors.email = 'Correo inválido'
   }
 

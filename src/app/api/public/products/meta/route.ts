@@ -24,18 +24,29 @@ export async function GET() {
 
     const brands = Array.from(new Set(brandsData.map(p => p.brand))).sort() as string[]
 
-    // Get price range
-    // We select min and max of sale_price
-    const { data: priceData, error: priceError } = await supabase
+    // Get price range using min/max — avoids loading all prices into memory
+    const { data: minData } = await supabase
       .from('products')
       .select('sale_price')
       .eq('is_active', true)
+      .gt('sale_price', 0)
+      .order('sale_price', { ascending: true })
+      .limit(1)
+      .single()
 
-    if (priceError) throw priceError
+    const { data: maxData } = await supabase
+      .from('products')
+      .select('sale_price')
+      .eq('is_active', true)
+      .gt('sale_price', 0)
+      .order('sale_price', { ascending: false })
+      .limit(1)
+      .single()
 
-    const prices = priceData.map(p => p.sale_price).filter(p => p > 0)
-    const minPrice = prices.length > 0 ? Math.floor(Math.min(...prices) / 5000) * 5000 : 0
-    const maxPrice = prices.length > 0 ? Math.ceil(Math.max(...prices) / 5000) * 5000 : 5000000
+    const rawMin = minData?.sale_price ?? 0
+    const rawMax = maxData?.sale_price ?? 5000000
+    const minPrice = Math.floor(rawMin / 5000) * 5000
+    const maxPrice = Math.ceil(rawMax / 5000) * 5000
 
     const response = NextResponse.json({
       success: true,

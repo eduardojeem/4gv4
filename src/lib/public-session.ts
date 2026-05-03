@@ -5,9 +5,17 @@
 
 import { SignJWT, jwtVerify } from 'jose'
 
-const SECRET_KEY = new TextEncoder().encode(
-  process.env.PUBLIC_SESSION_SECRET || 'your-secret-key-change-in-production'
-)
+let _secretKey: Uint8Array | null = null
+
+function getSecretKey(): Uint8Array {
+  if (_secretKey) return _secretKey
+  const secret = process.env.PUBLIC_SESSION_SECRET
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('PUBLIC_SESSION_SECRET environment variable is required in production')
+  }
+  _secretKey = new TextEncoder().encode(secret || 'dev-only-secret-not-for-production')
+  return _secretKey
+}
 
 export interface PublicSessionPayload {
   repairId: string
@@ -29,7 +37,7 @@ export async function generatePublicToken(
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(`${expiresInSeconds}s`)
-    .sign(SECRET_KEY)
+    .sign(getSecretKey())
 
   return token
 }
@@ -43,7 +51,7 @@ export async function verifyPublicToken(
   token: string
 ): Promise<PublicSessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET_KEY)
+    const { payload } = await jwtVerify(token, getSecretKey())
     return payload as unknown as PublicSessionPayload
   } catch {
     return null

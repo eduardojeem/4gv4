@@ -12,6 +12,8 @@ export function PublicFooter() {
   const emailDisplay = company?.email || process.env.NEXT_PUBLIC_COMPANY_EMAIL || ''
   const addressDisplay = company?.address || ''
 
+  const companyName = company?.name || '4G Celulares'
+
   return (
     <footer className="border-t border-border/50 bg-muted/30">
       <div className="container py-12">
@@ -19,7 +21,7 @@ export function PublicFooter() {
           {/* Brand */}
           <div>
             <p className="text-sm font-bold text-foreground tracking-tight">
-              4G Celulares
+              {companyName}
             </p>
             <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
               Reparacion profesional de celulares con garantia. Venta de accesorios y repuestos.
@@ -104,9 +106,9 @@ export function PublicFooter() {
             <div className="flex items-start gap-2.5 text-sm text-muted-foreground">
               <Clock className="h-4 w-4 mt-0.5 shrink-0" />
               <div className="space-y-0.5">
-                <div>Lun - Vie: 8:00 - 18:00</div>
-                <div>Sabados: 9:00 - 13:00</div>
-                <div>Domingos: Cerrado</div>
+                <div>{company?.hours?.weekdays || 'Lun - Vie: 8:00 - 18:00'}</div>
+                {company?.hours?.saturday && <div>Sabados: {company.hours.saturday}</div>}
+                <div>{company?.hours?.sunday || 'Domingos: Cerrado'}</div>
               </div>
             </div>
           </div>
@@ -115,7 +117,7 @@ export function PublicFooter() {
         <div className="mt-10 border-t border-border/50 pt-6 text-center text-xs text-muted-foreground">
           <p>
             {'© '}
-            {new Date().getFullYear()} 4G Celulares. Todos los derechos
+            {new Date().getFullYear()} {companyName}. Todos los derechos
             reservados.
           </p>
         </div>

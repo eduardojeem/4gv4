@@ -9,9 +9,6 @@ import { LRUCache } from '@/lib/cache'
 // Cache for repair details - 100 entries, 5 minute TTL
 const repairCache = new LRUCache<PublicRepair>(100, 5 * 60 * 1000)
 
-// Cleanup expired entries every 10 minutes
-setInterval(() => repairCache.cleanup(), 10 * 60 * 1000)
-
 /**
  * GET /api/public/repairs/[ticketId]
  * Get repair details (requires valid session token OR valid QR hash)
@@ -50,10 +47,9 @@ export async function GET(
       )
     }
     
-    // 3. Check cache (only if we trust the request, but for hash verification we need to verify against DB data anyway, 
-    //    so we might need to skip cache or store hash in cache? 
-    //    For simplicity, if using hash, we fetch DB to verify hash. If token, we can use cache)
+    // Check cache (with lazy cleanup of expired entries)
     if (isTokenAuthorized) {
+      repairCache.cleanup()
       const cached = repairCache.get(ticketId)
       if (cached) {
         return NextResponse.json({

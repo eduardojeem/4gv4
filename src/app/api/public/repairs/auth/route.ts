@@ -195,13 +195,18 @@ export async function POST(request: NextRequest) {
     const normalizePhone = (value: string) => value.replace(/\D/g, '')
     const customerPhoneNormalized = customerPhone ? normalizePhone(customerPhone) : ''
     const inputPhoneNormalized = normalizePhone(inputContact)
-    const phoneMatch = !!customerPhoneNormalized &&
-      !!inputPhoneNormalized &&
-      (
+    
+    // Require at least 8 matching trailing digits to prevent partial-number guessing
+    const MIN_PHONE_MATCH_DIGITS = 8
+    let phoneMatch = false
+    if (customerPhoneNormalized && inputPhoneNormalized && inputPhoneNormalized.length >= MIN_PHONE_MATCH_DIGITS) {
+      phoneMatch =
         customerPhoneNormalized === inputPhoneNormalized ||
-        customerPhoneNormalized.endsWith(inputPhoneNormalized) ||
-        inputPhoneNormalized.endsWith(customerPhoneNormalized)
-      )
+        (customerPhoneNormalized.length >= MIN_PHONE_MATCH_DIGITS &&
+          customerPhoneNormalized.endsWith(inputPhoneNormalized)) ||
+        (inputPhoneNormalized.length >= MIN_PHONE_MATCH_DIGITS &&
+          inputPhoneNormalized.endsWith(customerPhoneNormalized))
+    }
     
     const contactMatch = emailMatch || phoneMatch
     

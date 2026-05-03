@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
+import { validatePassword } from '@/lib/auth/password-validation'
 
 export default function ResetPasswordContent() {
   const [password, setPassword] = useState('')
@@ -49,22 +50,6 @@ export default function ResetPasswordContent() {
 
     validateSession()
   }, [router, supabase.auth])
-
-  const validatePassword = (pwd: string): string | null => {
-    if (pwd.length < 8) {
-      return 'La contraseña debe tener al menos 8 caracteres'
-    }
-    if (!/[A-Z]/.test(pwd)) {
-      return 'La contraseña debe contener al menos una mayúscula'
-    }
-    if (!/[a-z]/.test(pwd)) {
-      return 'La contraseña debe contener al menos una minúscula'
-    }
-    if (!/[0-9]/.test(pwd)) {
-      return 'La contraseña debe contener al menos un número'
-    }
-    return null
-  }
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()

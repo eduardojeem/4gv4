@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Eye, EyeOff, ArrowRight, Cpu, Shield } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, ArrowLeft, Cpu, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { config } from '@/lib/config'
+import { validatePassword, getPasswordChecks } from '@/lib/auth/password-validation'
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -31,14 +32,6 @@ export default function RegisterPage() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const validatePassword = (pwd: string): string | null => {
-    if (pwd.length < 8) return 'La contrasena debe tener al menos 8 caracteres'
-    if (!/[A-Z]/.test(pwd)) return 'La contrasena debe contener al menos una mayuscula'
-    if (!/[a-z]/.test(pwd)) return 'La contrasena debe contener al menos una minuscula'
-    if (!/[0-9]/.test(pwd)) return 'La contrasena debe contener al menos un numero'
-    return null
   }
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -72,7 +65,6 @@ export default function RegisterPage() {
         options: {
           data: {
             full_name: formData.fullName,
-            role: 'cliente',
           },
         },
       })
@@ -99,12 +91,7 @@ export default function RegisterPage() {
   }
 
   const pwd = formData.password
-  const pwdChecks = [
-    { ok: pwd.length >= 8, label: 'Minimo 8 caracteres' },
-    { ok: /[A-Z]/.test(pwd), label: 'Una letra mayuscula' },
-    { ok: /[a-z]/.test(pwd), label: 'Una letra minuscula' },
-    { ok: /[0-9]/.test(pwd), label: 'Un numero' },
-  ]
+  const pwdChecks = getPasswordChecks(pwd)
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -120,13 +107,22 @@ export default function RegisterPage() {
         >
           <Card className="border-slate-800/80 bg-slate-900/80 shadow-2xl backdrop-blur-xl">
             <CardHeader className="space-y-4 pb-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-900/30">
-                  <Cpu className="h-5 w-5 text-white" />
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-900/30">
+                    <Cpu className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">{config.company.name}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-200">{config.company.name}</p>
-                </div>
+                <Link
+                  href="/inicio"
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Inicio
+                </Link>
               </div>
               <div>
                 <CardTitle className="text-2xl font-bold text-white">Crear cuenta</CardTitle>
@@ -147,6 +143,7 @@ export default function RegisterPage() {
                     value={formData.fullName}
                     onChange={(e) => handleInputChange('fullName', e.target.value)}
                     required
+                    autoFocus
                     disabled={loading}
                     className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
                   />

@@ -156,7 +156,7 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
     ''
   ).toString()
   const envSupportEmail = (
-    process.env.NEXT_PUBLIC_COMPANY_EMAIL || 'info@4gcelulares.com'
+    process.env.NEXT_PUBLIC_COMPANY_EMAIL || ''
   ).toString()
   const phoneDisplay = companyInfo?.phone || envSupportPhone
   const phoneClean = phoneDisplay?.replace(/\D/g, '')

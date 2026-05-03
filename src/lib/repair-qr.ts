@@ -2,6 +2,8 @@
  * Utilidades para generación y verificación de códigos QR de reparaciones
  */
 
+import { createHash } from 'crypto'
+
 export interface RepairQRData {
   ticketNumber: string
   customerName: string
@@ -9,12 +11,19 @@ export interface RepairQRData {
   hash: string
 }
 
+function getQRSecret(): string {
+  const secret = process.env.REPAIR_QR_SECRET
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('REPAIR_QR_SECRET environment variable is required in production')
+  }
+  return secret || 'dev-only-qr-secret-not-for-production'
+}
+
 /**
  * Genera un hash de verificación para el comprobante de reparación
  * Usa SHA-256 con un salt basado en datos del ticket
  * 
  * NOTA: Esta función solo funciona en el servidor (Node.js)
- * Para uso en cliente, usar la API endpoint
  */
 export function generateRepairHash(
   ticketNumber: string,
@@ -23,37 +32,13 @@ export function generateRepairHash(
 ): string {
   const dateStr = date.toISOString().split('T')[0] // YYYY-MM-DD
   const data = `${ticketNumber}|${customerName}|${dateStr}`
-  
-  // En producción, deberías usar una SECRET_KEY del entorno
-  const secret = process.env.REPAIR_QR_SECRET || 'default-secret-change-in-production'
+  const secret = getQRSecret()
   const combined = `${data}|${secret}`
-  
-  // Solo disponible en servidor (Node.js)
-  if (typeof window === 'undefined') {
-    const { createHash } = require('crypto')
-    return createHash('sha256')
-      .update(combined)
-      .digest('hex')
-      .substring(0, 16) // Primeros 16 caracteres para mantenerlo compacto
-  }
-  
-  // Fallback para cliente (no seguro, solo para preview)
-  // En producción, siempre generar en servidor
-  return simpleHash(combined).substring(0, 16)
-}
 
-/**
- * Hash simple para uso en cliente (solo preview, no seguro)
- * NO usar para verificación real
- */
-function simpleHash(str: string): string {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash
-  }
-  return Math.abs(hash).toString(16).padStart(16, '0')
+  return createHash('sha256')
+    .update(combined)
+    .digest('hex')
+    .substring(0, 16) // Primeros 16 caracteres para mantenerlo compacto
 }
 
 /**

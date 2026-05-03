@@ -8,14 +8,14 @@ import { Badge } from '@/components/ui/badge'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
 import { ProductCard } from '@/components/public/ProductCard'
 import { getPublicProduct, getPublicProducts, resolveWholesaleStatus } from '@/lib/api/products-server'
+import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { generateProductSchema } from '@/lib/seo'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import { ProductGallery, ProductActions } from './client-components'
 
-// Force dynamic rendering and disable caching to ensure fresh data
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+// Allow ISR with 2-minute revalidation
+export const revalidate = 120
 
 interface Props {
   params: Promise<{ id: string }>
@@ -35,12 +35,14 @@ export async function generateMetadata(
   }
 
   const { product } = result
+  const settings = await fetchWebsiteSettings()
+  const companyName = settings?.company_info?.name || '4G Celulares'
   const previousImages = (await parent).openGraph?.images || []
   const productImage = resolveProductImageUrl(product.image)
 
   return {
-    title: `${product.name} | 4G Celulares`,
-    description: product.description?.slice(0, 160) || `Comprar ${product.name} en 4G Celulares`,
+    title: `${product.name} | ${companyName}`,
+    description: product.description?.slice(0, 160) || `Comprar ${product.name} en ${companyName}`,
     openGraph: {
       title: product.name,
       description: product.description?.slice(0, 160) || `Comprar ${product.name}`,
@@ -82,7 +84,7 @@ export default async function ProductDetailPage(props: Props) {
   const { product } = result
 
   // Prepare display data
-  const isInStock = product.stock_quantity > 0
+  const isInStock = product.in_stock
   const displayPrice = isWholesale && product.wholesale_price
     ? product.wholesale_price
     : product.sale_price

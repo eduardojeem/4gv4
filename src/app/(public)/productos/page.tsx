@@ -12,19 +12,19 @@ import {
   MobileFilters,
   FilterBadges,
   ClearAllFiltersButton,
+  PaginationLinks,
 } from './components'
 import { Search } from 'lucide-react'
+import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 
-// Force dynamic rendering and disable caching to ensure fresh data
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+export const revalidate = 60
 
 export const metadata: Metadata = {
-  title: 'Catálogo de Productos | 4G Celulares',
+  title: 'Catálogo de Productos',
   description: 'Explora nuestra amplia gama de celulares, repuestos y accesorios. Encuentra las mejores marcas y precios.',
 }
 
-const MAX_PRICE = 50_000_000
+const MAX_PRICE = PRODUCTS_MAX_PRICE
 
 export default async function ProductsPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
@@ -81,6 +81,7 @@ export default async function ProductsPage(props: {
   
   return (
     <div className="min-h-screen bg-background">
+      <PaginationLinks currentPage={page} totalPages={totalPages} />
       {/* Breadcrumb + title bar */}
       <div className="border-b border-border/40 bg-muted/20">
         <div className="container py-6">
@@ -117,11 +118,11 @@ export default async function ProductsPage(props: {
           {/* Sidebar filters - Desktop */}
           <aside className="hidden lg:block shrink-0 h-fit sticky top-24">
              {/* The width is now controlled by the content within the ProductFilters component when it collapses/expands */}
-             <div className="rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition-all duration-300">
-               <div className="p-4">
-                <Suspense fallback={<div className="h-96 w-64 bg-muted animate-pulse rounded-lg" />}>
-                  <ProductFilters
-                    priceRange={priceRange}
+             <div className="max-h-[calc(100vh-7rem)] overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-sm backdrop-blur-sm transition-all duration-300">
+               <div className="max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-contain p-4 pr-3 scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                 <Suspense fallback={<div className="h-96 w-64 bg-muted animate-pulse rounded-lg" />}>
+                   <ProductFilters
+                     priceRange={priceRange}
                     categories={categories}
                     brands={brands}
                   />
