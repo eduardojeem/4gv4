@@ -337,7 +337,13 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
     customerIds: string[],
     updates: Partial<Customer>
   ) => {
+    const MAX_BULK_UPDATE = 50
     try {
+      if (customerIds.length > MAX_BULK_UPDATE) {
+        toast.error(`No se pueden actualizar más de ${MAX_BULK_UPDATE} clientes a la vez`)
+        return { success: false, error: `Límite de ${MAX_BULK_UPDATE} registros excedido` }
+      }
+
       const supabase = createClient()
 
       // Remove read-only fields
@@ -383,7 +389,13 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
   }, [])
 
   const bulkDelete = useCallback(async (customerIds: string[]) => {
+    const MAX_BULK_DELETE = 50
     try {
+      if (customerIds.length > MAX_BULK_DELETE) {
+        toast.error(`No se pueden eliminar más de ${MAX_BULK_DELETE} clientes a la vez`)
+        return { success: false, error: `Límite de ${MAX_BULK_DELETE} registros excedido` }
+      }
+
       const supabase = createClient()
 
       const { error } = await supabase

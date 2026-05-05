@@ -322,6 +322,18 @@ export function CustomerDashboard() {
   const exportSelectedHistoryPDF = () => {
     if (!selectedCreditCustomerId) return
     const customer = customers.find(c => c.id === selectedCreditCustomerId)
+    
+    // Sanitize values to prevent XSS when injecting into HTML
+    const esc = (val: unknown): string => {
+      const str = String(val ?? '')
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;')
+    }
+    
     const html = `
       <html>
       <head>
@@ -336,19 +348,19 @@ export function CustomerDashboard() {
         </style>
       </head>
       <body>
-        <h1>Historial de ${customer?.name || "Cliente"}</h1>
+        <h1>Historial de ${esc(customer?.name || "Cliente")}</h1>
         <h2>Cuotas</h2>
         <table>
           <thead><tr><th>Cuota</th><th>Vence</th><th>Monto</th><th>Estado</th><th>Pagado</th><th>Método</th></tr></thead>
           <tbody>
             ${selectedInstallments.map(i => `
               <tr>
-                <td>${i.installment_number}</td>
-                <td>${new Date(i.due_date).toLocaleDateString()}</td>
-                <td>${i.amount}</td>
-                <td>${i.status}</td>
-                <td>${i.amount_paid || 0}</td>
-                <td>${i.payment_method || ""}</td>
+                <td>${esc(i.installment_number)}</td>
+                <td>${esc(new Date(i.due_date).toLocaleDateString())}</td>
+                <td>${esc(i.amount)}</td>
+                <td>${esc(i.status)}</td>
+                <td>${esc(i.amount_paid || 0)}</td>
+                <td>${esc(i.payment_method || "")}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -359,11 +371,11 @@ export function CustomerDashboard() {
           <tbody>
             ${selectedPayments.map(p => `
               <tr>
-                <td>${p.created_at ? new Date(p.created_at).toLocaleDateString() : ""}</td>
-                <td>${p.credit_id}</td>
-                <td>${p.installment_id || ""}</td>
-                <td>${p.amount}</td>
-                <td>${p.payment_method || ""}</td>
+                <td>${esc(p.created_at ? new Date(p.created_at).toLocaleDateString() : "")}</td>
+                <td>${esc(p.credit_id)}</td>
+                <td>${esc(p.installment_id || "")}</td>
+                <td>${esc(p.amount)}</td>
+                <td>${esc(p.payment_method || "")}</td>
                 <td></td>
               </tr>
             `).join("")}

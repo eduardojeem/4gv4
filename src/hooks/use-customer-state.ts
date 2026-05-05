@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import customerService from "@/services/customer-service"
@@ -107,11 +107,63 @@ const initialFilters: CustomerFilters = {
   loyalty_points_min: 0
 }
 
+/**
+ * Maps a raw Supabase row to the Customer interface.
+ * Centralized here to avoid duplication in realtime handlers.
+ */
+function mapRawToCustomer(raw: Record<string, any>): Customer {
+  return {
+    ...raw,
+    id: raw.id,
+    profile_id: raw.profile_id,
+    customerCode: raw.customer_code || `CLI-${raw.id?.slice(0, 6)}`,
+    name: raw.name || '',
+    email: raw.email || '',
+    phone: raw.phone || '',
+    ruc: raw.ruc,
+    customer_type: raw.customer_type || 'regular',
+    status: raw.status || 'active',
+    total_purchases: raw.total_purchases || 0,
+    total_repairs: raw.total_repairs || 0,
+    registration_date: raw.created_at,
+    created_at: raw.created_at,
+    last_visit: raw.last_visit || raw.created_at,
+    last_activity: raw.updated_at || raw.created_at,
+    address: raw.address || '',
+    city: raw.city || '',
+    credit_score: raw.credit_score || 0,
+    segment: raw.segment || 'regular',
+    satisfaction_score: raw.satisfaction_score || 0,
+    lifetime_value: raw.lifetime_value || 0,
+    avg_order_value: raw.avg_order_value || 0,
+    purchase_frequency: raw.purchase_frequency || 'low',
+    preferred_contact: raw.preferred_contact || 'email',
+    birthday: raw.birthday || '',
+    loyalty_points: raw.loyalty_points || 0,
+    credit_limit: raw.credit_limit || 0,
+    current_balance: raw.current_balance || 0,
+    pending_amount: raw.pending_amount || 0,
+    notes: raw.notes || '',
+    tags: raw.tags || [],
+    whatsapp: raw.whatsapp,
+    social_media: raw.social_media,
+    company: raw.company,
+    position: raw.position,
+    referral_source: raw.referral_source || '',
+    discount_percentage: raw.discount_percentage || 0,
+    payment_terms: raw.payment_terms || 'Contado',
+    assigned_salesperson: raw.assigned_salesperson || 'Sin asignar',
+    last_purchase_amount: raw.last_purchase_amount || 0,
+    total_spent_this_year: raw.total_spent_this_year || 0,
+    avatar: raw.avatar,
+  } as Customer
+}
+
 export function useCustomerState() {
-  const [state, setState] = useState<CustomerState>({
+  // Core state — only source-of-truth data lives here.
+  // filteredCustomers and paginatedCustomers are derived via useMemo (not stored in state).
+  const [state, setState] = useState<Omit<CustomerState, 'filteredCustomers' | 'paginatedCustomers'>>({
     customers: [],
-    filteredCustomers: [],
-    paginatedCustomers: [],
     filters: initialFilters,
     viewMode: "table",
     selectedCustomer: null,
@@ -128,17 +180,13 @@ export function useCustomerState() {
     }
   })
 
-  // Expose setState for actions
-  const stateWithSetter = { ...state, setState }
-
-  // Load customers on mount with pagination
+  // Load customers on mount
   useEffect(() => {
     const loadCustomers = async () => {
       try {
-        console.log('🔄 [CustomerState] Starting to load customers...')
         setState(prev => ({ ...prev, loading: true, error: null }))
 
-        // Load all pages to keep local pagination aligned with filtered results.
+        // Load all pages to keep local filtering aligned.
         const pageSize = 200
         let currentPage = 1
         let totalPages = 1
@@ -160,16 +208,8 @@ export function useCustomerState() {
           ...prev,
           customers: allCustomers,
           loading: false,
-          pagination: {
-            ...prev.pagination,
-            totalItems: allCustomers.length,
-            totalPages: Math.ceil(allCustomers.length / prev.pagination.itemsPerPage)
-          }
         }))
-        
-        console.log('🎯 [CustomerState] State updated successfully')
       } catch (error: unknown) {
-        console.error('💥 [CustomerState] Error loading customers:', error)
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
         setState(prev => ({
           ...prev,
@@ -193,36 +233,7 @@ export function useCustomerState() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'customers' },
         (payload) => {
-          console.log('Customer inserted:', payload.new)
-          const newCustomer = payload.new as any
-          const mappedCustomer: Customer = {
-            ...newCustomer,
-            customerCode: newCustomer.customer_code || `CLI-${newCustomer.id?.slice(0, 6)}`,
-            customer_type: newCustomer.customer_type || 'regular',
-            status: newCustomer.status || 'active',
-            total_purchases: newCustomer.total_purchases || 0,
-            total_repairs: newCustomer.total_repairs || 0,
-            registration_date: newCustomer.created_at,
-            last_visit: newCustomer.last_visit || newCustomer.created_at,
-            last_activity: newCustomer.updated_at || newCustomer.created_at,
-            credit_score: newCustomer.credit_score || 0,
-            segment: newCustomer.segment || 'regular',
-            satisfaction_score: newCustomer.satisfaction_score || 0,
-            lifetime_value: newCustomer.lifetime_value || 0,
-            avg_order_value: newCustomer.avg_order_value || 0,
-            purchase_frequency: newCustomer.purchase_frequency || 'low',
-            preferred_contact: newCustomer.preferred_contact || 'email',
-            loyalty_points: newCustomer.loyalty_points || 0,
-            credit_limit: newCustomer.credit_limit || 0,
-            current_balance: newCustomer.current_balance || 0,
-            pending_amount: newCustomer.pending_amount || 0,
-            tags: newCustomer.tags || [],
-            discount_percentage: newCustomer.discount_percentage || 0,
-            payment_terms: newCustomer.payment_terms || 'Contado',
-            assigned_salesperson: newCustomer.assigned_salesperson || 'Sin asignar',
-            last_purchase_amount: newCustomer.last_purchase_amount || 0,
-            total_spent_this_year: newCustomer.total_spent_this_year || 0
-          }
+          const mappedCustomer = mapRawToCustomer(payload.new as any)
           setState(prev => ({
             ...prev,
             customers: [mappedCustomer, ...prev.customers]
@@ -233,36 +244,7 @@ export function useCustomerState() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'customers' },
         (payload) => {
-          console.log('Customer updated:', payload.new)
-          const updatedCustomer = payload.new as any
-          const mappedCustomer: Customer = {
-            ...updatedCustomer,
-            customerCode: updatedCustomer.customer_code || `CLI-${updatedCustomer.id?.slice(0, 6)}`,
-            customer_type: updatedCustomer.customer_type || 'regular',
-            status: updatedCustomer.status || 'active',
-            total_purchases: updatedCustomer.total_purchases || 0,
-            total_repairs: updatedCustomer.total_repairs || 0,
-            registration_date: updatedCustomer.created_at,
-            last_visit: updatedCustomer.last_visit || updatedCustomer.created_at,
-            last_activity: updatedCustomer.updated_at || updatedCustomer.created_at,
-            credit_score: updatedCustomer.credit_score || 0,
-            segment: updatedCustomer.segment || 'regular',
-            satisfaction_score: updatedCustomer.satisfaction_score || 0,
-            lifetime_value: updatedCustomer.lifetime_value || 0,
-            avg_order_value: updatedCustomer.avg_order_value || 0,
-            purchase_frequency: updatedCustomer.purchase_frequency || 'low',
-            preferred_contact: updatedCustomer.preferred_contact || 'email',
-            loyalty_points: updatedCustomer.loyalty_points || 0,
-            credit_limit: updatedCustomer.credit_limit || 0,
-            current_balance: updatedCustomer.current_balance || 0,
-            pending_amount: updatedCustomer.pending_amount || 0,
-            tags: updatedCustomer.tags || [],
-            discount_percentage: updatedCustomer.discount_percentage || 0,
-            payment_terms: updatedCustomer.payment_terms || 'Contado',
-            assigned_salesperson: updatedCustomer.assigned_salesperson || 'Sin asignar',
-            last_purchase_amount: updatedCustomer.last_purchase_amount || 0,
-            total_spent_this_year: updatedCustomer.total_spent_this_year || 0
-          }
+          const mappedCustomer = mapRawToCustomer(payload.new as any)
           setState(prev => ({
             ...prev,
             customers: prev.customers.map(c =>
@@ -275,10 +257,9 @@ export function useCustomerState() {
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'customers' },
         (payload) => {
-          console.log('Customer deleted:', payload.old)
           setState(prev => ({
             ...prev,
-            customers: prev.customers.filter(c => c.id !== payload.old.id)
+            customers: prev.customers.filter(c => c.id !== (payload.old as any).id)
           }))
         }
       )
@@ -294,17 +275,11 @@ export function useCustomerState() {
   // Debounce search term for better performance
   const debouncedSearchTerm = useDebounce(state.filters.search, 300)
 
-  // Update searching state when search term changes
-  useEffect(() => {
-    if (state.filters.search !== debouncedSearchTerm) {
-      setState(prev => ({ ...prev, searching: true }))
-    } else {
-      setState(prev => ({ ...prev, searching: false }))
-    }
-  }, [state.filters.search, debouncedSearchTerm])
+  // Derive searching state without storing it
+  const searching = state.filters.search !== debouncedSearchTerm
 
   // Enhanced search function with fuzzy matching and pattern detection
-  const performIntelligentSearch = (customers: Customer[], searchTerm: string): Customer[] => {
+  const performIntelligentSearch = useCallback((customers: Customer[], searchTerm: string): Customer[] => {
     if (!searchTerm || searchTerm.trim().length === 0) return customers
     
     const term = searchTerm.toLowerCase().trim()
@@ -340,10 +315,8 @@ export function useCustomerState() {
       if (!text) return 0
       text = text.toLowerCase()
       
-      // Exact match gets highest score
       if (text.includes(query)) return 100
       
-      // Calculate fuzzy score
       let score = 0
       let queryIndex = 0
       
@@ -362,14 +335,12 @@ export function useCustomerState() {
       let totalScore = 0
       let matchCount = 0
       
-      // Name matching (highest priority)
       const nameScore = fuzzyMatch(customer.name || '', term)
       if (nameScore > 30) {
-        totalScore += nameScore * 2 // Double weight for name
+        totalScore += nameScore * 2
         matchCount++
       }
       
-      // Email matching (exact pattern or contains)
       if (customer.email) {
         if (isEmail && customer.email.toLowerCase() === term) {
           totalScore += 100
@@ -380,7 +351,6 @@ export function useCustomerState() {
         }
       }
       
-      // Phone matching
       if (customer.phone) {
         const cleanPhone = customer.phone.replace(/\D/g, '')
         const cleanTerm = term.replace(/\D/g, '')
@@ -393,7 +363,6 @@ export function useCustomerState() {
         }
       }
       
-      // Customer code matching
       if (customer.customerCode) {
         if (isCode && customer.customerCode.toLowerCase().includes(term)) {
           totalScore += 95
@@ -404,7 +373,6 @@ export function useCustomerState() {
         }
       }
       
-      // RUC matching
       if (customer.ruc) {
         const cleanRUC = customer.ruc.replace(/\D/g, '')
         const cleanTerm = term.replace(/\D/g, '')
@@ -417,25 +385,21 @@ export function useCustomerState() {
         }
       }
       
-      // City matching
       if (customer.city && customer.city.toLowerCase().includes(term)) {
         totalScore += 70
         matchCount++
       }
       
-      // Company matching
       if (customer.company && customer.company.toLowerCase().includes(term)) {
         totalScore += 75
         matchCount++
       }
       
-      // Address matching (lower priority)
       if (customer.address && customer.address.toLowerCase().includes(term)) {
         totalScore += 50
         matchCount++
       }
       
-      // Notes matching (lowest priority)
       if (customer.notes && customer.notes.toLowerCase().includes(term)) {
         totalScore += 30
         matchCount++
@@ -448,82 +412,68 @@ export function useCustomerState() {
       }
     })
     
-    // Filter and sort by score
     return scoredCustomers
-      .filter(item => item.score > 25) // Minimum score threshold
-      .sort((a, b) => b.score - a.score) // Sort by score descending
+      .filter(item => item.score > 25)
+      .sort((a, b) => b.score - a.score)
       .map(item => item.customer)
-  }
+  }, [])
 
-  // Filter customers based on current filters
+  // Derive filtered customers (not stored in state)
   const filteredCustomers = useMemo(() => {
     let filtered = [...state.customers]
 
-    // Search filter with intelligent matching
     if (debouncedSearchTerm) {
       filtered = performIntelligentSearch(filtered, debouncedSearchTerm)
     }
 
-    // Status filter
     if (state.filters.status !== "all") {
       filtered = filtered.filter(customer => customer.status === state.filters.status)
     }
 
-    // Customer type filter
     if (state.filters.customer_type !== "all") {
       filtered = filtered.filter(customer => customer.customer_type === state.filters.customer_type)
     }
 
-    // Segment filter
     if (state.filters.segment !== "all") {
       filtered = filtered.filter(customer => customer.segment === state.filters.segment)
     }
 
-    // City filter
     if (state.filters.city !== "all") {
       filtered = filtered.filter(customer => customer.city === state.filters.city)
     }
 
-    // Assigned salesperson filter
     if (state.filters.assigned_salesperson !== "all") {
       filtered = filtered.filter(customer => customer.assigned_salesperson === state.filters.assigned_salesperson)
     }
 
-    // Credit score range filter
     filtered = filtered.filter(customer =>
       customer.credit_score >= state.filters.credit_score_range[0] &&
       customer.credit_score <= state.filters.credit_score_range[1]
     )
 
-    // Lifetime value range filter
     filtered = filtered.filter(customer =>
       customer.lifetime_value >= state.filters.lifetime_value_range[0] &&
       customer.lifetime_value <= state.filters.lifetime_value_range[1]
     )
 
-    // Purchases min filter
     if (state.filters.purchases_min > 0) {
       filtered = filtered.filter(customer => (customer.total_purchases || 0) >= state.filters.purchases_min)
     }
 
-    // Spent min filter (uses total_spent_this_year fallback to lifetime_value)
     if (state.filters.spent_min > 0) {
       filtered = filtered.filter(customer => (((customer.total_spent_this_year as number) ?? customer.lifetime_value) || 0) >= state.filters.spent_min)
     }
 
-    // Loyalty points min filter
     if (state.filters.loyalty_points_min > 0) {
-      filtered = filtered.filter(customer => ((customer as any).loyalty_points ?? 0) >= state.filters.loyalty_points_min)
+      filtered = filtered.filter(customer => (customer.loyalty_points ?? 0) >= state.filters.loyalty_points_min)
     }
 
-    // Tags filter
     if (state.filters.tags.length > 0) {
       filtered = filtered.filter(customer =>
         state.filters.tags.some(tag => customer.tags.includes(tag))
       )
     }
 
-    // Date range filter
     if (state.filters.date_range.from && state.filters.date_range.to) {
       filtered = filtered.filter(customer => {
         const customerDate = new Date(customer.registration_date)
@@ -553,72 +503,116 @@ export function useCustomerState() {
     })
 
     return filtered
-  }, [state.customers, debouncedSearchTerm, state.filters, state.sortBy, state.sortOrder])
+  }, [state.customers, debouncedSearchTerm, state.filters, state.sortBy, state.sortOrder, performIntelligentSearch])
 
-  // Calculate paginated customers
+  // Derive pagination metadata from filtered results
+  const totalItems = filteredCustomers.length
+  const totalPages = Math.ceil(totalItems / state.pagination.itemsPerPage)
+  
+  // Auto-correct currentPage if it exceeds totalPages
+  const currentPage = state.pagination.currentPage > totalPages && totalPages > 0
+    ? 1
+    : state.pagination.currentPage
+
+  // Derive paginated customers (not stored in state)
   const paginatedCustomers = useMemo(() => {
-    const startIndex = (state.pagination.currentPage - 1) * state.pagination.itemsPerPage
+    const startIndex = (currentPage - 1) * state.pagination.itemsPerPage
     const endIndex = startIndex + state.pagination.itemsPerPage
     return filteredCustomers.slice(startIndex, endIndex)
-  }, [filteredCustomers, state.pagination.currentPage, state.pagination.itemsPerPage])
+  }, [filteredCustomers, currentPage, state.pagination.itemsPerPage])
 
-  // Update filtered customers and pagination when they change
-  useEffect(() => {
-    const totalItems = filteredCustomers.length
-    const totalPages = Math.ceil(totalItems / state.pagination.itemsPerPage)
-
-    setState(prev => ({
-      ...prev,
-      filteredCustomers,
-      paginatedCustomers,
-      pagination: {
-        ...prev.pagination,
-        totalItems,
-        totalPages,
-        // Reset to page 1 if current page is beyond total pages
-        currentPage: prev.pagination.currentPage > totalPages ? 1 : prev.pagination.currentPage
-      }
-    }))
-  }, [filteredCustomers, paginatedCustomers, state.pagination.itemsPerPage])
+  // Compose the full pagination object for consumers
+  const pagination = useMemo(() => ({
+    currentPage,
+    itemsPerPage: state.pagination.itemsPerPage,
+    totalItems,
+    totalPages
+  }), [currentPage, state.pagination.itemsPerPage, totalItems, totalPages])
 
   // Pagination functions
-  const setPage = (page: number) => {
+  const setPage = useCallback((page: number) => {
     setState(prev => ({
       ...prev,
       pagination: {
         ...prev.pagination,
-        currentPage: Math.max(1, Math.min(page, prev.pagination.totalPages))
+        currentPage: Math.max(1, Math.min(page, totalPages || 1))
       }
     }))
-  }
+  }, [totalPages])
 
-  const setItemsPerPage = (itemsPerPage: number) => {
+  const setItemsPerPage = useCallback((itemsPerPage: number) => {
     setState(prev => ({
       ...prev,
       pagination: {
         ...prev.pagination,
         itemsPerPage,
-        currentPage: 1 // Reset to first page when changing items per page
+        currentPage: 1
       }
     }))
-  }
+  }, [])
 
-  const nextPage = () => {
-    setPage(state.pagination.currentPage + 1)
-  }
+  const nextPage = useCallback(() => {
+    setPage(currentPage + 1)
+  }, [setPage, currentPage])
 
-  const prevPage = () => {
-    setPage(state.pagination.currentPage - 1)
-  }
+  const prevPage = useCallback(() => {
+    setPage(currentPage - 1)
+  }, [setPage, currentPage])
 
-  return {
-    ...state,
+  // Build the public state shape that matches CustomerState for consumers
+  const publicState: CustomerState = {
+    customers: state.customers,
     filteredCustomers,
     paginatedCustomers,
+    filters: state.filters,
+    viewMode: state.viewMode,
+    selectedCustomer: state.selectedCustomer,
+    loading: state.loading,
+    searching,
+    error: state.error,
+    sortBy: state.sortBy,
+    sortOrder: state.sortOrder,
+    pagination
+  }
+
+  // Provide a setState wrapper that keeps the same external API
+  // but internally only updates source-of-truth fields
+  const publicSetState = useCallback((updater: React.SetStateAction<CustomerState>) => {
+    setState(prev => {
+      const prevFull: CustomerState = {
+        ...prev,
+        filteredCustomers: [],
+        paginatedCustomers: [],
+        searching: false,
+      }
+      const next = typeof updater === 'function' ? updater(prevFull) : updater
+      // Extract only source-of-truth fields
+      return {
+        customers: next.customers,
+        filters: next.filters,
+        viewMode: next.viewMode,
+        selectedCustomer: next.selectedCustomer,
+        loading: next.loading,
+        searching: next.searching ?? false,
+        error: next.error,
+        sortBy: next.sortBy,
+        sortOrder: next.sortOrder,
+        pagination: {
+          currentPage: next.pagination.currentPage,
+          itemsPerPage: next.pagination.itemsPerPage,
+          totalItems: next.pagination.totalItems,
+          totalPages: next.pagination.totalPages,
+        }
+      }
+    })
+  }, [])
+
+  return {
+    ...publicState,
     setPage,
     setItemsPerPage,
     nextPage,
     prevPage,
-    setState
+    setState: publicSetState
   }
 }
