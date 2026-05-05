@@ -11,7 +11,7 @@
  */
 
 import React, { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -37,7 +37,6 @@ import {
   MessageSquare,
   Shield,
   ShieldCheck,
-  TrendingUp,
   CheckCircle,
   Building,
   Star,
@@ -99,7 +98,7 @@ function SalesHistoryList({ customerId }: { customerId: string }) {
       </div>
       
       <div className="space-y-3">
-        {recentSales.map((sale: any, index: number) => (
+        {recentSales.map((sale: { id: string | number; created_at?: string; date?: string; total?: number; payment_status?: string }, index: number) => (
           <motion.div 
             key={sale.id}
             initial={{ opacity: 0, y: 20 }}
@@ -128,7 +127,7 @@ function SalesHistoryList({ customerId }: { customerId: string }) {
               </div>
             </div>
             <div className="text-right">
-              <p className="font-bold text-lg text-gray-900 dark:text-white">
+              <p className="font-bold tabular-nums text-lg text-foreground">
                 ${sale.total?.toLocaleString() || '0'}
               </p>
               <Badge 
@@ -164,8 +163,8 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
 
   // Use fresh data if available, otherwise fallback to prop
   const currentCustomer = freshData ? { ...customer, ...freshData } : customer
-  const [resolvedProfileId, setResolvedProfileId] = useState<string | null>((currentCustomer as any).profile_id ?? null)
-  const resolvedEmail = (freshData?.email ?? (customer as any).email) as string | undefined
+  const [resolvedProfileId, setResolvedProfileId] = useState<string | null>((currentCustomer as Customer & { profile_id?: string }).profile_id ?? null)
+  const resolvedEmail = (freshData?.email ?? (customer as Customer & { email?: string }).email) as string | undefined
 
   React.useEffect(() => {
     const fetchProfileId = async () => {
@@ -257,7 +256,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
               value="authorized"
               className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-600 data-[state=active]:text-blue-600 data-[state=active]:shadow-none px-0 font-medium text-gray-500 hover:text-gray-700"
               onMouseEnter={() => {
-                const pid = resolvedProfileId || (currentCustomer as any).profile_id
+                const pid = resolvedProfileId || (currentCustomer as Customer & { profile_id?: string }).profile_id
                 if (pid) prefetchAuthorizedPersons(pid as string)
               }}
             >
@@ -559,7 +558,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
-              {(authorizedPersons as any)?.error && (
+              {(authorizedPersons as unknown as { error?: string })?.error && (
                 <div className="mb-4 p-3 border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-md text-sm">
                   Error al cargar autorizados.
                 </div>
@@ -579,7 +578,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                 </div>
               ) : authorizedPersons && authorizedPersons.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {authorizedPersons.map((person: any) => (
+                  {authorizedPersons.map((person: { id: string; full_name: string; document_number: string; relationship?: string; phone?: string }) => (
                     <div key={person.id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 group hover:shadow-md transition-all">
                       <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
                         <User className="h-5 w-5" />

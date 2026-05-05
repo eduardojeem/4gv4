@@ -162,13 +162,13 @@ export function CreditDetailDialog({
             ['Progreso', `${progressPct}%`],
         ], theme:'grid', headStyles:{fillColor:[37,99,235],textColor:255,fontStyle:'bold'},
            columnStyles:{0:{fontStyle:'bold',cellWidth:60}}, margin:{left:14,right:14} })
-        const y1 = (doc as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
+        const y1 = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
         doc.setFontSize(12); doc.setFont('helvetica','bold'); doc.text('Cuotas', 14, y1)
         autoTable(doc, { startY: y1+4, head:[['N°','Vencimiento','Monto','Pagado','Estado']],
             body: installments.map(i => [i.installment_number, new Date(i.due_date).toLocaleDateString('es-AR'),
                 formatCurrency(i.amount), formatCurrency(i.amount_paid ?? 0), INST_STATUS_CONFIG[getInstallmentStatus(i)].label]),
             theme:'striped', headStyles:{fillColor:[234,88,12],textColor:255,fontStyle:'bold'}, margin:{left:14,right:14} })
-        const y2 = (doc as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
+        const y2 = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
         doc.setFontSize(12); doc.setFont('helvetica','bold'); doc.text('Pagos Registrados', 14, y2)
         autoTable(doc, { startY: y2+4, head:[['Fecha','Método','Monto']],
             body: payments.length === 0 ? [['Sin pagos','-','-']] : payments.map(p => [

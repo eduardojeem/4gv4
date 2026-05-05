@@ -350,7 +350,7 @@ function TableView({
         <Table>
           <TableHeader>
             <TableRow className="border-b border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800/40">
-              <TableHead className="w-12 bg-gray-50 dark:bg-slate-800/70">
+              <TableHead className="w-12 bg-muted/20 border-border/40">
                 <Checkbox
                   checked={allSelected || someSelected}
                   onCheckedChange={onSelectAll}
@@ -358,62 +358,62 @@ function TableView({
                 />
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
+                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
                 onClick={() => onSort('name')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Cliente
                   <SortIcon field="name" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
+                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
                 onClick={() => onSort('email')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Contacto
                   <SortIcon field="email" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
+                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
                 onClick={() => onSort('status')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Estado
                   <SortIcon field="status" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
+                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
                 onClick={() => onSort('lifetime_value')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Valor
                   <SortIcon field="lifetime_value" />
                 </div>
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
+                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
                 onClick={() => onSort('total_purchases')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Compras
                 </div>
               </TableHead>
-              <TableHead className="bg-gray-50 dark:bg-slate-800/70 text-gray-700 dark:text-slate-200">
+              <TableHead className="bg-muted/20 border-border/40 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                 Última compra
               </TableHead>
               <TableHead 
-                className="cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700/60 transition-colors bg-gray-50 dark:bg-slate-800/70"
+                className="cursor-pointer bg-muted/20 border-border/40 hover:bg-muted/30 transition-colors"
                 onClick={() => onSort('last_activity')}
               >
-                <div className="flex items-center gap-2 text-gray-700 dark:text-slate-200">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Última Actividad
                   <SortIcon field="last_activity" />
                 </div>
               </TableHead>
-              <TableHead className="w-20 bg-gray-50 dark:bg-slate-800/70 text-gray-700 dark:text-slate-200">
+              <TableHead className="w-20 bg-muted/20 border-border/40 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground text-right">
                 Acciones
               </TableHead>
             </TableRow>
@@ -483,20 +483,20 @@ function TableView({
                 </TableCell>
                 <TableCell>
               <div className="space-y-1">
-                <div className="font-medium text-gray-900 dark:text-gray-100">
+                <div className="font-bold tabular-nums text-foreground">
                       {formatters.currency((metricsMap[customer.id]?.total ?? (customer as any).total_spent_this_year ?? customer.lifetime_value) || 0)}
                 </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                       {(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)} compras
                 </div>
               </div>
                 </TableCell>
                 <TableCell>
                 <div className="space-y-1">
-                  <div className="text-sm text-gray-700 dark:text-gray-300">
+                  <div className="font-semibold text-sm tabular-nums text-foreground">
                       {formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="text-[10px] uppercase font-medium text-muted-foreground tracking-wide">
                     {customer.city || ''}
                   </div>
                 </div>
@@ -511,7 +511,7 @@ function TableView({
                     </div>
                   </div>
                 </TableCell>
-                <TableCell onClick={(e) => e.stopPropagation()}>
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <CustomerActions
                     customer={customer}
                     onView={() => onViewCustomer(customer)}
@@ -680,22 +680,22 @@ function CustomerCard({
         {/* Métricas */}
         <div className="grid grid-cols-2 gap-4 text-sm mb-4">
             <div>
-              <div className="text-gray-500 dark:text-gray-400">Valor Total</div>
-              <div className="font-semibold text-gray-900 dark:text-gray-100">
+              <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Valor Total</div>
+              <div className="font-bold tabular-nums text-foreground">
               {formatters.currency((metricsMap[customer.id]?.total ?? (customer as any).total_spent_this_year ?? customer.lifetime_value) || 0)}
               </div>
             </div>
             <div>
-              <div className="text-gray-500 dark:text-gray-400">Compras</div>
-            <div className="font-semibold text-gray-900 dark:text-gray-100">{(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)}</div>
+              <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Compras</div>
+            <div className="font-bold tabular-nums text-foreground">{(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)}</div>
             </div>
             <div>
-              <div className="text-gray-500 dark:text-gray-400">Última compra</div>
-            <div className="font-semibold text-gray-900 dark:text-gray-100">{formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}</div>
+              <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Última compra</div>
+            <div className="font-bold tabular-nums text-foreground">{formatters.currency((metricsMap[customer.id]?.lastAmount ?? customer.last_purchase_amount ?? 0))}</div>
             </div>
           <div>
-            <div className="text-gray-500 dark:text-gray-400">Puntos</div>
-            <div className="font-semibold text-gray-900 dark:text-gray-100">{(customer as any).loyalty_points ?? 0}</div>
+            <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Puntos</div>
+            <div className="font-bold tabular-nums text-foreground">{(customer as any).loyalty_points ?? 0}</div>
           </div>
         </div>
 

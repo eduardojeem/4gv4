@@ -89,10 +89,10 @@ export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) 
                     <CardContent className="p-6">
                         <div className="flex items-start justify-between">
                             <div>
-                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                <p className="text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                                     {metric.label}
                                 </p>
-                                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                                <h3 className="text-2xl font-bold tabular-nums text-foreground mt-2">
                                     {metric.value}
                                 </h3>
                                 {metric.subtext && (

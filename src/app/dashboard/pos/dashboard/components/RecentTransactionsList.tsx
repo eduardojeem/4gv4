@@ -1,8 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import React, { useState } from 'react'
-import { CreditCard, Clock } from 'lucide-react'
+import { CreditCard, Clock, Receipt, ChevronRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { PosStats } from "../hooks/usePosStats"
@@ -23,55 +23,74 @@ export function RecentTransactionsList({ sales }: RecentTransactionsListProps) {
   }
 
   return (
-    <Card className="col-span-4">
-      <CardHeader>
-        <CardTitle>Ventas Recientes</CardTitle>
-        <CardDescription>Ultimas transacciones del periodo</CardDescription>
+    <Card className="col-span-4 border-border/60 shadow-sm overflow-hidden bg-card">
+      <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+        <CardTitle className="text-sm font-semibold flex items-center">
+          <Receipt className="mr-2 h-4 w-4 text-blue-600" />
+          Ventas Recientes
+          <span className="ml-auto text-[10px] uppercase font-semibold text-muted-foreground tracking-wide">
+            Últimas transacciones
+          </span>
+        </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {sales.map((sale: any) => (
-            <div key={sale.id} className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center space-x-4">
-                <div className="flex flex-col">
-                  <span className="font-medium text-xs md:text-sm">{sale.id.substring(0, 8)}...</span>
-                  <span className="text-xs text-muted-foreground">{sale.customer_name}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-4">
-                <Badge variant="outline" className="flex items-center space-x-1">
-                  <CreditCard className="h-3 w-3" />
-                  <span className="capitalize">{sale.payment_method}</span>
-                </Badge>
-
-                <div className="text-right">
-                  <div className="font-medium">{formatCurrency(Number(sale.total) || 0)}</div>
-                  <div className="text-xs text-muted-foreground flex items-center justify-end">
-                    <Clock className="h-3 w-3 mr-1" />
-                    {format(parseISO(sale.created_at), 'HH:mm', { locale: es })}
+      <CardContent className="p-0">
+        {sales.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-muted-foreground bg-card">
+            <div className="p-3 bg-muted/50 rounded-full mb-3">
+              <Receipt className="h-6 w-6 opacity-40" />
+            </div>
+            <p className="font-medium text-sm">No hay ventas en este periodo</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/40 max-h-[400px] overflow-y-auto">
+            {sales.map((sale: any) => (
+              <button
+                key={sale.id}
+                type="button"
+                onClick={() => openDetails(sale.id)}
+                className="w-full text-left p-4 hover:bg-muted/30 transition-colors group flex items-center justify-between"
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="hidden sm:flex p-2 rounded-lg bg-blue-50/50 border border-blue-100 dark:bg-blue-950/30 dark:border-blue-900/50">
+                    <Receipt className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm truncate text-foreground flex items-center gap-2">
+                      {sale.customer_name || 'Consumidor Final'}
+                      <span className="text-[10px] font-mono text-muted-foreground px-1.5 py-0.5 rounded-md bg-muted/50 border border-border/40">
+                        {sale.id.substring(0, 8).toUpperCase()}
+                      </span>
+                    </p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span className="flex items-center">
+                        <Clock className="h-3 w-3 mr-1" />
+                        {format(parseISO(sale.created_at), "d MMM, HH:mm", { locale: es })}
+                      </span>
+                      <span className="hidden md:flex items-center">
+                        <span className="h-1 w-1 rounded-full bg-muted-foreground mr-1.5" />
+                        {sale.items_count} {sale.items_count === 1 ? 'artículo' : 'artículos'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="text-xs text-muted-foreground hidden md:block">
-                  {sale.items_count} articulos
+                <div className="flex items-center gap-4 text-sm ml-4 shrink-0">
+                  <div className="text-right">
+                    <Badge variant="outline" className="text-[9px] uppercase tracking-wider font-semibold border-border/50 bg-background mb-0.5 px-1.5 py-0">
+                      {sale.payment_method}
+                    </Badge>
+                    <p className="font-bold tabular-nums text-foreground">
+                      {formatCurrency(Number(sale.total) || 0)}
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors hidden sm:block" />
                 </div>
-
-                <Button variant="outline" size="sm" onClick={() => openDetails(sale.id)}>
-                  Ver detalle
-                </Button>
-              </div>
-            </div>
-          ))}
-          {sales.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              No hay ventas registradas en este periodo.
-            </div>
-          )}
-        </div>
+              </button>
+            ))}
+          </div>
+        )}
       </CardContent>
       <SaleDetailsModal isOpen={open} onClose={() => setOpen(false)} saleId={selectedSaleId} />
     </Card>
   )
 }
-
