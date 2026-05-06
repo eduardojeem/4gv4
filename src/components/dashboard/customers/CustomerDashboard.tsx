@@ -15,7 +15,7 @@
 
 import React, { useMemo, useState, useEffect, Suspense, lazy, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -25,7 +25,6 @@ import {
   Users, 
   TrendingUp, 
   UserCheck, 
-  Sparkles,
   BarChart3,
   PieChart,
   Activity,
@@ -33,7 +32,6 @@ import {
   CreditCard,
   MessageSquare
 } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
 import { ImprovedMetricCard } from './ImprovedMetricCard'
 // Componentes cargados dinámicamente para reducir el peso inicial
 // Componente mejorado de lista de clientes
@@ -573,36 +571,30 @@ export function CustomerDashboard() {
   }, [selectedCustomer])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-3 sm:p-4 lg:p-6">
-      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-        {/* Header */}
+    <div className="min-h-screen bg-gray-50/50 dark:bg-slate-950 p-3 sm:p-4 lg:p-6">
+      <div className="max-w-7xl mx-auto space-y-5 sm:space-y-6">
+        {/* Header — Clean and minimal */}
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6"
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
         >
           <div className="flex items-center gap-3">
-            <div className="p-2 sm:p-3 bg-gradient-to-br from-blue-600 to-indigo-700 dark:from-blue-500 dark:to-indigo-600 rounded-xl shadow-lg">
-              <Users className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+            <div className="p-2.5 bg-blue-600 dark:bg-blue-500 rounded-xl shadow-sm">
+              <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white">
-                Gestión de Clientes
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-50 tracking-tight">
+                Clientes
               </h1>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1">
-                Panel de control avanzado para la gestión integral de clientes
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {totalCustomers} registrados · {activeCustomers} activos
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-yellow-500 dark:text-yellow-400" />
-              <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 dark:from-yellow-500 dark:to-orange-600 text-white border-0 text-xs sm:text-sm">
-                IA Activada
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2 bg-white/70 dark:bg-slate-900/80 px-2 py-1 rounded-lg border border-gray-200 dark:border-slate-700">
-              <span className="text-xs text-gray-700 dark:text-slate-200">Compacto</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm">
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Compacto</span>
               <Switch 
                 checked={compactMode} 
                 onCheckedChange={setCompactMode}
@@ -612,12 +604,12 @@ export function CustomerDashboard() {
           </div>
         </motion.div>
 
-        {/* Stats Cards - Using ImprovedMetricCard */}
+        {/* Stats Cards */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className={compactMode ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 lg:gap-4" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6"}
+          transition={{ delay: 0.05 }}
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
         >
           {stats.map((stat, index) => (
             <ImprovedMetricCard
@@ -634,70 +626,53 @@ export function CustomerDashboard() {
           ))}
         </motion.div>
 
-        {/* Main Content - Responsive Tabs */}
+        {/* Main Content — Tabs */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+          transition={{ delay: 0.1 }}
         >
-          <Tabs value={activeTab} onValueChange={setActiveTab} className={compactMode ? "space-y-3 sm:space-y-4" : "space-y-4 sm:space-y-6"}>
-            {/* Mobile-Optimized Tab List */}
-            <div className="bg-white/80 dark:bg-slate-900/85 backdrop-blur-sm rounded-xl shadow-lg border border-gray-200 dark:border-slate-700 p-2">
-              <TabsList className={compactMode ? "grid w-full grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-1 bg-transparent h-auto p-0" : "grid w-full grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2 bg-transparent h-auto p-0"}>
-                <TabsTrigger 
-                  value="customers" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
-                >
-                  <Users className="h-4 w-4" />
-                  <span className="hidden sm:inline">Clientes</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="analytics" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
-                >
-                  <BarChart3 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Analíticas</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="segmentation" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
-                >
-                  <PieChart className="h-4 w-4" />
-                  <span className="hidden sm:inline">Segmentación</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="communications" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
-                >
-                  <MessageSquare className="h-4 w-4" />
-                  <span className="hidden sm:inline">Comunicaciones</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="metrics" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
-                >
-                  <Activity className="h-4 w-4" />
-                  <span className="hidden sm:inline">Métricas</span>
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="notifications" 
-                  className={compactMode ? "flex flex-col sm:flex-row items-center gap-1 p-1 sm:p-2 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200" : "flex flex-col sm:flex-row items-center gap-2 p-2 sm:p-3 text-xs sm:text-sm font-medium rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-600 data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-200 hover:bg-gray-100 dark:hover:bg-slate-700/70 text-gray-700 dark:text-slate-200"}
-                >
-                  <Bell className="h-4 w-4" />
-                  <span className="hidden sm:inline">Notificaciones</span>
-                </TabsTrigger>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            {/* Tab Navigation — Clean pill style */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-1.5">
+              <TabsList className="grid w-full grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1 bg-transparent h-auto p-0">
+                {[
+                  { value: "customers", icon: <Users className="h-4 w-4" />, label: "Clientes" },
+                  { value: "analytics", icon: <BarChart3 className="h-4 w-4" />, label: "Analíticas" },
+                  { value: "segmentation", icon: <PieChart className="h-4 w-4" />, label: "Segmentos" },
+                  { value: "communications", icon: <MessageSquare className="h-4 w-4" />, label: "Mensajes" },
+                  { value: "metrics", icon: <Activity className="h-4 w-4" />, label: "Métricas" },
+                  { value: "notifications", icon: <Bell className="h-4 w-4" />, label: "Alertas" },
+                ].map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800"
+                  >
+                    {tab.icon}
+                    <span className="hidden sm:inline">{tab.label}</span>
+                  </TabsTrigger>
+                ))}
               </TabsList>
             </div>
 
             {/* Tab Content */}
-            <TabsContent value="customers" className={compactMode ? "space-y-3 sm:space-y-4 mt-0" : "space-y-4 sm:space-y-6 mt-0"}>
-              <div className={compactMode ? "space-y-3 sm:space-y-4" : "space-y-4 sm:space-y-6"}>
-                {currentView === 'list' && (
-                  <>
-                    <Card className="border border-gray-200 dark:border-slate-700 shadow-lg bg-white/80 dark:bg-slate-900/70">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-gray-100">
-                          <CreditCard className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <TabsContent value="customers" className="space-y-4 mt-0">
+              <div className="space-y-4">
+                <AnimatePresence mode="wait">
+                  {currentView === 'list' && (
+                    <motion.div
+                      key="list"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="space-y-4"
+                    >
+                      <Card className="border border-gray-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
+                          <CreditCard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           Créditos Activos
                         </CardTitle>
                       </CardHeader>
@@ -707,10 +682,10 @@ export function CustomerDashboard() {
                             placeholder="Buscar cliente"
                             value={creditSearchTerm}
                             onChange={(e) => setCreditSearchTerm(e.target.value)}
-                            className="lg:w-1/3 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100"
+                            className="lg:w-1/3 border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100"
                           />
                           <Select value={selectedCreditCustomerId} onValueChange={setSelectedCreditCustomerId}>
-                            <SelectTrigger className="lg:w-1/3 border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
+                            <SelectTrigger className="lg:w-1/3 border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
                               <SelectValue placeholder="Seleccionar cliente" />
                             </SelectTrigger>
                             <SelectContent className="max-h-[300px] bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-700">
@@ -876,28 +851,51 @@ export function CustomerDashboard() {
                         />
                       </div>
                     )}
-                  </>
+                    </motion.div>
                 )}
 
                 {currentView === 'detail' && selectedCustomer && (
-                  <CustomerDetail
-                    customer={selectedCustomer}
-                    onBack={handleBackToList}
-                    onEdit={handleEditCustomer}
-                    onViewHistory={() => handleViewHistory(selectedCustomer)}
-                    compact={compactMode}
-                  />
+                  <motion.div
+                    key="detail"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <CustomerDetail
+                      customer={selectedCustomer}
+                      onBack={handleBackToList}
+                      onEdit={handleEditCustomer}
+                      onViewHistory={() => handleViewHistory(selectedCustomer)}
+                      compact={compactMode}
+                    />
+                  </motion.div>
                 )}
 
                 {currentView === 'history' && selectedCustomer && (
+                  <motion.div
+                    key="history"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.2 }}
+                  >
                   <CustomerHistory
                     customer={selectedCustomer}
                     onBack={handleBackToList}
                     onViewDetail={() => handleViewDetail(selectedCustomer)}
                   />
+                  </motion.div>
                 )}
 
                 {currentView === 'edit' && selectedCustomer && (
+                  <motion.div
+                    key="edit"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.2 }}
+                  >
                   <CustomerEditFormV2
                     customer={selectedCustomer}
                     onSave={async (formData) => {
@@ -922,7 +920,9 @@ export function CustomerDashboard() {
                     }}
                     onCancel={handleBackToList}
                   />
+                  </motion.div>
                 )}
+                </AnimatePresence>
               </div>
             </TabsContent>
 

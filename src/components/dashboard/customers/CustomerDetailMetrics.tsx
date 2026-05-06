@@ -6,7 +6,8 @@ import {
     CreditCard,
     Clock,
     ArrowUpRight,
-    ArrowDownRight
+    ArrowDownRight,
+    Sparkles
 } from "lucide-react"
 import { Customer } from "@/hooks/use-customer-state"
 
@@ -55,12 +56,36 @@ export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) 
         {
             label: "Última Visita",
             value: customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : "N/A",
-            subtext: "Hace 2 días",
+            subtext: "Última actividad registrada",
             icon: Clock,
             color: "text-orange-600",
             bg: "bg-orange-50 dark:bg-orange-900/20"
         }
     ]
+
+    const prediction = (() => {
+        if (!customer.total_purchases || customer.total_purchases < 2 || !customer.registration_date || !customer.last_visit) return null;
+        const regDate = new Date(customer.registration_date);
+        const lastDate = new Date(customer.last_visit);
+        const now = new Date();
+        const daysSinceReg = Math.max(1, (now.getTime() - regDate.getTime()) / (1000 * 3600 * 24));
+        const avgDays = daysSinceReg / customer.total_purchases;
+        const nextDate = new Date(lastDate.getTime() + (avgDays * 1000 * 3600 * 24));
+        const diffDays = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 3600 * 24));
+        
+        return { diffDays, avgDays: Math.round(avgDays) };
+    })();
+
+    if (prediction) {
+        metrics.push({
+            label: "Próxima Compra (Est.)",
+            value: prediction.diffDays > 0 ? `En ${prediction.diffDays} días` : "Muy pronto",
+            subtext: `Frecuencia: ~${prediction.avgDays} días`,
+            icon: Sparkles,
+            color: "text-amber-600",
+            bg: "bg-amber-50 dark:bg-amber-900/20"
+        });
+    }
         if (creditSummary) {
             metrics.push(
                 {

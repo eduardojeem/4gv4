@@ -16,12 +16,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +27,6 @@ import {
   Grid3X3,
   List,
   Search,
-  Filter,
   SortAsc,
   SortDesc,
   Mail,
@@ -41,16 +35,10 @@ import {
   Eye,
   History,
   Star,
-  Award,
-  ShoppingBag,
-  Calendar,
-  CreditCard,
   MoreVertical,
   Edit,
   Trash2,
   MessageCircle,
-  TrendingUp,
-  Activity,
   Clock,
   Power,
   PowerOff
@@ -65,7 +53,7 @@ import { useAuth } from '@/contexts/auth-context'
 interface CustomerListViewProps {
   customers: Customer[]
   selectedCustomers: string[]
-  onCustomerSelect: (customer: Customer) => void
+
   onCustomerToggle: (customerId: string) => void
   onSelectAll: () => void
   onClearSelection: () => void
@@ -86,7 +74,7 @@ type SortOrder = 'asc' | 'desc'
 export function CustomerListView({
   customers,
   selectedCustomers,
-  onCustomerSelect,
+
   onCustomerToggle,
   onSelectAll,
   onClearSelection,
@@ -124,8 +112,8 @@ export function CustomerListView({
 
     // Aplicar ordenamiento
     filtered.sort((a, b) => {
-      let aValue: any = a[sortField]
-      let bValue: any = b[sortField]
+      let aValue: unknown = a[sortField as keyof Customer]
+      let bValue: unknown = b[sortField as keyof Customer]
 
       // Manejar valores especiales
       if (sortField === 'lifetime_value') {
@@ -275,7 +263,6 @@ export function CustomerListView({
               onEditCustomer={onEditCustomer}
               onDeleteCustomer={onDeleteCustomer}
               onToggleCustomerStatus={onToggleCustomerStatus}
-              loading={loading}
               metricsMap={metricsMap}
             />
           </motion.div>
@@ -295,7 +282,6 @@ export function CustomerListView({
               onEditCustomer={onEditCustomer}
               onDeleteCustomer={onDeleteCustomer}
               onToggleCustomerStatus={onToggleCustomerStatus}
-              loading={loading}
               metricsMap={metricsMap}
             />
           </motion.div>
@@ -320,7 +306,6 @@ function TableView({
   onEditCustomer,
   onDeleteCustomer,
   onToggleCustomerStatus,
-  loading,
   metricsMap
 }: {
   customers: Customer[]
@@ -336,10 +321,9 @@ function TableView({
   onEditCustomer: (customer: Customer) => void
   onDeleteCustomer: (customer: Customer) => void
   onToggleCustomerStatus?: (customer: Customer) => void
-  loading: boolean
   metricsMap: Record<string, CustomerMetrics>
 }) {
-  const SortIcon = ({ field }: { field: SortField }) => {
+  const renderSortIcon = (field: SortField) => {
     if (sortField !== field) return null
     return sortOrder === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />
   }
@@ -363,7 +347,7 @@ function TableView({
               >
                 <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Cliente
-                  <SortIcon field="name" />
+                  {renderSortIcon('name')}
                 </div>
               </TableHead>
               <TableHead 
@@ -372,7 +356,7 @@ function TableView({
               >
                 <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Contacto
-                  <SortIcon field="email" />
+                  {renderSortIcon('email')}
                 </div>
               </TableHead>
               <TableHead 
@@ -381,7 +365,7 @@ function TableView({
               >
                 <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Estado
-                  <SortIcon field="status" />
+                  {renderSortIcon('status')}
                 </div>
               </TableHead>
               <TableHead 
@@ -390,7 +374,7 @@ function TableView({
               >
                 <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Valor
-                  <SortIcon field="lifetime_value" />
+                  {renderSortIcon('lifetime_value')}
                 </div>
               </TableHead>
               <TableHead 
@@ -399,6 +383,7 @@ function TableView({
               >
                 <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Compras
+                  {renderSortIcon('total_purchases')}
                 </div>
               </TableHead>
               <TableHead className="bg-muted/20 border-border/40 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
@@ -410,7 +395,7 @@ function TableView({
               >
                 <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
                   Última Actividad
-                  <SortIcon field="last_activity" />
+                  {renderSortIcon('last_activity')}
                 </div>
               </TableHead>
               <TableHead className="w-20 bg-muted/20 border-border/40 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground text-right">
@@ -482,14 +467,14 @@ function TableView({
                   </div>
                 </TableCell>
                 <TableCell>
-              <div className="space-y-1">
-                <div className="font-bold tabular-nums text-foreground">
-                      {formatters.currency((metricsMap[customer.id]?.total ?? (customer as any).total_spent_this_year ?? customer.lifetime_value) || 0)}
-                </div>
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      {(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)} compras
-                </div>
-              </div>
+                  <div className="font-bold tabular-nums text-foreground">
+                        {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as {total_spent_this_year?: number}).total_spent_this_year ?? customer.lifetime_value) || 0)}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="font-semibold tabular-nums text-foreground">
+                        {(metricsMap[customer.id]?.count ?? customer.total_purchases ?? 0)}
+                  </div>
                 </TableCell>
                 <TableCell>
                 <div className="space-y-1">
@@ -538,7 +523,6 @@ function GridView({
   onEditCustomer,
   onDeleteCustomer,
   onToggleCustomerStatus,
-  loading,
   metricsMap
 }: {
   customers: Customer[]
@@ -548,7 +532,6 @@ function GridView({
   onEditCustomer: (customer: Customer) => void
   onDeleteCustomer: (customer: Customer) => void
   onToggleCustomerStatus?: (customer: Customer) => void
-  loading: boolean
   metricsMap: Record<string, CustomerMetrics>
 }) {
   return (
@@ -682,7 +665,7 @@ function CustomerCard({
             <div>
               <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Valor Total</div>
               <div className="font-bold tabular-nums text-foreground">
-              {formatters.currency((metricsMap[customer.id]?.total ?? (customer as any).total_spent_this_year ?? customer.lifetime_value) || 0)}
+              {formatters.currency((metricsMap[customer.id]?.total ?? (customer as unknown as {total_spent_this_year?: number}).total_spent_this_year ?? customer.lifetime_value) || 0)}
               </div>
             </div>
             <div>
@@ -695,7 +678,7 @@ function CustomerCard({
             </div>
           <div>
             <div className="text-[10px] uppercase font-semibold tracking-wide text-muted-foreground mb-1">Puntos</div>
-            <div className="font-bold tabular-nums text-foreground">{(customer as any).loyalty_points ?? 0}</div>
+            <div className="font-bold tabular-nums text-foreground">{(customer as unknown as {loyalty_points?: number}).loyalty_points ?? 0}</div>
           </div>
         </div>
 

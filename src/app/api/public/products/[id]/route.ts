@@ -108,7 +108,7 @@ export async function GET(
       category: category ? { id: category.id, name: category.name } : undefined,
       sale_price: finalProduct.sale_price,
       wholesale_price: isWholesale ? finalProduct.wholesale_price : null,
-      in_stock: finalProduct.stock_quantity > 0,
+      stock_quantity: finalProduct.stock_quantity,
       is_active: finalProduct.is_active,
       featured: finalProduct.featured || false,
       image: finalProduct.image_url || (Array.isArray(finalProduct.images) && finalProduct.images.length > 0 ? finalProduct.images[0] : null),

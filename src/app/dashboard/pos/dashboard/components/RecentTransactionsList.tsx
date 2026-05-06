@@ -1,8 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import React, { useState } from 'react'
-import { CreditCard, Clock, Receipt, ChevronRight } from 'lucide-react'
+import { Clock, Receipt, ChevronRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { PosStats } from "../hooks/usePosStats"
@@ -43,7 +42,7 @@ export function RecentTransactionsList({ sales }: RecentTransactionsListProps) {
           </div>
         ) : (
           <div className="divide-y divide-border/40 max-h-[400px] overflow-y-auto">
-            {sales.map((sale: any) => (
+            {sales.map((sale: NonNullable<PosStats['recentSales']>[0]) => (
               <button
                 key={sale.id}
                 type="button"

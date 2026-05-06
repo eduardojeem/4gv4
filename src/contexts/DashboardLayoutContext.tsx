@@ -23,15 +23,18 @@ export function DashboardLayoutProvider({ children }: { children: ReactNode }) {
 
     // Load preferences from localStorage on mount
     useEffect(() => {
-        const savedCollapsed = localStorage.getItem('dashboard-sidebar-collapsed')
-        if (savedCollapsed !== null) {
-            setSidebarCollapsed(savedCollapsed === 'true')
-            return
-        }
-        // By default, keep sidebar closed on mobile to avoid overlaying content on first load.
-        if (window.innerWidth < 1024) {
-            setSidebarCollapsed(true)
-        }
+        const timer = setTimeout(() => {
+            const savedCollapsed = localStorage.getItem('dashboard-sidebar-collapsed')
+            if (savedCollapsed !== null) {
+                setSidebarCollapsed(savedCollapsed === 'true')
+                return
+            }
+            // By default, keep sidebar closed on mobile to avoid overlaying content on first load.
+            if (window.innerWidth < 1024) {
+                setSidebarCollapsed(true)
+            }
+        }, 0)
+        return () => clearTimeout(timer)
     }, [])
 
     // Save sidebar collapsed state to localStorage

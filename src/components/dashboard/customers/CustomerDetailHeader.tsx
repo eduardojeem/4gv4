@@ -12,8 +12,13 @@ import {
     Mail,
     MapPin,
     Star,
-    Shield
+    Shield,
+    Download
 } from "lucide-react"
+import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 import { Customer } from "@/hooks/use-customer-state"
 
 interface CustomerDetailHeaderProps {
@@ -52,6 +57,44 @@ export function CustomerDetailHeader({
         }
     }
 
+    const exportToPDF = () => {
+        const doc = new jsPDF()
+        const pageW = doc.internal.pageSize.getWidth()
+        
+        doc.setFontSize(20); doc.setFont('helvetica','bold'); doc.setTextColor(37, 99, 235)
+        doc.text('4G - PUNTO DE VENTA', pageW / 2, 22, { align: 'center' })
+        
+        doc.setFontSize(14); doc.setTextColor(0)
+        doc.text('Reporte de Cliente', pageW / 2, 32, { align: 'center' })
+        
+        doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(100)
+        doc.text(`Generado el ${new Date().toLocaleString('es-AR')}`, pageW / 2, 40, { align: 'center' })
+        
+        doc.setTextColor(0)
+        
+        autoTable(doc, { 
+            startY: 50, 
+            head:[['Campo','Valor']], 
+            body:[
+                ['Nombre', customer.name || '-'],
+                ['Email', customer.email || '-'],
+                ['Teléfono', customer.phone || '-'],
+                ['Dirección', customer.address || customer.city || '-'],
+                ['Estado', customer.status === 'active' ? 'Activo' : customer.status || 'Activo'],
+                ['Segmento', customer.segment === 'vip' ? 'VIP' : customer.segment === 'wholesale' ? 'Mayorista' : customer.segment === 'business' ? 'Empresa' : 'Regular'],
+                ['Total Gastado', `$${(customer.lifetime_value || 0).toLocaleString()}`],
+                ['Compras', `${customer.total_purchases || 0}`],
+                ['Crédito', `$${(customer.credit_limit || 0).toLocaleString()}`],
+            ], 
+            theme:'grid', 
+            headStyles:{fillColor:[37,99,235],textColor:255,fontStyle:'bold'},
+            columnStyles:{0:{fontStyle:'bold',cellWidth:60}}, 
+            margin:{left:14,right:14} 
+        })
+        
+        doc.save(`cliente_${customer.name?.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`)
+    }
+
     return (
         <div className="space-y-6">
             {/* Navigation Bar */}
@@ -70,6 +113,10 @@ export function CustomerDetailHeader({
                     <Button variant="outline" size="sm" onClick={onViewHistory}>
                         <History className="h-4 w-4 mr-2" />
                         Historial
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={exportToPDF} className="bg-white dark:bg-slate-900 text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:hover:bg-blue-900/30">
+                        <Download className="h-4 w-4 mr-2" />
+                        Exportar PDF
                     </Button>
                     <Button variant="default" size="sm" onClick={onEdit} className="bg-blue-600 hover:bg-blue-700">
                         <Edit className="h-4 w-4 mr-2" />
