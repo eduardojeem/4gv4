@@ -1,16 +1,22 @@
 /**
- * RepairCard - Memoized card component for Kanban view
+ * RepairCard - Card component for grid/kanban views
  * 
- * Optimized with React.memo to prevent unnecessary re-renders.
- * Only re-renders when repair data or priority changes.
+ * Clean design with:
+ * - Color-coded left border by status
+ * - Urgency indicator
+ * - Key info at a glance (device, customer, technician, date, cost)
+ * - Compact but readable
  */
 
 import React, { memo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Calendar, Image as ImageIcon, User, Wrench } from 'lucide-react'
+import { Calendar, Clock, User, Wrench, Zap, ImageIcon } from 'lucide-react'
 import { Repair } from '@/types/repairs'
-import { priorityConfig } from '@/config/repair-constants'
+import { statusConfig, priorityConfig } from '@/config/repair-constants'
+import { formatCurrency } from '@/lib/currency'
+import { formatDistanceToNow } from 'date-fns'
+import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 
 interface RepairCardProps {
@@ -19,73 +25,126 @@ interface RepairCardProps {
   className?: string
 }
 
+const statusBorderColors: Record<string, string> = {
+  recibido: 'border-l-gray-400',
+  diagnostico: 'border-l-amber-500',
+  reparacion: 'border-l-blue-500',
+  pausado: 'border-l-orange-400',
+  listo: 'border-l-emerald-500',
+  entregado: 'border-l-gray-300',
+  cancelado: 'border-l-red-400',
+}
+
 export const RepairCard = memo<RepairCardProps>(
   function RepairCard({ repair, onClick, className }) {
+    const status = statusConfig[repair.status]
+    const priority = priorityConfig[repair.priority]
+    const borderColor = statusBorderColors[repair.status] || 'border-l-gray-300'
+    const imageCount = Array.isArray(repair.images) ? repair.images.length : 0
+
+    const timeAgo = (() => {
+      try {
+        if (!repair.createdAt) return ''
+        const date = new Date(repair.createdAt)
+        if (isNaN(date.getTime())) return ''
+        return formatDistanceToNow(date, { addSuffix: false, locale: es })
+      } catch {
+        return ''
+      }
+    })()
+
     return (
       <Card
-        className={cn('hover:shadow-md dark:hover:shadow-xl transition-all cursor-pointer border-border dark:border-muted/50 bg-card dark:bg-card/95', className)}
+        className={cn(
+          'border-l-4 hover:shadow-md transition-shadow cursor-pointer bg-white dark:bg-slate-900',
+          'border border-gray-100 dark:border-slate-800',
+          borderColor,
+          className
+        )}
         onClick={onClick}
       >
-        <CardContent className="p-3 space-y-2">
-          <div className="flex justify-between items-start">
-            <span className="font-medium text-sm truncate max-w-[150px] text-foreground dark:text-foreground">
-              {repair.device}
-            </span>
-            <Badge
-              className={cn(
-                'text-[10px] px-1 py-0 h-5',
-                priorityConfig[repair.priority].bgColor
+        <CardContent className="p-3.5 space-y-2.5">
+          {/* Header: Device + Priority/Urgency */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                {repair.device}
+              </h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                #{repair.ticketNumber || repair.id.slice(0, 8)}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {repair.urgency === 'urgent' && (
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-5 gap-0.5">
+                  <Zap className="h-2.5 w-2.5" />
+                  Urgente
+                </Badge>
               )}
-            >
-              {priorityConfig[repair.priority].label}
-            </Badge>
+              {repair.urgency !== 'urgent' && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                  {priority.icon} {priority.label}
+                </Badge>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground dark:text-muted-foreground/80">
-            <div className="flex items-center gap-1 truncate max-w-[60%]">
-              <User className="h-3 w-3" />
-              <span className="truncate">{repair.customer.name}</span>
+          {/* Issue description */}
+          <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 leading-relaxed">
+            {repair.issue}
+          </p>
+
+          {/* Customer + Technician */}
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 min-w-0">
+              <User className="h-3 w-3 text-gray-400 flex-shrink-0" />
+              <span className="truncate font-medium">{repair.customer.name}</span>
             </div>
-            <div className="flex items-center gap-1 truncate max-w-[35%]">
-              <Wrench className="h-3 w-3" />
+            <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 min-w-0">
+              <Wrench className="h-3 w-3 flex-shrink-0" />
               <span className="truncate">{repair.technician?.name || 'Sin asignar'}</span>
             </div>
           </div>
 
-          <p className="text-xs text-muted-foreground dark:text-muted-foreground/80 line-clamp-2 min-h-[2.5em]">
-            {repair.issue}
-          </p>
-
-          <div className="flex items-center justify-between text-xs text-muted-foreground dark:text-muted-foreground/80 pt-2 border-t border-border dark:border-muted/40 mt-2">
-            <div className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {new Date(repair.createdAt).toLocaleDateString(undefined, {
-                month: 'short',
-                day: 'numeric'
-              })}
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                <ImageIcon className="h-3 w-3" />
-                <span>{Array.isArray(repair.images) ? repair.images.length : 0}</span>
-              </div>
-              <span className="font-mono text-[10px] bg-slate-100 dark:bg-muted/60 text-slate-700 dark:text-muted-foreground px-1 rounded">
-                {repair.ticketNumber || repair.id.slice(0, 8)}
+          {/* Footer: Status + Date + Cost */}
+          <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-slate-800">
+            <Badge
+              variant="outline"
+              className={cn('text-[10px] px-1.5 py-0 h-5 font-medium', status.color)}
+            >
+              {status.label}
+            </Badge>
+            <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500">
+              {imageCount > 0 && (
+                <span className="flex items-center gap-0.5">
+                  <ImageIcon className="h-3 w-3" />{imageCount}
+                </span>
+              )}
+              <span className="flex items-center gap-0.5">
+                <Clock className="h-3 w-3" />{timeAgo}
               </span>
+              {repair.estimatedCost > 0 && (
+                <span className="font-medium text-gray-600 dark:text-gray-300">
+                  {formatCurrency(repair.estimatedCost)}
+                </span>
+              )}
             </div>
           </div>
         </CardContent>
       </Card>
     )
   },
-  // Custom comparison - only re-render if these properties change
   (prevProps, nextProps) => {
+    const prev = prevProps.repair
+    const next = nextProps.repair
+    if (prev === next) return true
     return (
-      prevProps.repair.id === nextProps.repair.id &&
-      prevProps.repair.device === nextProps.repair.device &&
-      prevProps.repair.issue === nextProps.repair.issue &&
-      prevProps.repair.priority === nextProps.repair.priority &&
-      prevProps.repair.createdAt === nextProps.repair.createdAt
+      prev.id === next.id &&
+      prev.status === next.status &&
+      prev.priority === next.priority &&
+      prev.urgency === next.urgency &&
+      prev.lastUpdate === next.lastUpdate &&
+      prev.technician?.id === next.technician?.id
     )
   }
 )

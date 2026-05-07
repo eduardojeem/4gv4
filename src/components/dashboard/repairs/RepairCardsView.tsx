@@ -21,8 +21,10 @@ interface RepairCardsViewProps {
 }
 
 export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }: RepairCardsViewProps) {
+  if (repairs.length === 0) return null
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
       {repairs.map((repair) => (
         <div key={repair.id} className="relative group">
           <RepairCard
@@ -37,7 +39,7 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
                 <Button
                   variant="secondary"
                   size="icon"
-                  className="h-7 w-7 shadow-md"
+                  className="h-7 w-7 shadow-sm bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <MoreVertical className="h-3.5 w-3.5" />
@@ -58,7 +60,7 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      className="text-emerald-600 dark:text-emerald-400 focus:text-emerald-700 dark:focus:text-emerald-300"
+                      className="text-emerald-600 dark:text-emerald-400"
                       onClick={() => onDeliver(repair)}
                     >
                       <PackageCheck className="mr-2 h-3.5 w-3.5" />
@@ -70,7 +72,7 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
                   <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
+                      className="text-red-600 dark:text-red-400"
                       onClick={() => onDelete(repair.id)}
                     >
                       <Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -86,4 +88,3 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
     </div>
   )
 }
-

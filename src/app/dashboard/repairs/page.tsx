@@ -113,7 +113,8 @@ function RepairsPageContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
   const [payTarget, setPayTarget] = useState<Repair | null>(null)
-  const [pageSize, setPageSize] = useState<number>(20)
+  const [pageSize, setPageSize] = useState<number>(25)
+  const [currentPage, setCurrentPage] = useState<number>(1)
   const [searchOpen, setSearchOpen] = useState(false)
   const [successDialogData, setSuccessDialogData] = useState<RepairPrintPayload | null>(null)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
@@ -185,10 +186,17 @@ function RepairsPageContent() {
   // Remove duplicate filtering logic
   const uiFiltered = filteredRepairs
 
-  // Optimize visible repairs calculation
+  // Optimize visible repairs calculation with pagination
+  const totalPages = Math.ceil(uiFiltered.length / pageSize)
   const visibleRepairs = useMemo(() => {
-    return uiFiltered.slice(0, pageSize)
-  }, [uiFiltered, pageSize])
+    const start = (currentPage - 1) * pageSize
+    return uiFiltered.slice(start, start + pageSize)
+  }, [uiFiltered, currentPage, pageSize])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, statusFilter, priorityFilter, technicianFilter, dateRange])
 
   // Optimized callbacks with proper dependencies
   const handleCalendarSelect = useCallback((d?: Date) => {
@@ -408,6 +416,32 @@ function RepairsPageContent() {
       toast.error('Error al guardar la reparación')
     }
   }, [dialogMode, selectedRepair, createRepair, updateRepair, addImages, technicianOptions, handleDialogClose])
+
+  const handleGlobalSearch = useCallback(({ query }: { query: string }) => {
+    if (!query || query.length < 2) return []
+    
+    const q = query.toLowerCase()
+    const results: Array<{ title: string; subtitle: string; href: string }> = []
+    
+    for (const repair of repairs) {
+      if (results.length >= 10) break
+      
+      const customerName = repair.customer.name.toLowerCase()
+      const device = repair.device.toLowerCase()
+      const id = repair.id.toLowerCase()
+      const ticket = (repair.ticketNumber || '').toLowerCase()
+      
+      if (customerName.includes(q) || device.includes(q) || id.includes(q) || ticket.includes(q)) {
+        results.push({
+          title: `${repair.customer.name} • ${repair.device}`,
+          subtitle: `${repair.ticketNumber || repair.id.slice(0, 8)} • ${repair.status}`,
+          href: `/dashboard/repairs?search=${encodeURIComponent(repair.id)}`
+        })
+      }
+    }
+    
+    return results
+  }, [repairs])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -649,41 +683,37 @@ function RepairsPageContent() {
         data={successDialogData}
       />
 
-      {uiFiltered.length > visibleRepairs.length && (viewMode === 'table' || viewMode === 'cards') && (
-        <div className="flex items-center justify-center">
-          <Button variant="outline" onClick={() => setPageSize(s => s + 20)}>Cargar más</Button>
+      {uiFiltered.length > pageSize && (viewMode === 'table' || viewMode === 'cards') && (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, uiFiltered.length)} de {uiFiltered.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage(p => p - 1)}
+            >
+              Anterior
+            </Button>
+            <span className="text-xs font-medium px-3">{currentPage} / {totalPages}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage(p => p + 1)}
+            >
+              Siguiente
+            </Button>
+          </div>
         </div>
       )}
 
       <GlobalSearch
         open={searchOpen}
         onOpenChange={setSearchOpen}
-        onSearch={useCallback(({ query }: { query: string }) => {
-          if (!query || query.length < 2) return []
-          
-          const q = query.toLowerCase()
-          const results: Array<{ title: string; subtitle: string; href: string }> = []
-          
-          // Search over ALL repairs, not just the currently filtered subset
-          for (const repair of repairs) {
-            if (results.length >= 10) break
-            
-            const customerName = repair.customer.name.toLowerCase()
-            const device = repair.device.toLowerCase()
-            const id = repair.id.toLowerCase()
-            const ticket = (repair.ticketNumber || '').toLowerCase()
-            
-            if (customerName.includes(q) || device.includes(q) || id.includes(q) || ticket.includes(q)) {
-              results.push({
-                title: `${repair.customer.name} • ${repair.device}`,
-                subtitle: `${repair.ticketNumber || repair.id.slice(0, 8)} • ${repair.status}`,
-                href: `/dashboard/repairs?search=${encodeURIComponent(repair.id)}`
-              })
-            }
-          }
-          
-          return results
-        }, [repairs])}
+        onSearch={handleGlobalSearch}
       />
 
       <RepairDetailDialog

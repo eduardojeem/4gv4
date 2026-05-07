@@ -1,17 +1,34 @@
 'use client'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Repair, RepairStatus } from '@/types/repairs'
-import { Activity, CheckCircle, Clock, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react'
+import { Repair } from '@/types/repairs'
+import { Activity, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 import { useMemo, memo } from 'react'
+import { cn } from '@/lib/utils'
 
 interface RepairStatsProps {
     repairs: Repair[]
 }
 
+function StatCard({ title, value, subtitle, icon: Icon, accent }: {
+  title: string; value: number; subtitle: string; icon: React.ElementType; accent: string
+}) {
+  return (
+    <Card className={cn('border-l-4 shadow-sm', accent)}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">{value}</div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
 export const RepairStats = memo(function RepairStats({ repairs }: RepairStatsProps) {
     const stats = useMemo(() => {
-        // Optimize with single pass through repairs array
         let total = 0
         let pending = 0
         let inProgress = 0
@@ -20,8 +37,6 @@ export const RepairStats = memo(function RepairStats({ repairs }: RepairStatsPro
 
         for (const repair of repairs) {
             total++
-            
-            // Count by status
             switch (repair.status) {
                 case 'recibido':
                     pending++
@@ -29,15 +44,13 @@ export const RepairStats = memo(function RepairStats({ repairs }: RepairStatsPro
                 case 'diagnostico':
                 case 'reparacion':
                 case 'pausado':
-                case 'listo': // Ready for pickup - still active, not yet completed
+                case 'listo':
                     inProgress++
                     break
                 case 'entregado':
                     completed++
                     break
             }
-
-            // Count urgent repairs (excluding completed/cancelled)
             if (repair.urgency === 'urgent' && 
                 repair.status !== 'entregado' && 
                 repair.status !== 'cancelado') {
@@ -48,80 +61,41 @@ export const RepairStats = memo(function RepairStats({ repairs }: RepairStatsPro
         return { total, pending, inProgress, completed, urgent }
     }, [repairs])
 
-    const statCards = [
-        {
-            title: 'Total Reparaciones',
-            value: stats.total,
-            subtitle: `${stats.completed} completadas`,
-            icon: Activity,
-            gradient: 'from-violet-500 to-purple-500',
-            iconColor: 'text-violet-500',
-            bgGradient: 'bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/40 dark:to-purple-950/40 border border-violet-200 dark:border-violet-700'
-        },
-        {
-            title: 'Pendientes',
-            value: stats.pending,
-            subtitle: 'Por recibir o diagnosticar',
-            icon: Clock,
-            gradient: 'from-amber-500 to-orange-500',
-            iconColor: 'text-amber-500',
-            bgGradient: 'bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 border border-amber-200 dark:border-amber-700'
-        },
-        {
-            title: 'En Progreso',
-            value: stats.inProgress,
-            subtitle: 'En reparación o espera',
-            icon: Activity,
-            gradient: 'from-blue-500 to-cyan-500',
-            iconColor: 'text-blue-500',
-            bgGradient: 'bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/40 dark:to-cyan-950/40 border border-blue-200 dark:border-blue-700'
-        },
-        {
-            title: 'Urgentes Activas',
-            value: stats.urgent,
-            subtitle: 'Atención inmediata',
-            icon: AlertCircle,
-            gradient: 'from-red-500 to-pink-500',
-            iconColor: 'text-red-500',
-            bgGradient: 'bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-950/40 dark:to-pink-950/40 border border-red-200 dark:border-red-700'
-        }
-    ]
-
     return (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            {statCards.map((stat, index) => {
-                const Icon = stat.icon
-                return (
-                    <Card
-                        key={index}
-                        className={`${stat.bgGradient} border-0 shadow-sm hover:shadow-md transition-shadow duration-200 dark:shadow-lg dark:hover:shadow-xl`}
-                    >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5">
-                            <CardTitle className="text-sm font-medium text-foreground/80 dark:text-foreground/90">
-                                {stat.title}
-                            </CardTitle>
-                            <div className={`h-10 w-10 rounded-lg bg-gradient-to-br ${stat.gradient} p-2 shadow-lg dark:shadow-xl`}>
-                                <Icon className="h-full w-full text-white" />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="pt-0">
-                            <div className="text-2xl font-bold bg-gradient-to-br bg-clip-text text-transparent from-foreground to-foreground/70 dark:from-foreground dark:to-foreground/80">
-                                {stat.value}
-                            </div>
-                            <p className="text-xs text-muted-foreground dark:text-muted-foreground/90 mt-1">
-                                {stat.subtitle}
-                            </p>
-                        </CardContent>
-                    </Card>
-                )
-            })}
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            <StatCard
+                title="Total Reparaciones"
+                value={stats.total}
+                subtitle={`${stats.completed} completadas`}
+                icon={Activity}
+                accent="border-l-blue-500"
+            />
+            <StatCard
+                title="Pendientes"
+                value={stats.pending}
+                subtitle="Por recibir o diagnosticar"
+                icon={Clock}
+                accent="border-l-amber-500"
+            />
+            <StatCard
+                title="En Progreso"
+                value={stats.inProgress}
+                subtitle="En reparación o espera"
+                icon={Activity}
+                accent="border-l-violet-500"
+            />
+            <StatCard
+                title="Urgentes Activas"
+                value={stats.urgent}
+                subtitle="Atención inmediata"
+                icon={AlertCircle}
+                accent="border-l-red-500"
+            />
         </div>
     )
 }, (prevProps, nextProps) => {
-    // Custom comparison: only re-render if repairs count or status distribution changes
     if (prevProps.repairs.length !== nextProps.repairs.length) return false
 
-    // Check if status distribution changed
     const prevStats = {
         pending: prevProps.repairs.filter(r => r.status === 'recibido').length,
         inProgress: prevProps.repairs.filter(r => r.status === 'diagnostico' || r.status === 'reparacion' || r.status === 'pausado').length,
