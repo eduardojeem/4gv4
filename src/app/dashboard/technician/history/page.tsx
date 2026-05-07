@@ -5,533 +5,394 @@ import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import {
-    CheckCircle2,
-    Package,
-    XCircle,
-    Search,
-    Calendar,
-    User,
-    Smartphone,
-    Clock,
-    TrendingUp,
-    Award,
-    DollarSign,
-    Eye,
-    Star,
-    Timer,
-    Wrench
+  CheckCircle2, Package, XCircle, Search, Calendar, User,
+  Smartphone, Clock, TrendingUp, Star, Timer, Wrench,
+  ChevronLeft, ChevronRight, Banknote, Activity, BarChart3
 } from 'lucide-react'
-import { GSIcon } from '@/components/ui/standardized-components'
-import { TechnicianPerformanceMetrics } from '@/components/dashboard/technicians/history/TechnicianPerformanceMetrics'
-import { WorkHistoryChart } from '@/components/dashboard/technicians/history/WorkHistoryChart'
-import { ProductivityStats } from '@/components/dashboard/technicians/history/ProductivityStats'
 import { ExportButton } from '@/components/dashboard/technicians/history/ExportButton'
 import { Repair } from '@/types/repairs'
+import { formatCurrency } from '@/lib/currency'
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { cn } from '@/lib/utils'
 
-function RepairTable({ repairs, emptyMessage }: { repairs: Repair[], emptyMessage: string }) {
-    if (repairs.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="p-4 bg-slate-100 rounded-full mb-4 dark:bg-slate-800">
-                    <Package className="h-8 w-8 text-slate-400" />
-                </div>
-                <p className="text-muted-foreground">{emptyMessage}</p>
-            </div>
-        )
-    }
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
 
-    return (
-        <div className="rounded-md border">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>ID</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Dispositivo</TableHead>
-                        <TableHead>Problema</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Duración</TableHead>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead className="text-right">Costo</TableHead>
-                        <TableHead className="text-center">Calificación</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {repairs.map((repair) => {
-                        const repairDuration = repair.completedAt && repair.createdAt
-                            ? Math.ceil((new Date(repair.completedAt).getTime() - new Date(repair.createdAt).getTime()) / (1000 * 60 * 60 * 24))
-                            : null
-
-                        return (
-                            <TableRow key={repair.id} className="cursor-pointer hover:bg-muted/50">
-                                <TableCell className="font-mono text-xs">
-                                    {repair.id.slice(0, 8)}
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center gap-2">
-                                        <User className="h-4 w-4 text-muted-foreground" />
-                                        <div>
-                                            <p className="font-medium">{repair.customer.name}</p>
-                                            <p className="text-xs text-muted-foreground">{repair.customer.phone}</p>
-                                        </div>
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center gap-2">
-                                        <Smartphone className="h-4 w-4 text-muted-foreground" />
-                                        <div>
-                                            <p className="font-medium">{repair.brand} {repair.model}</p>
-                                            <p className="text-xs text-muted-foreground capitalize">{repair.deviceType}</p>
-                                        </div>
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="max-w-xs">
-                                        <p className="truncate text-sm">{repair.issue}</p>
-                                        <div className="flex gap-1 mt-1">
-                                            <Badge variant="outline" className="text-xs">
-                                                {repair.priority === 'high' ? 'Alta' : repair.priority === 'medium' ? 'Media' : 'Baja'}
-                                            </Badge>
-                                            {repair.urgency === 'urgent' && (
-                                                <Badge variant="destructive" className="text-xs">Urgente</Badge>
-                                            )}
-                                        </div>
-                                    </div>
-                                </TableCell>
-                                <TableCell>
-                                    <Badge
-                                        variant={
-                                            repair.dbStatus === 'entregado' ? 'default' :
-                                            repair.dbStatus === 'listo' ? 'secondary' :
-                                            repair.dbStatus === 'cancelado' ? 'destructive' : 'outline'
-                                        }
-                                        className="text-xs"
-                                    >
-                                        {repair.dbStatus === 'entregado' ? 'Entregado' :
-                                         repair.dbStatus === 'listo' ? 'Listo' :
-                                         repair.dbStatus === 'cancelado' ? 'Cancelado' :
-                                         repair.dbStatus === 'reparacion' ? 'En Reparación' :
-                                         repair.dbStatus === 'diagnostico' ? 'Diagnóstico' :
-                                         'Recibido'}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell>
-                                    {repairDuration && (
-                                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                            <Timer className="h-4 w-4" />
-                                            {repairDuration} días
-                                        </div>
-                                    )}
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <Calendar className="h-4 w-4" />
-                                        {format(new Date(repair.completedAt || repair.createdAt), 'dd MMM yyyy', { locale: es })}
-                                    </div>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <div className="flex items-center justify-end gap-1 font-medium">
-                                        <GSIcon className="h-4 w-4" />
-                                        {(repair.finalCost || repair.estimatedCost).toLocaleString()}
-                                    </div>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    {repair.customerRating ? (
-                                        <div className="flex items-center justify-center gap-1">
-                                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                                            <span className="text-sm font-medium">{repair.customerRating}</span>
-                                        </div>
-                                    ) : (
-                                        <span className="text-xs text-muted-foreground">Sin calificar</span>
-                                    )}
-                                </TableCell>
-                            </TableRow>
-                        )
-                    })}
-                </TableBody>
-            </Table>
-        </div>
-    )
+function KpiCard({
+  title, value, subtitle, icon: Icon, accent,
+}: {
+  title: string; value: string | number; subtitle: string; icon: React.ElementType; accent: string
+}) {
+  return (
+    <Card className={cn('border-l-4 shadow-sm', accent)}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">{title}</CardTitle>
+        <Icon className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">{value}</div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{subtitle}</p>
+      </CardContent>
+    </Card>
+  )
 }
+
+// ─── Paginated Table ──────────────────────────────────────────────────────────
+
+function RepairTable({ repairs, page, pageSize, onPageChange }: {
+  repairs: Repair[]; page: number; pageSize: number; onPageChange: (p: number) => void
+}) {
+  const totalPages = Math.ceil(repairs.length / pageSize)
+  const paginated = repairs.slice((page - 1) * pageSize, page * pageSize)
+
+  if (repairs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <Package className="h-10 w-10 text-gray-200 dark:text-gray-700 mb-3" />
+        <p className="text-sm text-gray-400 dark:text-gray-500">No se encontraron reparaciones con los filtros aplicados</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-slate-800">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-gray-50 dark:bg-slate-900">
+              <TableHead className="text-xs font-semibold">Cliente</TableHead>
+              <TableHead className="text-xs font-semibold">Dispositivo</TableHead>
+              <TableHead className="text-xs font-semibold">Estado</TableHead>
+              <TableHead className="text-xs font-semibold">Duración</TableHead>
+              <TableHead className="text-xs font-semibold">Fecha</TableHead>
+              <TableHead className="text-xs font-semibold text-right">Costo</TableHead>
+              <TableHead className="text-xs font-semibold text-center">Rating</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginated.map((repair) => {
+              const duration = repair.completedAt && repair.createdAt
+                ? Math.ceil((new Date(repair.completedAt).getTime() - new Date(repair.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+                : null
+
+              return (
+                <TableRow key={repair.id} className="hover:bg-gray-50 dark:hover:bg-slate-800/50">
+                  <TableCell>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{repair.customer.name}</p>
+                      <p className="text-xs text-gray-400">{repair.customer.phone}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{repair.brand} {repair.model}</p>
+                      <div className="flex gap-1 mt-0.5">
+                        {repair.urgency === 'urgent' && (
+                          <Badge variant="destructive" className="text-[10px] px-1 py-0">Urgente</Badge>
+                        )}
+                        {repair.priority === 'high' && (
+                          <Badge variant="outline" className="text-[10px] px-1 py-0">Alta</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        repair.dbStatus === 'entregado' ? 'default' :
+                        repair.dbStatus === 'listo' ? 'secondary' :
+                        repair.dbStatus === 'cancelado' ? 'destructive' : 'outline'
+                      }
+                      className="text-[10px]"
+                    >
+                      {repair.dbStatus === 'entregado' ? 'Entregado' :
+                       repair.dbStatus === 'listo' ? 'Listo' :
+                       repair.dbStatus === 'cancelado' ? 'Cancelado' :
+                       repair.dbStatus === 'reparacion' ? 'En Reparación' :
+                       repair.dbStatus === 'diagnostico' ? 'Diagnóstico' : 'Recibido'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {duration !== null ? (
+                      <span className="text-sm text-gray-600 dark:text-gray-400 tabular-nums">{duration}d</span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      {format(new Date(repair.completedAt || repair.createdAt), 'dd MMM yy', { locale: es })}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 tabular-nums">
+                      {formatCurrency(repair.finalCost || repair.estimatedCost)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {repair.customerRating ? (
+                      <div className="flex items-center justify-center gap-0.5">
+                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                        <span className="text-xs font-medium">{repair.customerRating}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-gray-400">
+            {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, repairs.length)} de {repairs.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost" size="sm" className="h-7 w-7 p-0"
+              disabled={page <= 1}
+              onClick={() => onPageChange(page - 1)}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-xs font-medium px-2">{page} / {totalPages}</span>
+            <Button
+              variant="ghost" size="sm" className="h-7 w-7 p-0"
+              disabled={page >= totalPages}
+              onClick={() => onPageChange(page + 1)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TechnicianHistoryPage() {
-    const { repairs, isLoading } = useRepairs()
-    const { user } = useAuth()
-    const [searchTerm, setSearchTerm] = useState('')
-    const [dateFilter, setDateFilter] = useState('all')
-    const [statusFilter, setStatusFilter] = useState('all')
-    const [sortBy, setSortBy] = useState('date')
+  const { repairs, isLoading } = useRepairs()
+  const { user } = useAuth()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [dateFilter, setDateFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('date')
+  const [page, setPage] = useState(1)
+  const pageSize = 15
 
-    // Filter repairs for current technician
-    const myRepairs = useMemo(() => {
-        if (!user?.id) return []
-        return repairs.filter(r => r.technician?.id === user.id)
-    }, [repairs, user?.id])
+  // Filter repairs for current technician
+  const myRepairs = useMemo(() => {
+    if (!user?.id) return []
+    return repairs.filter(r => r.technician?.id === user.id)
+  }, [repairs, user?.id])
 
-    // Apply filters and sorting
-    const filteredAndSortedRepairs = useMemo(() => {
-        let filtered = [...myRepairs]
+  // Apply filters and sorting
+  const filteredRepairs = useMemo(() => {
+    let filtered = [...myRepairs]
 
-        // Date filter
-        if (dateFilter !== 'all') {
-            const now = new Date()
-            let dateRange: { start: Date; end: Date }
-
-            switch (dateFilter) {
-                case 'thisMonth':
-                    dateRange = { start: startOfMonth(now), end: endOfMonth(now) }
-                    break
-                case 'lastMonth': {
-                    const lastMonth = subMonths(now, 1)
-                    dateRange = { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) }
-                    break
-                }
-                case 'last3Months':
-                    dateRange = { start: subMonths(now, 3), end: now }
-                    break
-                default:
-                    dateRange = { start: new Date(0), end: now }
-            }
-
-            filtered = filtered.filter(repair => {
-                const repairDate = new Date(repair.completedAt || repair.createdAt)
-                return isWithinInterval(repairDate, dateRange)
-            })
+    // Date filter
+    if (dateFilter !== 'all') {
+      const now = new Date()
+      let dateRange: { start: Date; end: Date }
+      switch (dateFilter) {
+        case 'thisMonth':
+          dateRange = { start: startOfMonth(now), end: endOfMonth(now) }; break
+        case 'lastMonth': {
+          const lm = subMonths(now, 1)
+          dateRange = { start: startOfMonth(lm), end: endOfMonth(lm) }; break
         }
+        case 'last3Months':
+          dateRange = { start: subMonths(now, 3), end: now }; break
+        default:
+          dateRange = { start: new Date(0), end: now }
+      }
+      filtered = filtered.filter(r => {
+        const d = new Date(r.completedAt || r.createdAt)
+        return isWithinInterval(d, dateRange)
+      })
+    }
 
-        // Status filter
-        if (statusFilter !== 'all') {
-            filtered = filtered.filter(repair => repair.dbStatus === statusFilter)
-        }
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(r => r.dbStatus === statusFilter)
+    }
 
-        // Search filter
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase()
-            filtered = filtered.filter(r =>
-                r.customer.name.toLowerCase().includes(term) ||
-                r.device.toLowerCase().includes(term) ||
-                r.id.toLowerCase().includes(term) ||
-                r.issue.toLowerCase().includes(term) ||
-                r.brand.toLowerCase().includes(term) ||
-                r.model.toLowerCase().includes(term)
-            )
-        }
+    // Search
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      filtered = filtered.filter(r =>
+        r.customer.name.toLowerCase().includes(term) ||
+        r.device.toLowerCase().includes(term) ||
+        r.id.toLowerCase().includes(term) ||
+        r.issue.toLowerCase().includes(term) ||
+        r.brand.toLowerCase().includes(term)
+      )
+    }
 
-        // Sort
-        filtered.sort((a, b) => {
-            switch (sortBy) {
-                case 'date':
-                    return new Date(b.completedAt || b.createdAt).getTime() - new Date(a.completedAt || a.createdAt).getTime()
-                case 'cost':
-                    return (b.finalCost || b.estimatedCost) - (a.finalCost || a.estimatedCost)
-                case 'customer':
-                    return a.customer.name.localeCompare(b.customer.name)
-                case 'device':
-                    return `${a.brand} ${a.model}`.localeCompare(`${b.brand} ${b.model}`)
-                default:
-                    return 0
-            }
-        })
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'date':
+          return new Date(b.completedAt || b.createdAt).getTime() - new Date(a.completedAt || a.createdAt).getTime()
+        case 'cost':
+          return (b.finalCost || b.estimatedCost) - (a.finalCost || a.estimatedCost)
+        case 'customer':
+          return a.customer.name.localeCompare(b.customer.name)
+        default:
+          return 0
+      }
+    })
 
-        return filtered
-    }, [myRepairs, dateFilter, statusFilter, searchTerm, sortBy])
+    return filtered
+  }, [myRepairs, dateFilter, statusFilter, searchTerm, sortBy])
 
-    // Categorize repairs
-    const categorizedRepairs = useMemo(() => {
-        const completed = myRepairs.filter(r => r.dbStatus === 'listo')
-        const delivered = myRepairs.filter(r => r.dbStatus === 'entregado')
-        const cancelled = myRepairs.filter(r => r.dbStatus === 'cancelado')
-        const inProgress = myRepairs.filter(r => 
-            ['recibido', 'diagnostico', 'reparacion', 'pausado'].includes(r.dbStatus || '')
-        )
+  // Reset page when filters change
+  useMemo(() => { setPage(1) }, [dateFilter, statusFilter, searchTerm, sortBy])
 
-        return { completed, delivered, cancelled, inProgress }
-    }, [myRepairs])
+  // KPIs (consolidated — no duplication)
+  const kpis = useMemo(() => {
+    const completed = myRepairs.filter(r => r.dbStatus === 'entregado')
+    const active = myRepairs.filter(r => !['listo', 'entregado', 'cancelado'].includes(r.dbStatus || '')).length
+    const revenue = completed.reduce((s, r) => s + (r.finalCost || r.estimatedCost || 0), 0)
 
-    // Performance metrics
-    const performanceMetrics = useMemo(() => {
-        const completedRepairs = myRepairs.filter(r => r.dbStatus === 'entregado')
-        const totalRevenue = completedRepairs.reduce((sum, r) => sum + (r.finalCost || r.estimatedCost), 0)
-        const avgRepairTime = completedRepairs.length > 0 
-            ? completedRepairs.reduce((sum, r) => {
-                if (r.completedAt && r.createdAt) {
-                    const days = Math.ceil((new Date(r.completedAt).getTime() - new Date(r.createdAt).getTime()) / (1000 * 60 * 60 * 24))
-                    return sum + days
-                }
-                return sum
-            }, 0) / completedRepairs.length
-            : 0
-        
-        const avgRating = completedRepairs.length > 0
-            ? completedRepairs.reduce((sum, r) => sum + (r.customerRating || 0), 0) / completedRepairs.length
-            : 0
+    const withDates = completed.filter(r => r.completedAt && r.createdAt)
+    const avgDays = withDates.length > 0
+      ? Math.round(withDates.reduce((s, r) => {
+          return s + Math.ceil((new Date(r.completedAt!).getTime() - new Date(r.createdAt).getTime()) / 86400000)
+        }, 0) / withDates.length * 10) / 10
+      : 0
 
-        return {
-            totalCompleted: completedRepairs.length,
-            totalRevenue,
-            avgRepairTime: Math.round(avgRepairTime),
-            avgRating: Math.round(avgRating * 10) / 10
-        }
-    }, [myRepairs])
+    const rated = myRepairs.filter(r => r.customerRating && r.customerRating > 0)
+    const avgRating = rated.length > 0
+      ? Math.round(rated.reduce((s, r) => s + (r.customerRating || 0), 0) / rated.length * 10) / 10
+      : 0
 
-    if (isLoading) return <div className="p-8 text-center">Cargando historial...</div>
+    return { total: myRepairs.length, completed: completed.length, active, revenue, avgDays, avgRating }
+  }, [myRepairs])
 
+  // Loading
+  if (isLoading) {
     return (
-        <div className="space-y-6 p-6 max-w-[1800px] mx-auto animate-in fade-in duration-500">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Historial de Trabajo</h1>
-                    <p className="text-muted-foreground">Registro completo de tu desempeño y reparaciones realizadas</p>
-                </div>
-                <div className="flex gap-2">
-                    <ExportButton 
-                        repairs={filteredAndSortedRepairs} 
-                        disabled={isLoading}
-                    />
-                </div>
-            </div>
-
-            {/* Performance Metrics */}
-            <div className="grid gap-4 md:grid-cols-4">
-                <Card className="bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-900">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                            Total Completadas
-                        </CardTitle>
-                        <Wrench className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                            {performanceMetrics.totalCompleted}
-                        </div>
-                        <p className="text-xs text-blue-600/80 dark:text-blue-400/80">
-                            Reparaciones entregadas
-                        </p>
-                    </CardContent>
-                </Card>
-                
-                <Card className="bg-linear-to-br from-green-50 to-emerald-50 border-green-100 dark:from-green-950/20 dark:to-emerald-950/20 dark:border-green-900">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-green-700 dark:text-green-300">
-                            Ingresos Generados
-                        </CardTitle>
-                        <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-green-900 dark:text-green-100 flex items-center gap-1">
-                            <GSIcon className="h-5 w-5" />
-                            {performanceMetrics.totalRevenue.toLocaleString()}
-                        </div>
-                        <p className="text-xs text-green-600/80 dark:text-green-400/80">
-                            Total facturado
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-linear-to-br from-orange-50 to-amber-50 border-orange-100 dark:from-orange-950/20 dark:to-amber-950/20 dark:border-orange-900">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-orange-700 dark:text-orange-300">
-                            Tiempo Promedio
-                        </CardTitle>
-                        <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                            {performanceMetrics.avgRepairTime}
-                        </div>
-                        <p className="text-xs text-orange-600/80 dark:text-orange-400/80">
-                            Días por reparación
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-linear-to-br from-purple-50 to-violet-50 border-purple-100 dark:from-purple-950/20 dark:to-violet-950/20 dark:border-purple-900">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-300">
-                            Calificación Promedio
-                        </CardTitle>
-                        <Award className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-purple-900 dark:text-purple-100 flex items-center gap-1">
-                            <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                            {performanceMetrics.avgRating || 'N/A'}
-                        </div>
-                        <p className="text-xs text-purple-600/80 dark:text-purple-400/80">
-                            Satisfacción del cliente
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Status Summary Cards */}
-            <div className="grid gap-4 md:grid-cols-4">
-                <Card className="bg-linear-to-br from-green-50 to-emerald-50 border-green-100 dark:from-green-950/20 dark:to-emerald-950/20 dark:border-green-900">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-green-700 dark:text-green-300">
-                            Entregadas
-                        </CardTitle>
-                        <Package className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-green-900 dark:text-green-100">
-                            {categorizedRepairs.delivered.length}
-                        </div>
-                        <p className="text-xs text-green-600/80 dark:text-green-400/80">
-                            Completadas y entregadas
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-linear-to-br from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950/20 dark:to-indigo-950/20 dark:border-blue-900">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                            Listas
-                        </CardTitle>
-                        <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                            {categorizedRepairs.completed.length}
-                        </div>
-                        <p className="text-xs text-blue-600/80 dark:text-blue-400/80">
-                            Esperando entrega
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-linear-to-br from-yellow-50 to-orange-50 border-yellow-100 dark:from-yellow-950/20 dark:to-orange-950/20 dark:border-yellow-900">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
-                            En Progreso
-                        </CardTitle>
-                        <TrendingUp className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">
-                            {categorizedRepairs.inProgress.length}
-                        </div>
-                        <p className="text-xs text-yellow-600/80 dark:text-yellow-400/80">
-                            Trabajos activos
-                        </p>
-                    </CardContent>
-                </Card>
-
-                <Card className="bg-linear-to-br from-red-50 to-rose-50 border-red-100 dark:from-red-950/20 dark:to-rose-950/20 dark:border-red-900">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-red-700 dark:text-red-300">
-                            Canceladas
-                        </CardTitle>
-                        <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold text-red-900 dark:text-red-100">
-                            {categorizedRepairs.cancelled.length}
-                        </div>
-                        <p className="text-xs text-red-600/80 dark:text-red-400/80">
-                            Sin completar
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Filters and Search */}
-            <Card>
-                <CardContent className="pt-6">
-                    <div className="flex flex-col md:flex-row gap-4">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Buscar por cliente, dispositivo, ID, problema, marca..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10"
-                            />
-                        </div>
-                        <div className="flex gap-2">
-                            <Select value={dateFilter} onValueChange={setDateFilter}>
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="Filtrar por fecha" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todas las fechas</SelectItem>
-                                    <SelectItem value="thisMonth">Este mes</SelectItem>
-                                    <SelectItem value="lastMonth">Mes pasado</SelectItem>
-                                    <SelectItem value="last3Months">Últimos 3 meses</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            
-                            <Select value={statusFilter} onValueChange={setStatusFilter}>
-                                <SelectTrigger className="w-[150px]">
-                                    <SelectValue placeholder="Estado" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todos</SelectItem>
-                                    <SelectItem value="entregado">Entregadas</SelectItem>
-                                    <SelectItem value="listo">Listas</SelectItem>
-                                    <SelectItem value="reparacion">En Reparación</SelectItem>
-                                    <SelectItem value="cancelado">Canceladas</SelectItem>
-                                </SelectContent>
-                            </Select>
-
-                            <Select value={sortBy} onValueChange={setSortBy}>
-                                <SelectTrigger className="w-[150px]">
-                                    <SelectValue placeholder="Ordenar por" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="date">Fecha</SelectItem>
-                                    <SelectItem value="cost">Costo</SelectItem>
-                                    <SelectItem value="customer">Cliente</SelectItem>
-                                    <SelectItem value="device">Dispositivo</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Performance Analytics */}
-            <TechnicianPerformanceMetrics repairs={myRepairs} />
-
-            {/* Work History Charts */}
-            <WorkHistoryChart repairs={myRepairs} />
-
-            {/* Productivity Statistics */}
-            <ProductivityStats repairs={myRepairs} />
-
-            {/* Main Table */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Eye className="h-5 w-5" />
-                        Historial Detallado ({filteredAndSortedRepairs.length} registros)
-                    </CardTitle>
-                    <CardDescription>
-                        Registro completo de todas tus reparaciones con métricas de desempeño
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <RepairTable
-                        repairs={filteredAndSortedRepairs}
-                        emptyMessage="No se encontraron reparaciones con los filtros aplicados"
-                    />
-                </CardContent>
-            </Card>
+      <div className="space-y-6 max-w-6xl mx-auto">
+        <Skeleton className="h-10 w-48" />
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-24 rounded-xl" />)}
         </div>
+        <Skeleton className="h-96 rounded-xl" />
+      </div>
     )
+  }
+
+  return (
+    <div className="space-y-5 max-w-6xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Historial</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            {myRepairs.length} reparaciones totales
+          </p>
+        </div>
+        <ExportButton repairs={filteredRepairs} disabled={isLoading} />
+      </div>
+
+      {/* KPIs — Single row, no duplication */}
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+        <KpiCard title="Completadas" value={kpis.completed} subtitle="Entregadas al cliente" icon={CheckCircle2} accent="border-l-emerald-500" />
+        <KpiCard title="En proceso" value={kpis.active} subtitle="Trabajos activos" icon={Activity} accent="border-l-blue-500" />
+        <KpiCard title="Ingresos" value={formatCurrency(kpis.revenue)} subtitle="Total facturado" icon={Banknote} accent="border-l-green-500" />
+        <KpiCard title="Tiempo prom." value={kpis.avgDays > 0 ? `${kpis.avgDays}d` : '—'} subtitle="Creación → entrega" icon={Clock} accent="border-l-violet-500" />
+        <KpiCard title="Rating" value={kpis.avgRating > 0 ? `${kpis.avgRating}/5` : '—'} subtitle="Satisfacción" icon={Star} accent="border-l-amber-500" />
+      </div>
+
+      {/* Filters */}
+      <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar por cliente, dispositivo, marca..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className="w-[150px] h-9 text-xs">
+                  <SelectValue placeholder="Fecha" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las fechas</SelectItem>
+                  <SelectItem value="thisMonth">Este mes</SelectItem>
+                  <SelectItem value="lastMonth">Mes pasado</SelectItem>
+                  <SelectItem value="last3Months">Últimos 3 meses</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[140px] h-9 text-xs">
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="entregado">Entregadas</SelectItem>
+                  <SelectItem value="listo">Listas</SelectItem>
+                  <SelectItem value="reparacion">En Reparación</SelectItem>
+                  <SelectItem value="cancelado">Canceladas</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={setSortBy}>
+                <SelectTrigger className="w-[130px] h-9 text-xs">
+                  <SelectValue placeholder="Ordenar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date">Más recientes</SelectItem>
+                  <SelectItem value="cost">Mayor costo</SelectItem>
+                  <SelectItem value="customer">Cliente A-Z</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Table */}
+      <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-blue-500" />
+              Registro de reparaciones
+            </CardTitle>
+            <Badge variant="secondary" className="text-xs">{filteredRepairs.length} resultados</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <RepairTable
+            repairs={filteredRepairs}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
-
-

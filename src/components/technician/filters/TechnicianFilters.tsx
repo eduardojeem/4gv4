@@ -35,6 +35,7 @@ export function TechnicianFilters({
                     <Input
                         placeholder="Buscar por ID, dispositivo, problema..."
                         className="pl-9 pr-9"
+                        id="technician-search-input"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />

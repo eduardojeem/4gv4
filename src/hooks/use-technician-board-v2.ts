@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
-import { DbRepairStatus } from '@/types/repairs'
+import type { Repair, DbRepairStatus } from '@/types/repairs'
+import type { RepairFormData as PersistRepairFormData } from '@/contexts/RepairsContext'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
 
@@ -18,7 +19,7 @@ export function useTechnicianBoardV2() {
     } = useRepairs()
     
     const { user } = useAuth()
-    const canViewAllRepairs = user?.role === 'admin'
+    const canViewAllRepairs = user?.role === 'admin' || user?.role === 'super_admin'
     
     // Estado específico del dashboard técnico
     const [kanbanOrder, setKanbanOrder] = useState<Record<DbRepairStatus, string[]>>({
@@ -79,6 +80,16 @@ export function useTechnicianBoardV2() {
         const repairToMove = repairs.find(r => r.id === draggedRepairId)
         const previousStatus = repairToMove?.dbStatus || repairToMove?.status
 
+        if (!repairToMove) {
+            setDraggedRepairId(null)
+            return
+        }
+
+        if (previousStatus === status) {
+            setDraggedRepairId(null)
+            return
+        }
+
         // Actualización optimista del Kanban
         setKanbanOrder(prev => {
             const next = { ...prev }
@@ -113,57 +124,37 @@ export function useTechnicianBoardV2() {
         }
     }
 
-interface RepairUpdateData {
-    status?: string
-    priority?: string
-    urgency?: string
-    estimated_cost?: number
-    final_cost?: number
+type RepairUpdateData = Omit<Partial<Repair>, 'images' | 'parts' | 'notes'> & {
+    customer_id?: string
     technician_id?: string
-    notes?: string
-    [key: string]: unknown
-}
-
-interface RepairCreateData {
-    customer_name: string
-    customer_phone?: string
-    customer_email?: string
-    device_brand: string
-    device_model: string
-    issue_description: string
-    status?: string
-    priority?: string
-    urgency?: string
-    estimated_cost?: number
-    technician_id?: string
-    notes?: string
-    [key: string]: unknown
+    images?: string[]
+    parts?: PersistRepairFormData['parts']
+    notes?: PersistRepairFormData['notes']
 }
 
     // Wrapper para actualizar reparación manteniendo compatibilidad
     const updateRepair = async (id: string, data: RepairUpdateData) => {
         try {
-            // Cast necesario: RepairUpdateData usa snake_case (DB) mientras globalUpdateRepair espera Partial<Repair>
-            const result = await globalUpdateRepair(id, data as any)
+            const result = await globalUpdateRepair(id, data as unknown as Partial<Repair>)
+            if (!result) {
+                throw new Error('No se pudo actualizar la reparación')
+            }
             return result
         } catch (error) {
             logger.error('Error updating repair', { error })
-            toast.error('Error al actualizar la reparación')
             throw error
         }
     }
 
-    const createRepair = async (data: RepairCreateData) => {
+    const createRepair = async (data: PersistRepairFormData) => {
         try {
-            // Cast necesario: RepairCreateData usa snake_case (DB) mientras globalCreateRepair espera RepairFormData
-            const result = await globalCreateRepair(data as any)
-            if (result) {
-                toast.success('Reparación creada correctamente')
+            const result = await globalCreateRepair(data)
+            if (!result) {
+                throw new Error('No se pudo crear la reparación')
             }
             return result
         } catch (error) {
             logger.error('Error creating repair', { error })
-            toast.error('Error al crear la reparación')
             throw error
         }
     }
