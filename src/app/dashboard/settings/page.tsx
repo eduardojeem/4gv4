@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Settings, Save, RotateCcw, AlertCircle, HelpCircle, Mail, Phone, MapPin, Loader2, Globe, Clock, Calendar } from 'lucide-react'
+import {
+  Settings, Save, RotateCcw, AlertCircle, HelpCircle, Mail, Phone, MapPin,
+  Loader2, Globe, Clock, Calendar, Package, Bell, Shield, Palette, Building2
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,7 +25,7 @@ import { useTheme } from '@/contexts/theme-context'
 
 const EDITABLE_COLOR_SCHEMES = ['blue', 'green', 'purple', 'orange', 'red'] as const
 
-export default function SettingsPageFixed() {
+export default function SettingsPage() {
   const {
     settings,
     originalSettings,
@@ -53,11 +56,9 @@ export default function SettingsPageFixed() {
 
   useEffect(() => {
     if (isLoading) return
-
     if (theme !== settings.theme) {
       setTheme(settings.theme as 'light' | 'dark' | 'system')
     }
-
     if (
       EDITABLE_COLOR_SCHEMES.includes(settings.primaryColor as typeof EDITABLE_COLOR_SCHEMES[number]) &&
       colorScheme !== settings.primaryColor
@@ -66,12 +67,15 @@ export default function SettingsPageFixed() {
     }
   }, [colorScheme, isLoading, setColorScheme, setTheme, settings.primaryColor, settings.theme, theme])
 
-  if (authLoading) {
+  // Loading states
+  if (authLoading || isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <p className="text-gray-500 dark:text-gray-400">Verificando permisos...</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {authLoading ? 'Verificando permisos...' : 'Cargando configuración...'}
+          </p>
         </div>
       </div>
     )
@@ -79,14 +83,14 @@ export default function SettingsPageFixed() {
 
   if (!canManageSettings) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950 px-4">
-        <Card className="w-full max-w-lg border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20">
+      <div className="flex items-center justify-center min-h-[60vh] px-4">
+        <Card className="w-full max-w-md border border-amber-200 dark:border-amber-800">
           <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
-            <AlertCircle className="h-12 w-12 text-amber-500" />
+            <AlertCircle className="h-10 w-10 text-amber-500" />
             <div className="space-y-1">
-              <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">Acceso restringido</h3>
-              <p className="text-sm text-amber-700 dark:text-amber-300">
-                Solo administradores pueden modificar la configuracion global del sistema.
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Acceso restringido</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Solo administradores pueden modificar la configuración del sistema.
               </p>
             </div>
           </CardContent>
@@ -95,28 +99,17 @@ export default function SettingsPageFixed() {
     )
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-          <p className="text-gray-500 dark:text-gray-400">Cargando configuraciones...</p>
-        </div>
-      </div>
-    )
-  }
-
   if (error && !canRenderFallback) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
-        <Card className="w-full max-w-md border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900">
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="w-full max-w-md border border-red-200 dark:border-red-800">
           <CardContent className="flex flex-col items-center gap-4 p-6">
-            <AlertCircle className="h-12 w-12 text-red-500" />
+            <AlertCircle className="h-10 w-10 text-red-500" />
             <div className="text-center">
-              <h3 className="text-lg font-semibold text-red-900 dark:text-red-100">Error al cargar</h3>
-              <p className="text-red-700 dark:text-red-300 mt-1">{error}</p>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Error al cargar</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{error}</p>
             </div>
-            <Button onClick={() => window.location.reload()} variant="outline" className="border-red-200 hover:bg-red-100 text-red-700">
+            <Button onClick={() => window.location.reload()} variant="outline" size="sm">
               Reintentar
             </Button>
           </CardContent>
@@ -125,678 +118,363 @@ export default function SettingsPageFixed() {
     )
   }
 
-  // Guardar configuraciones
   const handleSave = async () => {
     const result = await saveSettings()
-    
     if (result.success) {
-      toast.success('Configuraciones guardadas correctamente', {
-        description: 'Los cambios se han aplicado exitosamente'
-      })
+      toast.success('Configuración guardada correctamente')
     } else {
-      toast.error(result.error || 'Error al guardar las configuraciones')
+      toast.error(result.error || 'Error al guardar')
     }
   }
 
-  // Resetear configuraciones
   const handleReset = () => {
     resetSettings()
     toast.info('Cambios descartados')
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Header */}
-        <div className="mb-6 sm:mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
-                  <Settings className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
-                    Configuración
-                  </h1>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                    Personaliza tu sistema según tus necesidades
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {hasChanges && (
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="flex items-center gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                  <AlertCircle className="h-3 w-3" />
-                  {changedFields} cambio{changedFields !== 1 ? 's' : ''}
-                </Badge>
-              </div>
-            )}
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-blue-600 dark:bg-blue-500 rounded-xl shadow-sm">
+            <Settings className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-50 tracking-tight">
+              Configuración
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Ajustes generales del sistema
+            </p>
           </div>
         </div>
-
-        {error && canRenderFallback && (
-          <Alert variant="destructive" className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Mostrando configuracion guardada en este navegador</AlertTitle>
-            <AlertDescription>
-              {error}. Puedes revisar los datos en cache y volver a intentar guardar cuando el servicio se recupere.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Barra de cambios flotante */}
         {hasChanges && (
-          <div className="mb-6 animate-in slide-in-from-top-2 fade-in duration-300">
-            <Card className="border-blue-200 dark:border-blue-800 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 shadow-lg">
-              <CardContent className="p-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-blue-500 rounded-lg">
-                      <AlertCircle className="h-5 w-5 text-white" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-blue-900 dark:text-blue-100">
-                        Cambios sin guardar
-                      </p>
-                      <p className="text-sm text-blue-700 dark:text-blue-300">
-                        Tienes modificaciones pendientes
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 w-full sm:w-auto">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={handleReset}
-                      disabled={isSaving}
-                      className="flex-1 sm:flex-none border-blue-300 text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300"
-                    >
-                      <RotateCcw className="h-4 w-4 mr-2" />
-                      Descartar
-                    </Button>
-                    <Button 
-                      size="sm"
-                      onClick={handleSave} 
-                      disabled={isSaving}
-                      className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      {isSaving ? (
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
-                      ) : (
-                        <Save className="h-4 w-4 mr-2" />
-                      )}
-                      {isSaving ? 'Guardando...' : 'Guardar'}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <Badge variant="secondary" className="self-start sm:self-auto text-xs gap-1">
+            <AlertCircle className="h-3 w-3" />
+            {changedFields} cambio{changedFields !== 1 ? 's' : ''} sin guardar
+          </Badge>
         )}
-
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <div className="sticky top-0 z-10 bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 pb-4">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2 bg-white dark:bg-gray-800 p-2 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-              <TabsTrigger 
-                value="general"
-                className={cn(
-                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-all",
-                  "data-[state=active]:bg-gradient-to-br data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md"
-                )}
-              >
-                <Settings className="h-4 w-4" />
-                <span className="hidden sm:inline text-sm font-medium">General</span>
-                <span className="sm:hidden text-xs font-medium">General</span>
-              </TabsTrigger>
-              
-              <TabsTrigger 
-                value="inventory"
-                className={cn(
-                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-all",
-                  "data-[state=active]:bg-gradient-to-br data-[state=active]:from-purple-500 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-md"
-                )}
-              >
-                <span className="text-lg">📦</span>
-                <span className="hidden sm:inline text-sm font-medium">Inventario</span>
-                <span className="sm:hidden text-xs font-medium">Inventario</span>
-              </TabsTrigger>
-              
-              <TabsTrigger 
-                value="notifications"
-                className={cn(
-                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-all",
-                  "data-[state=active]:bg-gradient-to-br data-[state=active]:from-green-500 data-[state=active]:to-green-600 data-[state=active]:text-white data-[state=active]:shadow-md"
-                )}
-              >
-                <span className="text-lg">🔔</span>
-                <span className="hidden sm:inline text-sm font-medium">Notificaciones</span>
-                <span className="sm:hidden text-xs font-medium">Notif.</span>
-              </TabsTrigger>
-              
-              <TabsTrigger 
-                value="security"
-                className={cn(
-                  "flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-all",
-                  "data-[state=active]:bg-gradient-to-br data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=active]:shadow-md"
-                )}
-              >
-                <span className="text-lg">🛡️</span>
-                <span className="hidden sm:inline text-sm font-medium">Seguridad</span>
-                <span className="sm:hidden text-xs font-medium">Seguridad</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
-
-          {/* Tab: General */}
-          <TabsContent value="general" className="space-y-4 sm:space-y-6">
-            <Card className="border-blue-100 dark:border-blue-900 shadow-lg">
-              <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-500 rounded-lg">
-                    <span className="text-lg text-white">🌍</span>
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">Configuración Regional</CardTitle>
-                    <CardDescription>Formatos de fecha, hora e idioma</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="language" className="flex items-center gap-2">
-                      <Globe className="h-4 w-4 text-muted-foreground" />
-                      Idioma
-                    </Label>
-                    <Select
-                      value={settings.language}
-                      onValueChange={(value) => updateSetting('language', value)}
-                    >
-                      <SelectTrigger id="language">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="es">Español</SelectItem>
-                        <SelectItem value="en">English</SelectItem>
-                        <SelectItem value="pt">Português</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="timeZone" className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      Zona Horaria
-                    </Label>
-                    <Select
-                      value={settings.timeZone}
-                      onValueChange={(value) => updateSetting('timeZone', value)}
-                    >
-                      <SelectTrigger id="timeZone">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="America/Asuncion">Asunción (GMT-4)</SelectItem>
-                        <SelectItem value="America/Argentina/Buenos_Aires">Buenos Aires (GMT-3)</SelectItem>
-                        <SelectItem value="America/Sao_Paulo">São Paulo (GMT-3)</SelectItem>
-                        <SelectItem value="UTC">UTC</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="dateFormat" className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      Formato de Fecha
-                    </Label>
-                    <Select
-                      value={settings.dateFormat}
-                      onValueChange={(value) => updateSetting('dateFormat', value)}
-                    >
-                      <SelectTrigger id="dateFormat">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-                        <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-                        <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="itemsPerPage">Registros por página</Label>
-                    <Select
-                      value={String(settings.itemsPerPage)}
-                      onValueChange={(value) => updateSetting('itemsPerPage', parseInt(value))}
-                    >
-                      <SelectTrigger id="itemsPerPage">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="10">10 registros</SelectItem>
-                        <SelectItem value="20">20 registros</SelectItem>
-                        <SelectItem value="50">50 registros</SelectItem>
-                        <SelectItem value="100">100 registros</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-blue-100 dark:border-blue-900 shadow-lg">
-              <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-500 rounded-lg">
-                    <span className="text-lg text-white">🏢</span>
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">Información de la Empresa</CardTitle>
-                    <CardDescription>Configuración básica de tu negocio</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="companyName">
-                      Nombre de la Empresa
-                      <span className="text-red-500 ml-1">*</span>
-                    </Label>
-                    <Input
-                      id="companyName"
-                      value={settings.companyName}
-                      onChange={(e) => updateSetting('companyName', e.target.value)}
-                      placeholder="Mi Empresa"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="companyRuc">RUC / Tax ID</Label>
-                    <Input
-                      id="companyRuc"
-                      value={settings.companyRuc}
-                      onChange={(e) => updateSetting('companyRuc', e.target.value)}
-                      placeholder="80012345-6"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="companyEmail" className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      Email de Contacto
-                    </Label>
-                    <Input
-                      id="companyEmail"
-                      type="email"
-                      value={settings.companyEmail}
-                      onChange={(e) => updateSetting('companyEmail', e.target.value)}
-                      placeholder="info@empresa.com"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="companyPhone" className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      Teléfono
-                    </Label>
-                    <Input
-                      id="companyPhone"
-                      value={settings.companyPhone}
-                      onChange={(e) => updateSetting('companyPhone', e.target.value)}
-                      placeholder="+595 21 123-4567"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="city" className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      Ciudad
-                    </Label>
-                    <Input
-                      id="city"
-                      value={settings.city}
-                      onChange={(e) => updateSetting('city', e.target.value)}
-                      placeholder="Asunción"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="currency">Moneda</Label>
-                    <Select
-                      value={settings.currency}
-                      onValueChange={(value) => updateSetting('currency', value)}
-                    >
-                      <SelectTrigger id="currency">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="PYG">PYG - Guaraní Paraguayo</SelectItem>
-                        <SelectItem value="USD">USD - Dólar</SelectItem>
-                        <SelectItem value="EUR">EUR - Euro</SelectItem>
-                        <SelectItem value="MXN">MXN - Peso Mexicano</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="taxRate" className="flex items-center gap-2">
-                      Tasa de Impuesto (%)
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Se aplicará a todas las ventas por defecto</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </Label>
-                    <Input
-                      id="taxRate"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={settings.taxRate}
-                      onChange={(e) => updateSetting('taxRate', parseFloat(e.target.value) || 0)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="sessionTimeout">Tiempo de Sesión (minutos)</Label>
-                    <Input
-                      id="sessionTimeout"
-                      type="number"
-                      min="5"
-                      max="480"
-                      value={settings.sessionTimeout}
-                      onChange={(e) => updateSetting('sessionTimeout', parseInt(e.target.value) || 60)}
-                    />
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <Label htmlFor="companyAddress" className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    Dirección Física
-                  </Label>
-                  <Textarea
-                    id="companyAddress"
-                    value={settings.companyAddress}
-                    onChange={(e) => updateSetting('companyAddress', e.target.value)}
-                    rows={3}
-                    className="resize-none"
-                    placeholder="Av. Principal 1234, Ciudad, País"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-blue-100 dark:border-blue-900 shadow-lg">
-              <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-500 rounded-lg">
-                    <span className="text-lg text-white">🎨</span>
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">Apariencia</CardTitle>
-                    <CardDescription>Personaliza cómo se ve tu sistema</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="theme">Tema</Label>
-                    <Select
-                      value={settings.theme}
-                      onValueChange={(value) => updateSetting('theme', value)}
-                    >
-                      <SelectTrigger id="theme">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="light">Claro</SelectItem>
-                        <SelectItem value="dark">Oscuro</SelectItem>
-                        <SelectItem value="system">Sistema</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="primaryColor">Color Primario</Label>
-                    <Select
-                      value={settings.primaryColor}
-                      onValueChange={(value) => updateSetting('primaryColor', value)}
-                    >
-                      <SelectTrigger id="primaryColor">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="blue">Azul</SelectItem>
-                        <SelectItem value="green">Verde</SelectItem>
-                        <SelectItem value="purple">Púrpura</SelectItem>
-                        <SelectItem value="orange">Naranja</SelectItem>
-                        <SelectItem value="red">Rojo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tab: Inventario */}
-          <TabsContent value="inventory" className="space-y-4 sm:space-y-6">
-            <Card className="border-purple-100 dark:border-purple-900 shadow-lg">
-              <CardHeader className="bg-gradient-to-r from-purple-50 to-transparent dark:from-purple-950">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-500 rounded-lg">
-                    <span className="text-lg text-white">📦</span>
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">Gestión de Inventario</CardTitle>
-                    <CardDescription>Configuración de stock y productos</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="lowStockThreshold">Umbral de Stock Bajo</Label>
-                  <Input
-                    id="lowStockThreshold"
-                    type="number"
-                    min="1"
-                    value={settings.lowStockThreshold}
-                    onChange={(e) => updateSetting('lowStockThreshold', parseInt(e.target.value) || 10)}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Cantidad mínima antes de alertar stock bajo
-                  </p>
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="autoBackup">Respaldo Automático</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Crear respaldos automáticos del sistema
-                    </p>
-                  </div>
-                  <Switch
-                    id="autoBackup"
-                    checked={settings.autoBackup}
-                    onCheckedChange={(checked) => updateSetting('autoBackup', checked)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tab: Notificaciones */}
-          <TabsContent value="notifications" className="space-y-4 sm:space-y-6">
-            <Card className="border-green-100 dark:border-green-900 shadow-lg">
-              <CardHeader className="bg-gradient-to-r from-green-50 to-transparent dark:from-green-950">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-500 rounded-lg">
-                    <span className="text-lg text-white">🔔</span>
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">Preferencias de Notificaciones</CardTitle>
-                    <CardDescription>Configura cómo y cuándo recibir alertas</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="emailNotifications">Notificaciones por Email</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Recibir notificaciones importantes por correo
-                    </p>
-                  </div>
-                  <Switch
-                    id="emailNotifications"
-                    checked={settings.emailNotifications}
-                    onCheckedChange={(checked) => updateSetting('emailNotifications', checked)}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="smsNotifications">Notificaciones por SMS</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Recibir alertas críticas por mensaje de texto
-                    </p>
-                  </div>
-                  <Switch
-                    id="smsNotifications"
-                    checked={settings.smsNotifications}
-                    onCheckedChange={(checked) => updateSetting('smsNotifications', checked)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tab: Seguridad */}
-          <TabsContent value="security" className="space-y-4 sm:space-y-6">
-            <Card className="border-red-100 dark:border-red-900 shadow-lg">
-              <CardHeader className="bg-gradient-to-r from-red-50 to-transparent dark:from-red-950">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-red-500 rounded-lg">
-                    <span className="text-lg text-white">🛡️</span>
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl">Seguridad y Acceso</CardTitle>
-                    <CardDescription>Configuración de autenticación y contraseñas</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="passwordMinLength">Longitud Mínima de Contraseña</Label>
-                  <Input
-                    id="passwordMinLength"
-                    type="number"
-                    min="6"
-                    max="32"
-                    value={settings.passwordMinLength}
-                    onChange={(e) => updateSetting('passwordMinLength', parseInt(e.target.value) || 8)}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="allowRegistration">Permitir Registro</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Permitir que nuevos usuarios se registren
-                    </p>
-                  </div>
-                  <Switch
-                    id="allowRegistration"
-                    checked={settings.allowRegistration}
-                    onCheckedChange={(checked) => updateSetting('allowRegistration', checked)}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="requireEmailVerification">Verificación de Email</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Requerir verificación de email al registrarse
-                    </p>
-                  </div>
-                  <Switch
-                    id="requireEmailVerification"
-                    checked={settings.requireEmailVerification}
-                    onCheckedChange={(checked) => updateSetting('requireEmailVerification', checked)}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="requireTwoFactor">Autenticación de Dos Factores</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Requerir código adicional al iniciar sesión
-                    </p>
-                  </div>
-                  <Switch
-                    id="requireTwoFactor"
-                    checked={settings.requireTwoFactor}
-                    onCheckedChange={(checked) => updateSetting('requireTwoFactor', checked)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
       </div>
 
-      {/* Botón flotante de guardar */}
+      {/* Cache warning */}
+      {error && canRenderFallback && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Usando datos en caché</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Save bar */}
       {hasChanges && (
-        <div className="fixed bottom-6 right-6 flex items-center gap-2 z-50 animate-in slide-in-from-bottom-2 fade-in duration-300">
-          <Button
-            variant="outline"
-            onClick={handleReset}
-            disabled={isSaving}
-            className="shadow-lg border-blue-300 text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:text-blue-300"
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Descartar
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={isSaving}
-            size="lg"
-            className="shadow-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white"
-          >
-            {isSaving ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent mr-2" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
-            Guardar Cambios
-          </Button>
+        <div className="flex items-center justify-between p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+            Hay cambios sin guardar
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={handleReset} disabled={isSaving}>
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              Descartar
+            </Button>
+            <Button size="sm" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
+              {isSaving ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </div>
         </div>
       )}
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-1.5">
+          <TabsList className="grid w-full grid-cols-4 gap-1 bg-transparent h-auto p-0">
+            {[
+              { value: 'general', icon: Settings, label: 'General' },
+              { value: 'inventory', icon: Package, label: 'Inventario' },
+              { value: 'notifications', icon: Bell, label: 'Alertas' },
+              { value: 'security', icon: Shield, label: 'Seguridad' },
+            ].map(tab => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800"
+              >
+                <tab.icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+
+        {/* ── General Tab ── */}
+        <TabsContent value="general" className="space-y-5 mt-0">
+          {/* Regional */}
+          <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Globe className="h-4 w-4 text-blue-500" />
+                Configuración Regional
+              </CardTitle>
+              <CardDescription>Formatos de fecha, hora e idioma</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="language">Idioma</Label>
+                  <Select value={settings.language} onValueChange={(v) => updateSetting('language', v)}>
+                    <SelectTrigger id="language"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="es">Español</SelectItem>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="pt">Português</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="timeZone">Zona Horaria</Label>
+                  <Select value={settings.timeZone} onValueChange={(v) => updateSetting('timeZone', v)}>
+                    <SelectTrigger id="timeZone"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="America/Asuncion">Asunción (GMT-4)</SelectItem>
+                      <SelectItem value="America/Argentina/Buenos_Aires">Buenos Aires (GMT-3)</SelectItem>
+                      <SelectItem value="America/Montevideo">Montevideo (GMT-3)</SelectItem>
+                      <SelectItem value="America/Sao_Paulo">São Paulo (GMT-3)</SelectItem>
+                      <SelectItem value="UTC">UTC</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dateFormat">Formato de Fecha</Label>
+                  <Select value={settings.dateFormat} onValueChange={(v) => updateSetting('dateFormat', v)}>
+                    <SelectTrigger id="dateFormat"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
+                      <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
+                      <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="itemsPerPage">Registros por página</Label>
+                  <Select value={String(settings.itemsPerPage)} onValueChange={(v) => updateSetting('itemsPerPage', parseInt(v))}>
+                    <SelectTrigger id="itemsPerPage"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Company */}
+          <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-blue-500" />
+                Información de la Empresa
+              </CardTitle>
+              <CardDescription>Datos de tu negocio para tickets y documentos</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="companyName">Nombre <span className="text-red-500">*</span></Label>
+                  <Input id="companyName" value={settings.companyName} onChange={(e) => updateSetting('companyName', e.target.value)} placeholder="Mi Empresa" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="companyRuc">RUC / Tax ID</Label>
+                  <Input id="companyRuc" value={settings.companyRuc} onChange={(e) => updateSetting('companyRuc', e.target.value)} placeholder="80012345-6" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="companyEmail">Email</Label>
+                  <Input id="companyEmail" type="email" value={settings.companyEmail} onChange={(e) => updateSetting('companyEmail', e.target.value)} placeholder="info@empresa.com" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="companyPhone">Teléfono</Label>
+                  <Input id="companyPhone" value={settings.companyPhone} onChange={(e) => updateSetting('companyPhone', e.target.value)} placeholder="+595 21 123-4567" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="city">Ciudad</Label>
+                  <Input id="city" value={settings.city} onChange={(e) => updateSetting('city', e.target.value)} placeholder="Asunción" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currency">Moneda</Label>
+                  <Select value={settings.currency} onValueChange={(v) => updateSetting('currency', v)}>
+                    <SelectTrigger id="currency"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PYG">PYG - Guaraní</SelectItem>
+                      <SelectItem value="USD">USD - Dólar</SelectItem>
+                      <SelectItem value="UYU">UYU - Peso Uruguayo</SelectItem>
+                      <SelectItem value="EUR">EUR - Euro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="taxRate" className="flex items-center gap-1.5">
+                    Impuesto (%)
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild><HelpCircle className="h-3.5 w-3.5 text-gray-400" /></TooltipTrigger>
+                        <TooltipContent><p>Se aplica a todas las ventas por defecto</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <Input id="taxRate" type="number" min="0" max="100" value={settings.taxRate} onChange={(e) => updateSetting('taxRate', parseFloat(e.target.value) || 0)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sessionTimeout">Sesión (minutos)</Label>
+                  <Input id="sessionTimeout" type="number" min="5" max="480" value={settings.sessionTimeout} onChange={(e) => updateSetting('sessionTimeout', parseInt(e.target.value) || 60)} />
+                </div>
+              </div>
+              <div className="space-y-2 pt-2">
+                <Label htmlFor="companyAddress">Dirección</Label>
+                <Textarea id="companyAddress" value={settings.companyAddress} onChange={(e) => updateSetting('companyAddress', e.target.value)} rows={2} className="resize-none" placeholder="Av. Principal 1234, Ciudad" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Appearance */}
+          <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Palette className="h-4 w-4 text-blue-500" />
+                Apariencia
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="theme">Tema</Label>
+                  <Select value={settings.theme} onValueChange={(v) => updateSetting('theme', v)}>
+                    <SelectTrigger id="theme"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Claro</SelectItem>
+                      <SelectItem value="dark">Oscuro</SelectItem>
+                      <SelectItem value="system">Sistema</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="primaryColor">Color primario</Label>
+                  <Select value={settings.primaryColor} onValueChange={(v) => updateSetting('primaryColor', v)}>
+                    <SelectTrigger id="primaryColor"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="blue">Azul</SelectItem>
+                      <SelectItem value="green">Verde</SelectItem>
+                      <SelectItem value="purple">Púrpura</SelectItem>
+                      <SelectItem value="orange">Naranja</SelectItem>
+                      <SelectItem value="red">Rojo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Inventory Tab ── */}
+        <TabsContent value="inventory" className="space-y-5 mt-0">
+          <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Package className="h-4 w-4 text-violet-500" />
+                Gestión de Inventario
+              </CardTitle>
+              <CardDescription>Configuración de stock y alertas</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="lowStockThreshold">Umbral de stock bajo</Label>
+                <Input id="lowStockThreshold" type="number" min="1" value={settings.lowStockThreshold} onChange={(e) => updateSetting('lowStockThreshold', parseInt(e.target.value) || 10)} />
+                <p className="text-xs text-gray-400">Cantidad mínima antes de alertar stock bajo</p>
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="autoBackup" className="text-sm font-medium">Respaldo automático</Label>
+                  <p className="text-xs text-gray-400 mt-0.5">Crear respaldos automáticos del sistema</p>
+                </div>
+                <Switch id="autoBackup" checked={settings.autoBackup} onCheckedChange={(v) => updateSetting('autoBackup', v)} />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Notifications Tab ── */}
+        <TabsContent value="notifications" className="space-y-5 mt-0">
+          <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Bell className="h-4 w-4 text-emerald-500" />
+                Notificaciones
+              </CardTitle>
+              <CardDescription>Configura cómo y cuándo recibir alertas</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-slate-800">
+                <div>
+                  <Label className="text-sm font-medium">Notificaciones por Email</Label>
+                  <p className="text-xs text-gray-400 mt-0.5">Recibir notificaciones importantes por correo</p>
+                </div>
+                <Switch checked={settings.emailNotifications} onCheckedChange={(v) => updateSetting('emailNotifications', v)} />
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-slate-800">
+                <div>
+                  <Label className="text-sm font-medium">Notificaciones por SMS</Label>
+                  <p className="text-xs text-gray-400 mt-0.5">Recibir alertas críticas por mensaje de texto</p>
+                </div>
+                <Switch checked={settings.smsNotifications} onCheckedChange={(v) => updateSetting('smsNotifications', v)} />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Security Tab ── */}
+        <TabsContent value="security" className="space-y-5 mt-0">
+          <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Shield className="h-4 w-4 text-red-500" />
+                Seguridad y Acceso
+              </CardTitle>
+              <CardDescription>Autenticación y políticas de contraseñas</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="passwordMinLength">Longitud mínima de contraseña</Label>
+                <Input id="passwordMinLength" type="number" min="6" max="32" value={settings.passwordMinLength} onChange={(e) => updateSetting('passwordMinLength', parseInt(e.target.value) || 8)} />
+              </div>
+              <Separator />
+              <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-slate-800">
+                <div>
+                  <Label className="text-sm font-medium">Permitir registro</Label>
+                  <p className="text-xs text-gray-400 mt-0.5">Nuevos usuarios pueden crear cuenta</p>
+                </div>
+                <Switch checked={settings.allowRegistration} onCheckedChange={(v) => updateSetting('allowRegistration', v)} />
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-slate-800">
+                <div>
+                  <Label className="text-sm font-medium">Verificación de email</Label>
+                  <p className="text-xs text-gray-400 mt-0.5">Requerir verificación al registrarse</p>
+                </div>
+                <Switch checked={settings.requireEmailVerification} onCheckedChange={(v) => updateSetting('requireEmailVerification', v)} />
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-slate-800">
+                <div>
+                  <Label className="text-sm font-medium">Autenticación de dos factores</Label>
+                  <p className="text-xs text-gray-400 mt-0.5">Código adicional al iniciar sesión</p>
+                </div>
+                <Switch checked={settings.requireTwoFactor} onCheckedChange={(v) => updateSetting('requireTwoFactor', v)} />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
