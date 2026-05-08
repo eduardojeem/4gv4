@@ -11,7 +11,7 @@
 import React, { memo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Calendar, Clock, User, Wrench, Zap, ImageIcon } from 'lucide-react'
+import { Clock, User, Wrench, Zap, ImageIcon } from 'lucide-react'
 import { Repair } from '@/types/repairs'
 import { statusConfig, priorityConfig } from '@/config/repair-constants'
 import { formatCurrency } from '@/lib/currency'
@@ -41,6 +41,7 @@ export const RepairCard = memo<RepairCardProps>(
     const priority = priorityConfig[repair.priority]
     const borderColor = statusBorderColors[repair.status] || 'border-l-gray-300'
     const imageCount = Array.isArray(repair.images) ? repair.images.length : 0
+    const ticketLabel = repair.ticketNumber || repair.id.slice(0, 8)
 
     const timeAgo = (() => {
       try {
@@ -53,15 +54,29 @@ export const RepairCard = memo<RepairCardProps>(
       }
     })()
 
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!onClick) return
+
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        onClick()
+      }
+    }
+
     return (
       <Card
         className={cn(
-          'border-l-4 hover:shadow-md transition-shadow cursor-pointer bg-white dark:bg-slate-900',
-          'border border-gray-100 dark:border-slate-800',
+          'border border-gray-100 bg-white transition-shadow dark:border-slate-800 dark:bg-slate-900',
+          'border-l-4',
+          onClick && 'cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           borderColor,
           className
         )}
         onClick={onClick}
+        onKeyDown={handleKeyDown}
+        role={onClick ? 'button' : undefined}
+        tabIndex={onClick ? 0 : undefined}
+        aria-label={onClick ? `Abrir reparacion ${ticketLabel} de ${repair.customer.name}` : undefined}
       >
         <CardContent className="p-3.5 space-y-2.5">
           {/* Header: Device + Priority/Urgency */}
@@ -71,7 +86,7 @@ export const RepairCard = memo<RepairCardProps>(
                 {repair.device}
               </h4>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                #{repair.ticketNumber || repair.id.slice(0, 8)}
+                #{ticketLabel}
               </p>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
@@ -138,13 +153,18 @@ export const RepairCard = memo<RepairCardProps>(
     const prev = prevProps.repair
     const next = nextProps.repair
     if (prev === next) return true
+
+    const prevImageCount = Array.isArray(prev.images) ? prev.images.length : 0
+    const nextImageCount = Array.isArray(next.images) ? next.images.length : 0
+
     return (
       prev.id === next.id &&
       prev.status === next.status &&
       prev.priority === next.priority &&
       prev.urgency === next.urgency &&
       prev.lastUpdate === next.lastUpdate &&
-      prev.technician?.id === next.technician?.id
+      prev.technician?.id === next.technician?.id &&
+      prevImageCount === nextImageCount
     )
   }
 )

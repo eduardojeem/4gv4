@@ -77,6 +77,9 @@ export function useTechnicianAnalytics(repairs: Repair[]): TechnicianAnalytics {
     const completedRepairs = repairs.filter(r => 
       r.dbStatus && ['listo', 'entregado'].includes(r.dbStatus)
     )
+    const deliveredRepairs = repairs.filter(r =>
+      (r.dbStatus || r.status) === 'entregado'
+    )
 
     // Calcular métricas básicas
     const totalJobs = repairs.length
@@ -100,9 +103,9 @@ export function useTechnicianAnalytics(repairs: Repair[]): TechnicianAnalytics {
       return days <= 7
     }).length
 
-    // Calcular ingresos
-    const totalRevenue = completedRepairs.reduce((sum, r) => 
-      sum + (r.finalCost || r.estimatedCost || 0), 0
+    // Calcular solo el valor ya entregado para no mezclar presupuestos con ingresos reales
+    const totalRevenue = deliveredRepairs.reduce((sum, repair) =>
+      sum + (repair.finalCost ?? repair.paidAmount ?? 0), 0
     )
 
     // Determinar carga de trabajo y estado
@@ -133,14 +136,14 @@ export function useTechnicianAnalytics(repairs: Repair[]): TechnicianAnalytics {
       const weekStart = startOfWeek(subDays(new Date(), i * 7))
       const weekEnd = endOfWeek(weekStart)
       
-      const weekRepairs = completedRepairs.filter(r => {
+      const weekRepairs = deliveredRepairs.filter(r => {
         if (!r.completedAt) return false
         const completedDate = new Date(r.completedAt)
         return isWithinInterval(completedDate, { start: weekStart, end: weekEnd })
       })
 
-      const weekRevenue = weekRepairs.reduce((sum, r) => 
-        sum + (r.finalCost || r.estimatedCost || 0), 0
+      const weekRevenue = weekRepairs.reduce((sum, repair) =>
+        sum + (repair.finalCost ?? repair.paidAmount ?? 0), 0
       )
 
       const weekAvgTime = weekRepairs.length > 0
@@ -211,7 +214,7 @@ export function useTechnicianAnalytics(repairs: Repair[]): TechnicianAnalytics {
       onTimeDeliveries,
       onTimeRate: completedWithDates.length > 0 ? (onTimeDeliveries / completedWithDates.length) * 100 : 0,
       totalRevenue,
-      avgJobValue: completedJobs > 0 ? totalRevenue / completedJobs : 0,
+      avgJobValue: deliveredRepairs.length > 0 ? totalRevenue / deliveredRepairs.length : 0,
       efficiency,
       workload,
       status

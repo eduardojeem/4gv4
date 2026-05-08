@@ -121,16 +121,28 @@ function RepairsPageContent() {
   const [quickAccessOpen, setQuickAccessOpen] = useState(false)
   const [statsOpen, setStatsOpen] = useState(false)
   const searchParams = useSearchParams()
+  const requestedTechnicianId = searchParams.get('technician') || ''
+  const shouldOpenNewRepair = searchParams.get('new') === 'true'
+
   const handleDialogClose = useCallback(() => {
     setIsDialogOpen(false)
     setSelectedRepair(undefined)
 
     const params = new URLSearchParams(searchParams.toString())
     const hadEditParams = params.has('id') || params.has('edit')
+    const hadCreateParams = params.has('new') || params.has('technician')
 
     if (hadEditParams) {
       params.delete('id')
       params.delete('edit')
+    }
+
+    if (hadCreateParams) {
+      params.delete('new')
+      params.delete('technician')
+    }
+
+    if (hadEditParams || hadCreateParams) {
       const query = params.toString()
       router.replace(query ? `/dashboard/repairs?${query}` : '/dashboard/repairs')
     }
@@ -152,6 +164,15 @@ function RepairsPageContent() {
       }
     }
   }, [isLoading, repairs, searchParams, isDialogOpen])
+
+  useEffect(() => {
+    if (isLoading || isDialogOpen) return
+    if (!shouldOpenNewRepair) return
+
+    setDialogMode('add')
+    setSelectedRepair(undefined)
+    setIsDialogOpen(true)
+  }, [isLoading, isDialogOpen, shouldOpenNewRepair])
 
   // Preload: Precargar componentes pesados para mejorar UX
   const preload = useComponentPreload({
@@ -490,6 +511,20 @@ function RepairsPageContent() {
     }],
     parts: selectedRepair.parts || [],
     notes: (selectedRepair.notes || []).map(n => ({ text: n.text, isInternal: false, id: n.id }))
+  } : shouldOpenNewRepair && requestedTechnicianId ? {
+    priority: 'medium',
+    urgency: 'medium',
+    devices: [{
+      deviceType: 'smartphone',
+      brand: '',
+      model: '',
+      issue: '',
+      description: '',
+      accessType: 'none',
+      images: [],
+      technician: requestedTechnicianId,
+      estimatedCost: 0
+    }]
   } : undefined
 
   // Quick access navigation items

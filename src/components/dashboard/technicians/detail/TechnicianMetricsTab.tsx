@@ -68,7 +68,7 @@ const CustomTooltip = memo(({ active, payload, label }: any) => {
           />
           <span>{entry.name}:</span>
           <span className="font-medium">
-            {entry.name.includes('Ingresos') ? (
+            {entry.name.includes('Ingresos') || entry.name.includes('Valor') ? (
               <span className="flex items-center gap-1">
                 <GSIcon className="h-3 w-3" />
                 {entry.value.toLocaleString()}
@@ -136,7 +136,7 @@ export const TechnicianMetricsTab = memo(function TechnicianMetricsTab({
         <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/30 dark:to-purple-900/50 border-purple-200 dark:border-purple-800">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-300">
-              Ingresos Totales
+              Valor Entregado
             </CardTitle>
             <div className="p-2 bg-purple-500 rounded-full">
               <TrendingUp className="h-4 w-4 text-white" />
@@ -148,7 +148,7 @@ export const TechnicianMetricsTab = memo(function TechnicianMetricsTab({
               {metrics.totalRevenue.toLocaleString()}
             </div>
             <p className="text-xs text-purple-600 dark:text-purple-400">
-              Promedio por trabajo: {Math.round(metrics.avgJobValue).toLocaleString()}
+              Promedio entregado: {Math.round(metrics.avgJobValue).toLocaleString()}
             </p>
           </CardContent>
         </Card>
@@ -207,7 +207,7 @@ export const TechnicianMetricsTab = memo(function TechnicianMetricsTab({
                   fill="#10b981"
                   fillOpacity={0.1}
                   strokeWidth={2}
-                  name="Ingresos"
+                  name="Valor entregado"
                 />
               </AreaChart>
             </ResponsiveContainer>

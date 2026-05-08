@@ -106,45 +106,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return defaultProfile
       }
 
-      // 1. Obtener rol de user_roles (fuente de verdad, misma que el middleware)
-      const { data: roleRow } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .maybeSingle()
+      // Ejecutar las 3 queries en paralelo para evitar bloqueos secuenciales
+      const [roleResult, profileResult, permissionsResult] = await Promise.allSettled([
+        supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle(),
+        supabase.from('profiles').select('full_name, avatar_url, phone, status').eq('id', userId).maybeSingle(),
+        supabase.from('user_permissions').select('permission,is_active').eq('user_id', userId),
+      ])
 
-      // 2. Obtener perfil para datos de display
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_url, phone, status')
-        .eq('id', userId)
-        .maybeSingle()
+      // Extraer resultados de forma segura
+      const roleRow = roleResult.status === 'fulfilled' ? roleResult.value.data : null
+      const profileData = profileResult.status === 'fulfilled' ? profileResult.value.data : null
 
-      // 3. Obtener permisos directos del usuario (fuente para permisos extra por encima del rol)
       let directPermissions: string[] = []
-      const { data: directPermissionsWithStatus, error: directPermissionsError } = await supabase
-        .from('user_permissions')
-        .select('permission,is_active')
-        .eq('user_id', userId)
+      if (permissionsResult.status === 'fulfilled') {
+        const { data: permData, error: permError } = permissionsResult.value
+        if (!permError && permData) {
+          directPermissions = permData
+            .filter((row: any) => row?.is_active !== false)
+            .map((row: any) => row?.permission)
+            .filter((permission: unknown): permission is string => typeof permission === 'string' && permission.length > 0)
+        } else if (permError?.message?.includes('is_active')) {
+          // Compatibilidad con esquemas antiguos sin user_permissions.is_active
+          const { data: directPermissionsOnly } = await supabase
+            .from('user_permissions')
+            .select('permission')
+            .eq('user_id', userId)
 
-      if (!directPermissionsError) {
-        directPermissions = (directPermissionsWithStatus || [])
-          .filter((row) => row?.is_active !== false)
-          .map((row) => row?.permission)
-          .filter((permission): permission is string => typeof permission === 'string' && permission.length > 0)
-      } else if (directPermissionsError.message?.includes('is_active')) {
-        // Compatibilidad con esquemas antiguos sin user_permissions.is_active
-        const { data: directPermissionsOnly } = await supabase
-          .from('user_permissions')
-          .select('permission')
-          .eq('user_id', userId)
-
-        directPermissions = (directPermissionsOnly || [])
-          .map((row) => row?.permission)
-          .filter((permission): permission is string => typeof permission === 'string' && permission.length > 0)
+          directPermissions = (directPermissionsOnly || [])
+            .map((row: any) => row?.permission)
+            .filter((permission: unknown): permission is string => typeof permission === 'string' && permission.length > 0)
+        }
       }
 
-      // user_roles is the trusted role source for permissions.
       const resolvedRole = toUserRole(roleRow?.role ?? undefined)
       const resolvedStatus = toProfileStatus(profileData?.status)
 
@@ -420,6 +413,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Efecto para manejar cambios de autenticación
   useEffect(() => {
+    // Safety timeout: if auth takes more than 8 seconds, stop loading
+    // This prevents the "Verificando permisos" screen from hanging indefinitely
+    const safetyTimeout = setTimeout(() => {
+      setLoading(prev => {
+        if (prev) {
+          console.warn('⚠️ Auth loading timeout reached (8s). Forcing loading=false.')
+          return false
+        }
+        return prev
+      })
+    }, 8000)
+
     const getSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
@@ -498,7 +503,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(safetyTimeout)
+    }
   }, [fetchUserProfile, supabase])
 
   const value = useMemo<AuthContextType>(() => ({

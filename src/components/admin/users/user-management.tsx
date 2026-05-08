@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useUsersSupabase, SupabaseUser } from '@/hooks/use-users-supabase'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent } from '@/components/ui/card'
@@ -33,6 +33,7 @@ import { EditUserForm } from './EditUserForm'
 
 export function UserManagement() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, isAdmin, isSuperAdmin, loading: authLoading } = useAuth()
   const supabase = useMemo(() => createClient(), [])
 
@@ -43,6 +44,7 @@ export function UserManagement() {
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [activeTab, setActiveTab] = useState('users')
+  const requestedEditUserId = searchParams.get('editUser')
 
   const debouncedSearch = useDebounce(searchTerm, 500)
 
@@ -100,6 +102,23 @@ export function UserManagement() {
     permissions: [] as string[]
   })
 
+  const mapProfileToDialogUser = useCallback((profile: any): SupabaseUser => ({
+    id: profile.id,
+    name: profile.full_name || profile.email?.split('@')[0] || 'Usuario',
+    email: profile.email || '',
+    role: profile.role === 'technician' ? 'tecnico' : (profile.role || 'cliente'),
+    status: profile.status === 'inactive' || profile.status === 'suspended' ? profile.status : 'active',
+    department: profile.department || '',
+    phone: profile.phone || '',
+    avatar_url: profile.avatar_url,
+    permissions: profile.permissions || [],
+    lastLogin: profile.updated_at || new Date().toISOString(),
+    createdAt: profile.created_at || new Date().toISOString(),
+    loginAttempts: 0,
+    lastActivity: profile.updated_at || new Date().toISOString(),
+    notes: '',
+  }), [])
+
   // Reset page when filters change
   useEffect(() => {
     setPage(1)
@@ -114,16 +133,13 @@ export function UserManagement() {
     newUsersThisMonth: stats.newThisMonth
   }
 
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center h-[500px]">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    )
-  }
+  const authGuard = authLoading ? (
+    <div className="flex items-center justify-center h-[500px]">
+      <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+    </div>
+  ) : null
 
-  if (!isAdmin) {
-    return (
+  const accessDenied = !isAdmin ? (
       <div className="flex flex-col items-center justify-center h-[500px] text-center p-6">
         <ShieldAlert className="h-16 w-16 text-red-500 mb-4" />
         <h2 className="text-2xl font-bold text-gray-900">Acceso Denegado</h2>
@@ -134,8 +150,7 @@ export function UserManagement() {
           Volver al Dashboard
         </Button>
       </div>
-    )
-  }
+    ) : null
 
   // Handlers
   const handleCreateSubmit = async () => {
@@ -219,6 +234,64 @@ export function UserManagement() {
     })()
   }, [supabase])
 
+  useEffect(() => {
+    if (!requestedEditUserId || authLoading || dataLoading || !isAdmin) return
+
+    let cancelled = false
+
+    const clearRequestedEdit = () => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete('editUser')
+      const query = params.toString()
+      router.replace(query ? `/admin/users?${query}` : '/admin/users')
+    }
+
+    const openRequestedUser = async () => {
+      setActiveTab('users')
+
+      const existingUser = users.find((item) => item.id === requestedEditUserId)
+      if (existingUser) {
+        openEditDialog(existingUser)
+        clearRequestedEdit()
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, status, department, phone, avatar_url, updated_at, created_at')
+        .eq('id', requestedEditUserId)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      if (error || !data) {
+        toast.error('No se pudo abrir el usuario solicitado para edicion')
+        clearRequestedEdit()
+        return
+      }
+
+      openEditDialog(mapProfileToDialogUser(data))
+      clearRequestedEdit()
+    }
+
+    void openRequestedUser()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    authLoading,
+    dataLoading,
+    isAdmin,
+    mapProfileToDialogUser,
+    openEditDialog,
+    requestedEditUserId,
+    router,
+    searchParams,
+    supabase,
+    users,
+  ])
+
   const handleSetStatusFromDetail = useCallback(async (
     targetUser: SupabaseUser,
     nextStatus: SupabaseUser['status'],
@@ -248,6 +321,9 @@ export function UserManagement() {
       setIsUpdatingStatusFromDetail(false)
     }
   }, [refreshUsers, updateUser, user?.id])
+
+  if (authGuard) return authGuard
+  if (accessDenied) return accessDenied
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -361,7 +437,7 @@ export function UserManagement() {
                 <Label>Rol</Label>
                 <Select
                   value={formData.role}
-                  onValueChange={(v: any) => setFormData({ ...formData, role: v })}
+                  onValueChange={(value) => setFormData({ ...formData, role: value as SupabaseUser['role'] })}
                 >
                   <SelectTrigger>
                     <SelectValue />

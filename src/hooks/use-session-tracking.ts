@@ -39,13 +39,19 @@ const detectOS = (userAgent: string): string => {
 
 const getGeolocation = async (): Promise<{ country?: string; city?: string }> => {
   try {
-    // Use ipapi.co for free IP geolocation (no API key required)
+    // Use ipapi.co for free IP geolocation with a 3-second timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+
     const response = await fetch('https://ipapi.co/json/', {
       method: 'GET',
       headers: {
         'Accept': 'application/json'
-      }
+      },
+      signal: controller.signal
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       throw new Error('Failed to fetch geolocation')

@@ -14,7 +14,6 @@ import {
   Clock, 
   CheckCircle2, 
   Wrench,
-  TrendingUp,
   DollarSign,
   Target,
   Zap
@@ -159,13 +158,13 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
                 </p>
               </div>
 
-              {/* Revenue */}
+              {/* Delivered Value */}
               <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/30 dark:to-purple-900/50 border border-purple-200 dark:border-purple-800">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="p-1.5 bg-purple-500 rounded-lg">
                     <DollarSign className="h-4 w-4 text-white" />
                   </div>
-                  <span className="text-xs font-medium text-purple-700 dark:text-purple-300">Ingresos</span>
+                  <span className="text-xs font-medium text-purple-700 dark:text-purple-300">Valor Entregado</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <GSIcon className="h-5 w-5 text-purple-900 dark:text-purple-100" />
@@ -174,7 +173,7 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
                   </p>
                 </div>
                 <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                  Promedio: {Math.round(metrics.avgJobValue).toLocaleString()}
+                  Promedio entregado: {Math.round(metrics.avgJobValue).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -184,7 +183,7 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
               <Button
                 variant="outline"
                 className="gap-2 flex-1 lg:flex-none"
-                onClick={() => router.push(`/admin/users?search=${encodeURIComponent(id)}`)}
+                onClick={() => router.push(`/admin/users?editUser=${encodeURIComponent(id)}`)}
               >
                 <Edit className="h-4 w-4" />
                 Editar

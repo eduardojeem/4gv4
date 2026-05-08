@@ -29,11 +29,11 @@ export function RepairCardsView({ repairs, onView, onEdit, onDelete, onDeliver }
         <div key={repair.id} className="relative group">
           <RepairCard
             repair={repair}
-            onClick={() => onView?.(repair)}
+            onClick={onView ? () => onView(repair) : onEdit ? () => onEdit(repair) : undefined}
             className="h-full"
           />
           {/* Action menu — visible on hover */}
-          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          <div className="absolute right-2 top-2 z-10 opacity-100 transition-opacity sm:pointer-events-none sm:opacity-0 sm:group-hover:pointer-events-auto sm:group-hover:opacity-100 sm:group-focus-within:pointer-events-auto sm:group-focus-within:opacity-100">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
