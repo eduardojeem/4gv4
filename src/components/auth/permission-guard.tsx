@@ -93,7 +93,13 @@ export function ConditionalRender({ children, requirements, fallback }: Conditio
 // Componente para protección de rutas específicas
 export function RouteGuard({ children, route, fallback, redirectTo }: RouteGuardProps) {
   const { canAccessRoute } = usePermissions()
+  const { loading } = useAuth()
   const router = useRouter()
+
+  // While auth is loading, show nothing (or a spinner) — don't deny access prematurely
+  if (loading) {
+    return null
+  }
 
   const canAccess = canAccessRoute(route)
 

@@ -12,11 +12,9 @@ import {
   UserPlus, 
   Star, 
   Clock, 
-  CheckCircle2, 
   Wrench,
   DollarSign,
   Target,
-  Zap
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { TechnicianMetrics } from '@/hooks/use-technician-analytics'

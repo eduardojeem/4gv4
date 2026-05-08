@@ -50,7 +50,6 @@ export function TechnicianFilters({
                         <SelectItem value="all">Todos los estados</SelectItem>
                         <SelectItem value="available">Disponible</SelectItem>
                         <SelectItem value="busy">Ocupado</SelectItem>
-                        <SelectItem value="offline">Fuera de servicio</SelectItem>
                         <SelectItem value="unavailable">No disponible</SelectItem>
                     </SelectContent>
                 </Select>

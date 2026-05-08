@@ -413,26 +413,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Efecto para manejar cambios de autenticación
   useEffect(() => {
-    // Safety timeout: if auth takes more than 8 seconds, stop loading
-    // This prevents the "Verificando permisos" screen from hanging indefinitely
-    const safetyTimeout = setTimeout(() => {
-      setLoading(prev => {
-        if (prev) {
-          console.warn('⚠️ Auth loading timeout reached (8s). Forcing loading=false.')
-          return false
-        }
-        return prev
-      })
-    }, 8000)
+    let isMounted = true
 
     const getSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
+        if (!isMounted) return
+
         setSession(session)
 
         if (session?.user) {
           try {
             const userProfile = await fetchUserProfile(session.user.id)
+            if (!isMounted) return
             setUser({
               ...session.user,
               role: userProfile.role,
@@ -441,6 +434,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               profile: userProfile.profile
             } as AuthUser)
           } catch {
+            if (!isMounted) return
             setUser({
               ...session.user,
               role: 'cliente' as UserRole,
@@ -452,9 +446,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null)
         }
       } catch {
-        // Silently handle session errors
+        if (!isMounted) return
+        // Session retrieval failed — user will be set by onAuthStateChange if available
+        setUser(null)
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
       }
     }
 
@@ -462,12 +458,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!isMounted) return
         try {
           setSession(session)
 
           if (session?.user) {
             try {
               const userProfile = await fetchUserProfile(session.user.id)
+              if (!isMounted) return
               setUser({
                 ...session.user,
                 role: userProfile.role,
@@ -476,6 +474,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 profile: userProfile.profile
               } as AuthUser)
             } catch {
+              if (!isMounted) return
               setUser({
                 ...session.user,
                 role: 'cliente' as UserRole,
@@ -487,6 +486,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(null)
           }
         } catch {
+          if (!isMounted) return
           if (session?.user) {
             setUser({
               ...session.user,
@@ -504,8 +504,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     )
 
     return () => {
+      isMounted = false
       subscription.unsubscribe()
-      clearTimeout(safetyTimeout)
     }
   }, [fetchUserProfile, supabase])
 

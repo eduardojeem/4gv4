@@ -17,10 +17,10 @@ export const SystemSettingsSchema = z.object({
     .min(1, 'El email es obligatorio'),
   
   companyPhone: z.string()
-    .min(1, 'El teléfono es obligatorio')
-    .max(50, 'El teléfono no puede exceder 50 caracteres')
-    .trim(),
-  
+    .max(50, 'El telefono no puede exceder 50 caracteres')
+    .trim()
+    .optional()
+    .default(''),
   companyRuc: z.string()
     .max(50, 'El RUC no puede exceder 50 caracteres')
     .optional()
@@ -177,8 +177,8 @@ export function mapDBToSettings(dbData: z.infer<typeof SystemSettingsDBSchema>):
 /**
  * Convierte datos de frontend a formato DB
  */
-export function mapSettingsToDB(settings: SystemSettingsPartial): Record<string, any> {
-  const dbData: Record<string, any> = {}
+export function mapSettingsToDB(settings: SystemSettingsPartial): Record<string, unknown> {
+  const dbData: Record<string, unknown> = {}
   
   if (settings.companyName !== undefined) dbData.company_name = settings.companyName
   if (settings.companyEmail !== undefined) dbData.company_email = settings.companyEmail

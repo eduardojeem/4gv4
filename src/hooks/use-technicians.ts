@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config, isDemoNoDb } from '@/lib/config'
 
 export interface Technician {
     id: string
     full_name: string
-    name: string  // Alias for full_name for easier component usage
+    name: string
     email: string
     role: string
-    specialty?: string  // Optional specialty field
+    specialty?: string
 }
 
 interface DbProfile {
@@ -20,23 +20,46 @@ interface DbProfile {
 }
 
 const TECHNICIAN_ROLES = ['technician', 'tecnico', 'técnico']
+const DEMO_TECHNICIANS: Technician[] = [
+    {
+        id: 'TECH-001',
+        full_name: 'Tecnico Demo 1',
+        name: 'Tecnico Demo 1',
+        email: 'tech1@demo.com',
+        role: 'technician',
+        specialty: 'Smartphones'
+    },
+    {
+        id: 'TECH-002',
+        full_name: 'Tecnico Demo 2',
+        name: 'Tecnico Demo 2',
+        email: 'tech2@demo.com',
+        role: 'technician',
+        specialty: 'Laptops'
+    }
+]
 
 function isMissingSpecialtyColumnError(error: unknown) {
-    const msg = (error as any)?.message?.toLowerCase?.() || ''
+    const msg = (error as { message?: string })?.message?.toLowerCase?.() || ''
     return msg.includes('specialty') && (msg.includes('column') || msg.includes('schema cache'))
 }
 
-function mapTechnicians(data: DbProfile[]): Technician[] {
-    const filtered = (data || []).filter((p: DbProfile) => {
-        const normalizedRole = String(p.role || '').trim().toLowerCase()
-        return TECHNICIAN_ROLES.includes(normalizedRole)
-    })
+function isMissingProfilesTableError(error: unknown) {
+    const msg = (error as { message?: string })?.message?.toLowerCase?.() || ''
+    return msg.includes("could not find the table 'public.profiles'") || msg.includes('relation "profiles" does not exist')
+}
 
-    return filtered.map((t: DbProfile): Technician => ({
-        ...t,
-        name: t.full_name,
-        specialty: t.specialty || undefined
-    }))
+function mapTechnicians(data: DbProfile[]): Technician[] {
+    return (data || [])
+        .filter((profile) => {
+            const normalizedRole = String(profile.role || '').trim().toLowerCase()
+            return TECHNICIAN_ROLES.includes(normalizedRole)
+        })
+        .map((technician) => ({
+            ...technician,
+            name: technician.full_name,
+            specialty: technician.specialty || undefined
+        }))
 }
 
 export function useTechnicians() {
@@ -44,112 +67,65 @@ export function useTechnicians() {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
-    useEffect(() => {
-        const fetchTechnicians = async () => {
+    const fetchTechnicians = useCallback(async () => {
+        setIsLoading(true)
+        setError(null)
+
+        try {
             if (!config.supabase.isConfigured || isDemoNoDb()) {
-                setTechnicians([
-                    { id: 'TECH-001', full_name: 'Técnico Demo 1', name: 'Técnico Demo 1', email: 'tech1@demo.com', role: 'technician', specialty: 'Smartphones' },
-                    { id: 'TECH-002', full_name: 'Técnico Demo 2', name: 'Técnico Demo 2', email: 'tech2@demo.com', role: 'technician', specialty: 'Laptops' }
-                ])
-                setIsLoading(false)
+                setTechnicians(DEMO_TECHNICIANS)
                 return
             }
 
-            try {
-                const supabase = createClient()
-                let data: DbProfile[] | null = null
-                let error: unknown = null
+            const supabase = createClient()
 
-                const withSpecialty = await supabase
+            let data: DbProfile[] | null = null
+            let queryError: unknown = null
+
+            const withSpecialty = await supabase
+                .from('profiles')
+                .select('id, full_name, email, role, specialty')
+                .order('full_name')
+
+            data = withSpecialty.data as DbProfile[] | null
+            queryError = withSpecialty.error
+
+            if (queryError && isMissingSpecialtyColumnError(queryError)) {
+                const fallback = await supabase
                     .from('profiles')
-                    .select('id, full_name, email, role, specialty')
+                    .select('id, full_name, email, role')
                     .order('full_name')
 
-                data = withSpecialty.data as DbProfile[] | null
-                error = withSpecialty.error
-
-                if (error && isMissingSpecialtyColumnError(error)) {
-                    const fallback = await supabase
-                        .from('profiles')
-                        .select('id, full_name, email, role')
-                        .order('full_name')
-                    data = fallback.data as DbProfile[] | null
-                    error = fallback.error
-                }
-
-                if (error) {
-                    const msg = (error as any)?.message || String(error)
-                    const lower = msg.toLowerCase()
-                    const missing = lower.includes("could not find the table 'public.profiles'") || lower.includes('relation "profiles" does not exist')
-                    if (missing) {
-                        setTechnicians([])
-                        setError(null)
-                        return
-                    }
-                    throw error
-                }
-
-                setTechnicians(mapTechnicians(data || []))
-            } catch (err: unknown) {
-                const msg = err && typeof err === 'object' && 'message' in err ? String((err as Error).message) : String(err)
-                console.error('Error fetching technicians:', { message: msg })
-                setError(msg)
-            } finally {
-                setIsLoading(false)
+                data = fallback.data as DbProfile[] | null
+                queryError = fallback.error
             }
-        }
 
-        fetchTechnicians()
+            if (queryError) {
+                if (isMissingProfilesTableError(queryError)) {
+                    setTechnicians([])
+                    return
+                }
+
+                throw queryError
+            }
+
+            setTechnicians(mapTechnicians(data || []))
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err)
+            console.error('Error fetching technicians:', { message })
+            setError(message)
+        } finally {
+            setIsLoading(false)
+        }
     }, [])
 
-    const refreshTechnicians = async () => {
-        setIsLoading(true)
-        // Re-run the fetch logic
-        const fetchTechnicians = async () => {
-            if (!config.supabase.isConfigured || isDemoNoDb()) {
-                setTechnicians([
-                    { id: 'TECH-001', full_name: 'Técnico Demo 1', name: 'Técnico Demo 1', email: 'tech1@demo.com', role: 'technician', specialty: 'Smartphones' },
-                    { id: 'TECH-002', full_name: 'Técnico Demo 2', name: 'Técnico Demo 2', email: 'tech2@demo.com', role: 'technician', specialty: 'Laptops' }
-                ])
-                setIsLoading(false)
-                return
-            }
+    useEffect(() => {
+        void fetchTechnicians()
+    }, [fetchTechnicians])
 
-            try {
-                const supabase = createClient()
-                let data: DbProfile[] | null = null
-                let error: unknown = null
-
-                const withSpecialty = await supabase
-                    .from('profiles')
-                    .select('id, full_name, email, role, specialty')
-                    .order('full_name')
-
-                data = withSpecialty.data as DbProfile[] | null
-                error = withSpecialty.error
-
-                if (error && isMissingSpecialtyColumnError(error)) {
-                    const fallback = await supabase
-                        .from('profiles')
-                        .select('id, full_name, email, role')
-                        .order('full_name')
-                    data = fallback.data as DbProfile[] | null
-                    error = fallback.error
-                }
-
-                if (error) throw error
-
-                setTechnicians(mapTechnicians(data || []))
-            } catch (err: unknown) {
-                console.error('Error refreshing technicians:', err)
-                const errorMessage = err instanceof Error ? err.message : 'Error desconocido'
-                setError(errorMessage)
-            } finally {
-                setIsLoading(false)
-            }
-        }
+    const refreshTechnicians = useCallback(async () => {
         await fetchTechnicians()
-    }
+    }, [fetchTechnicians])
 
     return { technicians, isLoading, error, refreshTechnicians }
 }

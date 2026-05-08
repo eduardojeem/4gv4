@@ -13,36 +13,50 @@ interface DashboardGuardProps {
  * DashboardGuard - Protege el dashboard de usuarios con rol 'cliente'.
  *
  * Solo los roles admin, vendedor y tecnico tienen acceso.
- * Redirige a /inicio si el usuario es cliente o no esta autenticado.
+ * Redirige a /login si no hay sesión, o a /inicio si el usuario es cliente.
  */
 export function DashboardGuard({ children }: DashboardGuardProps) {
   const { user, loading } = useAuth()
   const router = useRouter()
 
   const role = user?.role
-  const isClientOrNoRole = !role || role === 'cliente'
+  const isClientRole = role === 'cliente'
 
   useEffect(() => {
     if (loading) return
     if (!user) {
       router.replace('/login')
-    } else if (isClientOrNoRole) {
+    } else if (isClientRole) {
       router.replace('/inicio')
     }
-  }, [user, loading, isClientOrNoRole, router])
+  }, [user, loading, isClientRole, router])
 
+  // Still loading auth state — show spinner
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Verificando permisos...</p>
+          <p className="text-muted-foreground">Cargando...</p>
         </div>
       </div>
     )
   }
 
-  if (!user || isClientOrNoRole) {
+  // No user — redirect is happening via useEffect, show spinner while it navigates
+  if (!user) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Redirigiendo...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // User exists but has client role — show access denied briefly while redirect happens
+  if (isClientRole) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="text-center">
@@ -51,7 +65,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
             Acceso Denegado
           </h2>
           <p className="text-muted-foreground">
-            No tienes permisos para acceder al panel de administracion.
+            No tienes permisos para acceder al panel de administración.
           </p>
         </div>
       </div>

@@ -5,7 +5,7 @@ import { Users, UserCheck, Wrench, Clock, TrendingUp, Award } from 'lucide-react
 
 interface TechnicianStatsGridProps {
     totalTechnicians: number
-    activeTechnicians: number
+    availableTechnicians: number
     totalActiveJobs: number
     avgJobsPerTech: number
     avgCompletionTime?: string
@@ -14,14 +14,14 @@ interface TechnicianStatsGridProps {
 
 export function TechnicianStatsGrid({
     totalTechnicians,
-    activeTechnicians,
+    availableTechnicians,
     totalActiveJobs,
     avgJobsPerTech,
     avgCompletionTime,
     bestPerformer
 }: TechnicianStatsGridProps) {
     const activePct = totalTechnicians > 0
-        ? Math.round((activeTechnicians / totalTechnicians) * 100)
+        ? Math.round((availableTechnicians / totalTechnicians) * 100)
         : 0
 
     return (
@@ -36,7 +36,7 @@ export function TechnicianStatsGrid({
 
             <StatsCard
                 title="Disponibles"
-                value={activeTechnicians}
+                value={availableTechnicians}
                 subtitle={`${activePct}% del equipo`}
                 icon={UserCheck}
                 color="green"

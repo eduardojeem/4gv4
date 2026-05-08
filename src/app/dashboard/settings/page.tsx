@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Settings, Save, RotateCcw, AlertCircle, HelpCircle, Mail, Phone, MapPin, Loader2, Globe, Clock, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,23 +17,83 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { useAuth } from '@/contexts/auth-context'
+import { useTheme } from '@/contexts/theme-context'
+
+const EDITABLE_COLOR_SCHEMES = ['blue', 'green', 'purple', 'orange', 'red'] as const
 
 export default function SettingsPageFixed() {
   const {
     settings,
+    originalSettings,
     hasChanges,
     isLoading,
     isSaving,
     error,
+    settingsSource,
     updateSetting,
     saveSettings,
     resetSettings
   } = useSharedSettings()
+  const { isAdmin, isSuperAdmin, loading: authLoading } = useAuth()
+  const { theme, colorScheme, setTheme, setColorScheme } = useTheme()
 
   const [activeTab, setActiveTab] = useState('general')
+  const canManageSettings = isAdmin || isSuperAdmin
+  const canRenderFallback = settingsSource === 'cache'
 
-  // Contar cambios
-  const changedFields = hasChanges ? 1 : 0
+  const changedFields = useMemo(() => {
+    return Object.keys(settings).reduce((count, key) => {
+      const typedKey = key as keyof typeof settings
+      return JSON.stringify(settings[typedKey]) === JSON.stringify(originalSettings[typedKey])
+        ? count
+        : count + 1
+    }, 0)
+  }, [settings, originalSettings])
+
+  useEffect(() => {
+    if (isLoading) return
+
+    if (theme !== settings.theme) {
+      setTheme(settings.theme as 'light' | 'dark' | 'system')
+    }
+
+    if (
+      EDITABLE_COLOR_SCHEMES.includes(settings.primaryColor as typeof EDITABLE_COLOR_SCHEMES[number]) &&
+      colorScheme !== settings.primaryColor
+    ) {
+      setColorScheme(settings.primaryColor as 'blue' | 'green' | 'purple' | 'orange' | 'red')
+    }
+  }, [colorScheme, isLoading, setColorScheme, setTheme, settings.primaryColor, settings.theme, theme])
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+          <p className="text-gray-500 dark:text-gray-400">Verificando permisos...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!canManageSettings) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950 px-4">
+        <Card className="w-full max-w-lg border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20">
+          <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
+            <AlertCircle className="h-12 w-12 text-amber-500" />
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">Acceso restringido</h3>
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Solo administradores pueden modificar la configuracion global del sistema.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -45,7 +106,7 @@ export default function SettingsPageFixed() {
     )
   }
 
-  if (error) {
+  if (error && !canRenderFallback) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-950">
         <Card className="w-full max-w-md border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900">
@@ -115,6 +176,16 @@ export default function SettingsPageFixed() {
             )}
           </div>
         </div>
+
+        {error && canRenderFallback && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Mostrando configuracion guardada en este navegador</AlertTitle>
+            <AlertDescription>
+              {error}. Puedes revisar los datos en cache y volver a intentar guardar cuando el servicio se recupere.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Barra de cambios flotante */}
         {hasChanges && (

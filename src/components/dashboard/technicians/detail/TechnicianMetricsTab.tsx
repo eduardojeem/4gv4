@@ -16,8 +16,6 @@ import { YAxis } from 'recharts/es6/cartesian/YAxis';
 import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid';
 import { Tooltip } from 'recharts/es6/component/Tooltip';
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
-import { LineChart } from 'recharts/es6/chart/LineChart';
-import { Line } from 'recharts/es6/cartesian/Line';
 import {
   TrendingUp,
   Clock,
@@ -53,14 +51,26 @@ const priorityLabels: Record<string, string> = {
   high: 'Alta'
 }
 
+interface TooltipEntry {
+  color?: string
+  name?: string
+  value?: number
+}
+
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: TooltipEntry[]
+  label?: string
+}
+
 // Tooltip personalizado
-const CustomTooltip = memo(({ active, payload, label }: any) => {
+const CustomTooltip = memo(function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null
 
   return (
     <div className="bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg p-3">
       <div className="font-medium text-sm mb-1">{label}</div>
-      {payload.map((entry: any, index: number) => (
+      {payload.map((entry, index) => (
         <div key={index} className="text-sm flex items-center gap-2" style={{ color: entry.color }}>
           <div 
             className="w-3 h-3 rounded-full flex-shrink-0" 
@@ -68,12 +78,12 @@ const CustomTooltip = memo(({ active, payload, label }: any) => {
           />
           <span>{entry.name}:</span>
           <span className="font-medium">
-            {entry.name.includes('Ingresos') || entry.name.includes('Valor') ? (
+            {(entry.name || '').includes('Ingresos') || (entry.name || '').includes('Valor') ? (
               <span className="flex items-center gap-1">
                 <GSIcon className="h-3 w-3" />
-                {entry.value.toLocaleString()}
+                {(entry.value || 0).toLocaleString()}
               </span>
-            ) : entry.value.toLocaleString()}
+            ) : (entry.value || 0).toLocaleString()}
           </span>
         </div>
       ))}

@@ -31,6 +31,20 @@ import { useDebounce } from '@/hooks/use-debounce'
 import { toast } from 'sonner'
 import { EditUserForm } from './EditUserForm'
 
+interface ProfileLookupRow {
+  id: string
+  full_name?: string | null
+  email?: string | null
+  role?: string | null
+  status?: string | null
+  department?: string | null
+  phone?: string | null
+  avatar_url?: string | null
+  updated_at?: string | null
+  created_at?: string | null
+  permissions?: string[] | null
+}
+
 export function UserManagement() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -102,7 +116,7 @@ export function UserManagement() {
     permissions: [] as string[]
   })
 
-  const mapProfileToDialogUser = useCallback((profile: any): SupabaseUser => ({
+  const mapProfileToDialogUser = useCallback((profile: ProfileLookupRow): SupabaseUser => ({
     id: profile.id,
     name: profile.full_name || profile.email?.split('@')[0] || 'Usuario',
     email: profile.email || '',

@@ -2,18 +2,22 @@
 
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, Home, ChevronRight, UserPlus, LayoutGrid, List, ArrowLeft } from 'lucide-react'
+import { AlertCircle, RefreshCw, Home, ChevronRight, UserPlus, LayoutGrid, List, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { TechnicianStatsGrid } from '@/components/dashboard/technicians/TechnicianStatsGrid'
 import { TechnicianFilters } from '@/components/dashboard/technicians/TechnicianFilters'
 import { TechnicianCard } from '@/components/dashboard/technicians/TechnicianCard'
+import { TechnicianListItem } from '@/components/dashboard/technicians/TechnicianListItem'
 import { useTechnicians } from '@/hooks/use-technicians'
 import { useRepairs } from '@/contexts/RepairsContext'
 
+const COMPLETED_STATUSES = new Set(['listo', 'entregado'])
+
 export default function TechniciansPage() {
     const router = useRouter()
-    const { technicians, isLoading: isLoadingTechs, refreshTechnicians } = useTechnicians()
-    const { repairs, isLoading: isLoadingRepairs } = useRepairs()
+    const { technicians, isLoading: isLoadingTechs, error: techniciansError, refreshTechnicians } = useTechnicians()
+    const { repairs, isLoading: isLoadingRepairs, error: repairsError, refreshRepairs } = useRepairs()
 
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
@@ -22,13 +26,17 @@ export default function TechniciansPage() {
     const handleAddTechnician = () => {
         router.push('/admin/users')
     }
+    const handleRefresh = async () => {
+        await Promise.allSettled([refreshTechnicians(), refreshRepairs()])
+    }
 
     // Calculate technician stats
     const technicianData = useMemo(() => {
         return technicians.map(tech => {
             const techRepairs = repairs.filter(r => r.technician?.id === tech.id)
             const activeJobs = techRepairs.filter(r =>
-                r.dbStatus !== 'listo' && r.dbStatus !== 'entregado'
+                !COMPLETED_STATUSES.has(r.dbStatus || r.status) &&
+                (r.dbStatus || r.status) !== 'cancelado'
             ).length
 
             // Calculate completed this month
@@ -37,14 +45,14 @@ export default function TechniciansPage() {
             const completedThisMonth = techRepairs.filter(r => {
                 const completedDate = r.completedAt ? new Date(r.completedAt) : null
                 return completedDate && completedDate >= startOfMonth &&
-                    (r.dbStatus === 'listo' || r.dbStatus === 'entregado')
+                    COMPLETED_STATUSES.has(r.dbStatus || r.status)
             }).length
 
             const totalCompleted = techRepairs.filter(r =>
-                r.dbStatus === 'listo' || r.dbStatus === 'entregado'
+                COMPLETED_STATUSES.has(r.dbStatus || r.status)
             ).length
             const completedWithDates = techRepairs.filter(r =>
-                (r.dbStatus === 'listo' || r.dbStatus === 'entregado') &&
+                COMPLETED_STATUSES.has(r.dbStatus || r.status) &&
                 !!r.createdAt &&
                 !!r.completedAt
             )
@@ -85,7 +93,7 @@ export default function TechniciansPage() {
 
     // Filter technicians
     const filteredTechnicians = useMemo(() => {
-        let filtered = technicianData
+        let filtered = [...technicianData]
 
         // Search filter
         if (searchTerm) {
@@ -123,7 +131,7 @@ export default function TechniciansPage() {
     // Calculate overall stats
     const overallStats = useMemo(() => {
         const total = technicianData.length
-        const active = technicianData.filter(t => t.status === 'available' || t.status === 'busy').length
+        const available = technicianData.filter(t => t.status === 'available').length
         const totalActiveJobs = technicianData.reduce((sum, t) => sum + t.activeJobs, 0)
         const avgJobsPerTech = total > 0 ? totalActiveJobs / total : 0
         const avgCompletionDays = technicianData.length > 0
@@ -132,12 +140,16 @@ export default function TechniciansPage() {
 
         // Find best performer
         const bestPerformer = technicianData.reduce((best, current) => {
-            return current.completedThisMonth > (best?.completedThisMonth || 0) ? current : best
-        }, technicianData[0])
+            if (current.completedThisMonth === 0) {
+                return best
+            }
+
+            return !best || current.completedThisMonth > best.completedThisMonth ? current : best
+        }, undefined as (typeof technicianData)[number] | undefined)
 
         return {
             totalTechnicians: total,
-            activeTechnicians: active,
+            availableTechnicians: available,
             totalActiveJobs,
             avgJobsPerTech,
             avgCompletionTime: avgCompletionDays > 0 ? `${avgCompletionDays.toFixed(1)} días` : undefined,
@@ -145,7 +157,10 @@ export default function TechniciansPage() {
         }
     }, [technicianData])
 
+    const dataErrors = [techniciansError, repairsError?.message].filter(Boolean) as string[]
+    const errorMessage = dataErrors.join(' ')
     const isLoading = isLoadingTechs || isLoadingRepairs
+    const showErrorState = !isLoading && dataErrors.length > 0 && technicianData.length === 0
 
     return (
         <div className="flex flex-col gap-6 p-6">
@@ -184,7 +199,7 @@ export default function TechniciansPage() {
                     <Button
                         variant="outline"
                         size="icon"
-                        onClick={refreshTechnicians}
+                        onClick={handleRefresh}
                         title="Actualizar"
                         disabled={isLoading}
                     >
@@ -215,19 +230,35 @@ export default function TechniciansPage() {
                     <Button
                         variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
                         size="sm"
+                        aria-label="Cambiar a vista de grilla"
+                        aria-pressed={viewMode === 'grid'}
                         onClick={() => setViewMode('grid')}
+                        title="Vista de grilla"
                     >
                         <LayoutGrid className="h-4 w-4" />
                     </Button>
                     <Button
                         variant={viewMode === 'list' ? 'secondary' : 'ghost'}
                         size="sm"
+                        aria-label="Cambiar a vista de lista"
+                        aria-pressed={viewMode === 'list'}
                         onClick={() => setViewMode('list')}
+                        title="Vista de lista"
                     >
                         <List className="h-4 w-4" />
                     </Button>
                 </div>
             </div>
+
+            {dataErrors.length > 0 && (
+                <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Error al cargar datos</AlertTitle>
+                    <AlertDescription>
+                        {errorMessage}
+                    </AlertDescription>
+                </Alert>
+            )}
 
             {/* Technicians Grid/List */}
             {isLoading ? (
@@ -236,6 +267,22 @@ export default function TechniciansPage() {
                         <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
                         <p className="text-sm text-muted-foreground">Cargando técnicos...</p>
                     </div>
+                </div>
+            ) : showErrorState ? (
+                <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed px-4 py-12 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+                        <AlertCircle className="h-8 w-8 text-destructive" />
+                    </div>
+                    <div className="max-w-md space-y-2">
+                        <h3 className="text-lg font-semibold">No pudimos cargar los tecnicos</h3>
+                        <p className="text-sm text-muted-foreground">
+                            Revisa la conexion o la configuracion de datos y vuelve a intentarlo.
+                        </p>
+                    </div>
+                    <Button onClick={handleRefresh} variant="outline" className="gap-2">
+                        <RefreshCw className="h-4 w-4" />
+                        Reintentar
+                    </Button>
                 </div>
             ) : filteredTechnicians.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed rounded-lg">
@@ -252,15 +299,27 @@ export default function TechniciansPage() {
                     </div>
                 </div>
             ) : (
-                <div className={
-                    viewMode === 'grid'
-                        ? 'grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-                        : 'flex flex-col gap-4'
-                }>
-                    {filteredTechnicians.map(tech => (
-                        <TechnicianCard key={tech.id} {...tech} />
-                    ))}
-                </div>
+                viewMode === 'grid' ? (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {filteredTechnicians.map(tech => (
+                            <TechnicianCard key={tech.id} {...tech} />
+                        ))}
+                    </div>
+                ) : (
+                    <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+                        <div className="hidden border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_minmax(220px,1.2fr)_auto] md:items-center md:gap-4">
+                            <span>Tecnico</span>
+                            <span>Rendimiento</span>
+                            <span>Carga</span>
+                            <span className="text-right">Accion</span>
+                        </div>
+                        <div className="divide-y">
+                            {filteredTechnicians.map(tech => (
+                                <TechnicianListItem key={tech.id} {...tech} />
+                            ))}
+                        </div>
+                    </div>
+                )
             )}
         </div>
     )

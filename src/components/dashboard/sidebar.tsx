@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
+import type { UserRole } from '@/lib/auth/roles-permissions'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import type { LucideIcon } from 'lucide-react'
@@ -34,7 +35,6 @@ import {
   LogOut
 } from 'lucide-react'
 
-type UserRole = 'admin' | 'vendedor' | 'tecnico'
 type NavItem = { name: string; href: string; icon: LucideIcon; roles: UserRole[]; description?: string }
 
 const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
@@ -72,7 +72,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: 'Sistema',
     items: [
-      { name: 'Configuración', href: '/dashboard/settings', icon: Palette, roles: ['admin', 'vendedor', 'tecnico'] },
+      { name: 'Configuracion', href: '/dashboard/settings', icon: Palette, roles: ['admin'] },
     ],
   },
 ]
@@ -123,7 +123,11 @@ export const Sidebar = memo(function Sidebar() {
   const isDev = process.env.NODE_ENV === 'development'
 
   const filteredGroups = useMemo(() => {
-    const filterFn = (item: NavItem) => (isDev ? true : item.roles.includes(userRole))
+    const filterFn = (item: NavItem) => {
+      if (isDev) return true
+      if (userRole === 'super_admin') return item.roles.includes('admin') || item.roles.includes('super_admin')
+      return item.roles.includes(userRole)
+    }
     return NAV_GROUPS.map(group => ({
       label: group.label,
       items: group.items.filter(filterFn)

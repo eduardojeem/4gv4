@@ -31,8 +31,8 @@ export interface SystemSettingsRow {
   time_zone: string
   language: string
   items_per_page: number
-  social_links: any
-  features: any
+  social_links: Record<string, unknown> | null
+  features: Record<string, unknown> | null
   retention_days: number
   updated_at: string
   updated_by: string | null
@@ -79,6 +79,8 @@ export interface SharedSettings {
   maintenanceMode: boolean
 }
 
+export type SharedSettingsSource = 'remote' | 'cache' | 'default'
+
 const defaultSettings: SharedSettings = {
   companyName: 'Mi Empresa',
   companyEmail: 'info@empresa.com',
@@ -116,6 +118,7 @@ export function useSharedSettings() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [settingsSource, setSettingsSource] = useState<SharedSettingsSource>('default')
   
   const supabase = createClientComponentClient()
 
@@ -168,6 +171,7 @@ export function useSharedSettings() {
           console.log('No system settings found, using defaults')
           setSettings(defaultSettings)
           setOriginalSettings(defaultSettings)
+          setSettingsSource('default')
           return
         }
         throw error
@@ -177,6 +181,7 @@ export function useSharedSettings() {
         const mapped = mapToAppSettings(data as SystemSettingsRow)
         setSettings(mapped)
         setOriginalSettings(mapped)
+        setSettingsSource('remote')
         localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
       }
     } catch (err) {
@@ -189,9 +194,17 @@ export function useSharedSettings() {
           const parsed = JSON.parse(saved)
           setSettings(parsed)
           setOriginalSettings(parsed)
+          setSettingsSource('cache')
         } catch (e) {
           console.error('Error parsing local settings:', e)
+          setSettings(defaultSettings)
+          setOriginalSettings(defaultSettings)
+          setSettingsSource('default')
         }
+      } else {
+        setSettings(defaultSettings)
+        setOriginalSettings(defaultSettings)
+        setSettingsSource('default')
       }
     } finally {
       setIsLoading(false)
@@ -218,6 +231,7 @@ export function useSharedSettings() {
             const mapped = mapToAppSettings(payload.new as SystemSettingsRow)
             setSettings(mapped)
             setOriginalSettings(mapped)
+            setSettingsSource('remote')
             localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
           }
         }
@@ -266,12 +280,15 @@ export function useSharedSettings() {
       const mapped = mapToAppSettings(result.data as SystemSettingsRow)
       setSettings(mapped)
       setOriginalSettings(mapped)
+      setError(null)
+      setSettingsSource('remote')
       localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
       
       return { success: true }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error saving settings:', err)
-      return { success: false, error: err.message || 'Error al guardar las configuraciones' }
+      const message = err instanceof Error ? err.message : 'Error al guardar las configuraciones'
+      return { success: false, error: message }
     } finally {
       setIsSaving(false)
     }
@@ -292,6 +309,7 @@ export function useSharedSettings() {
     isLoading,
     isSaving,
     error,
+    settingsSource,
     updateSetting,
     updateSettings,
     saveSettings,

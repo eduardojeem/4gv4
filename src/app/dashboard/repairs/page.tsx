@@ -5,20 +5,16 @@ import dynamic from 'next/dynamic'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
-import type { DateRange } from 'react-day-picker'
 
 // Icons
 import {
-  Plus, Download, Users, BarChart3, MessageSquare, Package, RefreshCw
+  Users, BarChart3, MessageSquare, Package, RefreshCw
 } from 'lucide-react'
 
 // UI Components
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { GlobalSearch } from '@/components/ui/global-search'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { KanbanSkeleton, CalendarSkeleton } from '@/components/ui/skeleton-loader'
 
 // Custom Hooks
@@ -85,7 +81,7 @@ function RepairsPageContent() {
     addImages
   } = useRepairs()
 
-  const { technicians, isLoading: isLoadingTechs } = useTechnicians()
+  const { technicians } = useTechnicians()
 
   // New unified filter hook
   const {
@@ -99,8 +95,7 @@ function RepairsPageContent() {
     setTechnicianFilter,
     dateRange,
     setDateRange,
-    filteredRepairs,
-    activeFiltersCount
+    filteredRepairs
   } = useRepairFilters({ repairs })
 
   const [viewMode, setViewMode] = useState<'table' | 'cards' | 'kanban' | 'calendar'>('table')
@@ -113,7 +108,7 @@ function RepairsPageContent() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deliverTarget, setDeliverTarget] = useState<Repair | null>(null)
   const [payTarget, setPayTarget] = useState<Repair | null>(null)
-  const [pageSize, setPageSize] = useState<number>(25)
+  const [pageSize] = useState<number>(25)
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [searchOpen, setSearchOpen] = useState(false)
   const [successDialogData, setSuccessDialogData] = useState<RepairPrintPayload | null>(null)
@@ -393,7 +388,7 @@ function RepairsPageContent() {
                 estimatedCost: deviceFormData.estimatedCost,
                 ticketNumber: createdRepair.ticketNumber || createdRepair.id
               }
-            }).filter(Boolean) as any
+            }).filter((device): device is NonNullable<typeof device> => device !== null)
           }
           setSuccessDialogData(payload)
           setShowSuccessDialog(true)
@@ -405,6 +400,8 @@ function RepairsPageContent() {
         const updatePayload: Partial<Repair> & {
           customer_id?: string
           technician_id?: string
+          parts?: RepairFormData['parts']
+          notes?: RepairFormData['notes']
           images?: string[]
         } = {
           brand: d.brand,
@@ -424,9 +421,9 @@ function RepairsPageContent() {
           warrantyNotes: data.warrantyNotes,
           customer_id: data.existingCustomerId || undefined,
           technician_id: d.technician || undefined,
-          parts: (data.parts || []) as any,
-          notes: (data.notes || []) as any,
-          images: (Array.isArray(d.images) ? d.images : []) as any
+          parts: data.parts || [],
+          notes: data.notes || [],
+          images: Array.isArray(d.images) ? d.images : []
         }
         
         await updateRepair(selectedRepair.id, updatePayload)
