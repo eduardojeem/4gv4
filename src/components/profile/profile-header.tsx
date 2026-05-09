@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { WhatsAppButton } from '@/components/ui/whatsapp-button'
 import { cn } from '@/lib/utils'
 import { Calendar, LogOut, Mail, MessageCircle } from 'lucide-react'
-import Link from 'next/link'
 
 const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
   admin: { label: 'Administrador', color: 'bg-primary/10 text-primary border-primary/20' },
@@ -72,10 +71,12 @@ export function ProfileHeader({
               <span className="flex items-center gap-1.5">
                 <Mail className="h-3.5 w-3.5 shrink-0" /> {email}
               </span>
-              <span className="flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5 shrink-0" />
-                Miembro desde {new Date(createdAt || Date.now()).getFullYear()}
-              </span>
+              {createdAt && (
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  Miembro desde {new Date(createdAt).getFullYear()}
+                </span>
+              )}
             </div>
           </div>
 

@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import {
-  Settings, Save, RotateCcw, AlertCircle, HelpCircle, Mail, Phone, MapPin,
-  Loader2, Globe, Clock, Calendar, Package, Bell, Shield, Palette, Building2
+  Settings, Save, RotateCcw, AlertCircle, HelpCircle,
+  Loader2, Globe, Package, Bell, Shield, Palette, Building2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -18,7 +18,6 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useAuth } from '@/contexts/auth-context'
 import { useTheme } from '@/contexts/theme-context'
@@ -55,18 +54,18 @@ export default function SettingsPage() {
   }, [settings, originalSettings])
 
   // Sync theme/color ONLY when settings are first loaded or saved (not on every change)
-  const [initialSyncDone, setInitialSyncDone] = useState(false)
+  const initialSyncDone = useRef(false)
   
   useEffect(() => {
-    if (isLoading || initialSyncDone) return
+    if (isLoading || initialSyncDone.current) return
     
     // Apply theme from loaded settings on first load
     setTheme(settings.theme as 'light' | 'dark' | 'system')
     if (EDITABLE_COLOR_SCHEMES.includes(settings.primaryColor as typeof EDITABLE_COLOR_SCHEMES[number])) {
       setColorScheme(settings.primaryColor as 'blue' | 'green' | 'purple' | 'orange' | 'red')
     }
-    setInitialSyncDone(true)
-  }, [isLoading, initialSyncDone, settings.theme, settings.primaryColor, setTheme, setColorScheme])
+    initialSyncDone.current = true
+  }, [isLoading, settings.theme, settings.primaryColor, setTheme, setColorScheme])
 
   // Apply theme/color live when user changes the select (preview before saving)
   const handleThemeChange = (value: string) => {

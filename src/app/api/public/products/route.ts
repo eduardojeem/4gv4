@@ -45,9 +45,8 @@ export async function GET(request: NextRequest) {
       ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
       : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
 
-    const productsTable: any = supabase.from('products')
-    let queryBuilder: any = productsTable
-      .select(selectFields, { count: 'exact' })
+    let queryBuilder = supabase.from('products')
+      .select(selectFields as '*', { count: 'exact' })
       .eq('is_active', true)
 
     // Apply visibility by customer type.
@@ -129,6 +128,7 @@ export async function GET(request: NextRequest) {
         wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
         // Only expose stock status, not exact quantity
         stock_quantity: (p.stock_quantity as number) > 0 ? 1 : 0,
+        in_stock: (p.stock_quantity as number) > 0,
         is_active: p.is_active as boolean,
         featured: (p.featured as boolean) || false,
         has_offer: Boolean(p.has_offer),

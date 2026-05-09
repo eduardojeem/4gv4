@@ -263,9 +263,7 @@ export default function DatabaseMonitoring() {
     const a = document.createElement('a')
     a.href = url
     a.download = `database-metrics-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(a)
     a.click()
-    document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
 
@@ -322,54 +320,42 @@ export default function DatabaseMonitoring() {
 
   return (
     <div className="space-y-6 pb-10">
-      {/* Header Premium */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 p-8 text-white shadow-xl">
-        <div className="absolute inset-0 bg-grid-white/5 bg-[size:20px_20px]" />
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl" />
-        <div className="absolute bottom-0 left-0 -mb-10 -ml-10 h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" />
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-primary rounded-xl shadow-sm">
+            <Database className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
+              Monitoreo de Base de Datos
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Rendimiento, almacenamiento y salud del sistema
+            </p>
+          </div>
+        </div>
         
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 backdrop-blur-sm shadow-inner">
-                <Database className="h-6 w-6 text-indigo-300" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">Monitoreo de Base de Datos</h1>
-                <p className="text-indigo-200 text-sm">Supervisión en tiempo real de rendimiento y almacenamiento</p>
-              </div>
-            </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <Switch 
+              id="auto-refresh" 
+              checked={autoRefresh}
+              onCheckedChange={setAutoRefresh}
+              className="data-[state=checked]:bg-green-500"
+            />
+            <Label htmlFor="auto-refresh" className="text-xs font-medium cursor-pointer select-none">
+              Auto (30s)
+            </Label>
           </div>
-          
-          <div className="flex items-center gap-2">
-            <div className="flex items-center space-x-2 bg-black/20 p-2 rounded-lg mr-2">
-              <Switch 
-                id="auto-refresh" 
-                checked={autoRefresh}
-                onCheckedChange={setAutoRefresh}
-                className="data-[state=checked]:bg-green-500"
-              />
-              <Label htmlFor="auto-refresh" className="text-xs font-medium cursor-pointer select-none text-indigo-100">
-                Auto-Refresh (30s)
-              </Label>
-            </div>
-            <Button 
-              variant="outline"  
-              onClick={exportMetrics}
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Exportar
-            </Button>
-            <Button 
-              onClick={refresh}
-              disabled={refreshing}
-              className="bg-indigo-500 hover:bg-indigo-600 text-white shadow-lg shadow-indigo-500/30"
-            >
-              <RefreshCw className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")} />
-              Actualizar
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={exportMetrics}>
+            <Download className="h-4 w-4 mr-1.5" />
+            Exportar
+          </Button>
+          <Button size="sm" onClick={refresh} disabled={refreshing}>
+            <RefreshCw className={cn("h-4 w-4 mr-1.5", refreshing && "animate-spin")} />
+            Actualizar
+          </Button>
         </div>
       </div>
 
@@ -445,16 +431,18 @@ export default function DatabaseMonitoring() {
 
       {/* Tabs con detalles */}
       <Tabs defaultValue="tables" className="space-y-6">
-        <TabsList className="bg-muted/50 p-1 rounded-xl">
-          <TabsTrigger value="tables" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Tablas</TabsTrigger>
-          <TabsTrigger value="indexes" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Índices</TabsTrigger>
-          <TabsTrigger value="storage" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Almacenamiento</TabsTrigger>
-          <TabsTrigger value="performance" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Rendimiento</TabsTrigger>
-          <TabsTrigger value="growth" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Crecimiento</TabsTrigger>
-          <TabsTrigger value="recommendations" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Recomendaciones</TabsTrigger>
-          <TabsTrigger value="maintenance" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Mantenimiento</TabsTrigger>
-          <TabsTrigger value="storage-cleanup" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">Limpieza</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-1 px-1">
+          <TabsList className="inline-flex w-auto min-w-full sm:w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-1 rounded-xl shadow-sm">
+            <TabsTrigger value="tables" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Tablas</TabsTrigger>
+            <TabsTrigger value="indexes" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Índices</TabsTrigger>
+            <TabsTrigger value="storage" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Storage</TabsTrigger>
+            <TabsTrigger value="performance" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Rendimiento</TabsTrigger>
+            <TabsTrigger value="growth" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Crecimiento</TabsTrigger>
+            <TabsTrigger value="recommendations" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Tips</TabsTrigger>
+            <TabsTrigger value="maintenance" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Mantenimiento</TabsTrigger>
+            <TabsTrigger value="storage-cleanup" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Limpieza</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="tables" className="space-y-4 animate-in fade-in-50">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -639,11 +627,15 @@ export default function DatabaseMonitoring() {
                       </div>
                       <span className="font-bold">{item.value} MB</span>
                     </div>
-                    <Progress 
-                      value={(item.value / storageBreakdownData.reduce((sum, i) => sum + i.value, 0)) * 100} 
-                      className="h-2"
-                      indicatorColor={item.color}
-                    />
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full rounded-full transition-all"
+                        style={{ 
+                          width: `${(item.value / storageBreakdownData.reduce((sum, i) => sum + i.value, 0)) * 100}%`,
+                          backgroundColor: item.color 
+                        }}
+                      />
+                    </div>
                   </div>
                 ))}
               </CardContent>
