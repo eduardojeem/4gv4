@@ -7,14 +7,13 @@ import { Input } from '@/components/ui/input'
 import { Breadcrumbs } from '@/components/ui/breadcrumbs'
 import { GlobalSearch } from '@/components/ui/global-search'
 import { NotificationBell } from '@/components/ui/notification-bell'
-
-import { MobileNavSheet } from '@/components/ui/mobile-nav-sheet'
-import { ChevronDown, ChevronRight, Sun, Moon, ArrowLeft, Search } from 'lucide-react'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { ChevronDown, ChevronRight, ArrowLeft, Search } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
 import { cn } from '@/lib/utils'
-import { useSearchParams, useRouter, usePathname } from 'next/navigation'
+import { useSearchParams, usePathname } from 'next/navigation'
 
 interface AdminLayoutProps {
     children: React.ReactNode
@@ -24,10 +23,9 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
     const [searchOpen, setSearchOpen] = useState(false)
     const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration'])
     const { hasPermission, isAdmin } = useAuth()
-    const { sidebarCollapsed: collapsed, toggleSidebar, darkMode, toggleDarkMode } = useAdminLayout()
+    const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
 
     const searchParams = useSearchParams()
-    const router = useRouter()
     const pathname = usePathname()
 
     // Determine active tab from URL or default to 'overview'
@@ -72,7 +70,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
     }
 
     return (
-        <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-900">
+        <div className="flex h-screen overflow-hidden bg-background text-foreground">
             {/* Sidebar Overlay for Mobile */}
             {!collapsed && (
                 <div 
@@ -85,12 +83,12 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
             <aside
                 aria-label="Menú lateral"
                 className={cn(
-                    "fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-white dark:bg-gray-800 transition-all duration-300 ease-in-out lg:static shadow-lg lg:shadow-none",
+                    "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-border bg-card text-card-foreground transition-all duration-300 ease-in-out lg:static shadow-lg lg:shadow-none",
                     collapsed ? 'w-20 -translate-x-full lg:translate-x-0' : 'w-72 translate-x-0'
                 )}
             >
                 {/* Sidebar Header */}
-                <div className="flex h-16 items-center justify-between px-6 border-b border-gray-100 dark:border-gray-700">
+                <div className="flex h-16 items-center justify-between border-b border-border px-6">
                     {!collapsed && (
                         <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                             Admin Panel
@@ -100,7 +98,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                         variant="ghost" 
                         size="icon" 
                         onClick={toggleSidebar} 
-                        className={cn("hidden lg:flex ml-auto text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white", collapsed && "mx-auto")}
+                        className={cn("ml-auto hidden text-muted-foreground hover:text-foreground lg:flex", collapsed && "mx-auto")}
                     >
                         {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronDown className="h-5 w-5 rotate-90" />}
                     </Button>
@@ -109,7 +107,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                         variant="ghost" 
                         size="icon" 
                         onClick={toggleSidebar} 
-                        className="lg:hidden text-gray-500"
+                        className="text-muted-foreground lg:hidden"
                     >
                          <ArrowLeft className="h-5 w-5" />
                     </Button>
@@ -126,7 +124,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                                 {!collapsed && (
                                     <button
                                         onClick={() => toggleCategory(category.id)}
-                                        className="flex w-full items-center justify-between px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                                        className="flex w-full items-center justify-between px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
                                     >
                                         <span>{category.label}</span>
                                         {isExpanded ? (
@@ -137,7 +135,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                                     </button>
                                 )}
                                 
-                                {collapsed && <div className="h-px bg-gray-200 dark:bg-gray-700 mx-2" />}
+                                {collapsed && <div className="mx-2 h-px bg-border" />}
 
                                 {/* Category Items */}
                                 {(collapsed || isExpanded) && (
@@ -158,14 +156,14 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                                                             : 'gap-3 px-3 py-2.5',
                                                         isActive
                                                             ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-medium'
-                                                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-gray-200'
+                                                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                                                     )}
                                                     title={collapsed ? label : description}
                                                 >
                                                     <Icon className={cn(
                                                         "flex-shrink-0 transition-colors",
                                                         collapsed ? "h-6 w-6" : "h-5 w-5",
-                                                        isActive ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-500 group-hover:text-gray-900 dark:group-hover:text-gray-200"
+                                                        isActive ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground group-hover:text-foreground"
                                                     )} />
                                                     {!collapsed && <span>{label}</span>}
                                                     
@@ -184,11 +182,11 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                 </nav>
 
                 {/* Footer Actions */}
-                <div className="p-4 border-t border-gray-100 dark:border-gray-700 space-y-2 bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="space-y-2 border-t border-border bg-muted/20 p-4">
                     <Link
                         href="/dashboard"
                         className={cn(
-                            "flex items-center rounded-xl transition-all duration-200 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700 shadow-sm border border-transparent hover:border-gray-200 dark:hover:border-gray-600",
+                            "flex items-center rounded-xl border border-transparent text-muted-foreground shadow-sm transition-all duration-200 hover:border-border hover:bg-background hover:text-foreground",
                             collapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'
                         )}
                         title="Volver al Dashboard"
@@ -202,7 +200,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 {/* Top Header */}
-                <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between px-6 sticky top-0 z-30 shadow-sm">
+                <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 px-6 shadow-sm backdrop-blur supports-backdrop-filter:bg-background/80">
                     <div className="flex items-center gap-4">
                         <Button 
                             variant="ghost" 
@@ -223,9 +221,9 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                     <div className="flex items-center gap-3">
                         {/* Search Bar */}
                         <div className="hidden md:flex relative group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-blue-500" />
                             <Input
-                                className="w-64 pl-10 bg-gray-50 dark:bg-gray-900 border-transparent focus:bg-white dark:focus:bg-gray-800 transition-all duration-200"
+                                className="w-64 border-border/60 bg-muted/50 pl-10 transition-all duration-200 focus-visible:bg-background"
                                 placeholder="Buscar (Ctrl+K)"
                                 readOnly
                                 onClick={() => setSearchOpen(true)}
@@ -237,17 +235,10 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                             </div>
                         </div>
 
-                        <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2" />
+                        <div className="mx-2 h-6 w-px bg-border/60" />
 
                         {/* Theme Toggle */}
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={toggleDarkMode}
-                            className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                        >
-                            {darkMode ? <Sun className="h-5 w-5 text-yellow-500" /> : <Moon className="h-5 w-5 text-gray-500" />}
-                        </Button>
+                        <ThemeToggle />
 
                         {/* Notifications */}
                         <NotificationBell />
@@ -269,23 +260,23 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
 function AdminLayoutFallback() {
     return (
-        <div className="flex h-screen bg-gray-50">
-            <div className="w-72 border-r bg-white hidden lg:block p-6 space-y-6">
-                <div className="h-8 w-32 bg-gray-200 rounded animate-pulse" />
+        <div className="flex h-screen bg-background text-foreground">
+            <div className="hidden w-72 space-y-6 border-r border-border bg-card p-6 lg:block">
+                <div className="h-8 w-32 rounded bg-muted animate-pulse" />
                 <div className="space-y-4">
                     {[1, 2, 3, 4, 5].map(i => (
-                        <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />
+                        <div key={i} className="h-10 rounded-xl bg-muted/70 animate-pulse" />
                     ))}
                 </div>
             </div>
             <div className="flex-1 flex flex-col">
-                <div className="h-16 border-b bg-white" />
+                <div className="h-16 border-b border-border bg-background/80" />
                 <div className="p-8 space-y-6">
-                    <div className="h-32 bg-gray-200 rounded-xl animate-pulse" />
+                    <div className="h-32 rounded-xl bg-muted animate-pulse" />
                     <div className="grid grid-cols-3 gap-6">
-                        <div className="h-64 bg-gray-200 rounded-xl animate-pulse" />
-                        <div className="h-64 bg-gray-200 rounded-xl animate-pulse" />
-                        <div className="h-64 bg-gray-200 rounded-xl animate-pulse" />
+                        <div className="h-64 rounded-xl bg-muted animate-pulse" />
+                        <div className="h-64 rounded-xl bg-muted animate-pulse" />
+                        <div className="h-64 rounded-xl bg-muted animate-pulse" />
                     </div>
                 </div>
             </div>

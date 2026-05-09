@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,10 +12,11 @@ import { Switch } from '@/components/ui/switch'
 import { 
   Loader2, Save, Briefcase, Wrench, Shield, Package, Check, Plus, Trash2, 
   Smartphone, Monitor, Battery, Cpu, Zap, Headset, ArrowUp, ArrowDown, 
-  Settings, Clock, Sparkles, TrendingUp, Laptop, Edit3, X, Droplet, Camera,
+  Clock, Sparkles, Laptop, Edit3, Droplet, Camera,
   Eye, EyeOff
 } from 'lucide-react'
 import { Service } from '@/types/website-settings'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import {
   Dialog,
   DialogContent,
@@ -79,23 +80,17 @@ const COLOR_GRADIENTS: Record<string, string> = {
 
 export function ServicesManager() {
   const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
-  const [services, setServices] = useState<Service[] | null>(null)
-  const [hasChanges, setHasChanges] = useState(false)
+  const [servicesDraft, setServicesDraft] = useState<Service[] | null>(null)
   
   // Estado para el modal de edición
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingService, setEditingService] = useState<Service | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (settings?.services) {
-      setServices(settings.services)
-    }
-  }, [settings?.services])
+  const services = servicesDraft ?? settings?.services ?? getWebsiteSettingsDefaults().services
+  const hasChanges = servicesDraft !== null
+  const activeServicesCount = services.filter((service) => service.active !== false).length
 
   const handleSaveAll = async () => {
-    if (!services) return
-
     const invalidService = services.find((service) => {
       const title = service.title?.trim() || ''
       const description = service.description?.trim() || ''
@@ -119,15 +114,20 @@ export function ServicesManager() {
     const result = await updateSetting('services', services)
     if (result.success) {
       toast.success('Cambios guardados en la base de datos')
-      setHasChanges(false)
+      setServicesDraft(null)
     } else {
       toast.error(result.error || 'Error al guardar')
     }
   }
 
   const handleOpenEdit = (index: number) => {
-    if (!services) return
-    setEditingService({ ...services[index] })
+    const service = services[index]
+    if (!service) return
+
+    setEditingService({
+      ...service,
+      benefits: [...service.benefits]
+    })
     setEditingIndex(index)
     setIsDialogOpen(true)
   }
@@ -148,7 +148,7 @@ export function ServicesManager() {
   }
 
   const handleApplyChanges = () => {
-    if (!editingService || !services) return
+    if (!editingService) return
     
     // Validaciones alineadas con backend
     const title = editingService.title.trim()
@@ -190,8 +190,7 @@ export function ServicesManager() {
       updated.push(normalizedService)
     }
     
-    setServices(updated)
-    setHasChanges(true)
+    setServicesDraft(updated)
     setIsDialogOpen(false)
     setEditingService(null)
     setEditingIndex(null)
@@ -202,19 +201,16 @@ export function ServicesManager() {
   }
 
   const handleMove = (index: number, direction: 'up' | 'down') => {
-    if (!services) return
     const newIndex = direction === 'up' ? index - 1 : index + 1
     if (newIndex < 0 || newIndex >= services.length) return
 
     const updated = [...services]
     const [moved] = updated.splice(index, 1)
     updated.splice(newIndex, 0, moved)
-    setServices(updated)
-    setHasChanges(true)
+    setServicesDraft(updated)
   }
 
   const handleDeleteService = (index: number) => {
-    if (!services) return
     if (services.length <= 1) {
       toast.error('Debe haber al menos un servicio')
       return
@@ -223,23 +219,24 @@ export function ServicesManager() {
     const serviceName = services[index].title || `Servicio ${index + 1}`
     if (confirm(`¿Estás seguro de que deseas eliminar "${serviceName}"?`)) {
       const updated = services.filter((_, i) => i !== index)
-      setServices(updated)
-      setHasChanges(true)
+      setServicesDraft(updated)
       toast.success('Servicio eliminado de la lista')
     }
   }
 
   const handleToggleActive = (index: number) => {
-    if (!services) return
     const updated = [...services]
     updated[index] = { ...updated[index], active: !updated[index].active }
-    setServices(updated)
-    setHasChanges(true)
+    setServicesDraft(updated)
   }
 
-  if (isLoading) return <div className="p-8 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></div>
-  if (error) return <div className="p-8 text-center text-red-500">Error: {error}</div>
-  if (!services) return null
+  if (isLoading && servicesDraft === null && !settings) {
+    return <div className="p-8 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></div>
+  }
+
+  if (error && servicesDraft === null && !settings) {
+    return <div className="p-8 text-center text-red-500">Error: {error}</div>
+  }
 
   return (
     <div className="space-y-6">
@@ -251,7 +248,7 @@ export function ServicesManager() {
             </div>
             Gestión de Servicios
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Personaliza el catálogo de servicios que verán tus visitantes ({services.length} activos)</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Personaliza el catálogo de servicios que verán tus visitantes ({activeServicesCount} activos)</p>
         </div>
         <Button onClick={handleOpenAdd} className="bg-blue-600 hover:bg-blue-700 text-white px-6 h-11 rounded-xl shadow-lg shadow-blue-200 dark:shadow-none transition-all active:scale-95">
           <Plus className="mr-2 h-5 w-5" /> Nuevo Servicio
@@ -437,7 +434,7 @@ export function ServicesManager() {
                               <button
                                 key={opt.value}
                                 type="button"
-                                onClick={() => setEditingService({ ...editingService, icon: opt.value as any })}
+                                onClick={() => setEditingService({ ...editingService, icon: opt.value })}
                                 className={`p-2 md:p-2.5 rounded-xl border transition-all ${editingService.icon === opt.value ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-100 dark:border-gray-700 hover:border-blue-200 hover:text-blue-500'}`}
                                 title={opt.label}
                               >
@@ -454,7 +451,7 @@ export function ServicesManager() {
                             <button
                               key={opt.value}
                               type="button"
-                              onClick={() => setEditingService({ ...editingService, color: opt.value as any })}
+                              onClick={() => setEditingService({ ...editingService, color: opt.value })}
                               className={`h-6 md:h-7 rounded-lg border-2 transition-all flex items-center justify-center ${opt.class} ${editingService.color === opt.value ? 'ring-2 ring-blue-500 ring-offset-2' : 'opacity-40 hover:opacity-100'}`}
                               title={opt.label}
                             >

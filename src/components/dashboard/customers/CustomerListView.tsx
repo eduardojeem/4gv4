@@ -86,8 +86,7 @@ export function CustomerListView({
   onBulkDelete,
   bulkDeleting = false,
   onToggleCustomerStatus,
-  onBulkStatusChange,
-  loading = false
+  onBulkStatusChange
 }: CustomerListViewProps) {
   const { isAdmin, isManager } = useAuth()
   const canDelete = isAdmin || isManager

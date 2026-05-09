@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { WebsiteSettings } from '@/types/website-settings'
+import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 
 /**
  * GET /api/public/website/settings
@@ -24,60 +25,15 @@ export async function GET() {
       settingsObj[setting.key as keyof WebsiteSettings] = setting.value
     })
 
-    // Asegurar que maintenance_mode tenga valores por defecto
-    if (!settingsObj.maintenance_mode) {
-      settingsObj.maintenance_mode = {
-        enabled: false,
-        title: 'Sitio en Mantenimiento',
-        message: 'Estamos realizando mejoras en nuestro sitio. Volveremos pronto.',
-        estimatedEnd: ''
-      }
-    }
-
-    // Asegurar defaults de company_info si faltan (para inicialización)
-    if (!settingsObj.company_info) {
-      settingsObj.company_info = {
-        name: '',
-        phone: '',
-        email: '',
-        address: '',
-        hours: { weekdays: '', saturday: '', sunday: '' },
-        logoUrl: '',
-        brandColor: 'blue'
-      }
-    }
-
-    if (!settingsObj.hero_content) {
-      settingsObj.hero_content = {
-        badge: 'Servicio técnico especializado',
-        title: 'Reparación profesional para tu equipo',
-        subtitle: 'Diagnóstico claro, repuestos de calidad y seguimiento en línea.'
-      }
-    }
-
-    if (!settingsObj.hero_stats) {
-      settingsObj.hero_stats = {
-        repairs: '0+',
-        satisfaction: '0%',
-        avgTime: '24h'
-      }
-    }
-
-    if (!Array.isArray(settingsObj.services)) {
-      settingsObj.services = []
-    }
-
-    if (!Array.isArray(settingsObj.testimonials)) {
-      settingsObj.testimonials = []
-    }
+    const normalized = applyWebsiteSettingsDefaults(settingsObj)
 
     const response = NextResponse.json({
       success: true,
-      data: settingsObj
+      data: normalized
     })
     response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=60')
     return response
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to fetch website settings' },
       { status: 500 }

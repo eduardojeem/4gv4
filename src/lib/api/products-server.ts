@@ -187,6 +187,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       sale_price: p.sale_price as number,
       wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
       stock_quantity: (p.stock_quantity as number) ?? 0,
+      in_stock: ((p.stock_quantity as number) ?? 0) > 0,
       is_active: p.is_active as boolean,
       featured: (p.featured as boolean) || false,
       image: Array.isArray(p.images)
@@ -333,6 +334,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     sale_price: p.sale_price,
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
     stock_quantity: (p.stock_quantity as number) ?? 0,
+    in_stock: ((p.stock_quantity as number) ?? 0) > 0,
     is_active: p.is_active,
     featured: p.featured || false,
     image: Array.isArray(p.images)

@@ -15,11 +15,32 @@ export interface StorageSummary {
   orphanedSize: number
 }
 
+export interface StorageCleanupScan {
+  orphanedFiles: OrphanedFile[]
+  summary: StorageSummary
+}
+
+interface StorageFileEntry {
+  id: string | null
+  name: string
+  created_at?: string
+  updated_at?: string
+  metadata?: {
+    size?: number
+  }
+  fullPath: string
+}
+
+interface ProductImageRow {
+  images?: string[] | null
+  image_url?: string | null
+}
+
 class StorageCleanupService {
   private supabase = createClient()
 
   // Lista todos los archivos de un bucket de forma recursiva
-  async listAllFiles(bucket: string, folder: string = ''): Promise<any[]> {
+  async listAllFiles(bucket: string, folder: string = ''): Promise<StorageFileEntry[]> {
     const { data, error } = await this.supabase.storage.from(bucket).list(folder, {
       limit: 100,
       offset: 0,
@@ -31,17 +52,23 @@ class StorageCleanupService {
       return []
     }
 
-    let files: any[] = []
+    const files: StorageFileEntry[] = []
 
     for (const item of data || []) {
       const fullPath = folder ? `${folder}/${item.name}` : item.name
-      
+
       if (item.id === null) {
-        // Es un folder o placeholder
         const subFiles = await this.listAllFiles(bucket, fullPath)
-        files = [...files, ...subFiles]
+        files.push(...subFiles)
       } else {
-        files.push({ ...item, fullPath })
+        files.push({
+          id: item.id,
+          name: item.name,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          metadata: item.metadata as StorageFileEntry['metadata'],
+          fullPath,
+        })
       }
     }
 
@@ -61,14 +88,13 @@ class StorageCleanupService {
 
     const inUse = new Set<string>()
 
-    data.forEach(product => {
-      // De images[]
+    ;(data as ProductImageRow[]).forEach((product) => {
       if (Array.isArray(product.images)) {
-        product.images.forEach((url: string) => {
+        product.images.forEach((url) => {
           if (url) inUse.add(this.extractPathFromUrl(url))
         })
       }
-      // De image_url (legacy)
+
       if (product.image_url) {
         inUse.add(this.extractPathFromUrl(product.image_url))
       }
@@ -80,75 +106,88 @@ class StorageCleanupService {
   // Extrae el path relativo del URL de Supabase Storage
   private extractPathFromUrl(url: string): string {
     if (!url) return ''
-    
-    // Si es un URL de Supabase: .../storage/v1/object/public/bucket-name/folder/file.jpg
+
     if (url.includes('/storage/v1/object/public/')) {
       const parts = url.split('/storage/v1/object/public/')
       if (parts.length > 1) {
-        // bucket-name/folder/file.jpg
         const pathWithBucket = parts[1]
         const pathParts = pathWithBucket.split('/')
-        // Quitamos el bucket name (primer elemento)
         return pathParts.slice(1).join('/')
       }
     }
-    
-    // Si ya es un path relativo o un URL desconocido, devolvemos el final
+
     return url.split('/').pop() || url
   }
 
-  // Encuentra archivos que no están asociados a ningún producto
-  async findOrphanedFiles(bucket: string = 'product-images'): Promise<OrphanedFile[]> {
-    try {
-      const [storageFiles, inUsePaths] = await Promise.all([
-        this.listAllFiles(bucket),
-        this.getInUseImages()
-      ])
-
-      const orphaned: OrphanedFile[] = []
-
-      storageFiles.forEach(file => {
-        // Comparamos el path completo o solo el nombre si el path es complejo
+  private buildOrphanedFiles(bucket: string, storageFiles: StorageFileEntry[], inUsePaths: Set<string>): OrphanedFile[] {
+    return storageFiles
+      .filter((file) => {
         const fileName = file.name
         const fullPath = file.fullPath
 
-        const isInUse = Array.from(inUsePaths).some(path => 
+        return !Array.from(inUsePaths).some((path) =>
           path === fullPath || path === fileName || (path && fullPath.endsWith(path))
         )
+      })
+      .map((file) => {
+        const { data } = this.supabase.storage.from(bucket).getPublicUrl(file.fullPath)
 
-        if (!isInUse) {
-          const { data } = this.supabase.storage.from(bucket).getPublicUrl(fullPath)
-          orphaned.push({
-            name: file.name,
-            path: fullPath,
-            size: file.metadata?.size || 0,
-            lastModified: file.updated_at || file.created_at || new Date().toISOString(),
-            publicUrl: data.publicUrl
-          })
+        return {
+          name: file.name,
+          path: file.fullPath,
+          size: file.metadata?.size || 0,
+          lastModified: file.updated_at || file.created_at || new Date().toISOString(),
+          publicUrl: data.publicUrl,
         }
       })
+      .sort((a, b) => b.size - a.size)
+  }
 
-      return orphaned.sort((a, b) => b.size - a.size)
-    } catch (error) {
-      console.error('Error buscando archivos huérfanos:', error)
-      return []
+  private buildStorageSummary(storageFiles: StorageFileEntry[], orphanedFiles: OrphanedFile[]): StorageSummary {
+    const totalSize = storageFiles.reduce((sum, file) => sum + (file.metadata?.size || 0), 0)
+    const orphanedSize = orphanedFiles.reduce((sum, file) => sum + file.size, 0)
+
+    return {
+      totalFiles: storageFiles.length,
+      totalSize,
+      orphanedCount: orphanedFiles.length,
+      orphanedSize,
     }
   }
 
-  // Obtener resumen de ahorro potencial
-  async getStorageSummary(bucket: string = 'product-images'): Promise<StorageSummary> {
-    const allFiles = await this.listAllFiles(bucket)
-    const orphaned = await this.findOrphanedFiles(bucket)
+  async scanCleanup(bucket: string = 'product-images'): Promise<StorageCleanupScan> {
+    try {
+      const [storageFiles, inUsePaths] = await Promise.all([
+        this.listAllFiles(bucket),
+        this.getInUseImages(),
+      ])
 
-    const totalSize = allFiles.reduce((sum, f) => sum + (f.metadata?.size || 0), 0)
-    const orphanedSize = orphaned.reduce((sum, f) => sum + f.size, 0)
+      const orphanedFiles = this.buildOrphanedFiles(bucket, storageFiles, inUsePaths)
 
-    return {
-      totalFiles: allFiles.length,
-      totalSize,
-      orphanedCount: orphaned.length,
-      orphanedSize
+      return {
+        orphanedFiles,
+        summary: this.buildStorageSummary(storageFiles, orphanedFiles),
+      }
+    } catch (error) {
+      console.error('Error analizando storage:', error)
+      return {
+        orphanedFiles: [],
+        summary: {
+          totalFiles: 0,
+          totalSize: 0,
+          orphanedCount: 0,
+          orphanedSize: 0,
+        },
+      }
     }
+  }
+
+  async findOrphanedFiles(bucket: string = 'product-images'): Promise<OrphanedFile[]> {
+    return (await this.scanCleanup(bucket)).orphanedFiles
+  }
+
+  async getStorageSummary(bucket: string = 'product-images'): Promise<StorageSummary> {
+    return (await this.scanCleanup(bucket)).summary
   }
 
   // Eliminar archivos (llama al API seguro del servidor)
@@ -162,9 +201,9 @@ class StorageCleanupService {
 
       return await response.json()
     } catch (error) {
-      return { 
-        success: false, 
-        message: error instanceof Error ? error.message : 'Error al eliminar archivos' 
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Error al eliminar archivos'
       }
     }
   }

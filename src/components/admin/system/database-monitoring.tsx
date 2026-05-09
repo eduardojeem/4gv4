@@ -39,8 +39,6 @@ import {
   Info
 } from 'lucide-react'
 import { 
-  LineChart, 
-  Line, 
   AreaChart, 
   Area, 
   BarChart, 
@@ -52,10 +50,9 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  Legend, 
   ResponsiveContainer 
 } from 'recharts';
-import { databaseMonitoringService, DatabaseMetrics, DatabaseAlert, TableSize, IndexStats } from '@/services/database-monitoring-service'
+import { databaseMonitoringService, DatabaseAlert, IndexStats } from '@/services/database-monitoring-service'
 import { useDatabaseMonitoring } from '@/hooks/use-database-monitoring'
 import { useStorageCleanup } from '@/hooks/use-storage-cleanup'
 import { storageCleanupService } from '@/services/storage-cleanup-service'
@@ -130,7 +127,7 @@ function MetricCard({ title, value, unit = '', icon, trend, trendValue, status =
 
 interface AlertCardProps {
   alert: DatabaseAlert
-  onResolve?: (alertId: string) => void
+  onResolve?: () => void
 }
 
 function AlertCard({ alert, onResolve }: AlertCardProps) {
@@ -169,7 +166,7 @@ function AlertCard({ alert, onResolve }: AlertCardProps) {
           size="sm" 
           variant="outline"
           className="bg-white/50 hover:bg-white/80 border-transparent shadow-sm"
-          onClick={() => onResolve(alert.id)}
+          onClick={onResolve}
         >
           Resolver
         </Button>
@@ -179,57 +176,62 @@ function AlertCard({ alert, onResolve }: AlertCardProps) {
 }
 
 export default function DatabaseMonitoring() {
+  const [autoRefresh, setAutoRefresh] = useState(false)
+  const [retentionDays, setRetentionDays] = useState('90')
   const { 
     metrics, 
     loading, 
     error, 
     refreshing, 
     refresh,
-    quickMetrics,
     performMaintenance
-  } = useDatabaseMonitoring()
-  
-  const [selectedPeriod, setSelectedPeriod] = useState('7d')
+  } = useDatabaseMonitoring({
+    autoRefresh,
+    refreshIntervalMs: 30000,
+  })
+
   const [growthHistory, setGrowthHistory] = useState<{ date: string; size: number }[]>([])
   const [recommendations, setRecommendations] = useState<string[]>([])
   const [indexStats, setIndexStats] = useState<IndexStats[]>([])
-  const [autoRefresh, setAutoRefresh] = useState(false)
-
-  // Auto-refresh logic
-  useEffect(() => {
-    let interval: NodeJS.Timeout
-    if (autoRefresh) {
-      interval = setInterval(() => {
-        refresh()
-      }, 30000) // 30 seconds
-    }
-    return () => clearInterval(interval)
-  }, [autoRefresh, refresh])
 
   // Cargar datos adicionales
   useEffect(() => {
+    let isActive = true
+
     const loadAdditionalData = async () => {
       try {
-        const [historyData, recommendationsData, indexData] = await Promise.all([
+        const [historyData, indexData] = await Promise.all([
           databaseMonitoringService.getDatabaseGrowthHistory(30),
-          databaseMonitoringService.getOptimizationRecommendations(),
           databaseMonitoringService.getIndexStats()
         ])
 
+        if (!isActive) {
+          return
+        }
+
         setGrowthHistory(historyData)
-        setRecommendations(recommendationsData)
         setIndexStats(indexData)
+        setRecommendations(databaseMonitoringService.getOptimizationRecommendations(metrics, indexData))
       } catch (err) {
         console.error('Error cargando datos adicionales:', err)
+        if (isActive) {
+          setGrowthHistory([])
+          setIndexStats([])
+          setRecommendations(databaseMonitoringService.getOptimizationRecommendations(metrics, []))
+        }
       }
     }
 
     if (metrics) {
-      loadAdditionalData()
+      void loadAdditionalData()
+    }
+
+    return () => {
+      isActive = false
     }
   }, [metrics])
 
-  const handleResolveAlert = (alertId: string) => {
+  const handleResolveAlert = () => {
     if (!metrics) return
     // En una implementación real, esto haría una llamada a la API
     refresh()
@@ -499,7 +501,7 @@ export default function DatabaseMonitoring() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
-                  {metrics.tablesSizes.map((table, index) => (
+                  {metrics.tablesSizes.map((table) => (
                     <div 
                       key={table.tableName} 
                       className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors border border-transparent hover:border-border"
@@ -545,7 +547,7 @@ export default function DatabaseMonitoring() {
                   <div className="text-center py-8 text-muted-foreground">Cargando análisis de índices...</div>
                 ) : (
                   <div className="grid gap-2">
-                    {indexStats.map((idx, i) => (
+                    {indexStats.map((idx) => (
                       <div 
                         key={`${idx.tableName}-${idx.indexName}`} 
                         className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
@@ -628,7 +630,7 @@ export default function DatabaseMonitoring() {
                 <CardTitle>Desglose Detallado</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {storageBreakdownData.map((item, index) => (
+                {storageBreakdownData.map((item) => (
                   <div key={item.name} className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <div className="flex items-center gap-2">
@@ -840,7 +842,7 @@ export default function DatabaseMonitoring() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Select defaultValue="90" onValueChange={(val) => (window as any)._retentionDays = val}>
+                      <Select value={retentionDays} onValueChange={setRetentionDays}>
                         <SelectTrigger className="w-full bg-background">
                           <SelectValue placeholder="Seleccionar" />
                         </SelectTrigger>
@@ -853,13 +855,12 @@ export default function DatabaseMonitoring() {
                       </Select>
                       <Button 
                         onClick={async () => {
-                          const days = parseInt((window as any)._retentionDays || "90");
-                          const result = await performMaintenance('rotate_logs', { days });
+                          const days = parseInt(retentionDays, 10)
+                          const result = await performMaintenance('rotate_logs', { days })
                           if (result.success) {
-                            toast.success(result.message);
-                            refresh();
+                            toast.success(result.message)
                           } else {
-                            toast.error(result.message);
+                            toast.error(result.message)
                           }
                         }}
                         disabled={refreshing}
@@ -1076,7 +1077,7 @@ function StorageCleanupSection() {
             Resultados del Escaneo
           </CardTitle>
           <CardDescription>
-            Archivos encontrados en el bucket 'product-images' que no tienen referencias en la tabla de productos
+            Archivos encontrados en el bucket <code>product-images</code> que no tienen referencias en la tabla de productos
           </CardDescription>
         </CardHeader>
         <CardContent>

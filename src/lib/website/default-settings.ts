@@ -39,14 +39,33 @@ export function applyWebsiteSettingsDefaults(
   settings: Partial<WebsiteSettings>
 ): WebsiteSettings {
   const defaults = getWebsiteSettingsDefaults()
+  const companyInfo = settings.company_info ?? {}
+  const heroContent = settings.hero_content ?? {}
+  const heroStats = settings.hero_stats ?? {}
+  const maintenanceMode = settings.maintenance_mode ?? {}
 
   return {
-    company_info: settings.company_info ?? defaults.company_info,
-    hero_content: settings.hero_content ?? defaults.hero_content,
-    hero_stats: settings.hero_stats ?? defaults.hero_stats,
+    company_info: {
+      ...defaults.company_info,
+      ...companyInfo,
+      hours: {
+        ...defaults.company_info.hours,
+        ...(companyInfo.hours ?? {})
+      }
+    },
+    hero_content: {
+      ...defaults.hero_content,
+      ...heroContent
+    },
+    hero_stats: {
+      ...defaults.hero_stats,
+      ...heroStats
+    },
     services: Array.isArray(settings.services) ? settings.services : defaults.services,
     testimonials: Array.isArray(settings.testimonials) ? settings.testimonials : defaults.testimonials,
-    maintenance_mode: settings.maintenance_mode ?? defaults.maintenance_mode
+    maintenance_mode: {
+      ...defaults.maintenance_mode,
+      ...maintenanceMode
+    }
   }
 }
-

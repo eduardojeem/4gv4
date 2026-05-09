@@ -1,18 +1,18 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Breadcrumbs } from '@/components/ui/breadcrumbs'
 import { GlobalSearch } from '@/components/ui/global-search'
 import { NotificationBell } from '@/components/ui/notification-bell'
-
-import { Menu, MoreVertical, Download, Upload, PlusCircle, RefreshCw, Sun, Moon, ChevronDown, ChevronRight } from 'lucide-react'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { Menu, MoreVertical, Download, Upload, PlusCircle, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useAuth } from '@/contexts/auth-context'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
-import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey, type NavItem, type NavCategory } from '@/config/admin-navigation'
+import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
 import { cn } from '@/lib/utils'
 
 interface AdminShellProps {
@@ -25,11 +25,11 @@ interface AdminShellProps {
   compact?: boolean
 }
 
-export function AdminShell({ active, onNavigate, onSearch, topRightActions, onContextAction, children, compact = false }: AdminShellProps) {
+export function AdminShell({ active, onNavigate, topRightActions, onContextAction, children, compact = false }: AdminShellProps) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration'])
   const { hasPermission, isAdmin } = useAuth()
-  const { sidebarCollapsed: collapsed, toggleSidebar, darkMode, toggleDarkMode } = useAdminLayout()
+  const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
 
   // Filtrar categorías basado en permisos del usuario
   const visibleCategories = useMemo(
@@ -186,16 +186,7 @@ export function AdminShell({ active, onNavigate, onSearch, topRightActions, onCo
                 onFocus={() => setSearchOpen(true)}
                 readOnly
               />
-              {/* Dark Mode Toggle */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleDarkMode}
-                aria-label={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-                title={darkMode ? 'Modo claro' : 'Modo oscuro'}
-              >
-                {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-              </Button>
+              <ThemeToggle />
               {topRightActions}
               {/* Menú contextual según la sección activa y permisos */}
               <DropdownMenu>

@@ -73,32 +73,45 @@ export function ThemeProvider({
   defaultTheme = 'system',
   defaultColorScheme = 'indigo'
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme)
-  const [colorScheme, setColorScheme] = useState<ColorScheme>(defaultColorScheme)
-  const [isDark, setIsDark] = useState(false)
-  const [customPalette, setCustomPaletteState] = useState<CustomPalette | undefined>(undefined)
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return defaultTheme
 
-  useEffect(() => {
-    // Load saved preferences from localStorage
-    const savedTheme = localStorage.getItem('theme') as Theme
-    const savedColorScheme = localStorage.getItem('colorScheme') as ColorScheme
+    const savedTheme = localStorage.getItem('theme') as Theme | null
+    if (savedTheme) return savedTheme
+
+    const legacyAdminDarkMode = localStorage.getItem('admin-dark-mode')
+    if (legacyAdminDarkMode !== null) {
+      return legacyAdminDarkMode === 'true' ? 'dark' : 'light'
+    }
+
+    return defaultTheme
+  })
+  const [colorScheme, setColorScheme] = useState<ColorScheme>(() => {
+    if (typeof window === 'undefined') return defaultColorScheme
+    return (localStorage.getItem('colorScheme') as ColorScheme | null) ?? defaultColorScheme
+  })
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  const [customPalette, setCustomPaletteState] = useState<CustomPalette | undefined>(() => {
+    if (typeof window === 'undefined') return undefined
+
     const savedCustomPalette = localStorage.getItem('customPalette')
-    
-    if (savedTheme) {
-      setTheme(savedTheme)
-    }
-    
-    if (savedColorScheme) {
-      setColorScheme(savedColorScheme)
-    }
+    if (!savedCustomPalette) return undefined
 
-    if (savedCustomPalette) {
-      try {
-        const parsed = JSON.parse(savedCustomPalette)
-        setCustomPaletteState(parsed)
-      } catch {}
+    try {
+      return JSON.parse(savedCustomPalette)
+    } catch {
+      return undefined
     }
-  }, [])
+  })
+
+  // helper to convert camelCase to kebab-case for CSS variables
+  function toKebab(s: string) {
+    return s.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()
+  }
+  const isDark = theme === 'dark' || (theme === 'system' && systemPrefersDark)
 
   useEffect(() => {
     const root = window.document.documentElement
@@ -106,19 +119,8 @@ export function ThemeProvider({
     // Remove previous theme classes
     root.classList.remove('light', 'dark')
     
-    // Determine if dark mode should be active
-    let shouldBeDark = false
-    
-    if (theme === 'dark') {
-      shouldBeDark = true
-    } else if (theme === 'system') {
-      shouldBeDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    }
-    // Avoid redundant state updates to prevent render loops
-    setIsDark(prev => (prev !== shouldBeDark ? shouldBeDark : prev))
-    
     // Apply theme class
-    if (shouldBeDark) {
+    if (isDark) {
       root.classList.add('dark')
     } else {
       root.classList.add('light')
@@ -169,13 +171,9 @@ export function ThemeProvider({
     try {
       localStorage.setItem('theme', theme)
       localStorage.setItem('colorScheme', colorScheme)
+      localStorage.removeItem('admin-dark-mode')
     } catch {}
-  }, [theme, colorScheme])
-
-  // helper to convert camelCase to kebab-case for CSS variables
-  function toKebab(s: string) {
-    return s.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()
-  }
+  }, [theme, colorScheme, customPalette, isDark])
 
   const setCustomPalette = useCallback((palette: CustomPalette) => {
     setCustomPaletteState(palette)
@@ -195,18 +193,13 @@ export function ThemeProvider({
     // Listen for system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     
-    const handleChange = () => {
-      if (theme === 'system') {
-        setIsDark(mediaQuery.matches)
-        const root = window.document.documentElement
-        root.classList.remove('light', 'dark')
-        root.classList.add(mediaQuery.matches ? 'dark' : 'light')
-      }
+    const handleChange = (event: MediaQueryListEvent) => {
+      setSystemPrefersDark(event.matches)
     }
 
     mediaQuery.addEventListener('change', handleChange)
     return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [theme])
+  }, [])
 
   const value = useMemo(
     () => ({

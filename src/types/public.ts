@@ -29,6 +29,7 @@ export interface PublicProduct {
   sale_price: number
   wholesale_price: number | null
   stock_quantity: number
+  in_stock: boolean
   is_active: boolean
   featured: boolean
   has_offer?: boolean

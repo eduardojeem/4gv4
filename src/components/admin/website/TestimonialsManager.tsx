@@ -1,31 +1,24 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { Loader2, Save, Plus, Trash2, Star, Check, GripVertical, Eye, EyeOff } from 'lucide-react'
 import { Testimonial } from '@/types/website-settings'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 
 export function TestimonialsManager() {
   const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
-  const [testimonials, setTestimonials] = useState<Testimonial[] | null>(null)
-  const [hasChanges, setHasChanges] = useState(false)
-
-  useEffect(() => {
-    if (settings?.testimonials) {
-      setTestimonials(settings.testimonials)
-    }
-  }, [settings?.testimonials])
+  const [testimonialsDraft, setTestimonialsDraft] = useState<Testimonial[] | null>(null)
+  const testimonials = testimonialsDraft ?? settings?.testimonials ?? getWebsiteSettingsDefaults().testimonials
+  const hasChanges = testimonialsDraft !== null
 
   const handleSave = async () => {
-    if (!testimonials) return
-
     // Validar que todos los testimonios tengan datos completos
     const invalidTestimonial = testimonials.find(
       t => !t.name.trim() || !t.comment.trim() || t.rating < 1 || t.rating > 5
@@ -52,7 +45,7 @@ export function TestimonialsManager() {
       toast.success('Testimonios actualizados', {
         icon: <Check className="h-4 w-4" />
       })
-      setHasChanges(false)
+      setTestimonialsDraft(null)
     } else {
       toast.error(result.error || 'Error al guardar')
     }
@@ -61,7 +54,7 @@ export function TestimonialsManager() {
   const handleAdd = () => {
     const MAX_TESTIMONIALS = 20
     
-    if (testimonials && testimonials.length >= MAX_TESTIMONIALS) {
+    if (testimonials.length >= MAX_TESTIMONIALS) {
       toast.error(`Máximo ${MAX_TESTIMONIALS} testimonios`, {
         description: 'Has alcanzado el límite de testimonios permitidos'
       })
@@ -75,25 +68,19 @@ export function TestimonialsManager() {
       comment: '',
       active: true
     }
-    setTestimonials([...(testimonials || []), newTestimonial])
-    setHasChanges(true)
+    setTestimonialsDraft([...(testimonialsDraft ?? testimonials), newTestimonial])
   }
 
   const handleDelete = (id: string) => {
-    if (!testimonials) return
-    
     // Confirmación antes de eliminar
     if (!confirm('¿Estás seguro de eliminar este testimonio?')) {
       return
     }
     
-    setTestimonials(testimonials.filter((t) => t.id !== id))
-    setHasChanges(true)
+    setTestimonialsDraft(testimonials.filter((t) => t.id !== id))
   }
 
   const handleUpdate = (id: string, field: keyof Testimonial, value: string | number | boolean) => {
-    if (!testimonials) return
-    
     // Validar rating
     if (field === 'rating') {
       const rating = typeof value === 'number' ? value : parseInt(value as string)
@@ -104,13 +91,12 @@ export function TestimonialsManager() {
       value = rating
     }
     
-    setTestimonials(
+    setTestimonialsDraft(
       testimonials.map((t) => (t.id === id ? { ...t, [field]: value } : t))
     )
-    setHasChanges(true)
   }
 
-  if (isLoading) {
+  if (isLoading && testimonialsDraft === null && !settings) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -119,18 +105,10 @@ export function TestimonialsManager() {
     )
   }
 
-  if (error) {
+  if (error && testimonialsDraft === null && !settings) {
     return (
       <div className="rounded-lg border p-6 text-center text-sm text-red-600">
         Error al cargar testimonios: {error}
-      </div>
-    )
-  }
-
-  if (!testimonials) {
-    return (
-      <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
-        No se encontraron testimonios configurados.
       </div>
     )
   }

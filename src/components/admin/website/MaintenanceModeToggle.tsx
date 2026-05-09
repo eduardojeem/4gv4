@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,21 +12,15 @@ import { toast } from 'sonner'
 import { Loader2, Save, AlertTriangle, Check, Eye, Power } from 'lucide-react'
 import { MaintenanceMode } from '@/types/website-settings'
 import Link from 'next/link'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 
 export function MaintenanceModeToggle() {
-  const { settings, isSaving, updateSetting } = useAdminWebsiteSettings()
-  const [maintenanceMode, setMaintenanceMode] = useState<MaintenanceMode | null>(null)
-  const [hasChanges, setHasChanges] = useState(false)
-
-  useEffect(() => {
-    if (settings?.maintenance_mode) {
-      setMaintenanceMode(settings.maintenance_mode)
-    }
-  }, [settings?.maintenance_mode])
+  const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
+  const [maintenanceModeDraft, setMaintenanceModeDraft] = useState<MaintenanceMode | null>(null)
+  const maintenanceMode = maintenanceModeDraft ?? settings?.maintenance_mode ?? getWebsiteSettingsDefaults().maintenance_mode
+  const hasChanges = maintenanceModeDraft !== null
 
   const handleSave = async () => {
-    if (!maintenanceMode) return
-
     // Validaciones
     if (maintenanceMode.enabled) {
       if (maintenanceMode.title.trim().length < 5) {
@@ -57,32 +51,44 @@ export function MaintenanceModeToggle() {
           icon: <Check className="h-4 w-4" />
         }
       )
-      setHasChanges(false)
+      setMaintenanceModeDraft(null)
     } else {
       toast.error(result.error || 'Error al guardar')
     }
   }
 
   const handleToggle = (enabled: boolean) => {
-    if (!maintenanceMode) return
-    
-    setMaintenanceMode({ ...maintenanceMode, enabled })
-    setHasChanges(true)
+    setMaintenanceModeDraft((current) => ({
+      ...(current ?? maintenanceMode),
+      enabled
+    }))
   }
 
   const handleChange = (field: keyof MaintenanceMode, value: string) => {
-    if (!maintenanceMode) return
-    
-    setMaintenanceMode({ ...maintenanceMode, [field]: value })
-    setHasChanges(true)
+    setMaintenanceModeDraft((current) => ({
+      ...(current ?? maintenanceMode),
+      [field]: value
+    }))
   }
 
-  if (!maintenanceMode) {
+  if (isLoading && maintenanceModeDraft === null && !settings) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="mt-4 text-sm text-muted-foreground">Cargando configuración...</p>
       </div>
+    )
+  }
+
+  if (error && maintenanceModeDraft === null && !settings) {
+    return (
+      <Card className="border-none shadow-lg">
+        <CardContent className="pt-6">
+          <div className="text-center text-sm text-red-600">
+            Error al cargar configuración: {error}
+          </div>
+        </CardContent>
+      </Card>
     )
   }
 

@@ -41,7 +41,6 @@ const CustomerEditFormV2 = dynamic(() => import("./CustomerEditFormV2").then(m =
 const CustomerHistory = dynamic(() => import("./CustomerHistory").then(m => m.CustomerHistory), { ssr: false })
 const CustomerFilters = dynamic(() => import("./CustomerFilters").then(m => m.CustomerFilters), { ssr: false })
 import { CustomerModal } from './CustomerModal'
-import { CustomerEditDialog } from './CustomerEditDialog'
 // Componente consolidado de analíticas
 const AnalyticsDashboard = lazy(() => import("./AnalyticsDashboard").then(m => ({ default: m.AnalyticsDashboard })))
 // Componente consolidado de segmentación
@@ -98,7 +97,7 @@ export function CustomerDashboard() {
   }, [])
 
   // Enhanced updateFilters with search intelligence
-  const handleFiltersChange = React.useCallback((newFilters: any) => {
+  const handleFiltersChange = React.useCallback((newFilters: Partial<import('@/hooks/use-customer-state').CustomerFilters>) => {
     const startTime = performance.now()
     
     // Update filters
@@ -116,7 +115,7 @@ export function CustomerDashboard() {
       setSearchSuggestions([])
     }
   }, [updateFilters, customers, filteredCustomers.length])
-  const { creditSummaries, getCustomerCreditSummary } = useCustomersWithCredits(customers)
+  const { creditSummaries } = useCustomersWithCredits(customers)
   const [activeTab, setActiveTab] = useState("customers")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [compactMode, setCompactMode] = useState(true)
@@ -125,8 +124,6 @@ export function CustomerDashboard() {
   // Estados para navegación
   const [currentView, setCurrentView] = useState<ViewState>('list')
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [showExportDialog, setShowExportDialog] = useState(false)
-  const [showImportDialog, setShowImportDialog] = useState(false)
   const [selectedCreditCustomerId, setSelectedCreditCustomerId] = useState<string>("")
   const [creditSearchTerm, setCreditSearchTerm] = useState("")
   const [isDeletingCustomer, setIsDeletingCustomer] = useState(false)
@@ -139,11 +136,6 @@ export function CustomerDashboard() {
   // Calculate stats including credit metrics
   const totalCustomers = customers.length
   const activeCustomers = useMemo(() => customers.filter(c => c.status === "active").length, [customers])
-  const averageOrderValue = useMemo(() => {
-    const total = customers.reduce((sum, c) => sum + c.lifetime_value, 0)
-    return totalCustomers ? total / totalCustomers : 0
-  }, [customers, totalCustomers])
-  const totalRevenue = useMemo(() => customers.reduce((sum, c) => sum + c.lifetime_value, 0), [customers])
 
   // Credit metrics
   const creditMetrics = useMemo(() => {
@@ -611,7 +603,7 @@ export function CustomerDashboard() {
           transition={{ delay: 0.05 }}
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
         >
-          {stats.map((stat, index) => (
+          {stats.map((stat) => (
             <ImprovedMetricCard
               key={stat.title}
               title={stat.title}
@@ -815,7 +807,6 @@ export function CustomerDashboard() {
                       selectedCustomers={selectedCustomers}
                       viewMode={viewMode}
                       onViewModeChange={setViewMode}
-                      onCustomerSelect={handleViewDetail}
                       onCustomerToggle={(customerId) => {
                         setSelectedCustomers(prev => 
                           prev.includes(customerId) 
@@ -900,7 +891,7 @@ export function CustomerDashboard() {
                     customer={selectedCustomer}
                     onSave={async (formData) => {
                       try {
-                        const result = await updateCustomer(selectedCustomer.id, formData as any)
+                        const result = await updateCustomer(selectedCustomer.id, formData as Partial<Customer>)
                         if (result.success) {
                           // Actualizar el cliente en la lista local si es necesible
                           handleBackToList()
@@ -909,8 +900,8 @@ export function CustomerDashboard() {
                           toast.success('Cliente actualizado correctamente')
                         } else {
                           // Mostrar error específico al usuario
-                          const errorMsg = (result as any).error || 'Error al actualizar cliente'
-                          toast.error(errorMsg)
+                          const errorMsg = result.error || 'Error al actualizar cliente'
+                          toast.error(typeof errorMsg === 'string' ? errorMsg : 'Error al actualizar cliente')
                           console.error('Update failed:', errorMsg)
                         }
                       } catch (error) {

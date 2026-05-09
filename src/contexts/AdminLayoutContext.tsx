@@ -1,13 +1,11 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react'
 
 interface AdminLayoutContextValue {
     sidebarCollapsed: boolean
     toggleSidebar: () => void
     setSidebarCollapsed: (collapsed: boolean) => void
-    darkMode: boolean
-    toggleDarkMode: () => void
 }
 
 const AdminLayoutContext = createContext<AdminLayoutContextValue | null>(null)
@@ -21,58 +19,37 @@ export function useAdminLayout() {
 }
 
 export function AdminLayoutProvider({ children }: { children: ReactNode }) {
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-    const [darkMode, setDarkMode] = useState(false)
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        if (typeof window === 'undefined') {
+            return false
+        }
 
-    // Load preferences from localStorage
+        return localStorage.getItem('admin-sidebar-collapsed') === 'true'
+    })
+
     useEffect(() => {
-        const savedCollapsed = localStorage.getItem('admin-sidebar-collapsed')
-        const savedDarkMode = localStorage.getItem('admin-dark-mode')
-
-        if (savedCollapsed !== null) {
-            setSidebarCollapsed(savedCollapsed === 'true')
+        try {
+            localStorage.setItem('admin-sidebar-collapsed', String(sidebarCollapsed))
+        } catch (error) {
+            console.error('Error saving admin sidebar state:', error)
         }
+    }, [sidebarCollapsed])
 
-        if (savedDarkMode !== null) {
-            setDarkMode(savedDarkMode === 'true')
-        }
+    const toggleSidebar = useCallback(() => {
+        setSidebarCollapsed(prev => !prev)
     }, [])
 
-    // Apply dark mode class to document
-    useEffect(() => {
-        if (darkMode) {
-            document.documentElement.classList.add('dark')
-        } else {
-            document.documentElement.classList.remove('dark')
-        }
-    }, [darkMode])
-
-    const toggleSidebar = () => {
-        setSidebarCollapsed(prev => {
-            const newValue = !prev
-            localStorage.setItem('admin-sidebar-collapsed', String(newValue))
-            return newValue
-        })
-    }
-
-    const toggleDarkMode = () => {
-        setDarkMode(prev => {
-            const newValue = !prev
-            localStorage.setItem('admin-dark-mode', String(newValue))
-            return newValue
-        })
-    }
+    const value = useMemo(
+        () => ({
+            sidebarCollapsed,
+            toggleSidebar,
+            setSidebarCollapsed,
+        }),
+        [sidebarCollapsed, toggleSidebar]
+    )
 
     return (
-        <AdminLayoutContext.Provider
-            value={{
-                sidebarCollapsed,
-                toggleSidebar,
-                setSidebarCollapsed,
-                darkMode,
-                toggleDarkMode
-            }}
-        >
+        <AdminLayoutContext.Provider value={value}>
             {children}
         </AdminLayoutContext.Provider>
     )

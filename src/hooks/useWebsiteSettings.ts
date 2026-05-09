@@ -3,11 +3,20 @@ import useSWR, { mutate } from 'swr'
 import { WebsiteSettings } from '@/types/website-settings'
 import { createSupabaseClient } from '@/lib/supabase/client'
 
+type FetchError = Error & { status?: number }
+type RealtimeClient = ReturnType<typeof createSupabaseClient>
+type RealtimeChannel = ReturnType<RealtimeClient['channel']>
+
 let publicRealtimeRefCount = 0
-let publicRealtimeSupabase: ReturnType<typeof createSupabaseClient> | null = null
-let publicRealtimeChannel: ReturnType<ReturnType<typeof createSupabaseClient>['channel']> | null = null
+let publicRealtimeSupabase: RealtimeClient | null = null
+let publicRealtimeChannel: RealtimeChannel | null = null
+
+let adminRealtimeRefCount = 0
+let adminRealtimeSupabase: RealtimeClient | null = null
+let adminRealtimeChannel: RealtimeChannel | null = null
 
 const WEBSITE_SETTINGS_CACHE_KEY = '/api/public/website/settings'
+const ADMIN_WEBSITE_SETTINGS_CACHE_KEY = '/api/admin/website/settings'
 
 function ensurePublicWebsiteSettingsRealtime() {
   if (publicRealtimeChannel) return
@@ -39,6 +48,36 @@ function releasePublicWebsiteSettingsRealtime() {
   publicRealtimeChannel = null
 }
 
+function ensureAdminWebsiteSettingsRealtime() {
+  if (adminRealtimeChannel) return
+
+  if (!adminRealtimeSupabase) {
+    adminRealtimeSupabase = createSupabaseClient()
+  }
+
+  adminRealtimeChannel = adminRealtimeSupabase
+    .channel('realtime:website_settings_admin')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'website_settings'
+      },
+      async () => {
+        await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
+      }
+    )
+    .subscribe()
+}
+
+function releaseAdminWebsiteSettingsRealtime() {
+  if (!adminRealtimeSupabase || !adminRealtimeChannel) return
+
+  adminRealtimeSupabase.removeChannel(adminRealtimeChannel)
+  adminRealtimeChannel = null
+}
+
 export function useWebsiteSettings() {
   const fetcher = useMemo(() => async () => {
     const res = await fetch(WEBSITE_SETTINGS_CACHE_KEY)
@@ -46,7 +85,7 @@ export function useWebsiteSettings() {
       const errBody = await res.json().catch(() => ({}))
       const statusText = res.statusText || 'Error'
       const message = errBody?.error || statusText
-      const err: any = new Error(message)
+      const err: FetchError = new Error(message)
       err.status = res.status
       throw err
     }
@@ -81,7 +120,7 @@ export function useAdminWebsiteSettings() {
   const [isInitializing, setIsInitializing] = useState(false)
 
   const fetcher = useMemo(() => async () => {
-    const adminRes = await fetch('/api/admin/website/settings')
+    const adminRes = await fetch(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
     if (adminRes.ok) {
       const adminData = await adminRes.json()
       return adminData.data as WebsiteSettings
@@ -90,28 +129,27 @@ export function useAdminWebsiteSettings() {
     const errBody = await adminRes.json().catch(() => ({}))
     const statusText = adminRes.statusText || 'Error'
     const message = errBody?.error || statusText
-    const err: any = new Error(message)
+    const err: FetchError = new Error(message)
     err.status = adminRes.status
     throw err
   }, [])
 
-  const { data, error, isLoading } = useSWR<WebsiteSettings>('/api/admin/website/settings', fetcher)
+  const { data, error, isLoading } = useSWR<WebsiteSettings>(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, fetcher)
 
   // Optimistic update helper
-  const updateSetting = async (key: keyof WebsiteSettings, value: any) => {
-    const cacheKey = '/api/admin/website/settings'
+  const updateSetting = async <K extends keyof WebsiteSettings>(key: K, value: WebsiteSettings[K]) => {
     const previous = data
 
     try {
       setIsSaving(true)
 
       // Optimistically update cache
-      await mutate(cacheKey, (current?: WebsiteSettings) => {
+      await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
         if (!current) return current ?? null
         return { ...current, [key]: value } as WebsiteSettings
       }, false)
 
-      const res = await fetch(`/api/admin/website/settings/${key}`, {
+      const res = await fetch(`${ADMIN_WEBSITE_SETTINGS_CACHE_KEY}/${key}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value })
@@ -124,11 +162,11 @@ export function useAdminWebsiteSettings() {
       }
 
       // Revalidate to ensure server truth
-      await mutate(cacheKey)
+      await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
       return { success: true }
     } catch (err) {
       // Rollback on error
-      if (previous) await mutate(cacheKey, previous, false)
+      if (previous) await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, previous, false)
       const message = err instanceof Error ? err.message : 'Failed to update setting'
       return { success: false, error: message }
     } finally {
@@ -150,7 +188,7 @@ export function useAdminWebsiteSettings() {
         throw new Error(message)
       }
 
-      await mutate('/api/admin/website/settings')
+      await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
       return {
         success: true,
         insertedCount: Number(body?.insertedCount || 0),
@@ -166,27 +204,20 @@ export function useAdminWebsiteSettings() {
 
   // Realtime subscription: reflect changes done by other admins
   useEffect(() => {
-    let supabase: ReturnType<typeof createSupabaseClient> | null = null
+    adminRealtimeRefCount += 1
     try {
-      supabase = createSupabaseClient()
+      ensureAdminWebsiteSettingsRealtime()
     } catch {
       // Supabase not configured; skip realtime
+      adminRealtimeRefCount = Math.max(0, adminRealtimeRefCount - 1)
       return
     }
 
-    const channel = supabase
-      .channel('realtime:website_settings_admin')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'website_settings'
-      }, async () => {
-        await mutate('/api/admin/website/settings')
-      })
-      .subscribe()
-
     return () => {
-      supabase?.removeChannel(channel)
+      adminRealtimeRefCount = Math.max(0, adminRealtimeRefCount - 1)
+      if (adminRealtimeRefCount === 0) {
+        releaseAdminWebsiteSettingsRealtime()
+      }
     }
   }, [])
 
@@ -198,6 +229,6 @@ export function useAdminWebsiteSettings() {
     isInitializing,
     updateSetting,
     initializeMissingSettings,
-    refetch: () => mutate('/api/admin/website/settings')
+    refetch: () => mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)
   }
 }

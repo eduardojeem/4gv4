@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,34 +11,16 @@ import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles } from 'luci
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { CompanyInfo } from '@/types/website-settings'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 
 export function CompanyInfoForm() {
   const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
-  const [formData, setFormData] = useState<CompanyInfo | null>(null)
-  const [hasChanges, setHasChanges] = useState(false)
-
-  useEffect(() => {
-    if (settings?.company_info) {
-      setFormData(settings.company_info)
-    } else {
-      setFormData({
-        name: '',
-        phone: '',
-        email: '',
-        address: '',
-        hours: { weekdays: '', saturday: '', sunday: '' },
-        logoUrl: '',
-        brandColor: 'blue',
-        headerStyle: 'glass',
-        showTopBar: true,
-        headerColor: ''
-      })
-    }
-  }, [settings?.company_info])
+  const [draft, setDraft] = useState<CompanyInfo | null>(null)
+  const formData = draft ?? settings?.company_info ?? getWebsiteSettingsDefaults().company_info
+  const hasChanges = draft !== null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData) return
 
     // Validar nombre
     if (!formData.name || formData.name.trim().length < 2) {
@@ -104,31 +86,32 @@ export function CompanyInfoForm() {
         description: 'Los cambios se reflejarán en el portal público',
         icon: <Check className="h-4 w-4" />
       })
-      setHasChanges(false)
+      setDraft(null)
     } else {
       toast.error(result.error || 'Error al guardar')
     }
   }
 
   const handleChange = (field: keyof CompanyInfo | string, value: string) => {
-    if (!formData) return
-    setHasChanges(true)
+    setDraft((current) => {
+      const next = current ?? formData
 
-    if (field.startsWith('hours.')) {
-      const hourField = field.split('.')[1] as 'weekdays' | 'saturday' | 'sunday'
-      setFormData({
-        ...formData,
-        hours: {
-          ...formData.hours,
-          [hourField]: value
+      if (field.startsWith('hours.')) {
+        const hourField = field.split('.')[1] as 'weekdays' | 'saturday' | 'sunday'
+        return {
+          ...next,
+          hours: {
+            ...next.hours,
+            [hourField]: value
+          }
         }
-      })
-    } else {
-      setFormData({
-        ...formData,
+      }
+
+      return {
+        ...next,
         [field]: value
-      } as CompanyInfo)
-    }
+      } as CompanyInfo
+    })
   }
 
   if (isLoading) {
@@ -150,18 +133,6 @@ export function CompanyInfoForm() {
         <CardContent className="pt-6">
           <div className="text-center text-sm text-red-600">
             Error al cargar información: {error}
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (!formData) {
-    return (
-      <Card className="border-none shadow-lg">
-        <CardContent className="pt-6">
-          <div className="text-center text-sm text-muted-foreground">
-            No se encontró información de empresa configurada.
           </div>
         </CardContent>
       </Card>
@@ -291,8 +262,10 @@ export function CompanyInfoForm() {
                       id="showTopBar"
                       checked={formData.showTopBar !== false}
                       onCheckedChange={(checked) => {
-                        setHasChanges(true)
-                        setFormData({ ...formData, showTopBar: checked } as CompanyInfo)
+                        setDraft((current) => ({
+                          ...(current ?? formData),
+                          showTopBar: checked
+                        }))
                       }}
                     />
                     <span className="text-sm text-muted-foreground">

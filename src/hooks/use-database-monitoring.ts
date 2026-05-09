@@ -1,7 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { databaseMonitoringService, DatabaseMetrics } from '@/services/database-monitoring-service'
+import {
+  buildQuickMetrics,
+  databaseMonitoringService,
+  DatabaseMetrics,
+  MaintenanceTask,
+  MaintenanceTaskParams,
+  QuickDatabaseMetrics,
+} from '@/services/database-monitoring-service'
 
 interface UseDatabaseMonitoringReturn {
   metrics: DatabaseMetrics | null
@@ -9,51 +16,37 @@ interface UseDatabaseMonitoringReturn {
   error: string | null
   refreshing: boolean
   refresh: () => Promise<void>
-  quickMetrics: {
-    totalSize: number
-    totalSizeFormatted: string
-    activeConnections: number
-    connectionUsage: number
-    avgQueryTime: number
-    cacheHitRatio: number
-    alertsCount: number
-    status: 'good' | 'warning' | 'critical'
-  } | null
-  performMaintenance: (task: 'reset_stats' | 'clear_logs' | 'rotate_logs', params?: any) => Promise<{ success: boolean; message: string }>
+  quickMetrics: QuickDatabaseMetrics | null
+  performMaintenance: (task: MaintenanceTask, params?: MaintenanceTaskParams) => Promise<{ success: boolean; message: string }>
 }
 
-export function useDatabaseMonitoring(autoRefresh = true): UseDatabaseMonitoringReturn {
+interface UseDatabaseMonitoringOptions {
+  autoRefresh?: boolean
+  refreshIntervalMs?: number
+  includeQuickMetrics?: boolean
+}
+
+export function useDatabaseMonitoring({
+  autoRefresh = false,
+  refreshIntervalMs = 5 * 60 * 1000,
+  includeQuickMetrics = false,
+}: UseDatabaseMonitoringOptions = {}): UseDatabaseMonitoringReturn {
   const [metrics, setMetrics] = useState<DatabaseMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [quickMetrics, setQuickMetrics] = useState<UseDatabaseMonitoringReturn['quickMetrics']>(null)
+  const [quickMetrics, setQuickMetrics] = useState<QuickDatabaseMetrics | null>(null)
 
   const loadMetrics = useCallback(async () => {
     try {
       setRefreshing(true)
-      
+
       const result = await databaseMonitoringService.getDatabaseMetrics()
-      
+
       if (result.success && result.data) {
         setMetrics(result.data)
         setError(null)
-        
-        // También actualizar métricas rápidas
-        const quickResult = await databaseMonitoringService.getQuickMetrics()
-        if (quickResult.success && quickResult.data) {
-          const qd = quickResult.data
-          setQuickMetrics({
-            totalSize: qd.totalSizeBytes,
-            totalSizeFormatted: qd.totalSize,
-            activeConnections: qd.activeConnections,
-            connectionUsage: Math.min(100, (qd.activeConnections / 100) * 100),
-            avgQueryTime: qd.avgQueryTime,
-            cacheHitRatio: qd.cacheHitRatio,
-            alertsCount: qd.alertsCount,
-            status: qd.status
-          })
-        }
+        setQuickMetrics(includeQuickMetrics ? buildQuickMetrics(result.data) : null)
       } else {
         setError(result.error || 'Error desconocido')
       }
@@ -63,16 +56,16 @@ export function useDatabaseMonitoring(autoRefresh = true): UseDatabaseMonitoring
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [includeQuickMetrics])
 
   const refresh = useCallback(async () => {
     await loadMetrics()
   }, [loadMetrics])
 
-  const performMaintenance = useCallback(async (task: 'reset_stats' | 'clear_logs') => {
+  const performMaintenance = useCallback(async (task: MaintenanceTask, params?: MaintenanceTaskParams) => {
     setRefreshing(true)
     try {
-      const result = await databaseMonitoringService.performMaintenanceTask(task)
+      const result = await databaseMonitoringService.performMaintenanceTask(task, params)
       if (result.success) {
         await loadMetrics()
       }
@@ -83,14 +76,15 @@ export function useDatabaseMonitoring(autoRefresh = true): UseDatabaseMonitoring
   }, [loadMetrics])
 
   useEffect(() => {
-    loadMetrics()
-    
+    void loadMetrics()
+
     if (autoRefresh) {
-      // Actualizar cada 5 minutos
-      const interval = setInterval(loadMetrics, 5 * 60 * 1000)
+      const interval = setInterval(() => {
+        void loadMetrics()
+      }, refreshIntervalMs)
       return () => clearInterval(interval)
     }
-  }, [loadMetrics, autoRefresh])
+  }, [loadMetrics, autoRefresh, refreshIntervalMs])
 
   return {
     metrics,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,36 +10,27 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { Loader2, Save, Sparkles, TrendingUp, Check } from 'lucide-react'
 import { HeroContent, HeroStats } from '@/types/website-settings'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 
 export function HeroEditor() {
   const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
-  const [heroContent, setHeroContent] = useState<HeroContent | null>(null)
-  const [heroStats, setHeroStats] = useState<HeroStats | null>(null)
-  const [hasContentChanges, setHasContentChanges] = useState(false)
-  const [hasStatsChanges, setHasStatsChanges] = useState(false)
-
-  useEffect(() => {
-    if (settings?.hero_content) {
-      setHeroContent(settings.hero_content)
-    }
-  }, [settings?.hero_content])
-
-  useEffect(() => {
-    if (settings?.hero_stats) {
-      setHeroStats(settings.hero_stats)
-    }
-  }, [settings?.hero_stats])
+  const defaults = getWebsiteSettingsDefaults()
+  const [heroContentDraft, setHeroContentDraft] = useState<HeroContent | null>(null)
+  const [heroStatsDraft, setHeroStatsDraft] = useState<HeroStats | null>(null)
+  const heroContent = heroContentDraft ?? settings?.hero_content ?? defaults.hero_content
+  const heroStats = heroStatsDraft ?? settings?.hero_stats ?? defaults.hero_stats
+  const hasContentChanges = heroContentDraft !== null
+  const hasStatsChanges = heroStatsDraft !== null
 
   const handleSaveContent = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!heroContent) return
 
     const result = await updateSetting('hero_content', heroContent)
     if (result.success) {
       toast.success('Contenido del Hero actualizado', {
         icon: <Check className="h-4 w-4" />
       })
-      setHasContentChanges(false)
+      setHeroContentDraft(null)
     } else {
       toast.error(result.error || 'Error al guardar')
     }
@@ -47,14 +38,13 @@ export function HeroEditor() {
 
   const handleSaveStats = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!heroStats) return
 
     const result = await updateSetting('hero_stats', heroStats)
     if (result.success) {
       toast.success('Estadísticas actualizadas', {
         icon: <Check className="h-4 w-4" />
       })
-      setHasStatsChanges(false)
+      setHeroStatsDraft(null)
     } else {
       toast.error(result.error || 'Error al guardar')
     }
@@ -73,14 +63,6 @@ export function HeroEditor() {
     return (
       <div className="rounded-lg border p-6 text-center text-sm text-red-600">
         Error al cargar contenido: {error}
-      </div>
-    )
-  }
-
-  if (!heroContent || !heroStats) {
-    return (
-      <div className="rounded-lg border p-6 text-center text-sm text-muted-foreground">
-        No se encontró contenido configurado.
       </div>
     )
   }
@@ -104,14 +86,16 @@ export function HeroEditor() {
           <form onSubmit={handleSaveContent} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="badge" className="text-sm font-medium">Badge Superior</Label>
-              <Input
-                id="badge"
-                value={heroContent.badge}
-                onChange={(e) => {
-                  setHeroContent({ ...heroContent, badge: e.target.value })
-                  setHasContentChanges(true)
-                }}
-                placeholder="✨ Más de 10 años de experiencia"
+                <Input
+                  id="badge"
+                  value={heroContent.badge}
+                  onChange={(e) => {
+                    setHeroContentDraft((current) => ({
+                      ...(current ?? heroContent),
+                      badge: e.target.value
+                    }))
+                  }}
+                  placeholder="✨ Más de 10 años de experiencia"
                 maxLength={100}
                 className="border-gray-200 focus:border-purple-500 focus:ring-purple-500 h-11"
               />
@@ -119,14 +103,16 @@ export function HeroEditor() {
 
             <div className="space-y-2">
               <Label htmlFor="title" className="text-sm font-medium">Título Principal</Label>
-              <Input
-                id="title"
-                value={heroContent.title}
-                onChange={(e) => {
-                  setHeroContent({ ...heroContent, title: e.target.value })
-                  setHasContentChanges(true)
-                }}
-                placeholder="Reparación de celulares rápida y confiable"
+                <Input
+                  id="title"
+                  value={heroContent.title}
+                  onChange={(e) => {
+                    setHeroContentDraft((current) => ({
+                      ...(current ?? heroContent),
+                      title: e.target.value
+                    }))
+                  }}
+                  placeholder="Reparación de celulares rápida y confiable"
                 maxLength={150}
                 className="border-gray-200 focus:border-purple-500 focus:ring-purple-500 h-11"
               />
@@ -134,14 +120,16 @@ export function HeroEditor() {
 
             <div className="space-y-2">
               <Label htmlFor="subtitle" className="text-sm font-medium">Subtítulo</Label>
-              <Textarea
-                id="subtitle"
-                value={heroContent.subtitle}
-                onChange={(e) => {
-                  setHeroContent({ ...heroContent, subtitle: e.target.value })
-                  setHasContentChanges(true)
-                }}
-                placeholder="Diagnóstico gratuito • Garantía de 6 meses • Técnicos certificados"
+                <Textarea
+                  id="subtitle"
+                  value={heroContent.subtitle}
+                  onChange={(e) => {
+                    setHeroContentDraft((current) => ({
+                      ...(current ?? heroContent),
+                      subtitle: e.target.value
+                    }))
+                  }}
+                  placeholder="Diagnóstico gratuito • Garantía de 6 meses • Técnicos certificados"
                 rows={2}
                 maxLength={300}
                 className="border-gray-200 focus:border-purple-500 focus:ring-purple-500 text-sm"
@@ -191,8 +179,10 @@ export function HeroEditor() {
                   id="repairs"
                   value={heroStats.repairs}
                   onChange={(e) => {
-                    setHeroStats({ ...heroStats, repairs: e.target.value })
-                    setHasStatsChanges(true)
+                    setHeroStatsDraft((current) => ({
+                      ...(current ?? heroStats),
+                      repairs: e.target.value
+                    }))
                   }}
                   placeholder="10K+"
                   maxLength={20}
@@ -206,8 +196,10 @@ export function HeroEditor() {
                   id="satisfaction"
                   value={heroStats.satisfaction}
                   onChange={(e) => {
-                    setHeroStats({ ...heroStats, satisfaction: e.target.value })
-                    setHasStatsChanges(true)
+                    setHeroStatsDraft((current) => ({
+                      ...(current ?? heroStats),
+                      satisfaction: e.target.value
+                    }))
                   }}
                   placeholder="98%"
                   maxLength={20}
@@ -221,8 +213,10 @@ export function HeroEditor() {
                   id="avgTime"
                   value={heroStats.avgTime}
                   onChange={(e) => {
-                    setHeroStats({ ...heroStats, avgTime: e.target.value })
-                    setHasStatsChanges(true)
+                    setHeroStatsDraft((current) => ({
+                      ...(current ?? heroStats),
+                      avgTime: e.target.value
+                    }))
                   }}
                   placeholder="24-48h"
                   maxLength={20}

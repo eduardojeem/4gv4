@@ -39,7 +39,7 @@ export default function SettingsPage() {
     resetSettings
   } = useSharedSettings()
   const { isAdmin, isSuperAdmin, loading: authLoading } = useAuth()
-  const { theme, colorScheme, setTheme, setColorScheme } = useTheme()
+  const { setTheme, setColorScheme } = useTheme()
 
   const [activeTab, setActiveTab] = useState('general')
   const canManageSettings = isAdmin || isSuperAdmin
@@ -54,18 +54,32 @@ export default function SettingsPage() {
     }, 0)
   }, [settings, originalSettings])
 
+  // Sync theme/color ONLY when settings are first loaded or saved (not on every change)
+  const [initialSyncDone, setInitialSyncDone] = useState(false)
+  
   useEffect(() => {
-    if (isLoading) return
-    if (theme !== settings.theme) {
-      setTheme(settings.theme as 'light' | 'dark' | 'system')
-    }
-    if (
-      EDITABLE_COLOR_SCHEMES.includes(settings.primaryColor as typeof EDITABLE_COLOR_SCHEMES[number]) &&
-      colorScheme !== settings.primaryColor
-    ) {
+    if (isLoading || initialSyncDone) return
+    
+    // Apply theme from loaded settings on first load
+    setTheme(settings.theme as 'light' | 'dark' | 'system')
+    if (EDITABLE_COLOR_SCHEMES.includes(settings.primaryColor as typeof EDITABLE_COLOR_SCHEMES[number])) {
       setColorScheme(settings.primaryColor as 'blue' | 'green' | 'purple' | 'orange' | 'red')
     }
-  }, [colorScheme, isLoading, setColorScheme, setTheme, settings.primaryColor, settings.theme, theme])
+    setInitialSyncDone(true)
+  }, [isLoading, initialSyncDone, settings.theme, settings.primaryColor, setTheme, setColorScheme])
+
+  // Apply theme/color live when user changes the select (preview before saving)
+  const handleThemeChange = (value: string) => {
+    updateSetting('theme', value)
+    setTheme(value as 'light' | 'dark' | 'system')
+  }
+
+  const handleColorChange = (value: string) => {
+    updateSetting('primaryColor', value)
+    if (EDITABLE_COLOR_SCHEMES.includes(value as typeof EDITABLE_COLOR_SCHEMES[number])) {
+      setColorScheme(value as 'blue' | 'green' | 'purple' | 'orange' | 'red')
+    }
+  }
 
   // Loading states
   if (authLoading || isLoading) {
@@ -137,8 +151,8 @@ export default function SettingsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-blue-600 dark:bg-blue-500 rounded-xl shadow-sm">
-            <Settings className="h-5 w-5 text-white" />
+          <div className="p-2.5 bg-primary rounded-xl shadow-sm">
+            <Settings className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-50 tracking-tight">
@@ -168,8 +182,8 @@ export default function SettingsPage() {
 
       {/* Save bar */}
       {hasChanges && (
-        <div className="flex items-center justify-between p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
-          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+        <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-primary/5">
+          <span className="text-sm font-medium text-primary">
             Hay cambios sin guardar
           </span>
           <div className="flex gap-2">
@@ -198,7 +212,7 @@ export default function SettingsPage() {
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800"
+                className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800"
               >
                 <tab.icon className="h-4 w-4" />
                 <span className="hidden sm:inline">{tab.label}</span>
@@ -350,7 +364,7 @@ export default function SettingsPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="theme">Tema</Label>
-                  <Select value={settings.theme} onValueChange={(v) => updateSetting('theme', v)}>
+                  <Select value={settings.theme} onValueChange={handleThemeChange}>
                     <SelectTrigger id="theme"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="light">Claro</SelectItem>
@@ -361,7 +375,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="primaryColor">Color primario</Label>
-                  <Select value={settings.primaryColor} onValueChange={(v) => updateSetting('primaryColor', v)}>
+                  <Select value={settings.primaryColor} onValueChange={handleColorChange}>
                     <SelectTrigger id="primaryColor"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="blue">Azul</SelectItem>

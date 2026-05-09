@@ -31,7 +31,7 @@ export function ProductCard(props: ProductCardProps) {
       ? product.wholesale_price
       : product.sale_price
 
-  const isInStock = product.stock_quantity > 0
+  const isInStock = product.in_stock
   const imageSrc = resolveProductImageUrl(product.image)
 
   const hasDiscount =

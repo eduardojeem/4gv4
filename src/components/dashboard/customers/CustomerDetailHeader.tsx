@@ -17,8 +17,7 @@ import {
 } from "lucide-react"
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
+
 import { Customer } from "@/hooks/use-customer-state"
 
 interface CustomerDetailHeaderProps {
@@ -26,15 +25,13 @@ interface CustomerDetailHeaderProps {
     onBack: () => void
     onEdit: () => void
     onViewHistory: () => void
-    compact?: boolean
 }
 
 export function CustomerDetailHeader({
     customer,
     onBack,
     onEdit,
-    onViewHistory,
-    compact
+    onViewHistory
 }: CustomerDetailHeaderProps) {
 
     const getStatusColor = (status: string) => {
