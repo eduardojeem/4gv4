@@ -35,6 +35,9 @@ export interface Service {
   color: string
   benefits: string[]
   active?: boolean
+  price?: string      // e.g. "Desde $49.990"
+  duration?: string   // e.g. "30-60 min"
+  ctaUrl?: string     // optional link override per service
 }
 
 export interface Testimonial {
@@ -43,6 +46,15 @@ export interface Testimonial {
   rating: number
   comment: string
   active?: boolean
+  role?: string       // e.g. "Cliente desde 2022"
+  avatarUrl?: string  // URL to customer photo
+}
+
+export interface ProcessStep {
+  id: string
+  number: number
+  title: string
+  description: string
 }
 
 export interface MaintenanceMode {
@@ -58,7 +70,9 @@ export interface WebsiteSettings {
   hero_content: HeroContent
   services: Service[]
   testimonials: Testimonial[]
+  process_steps: ProcessStep[]
   maintenance_mode: MaintenanceMode
 }
 
 export type WebsiteSettingKey = keyof WebsiteSettings
+

@@ -307,9 +307,13 @@ function RepairsPageContent() {
             urgency,
             technician_id: d.technician,
             estimated_cost: d.estimatedCost || 0,
+            laborCost: data.laborCost || 0,
+            finalCost: data.finalCost,
             warrantyMonths: data.warrantyMonths,
             warrantyType: data.warrantyType,
-            warrantyNotes: data.warrantyNotes
+            warrantyNotes: data.warrantyNotes,
+            parts: data.parts || [],
+            notes: data.notes || []
           }
           const created = await createRepair(payload)
           if (created?.id && Array.isArray(d.images) && d.images.length > 0) {
@@ -322,6 +326,15 @@ function RepairsPageContent() {
 
         // Show success dialog with print options
         const validRepairs = createdRepairs.filter(Boolean) as Repair[]
+        if (validRepairs.length === 0) {
+          return false
+        }
+
+        if (validRepairs.length !== createdRepairs.length) {
+          toast.warning(`Se crearon ${validRepairs.length} de ${createdRepairs.length} reparaciones. Revisá el listado antes de reintentar.`)
+          return true
+        }
+
         if (validRepairs.length > 0) {
           
           let verificationHash: string | undefined = undefined
@@ -393,11 +406,12 @@ function RepairsPageContent() {
           setSuccessDialogData(payload)
           setShowSuccessDialog(true)
         }
+        return true
       } else if (selectedRepair) {
         const d = data.devices[0]
         const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
 
-        const updatePayload: Partial<Repair> & {
+        const updatePayload: Omit<Partial<Repair>, 'images' | 'parts' | 'notes'> & {
           customer_id?: string
           technician_id?: string
           parts?: RepairFormData['parts']
@@ -426,14 +440,15 @@ function RepairsPageContent() {
           images: Array.isArray(d.images) ? d.images : []
         }
         
-        await updateRepair(selectedRepair.id, updatePayload)
+        const updated = await updateRepair(selectedRepair.id, updatePayload)
+        return Boolean(updated)
       }
-      handleDialogClose()
     } catch (error) {
       logger.error('Error submitting repair form', { error })
-      toast.error('Error al guardar la reparación')
+      return false
     }
-  }, [dialogMode, selectedRepair, createRepair, updateRepair, addImages, technicianOptions, handleDialogClose])
+    return false
+  }, [dialogMode, selectedRepair, createRepair, updateRepair, addImages, technicianOptions])
 
   const handleGlobalSearch = useCallback(({ query }: { query: string }) => {
     if (!query || query.length < 2) return []
@@ -507,7 +522,7 @@ function RepairsPageContent() {
       images: Array.isArray(selectedRepair.images) ? selectedRepair.images.map(img => img.url) : []
     }],
     parts: selectedRepair.parts || [],
-    notes: (selectedRepair.notes || []).map(n => ({ text: n.text, isInternal: false, id: n.id }))
+    notes: (selectedRepair.notes || []).map(n => ({ text: n.text, isInternal: n.isInternal ?? false, id: n.id }))
   } : shouldOpenNewRepair && requestedTechnicianId ? {
     priority: 'medium',
     urgency: 'medium',

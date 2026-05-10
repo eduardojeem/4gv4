@@ -58,6 +58,14 @@ export function PublicFooter() {
                   Mis Reparaciones
                 </Link>
               </li>
+              <li>
+                <Link
+                  href="/inicio#contacto"
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Contacto
+                </Link>
+              </li>
             </ul>
           </div>
 

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { logger } from '@/lib/logger'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StatsCard } from '@/components/shared'
@@ -159,9 +160,18 @@ export default function TechnicianPanel() {
           })
         )
 
-        if (createdRepairs.some((repair) => !repair)) {
-          throw new Error('No se pudieron crear todas las reparaciones')
+        const validRepairs = createdRepairs.filter(Boolean)
+
+        if (validRepairs.length === 0) {
+          return false
         }
+
+        if (validRepairs.length !== createdRepairs.length) {
+          toast.warning(`Se crearon ${validRepairs.length} de ${createdRepairs.length} reparaciones. Revisá el listado antes de reintentar.`)
+          return true
+        }
+
+        return true
       } else if (selectedRepair) {
         const device = data.devices[0]
         const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'
@@ -189,12 +199,15 @@ export default function TechnicianPanel() {
           images: Array.isArray(device.images) ? device.images : [],
         }
 
-        await updateRepair(selectedRepair.id, updatePayload)
+        const updated = await updateRepair(selectedRepair.id, updatePayload)
+        return Boolean(updated)
       }
     } catch (error) {
       logger.error('Error submitting technician form', { error })
-      throw error
+      return false
     }
+
+    return false
   }
 
   useEffect(() => {
@@ -243,7 +256,7 @@ export default function TechnicianPanel() {
         notes: (selectedRepair.notes || []).map((note) => ({
           id: note.id,
           text: note.text,
-          isInternal: false,
+          isInternal: note.isInternal ?? false,
         })),
         laborCost: selectedRepair.laborCost || 0,
         finalCost: selectedRepair.finalCost,

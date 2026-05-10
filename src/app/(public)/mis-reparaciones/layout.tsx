@@ -6,25 +6,15 @@ export async function generateMetadata(): Promise<Metadata> {
   const companyName = settings?.company_info?.name || '4G Celulares'
 
   return {
-    title: `Rastrear Reparación | ${companyName}`,
-    description: `Rastrea el estado de tu reparación en tiempo real. Ingresa tu número de ticket y contacto para ver el progreso de tu dispositivo.`,
-    keywords: 'rastrear reparación, estado reparación, seguimiento reparación, ticket reparación',
+    title: `Mis Reparaciones | ${companyName}`,
+    description: 'Seguí el estado de tus reparaciones y consultá tu historial de órdenes.',
     robots: {
-      index: true,
+      index: false,   // página privada — no indexar
       follow: false,
-    },
-    openGraph: {
-      title: `Rastrear Reparación | ${companyName}`,
-      description: 'Rastrea el estado de tu reparación en tiempo real',
-      type: 'website',
     },
   }
 }
 
-export default function MisReparacionesLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function MisReparacionesLayout({ children }: { children: React.ReactNode }) {
   return children
 }

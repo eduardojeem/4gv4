@@ -4,13 +4,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CompanyInfoForm } from '@/components/admin/website/CompanyInfoForm'
 import { HeroEditor } from '@/components/admin/website/HeroEditor'
 import { ServicesManager } from '@/components/admin/website/ServicesManager'
-import { TestimonialsManager } from '@/components/admin/website/TestimonialsManager'
 import { MaintenanceModeToggle } from '@/components/admin/website/MaintenanceModeToggle'
-import { Settings, Building2, Sparkles, Briefcase, MessageSquare, Eye, Database, Loader2 } from 'lucide-react'
+import { Settings, Building2, Sparkles, Briefcase, Eye, Database, Loader2, Footprints } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { ProcessStepsEditor } from '@/components/admin/website/ProcessStepsEditor'
 
 export default function WebsiteAdminPage() {
   const { initializeMissingSettings, isInitializing } = useAdminWebsiteSettings()
@@ -112,11 +112,11 @@ export default function WebsiteAdminPage() {
               Servicios
             </TabsTrigger>
             <TabsTrigger 
-              value="testimonials"
-              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-600 data-[state=active]:to-red-600 data-[state=active]:text-white transition-all px-4 md:px-2"
+              value="process"
+              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white transition-all px-4 md:px-2"
             >
-              <MessageSquare className="mr-2 h-4 w-4" />
-              Testimonios
+              <Footprints className="mr-2 h-4 w-4" />
+              Proceso
             </TabsTrigger>
             <TabsTrigger 
               value="maintenance"
@@ -140,8 +140,8 @@ export default function WebsiteAdminPage() {
           <ServicesManager />
         </TabsContent>
 
-        <TabsContent value="testimonials" className="space-y-4">
-          <TestimonialsManager />
+        <TabsContent value="process" className="space-y-4">
+          <ProcessStepsEditor />
         </TabsContent>
 
         <TabsContent value="maintenance" className="space-y-4">

@@ -45,6 +45,7 @@ export interface RepairNote {
   text: string
   timestamp: string
   author: string
+  isInternal?: boolean
 }
 
 export interface RepairPart {

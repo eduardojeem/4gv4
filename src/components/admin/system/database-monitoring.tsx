@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
@@ -52,7 +53,7 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
-import { databaseMonitoringService, DatabaseAlert, IndexStats } from '@/services/database-monitoring-service'
+import { databaseMonitoringService, DatabaseAlert, IndexStats, MaintenanceResponse, MaintenanceTask } from '@/services/database-monitoring-service'
 import { useDatabaseMonitoring } from '@/hooks/use-database-monitoring'
 import { useStorageCleanup } from '@/hooks/use-storage-cleanup'
 import { storageCleanupService } from '@/services/storage-cleanup-service'
@@ -130,6 +131,38 @@ interface AlertCardProps {
   onResolve?: () => void
 }
 
+type MaintenanceAction = MaintenanceTask | 'refresh_metrics'
+
+interface MaintenanceActivity {
+  success: boolean
+  task: MaintenanceAction
+  title: string
+  message: string
+  executedAt: string
+  retentionDays?: number
+  deletedCount?: number
+}
+
+const RETENTION_LABELS: Record<string, string> = {
+  '30': '30 dias',
+  '60': '60 dias',
+  '90': '90 dias',
+  '180': '180 dias'
+}
+
+function getMaintenanceActionTitle(task: MaintenanceAction): string {
+  switch (task) {
+    case 'reset_stats':
+      return 'Reseteo de estadisticas'
+    case 'rotate_logs':
+      return 'Rotacion de logs'
+    case 'refresh_metrics':
+      return 'Refresco de metricas'
+    default:
+      return 'Mantenimiento'
+  }
+}
+
 function AlertCard({ alert, onResolve }: AlertCardProps) {
   const getSeverityStyles = (severity: DatabaseAlert['severity']) => {
     switch (severity) {
@@ -178,6 +211,10 @@ function AlertCard({ alert, onResolve }: AlertCardProps) {
 export default function DatabaseMonitoring() {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [retentionDays, setRetentionDays] = useState('90')
+  const [runningTask, setRunningTask] = useState<MaintenanceAction | null>(null)
+  const [confirmRotateOpen, setConfirmRotateOpen] = useState(false)
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false)
+  const [lastMaintenanceActivity, setLastMaintenanceActivity] = useState<MaintenanceActivity | null>(null)
   const { 
     metrics, 
     loading, 
@@ -235,6 +272,46 @@ export default function DatabaseMonitoring() {
     if (!metrics) return
     // En una implementación real, esto haría una llamada a la API
     refresh()
+  }
+
+  const handleMaintenanceResult = (result: MaintenanceResponse) => {
+    setLastMaintenanceActivity({
+      success: result.success,
+      task: result.task,
+      title: getMaintenanceActionTitle(result.task),
+      message: result.message,
+      executedAt: result.executedAt,
+      retentionDays: result.retentionDays,
+      deletedCount: result.deletedCount
+    })
+
+    if (result.success) {
+      toast.success(result.message)
+    } else {
+      toast.error(result.message)
+    }
+  }
+
+  const executeMaintenanceTask = async (task: MaintenanceTask, params?: { days?: number }) => {
+    setRunningTask(task)
+
+    try {
+      const result = await performMaintenance(task, params)
+      handleMaintenanceResult(result)
+    } finally {
+      setRunningTask(null)
+    }
+  }
+
+  const handleRefreshMetrics = async () => {
+    setRunningTask('refresh_metrics')
+
+    try {
+      await refresh()
+      toast.success('Se solicito una actualizacion inmediata de las metricas')
+    } finally {
+      setRunningTask(null)
+    }
   }
 
   const formatBytes = (bytes: number): string => {
@@ -317,6 +394,8 @@ export default function DatabaseMonitoring() {
   ]
 
   const activeAlerts = metrics.alerts.filter(alert => !alert.resolved)
+  const selectedRetentionLabel = RETENTION_LABELS[retentionDays] ?? `${retentionDays} dias`
+  const maintenanceBusy = runningTask !== null || refreshing
 
   return (
     <div className="space-y-6 pb-10">
@@ -516,6 +595,7 @@ export default function DatabaseMonitoring() {
               </CardContent>
             </Card>
           </div>
+
         </TabsContent>
 
         <TabsContent value="indexes" className="space-y-4 animate-in fade-in-50">
@@ -641,6 +721,7 @@ export default function DatabaseMonitoring() {
               </CardContent>
             </Card>
           </div>
+
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-4 animate-in fade-in-50">
@@ -801,15 +882,17 @@ export default function DatabaseMonitoring() {
                   title="Resetear Estadísticas"
                   description="Limpia registros de rendimiento acumulados para reiniciar el análisis"
                   icon={<Activity className="h-4 w-4 text-blue-500" />}
-                  onExecute={() => performMaintenance('reset_stats')}
-                  loading={refreshing}
+                  onExecute={() => setConfirmResetOpen(true)}
+                  loading={runningTask === 'reset_stats'}
+                  disabled={maintenanceBusy}
                 />
                 <MaintenanceTaskItem 
                   title="Refrescar Métricas"
                   description="Fuerza una actualización inmediata de todos los datos de monitoreo"
                   icon={<RefreshCw className="h-4 w-4 text-green-500" />}
-                  onExecute={refresh}
-                  loading={refreshing}
+                  onExecute={handleRefreshMetrics}
+                  loading={runningTask === 'refresh_metrics'}
+                  disabled={maintenanceBusy}
                 />
               </CardContent>
             </Card>
@@ -834,7 +917,7 @@ export default function DatabaseMonitoring() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Select value={retentionDays} onValueChange={setRetentionDays}>
+                      <Select value={retentionDays} onValueChange={setRetentionDays} disabled={maintenanceBusy}>
                         <SelectTrigger className="w-full bg-background">
                           <SelectValue placeholder="Seleccionar" />
                         </SelectTrigger>
@@ -845,20 +928,16 @@ export default function DatabaseMonitoring() {
                           <SelectItem value="180">180 días (Largo plazo)</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button 
-                        onClick={async () => {
-                          const days = parseInt(retentionDays, 10)
-                          const result = await performMaintenance('rotate_logs', { days })
-                          if (result.success) {
-                            toast.success(result.message)
-                          } else {
-                            toast.error(result.message)
-                          }
-                        }}
-                        disabled={refreshing}
+                      <Button
+                        onClick={() => setConfirmRotateOpen(true)}
+                        disabled={maintenanceBusy}
                       >
-                        Ejecutar
+                        {runningTask === 'rotate_logs' ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Ejecutar'}
                       </Button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="secondary">{selectedRetentionLabel}</Badge>
+                      <span>La politica recomendada para operacion diaria es 90 dias.</span>
                     </div>
                   </div>
                 </div>
@@ -871,6 +950,94 @@ export default function DatabaseMonitoring() {
               </CardContent>
             </Card>
           </div>
+          <Card className="border-dashed">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Estado del Mantenimiento
+              </CardTitle>
+              <CardDescription>
+                Resumen de la politica activa y del ultimo mantenimiento ejecutado desde este panel
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Retencion activa</div>
+                  <div className="mt-2 text-lg font-semibold">{selectedRetentionLabel}</div>
+                  <div className="text-xs text-muted-foreground mt-1">Se aplicara en la proxima rotacion manual.</div>
+                </div>
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Ultima accion</div>
+                  <div className="mt-2 text-lg font-semibold">
+                    {lastMaintenanceActivity ? lastMaintenanceActivity.title : 'Sin ejecuciones'}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {lastMaintenanceActivity ? new Date(lastMaintenanceActivity.executedAt).toLocaleString() : 'Aun no se ejecuto mantenimiento en esta sesion.'}
+                  </div>
+                </div>
+                <div className="rounded-xl border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Estado actual</div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Badge variant={lastMaintenanceActivity?.success === false ? 'destructive' : 'secondary'}>
+                      {lastMaintenanceActivity ? (lastMaintenanceActivity.success ? 'Correcto' : 'Con error') : 'Pendiente'}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {maintenanceBusy ? 'Hay una tarea en ejecucion ahora mismo.' : 'No hay tareas de mantenimiento corriendo.'}
+                  </div>
+                </div>
+              </div>
+
+              {lastMaintenanceActivity && (
+                <Alert variant={lastMaintenanceActivity.success ? 'default' : 'destructive'}>
+                  {lastMaintenanceActivity.success ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4" />
+                  )}
+                  <AlertTitle>{lastMaintenanceActivity.title}</AlertTitle>
+                  <AlertDescription className="space-y-1">
+                    <p>{lastMaintenanceActivity.message}</p>
+                    {lastMaintenanceActivity.retentionDays && (
+                      <p>Retencion aplicada: {lastMaintenanceActivity.retentionDays} dias.</p>
+                    )}
+                    {typeof lastMaintenanceActivity.deletedCount === 'number' && (
+                      <p>Registros eliminados: {lastMaintenanceActivity.deletedCount}.</p>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          <ConfirmationDialog
+            open={confirmResetOpen}
+            onOpenChange={setConfirmResetOpen}
+            title="Resetear estadisticas de monitoreo"
+            description="Esta accion reinicia los acumulados de rendimiento usados por el panel. No borra datos operativos, pero afecta comparaciones historicas."
+            confirmText="Resetear"
+            variant="warning"
+            isLoading={runningTask === 'reset_stats'}
+            onConfirm={async () => {
+              await executeMaintenanceTask('reset_stats')
+            }}
+          />
+
+          <ConfirmationDialog
+            open={confirmRotateOpen}
+            onOpenChange={setConfirmRotateOpen}
+            title="Ejecutar rotacion de logs"
+            description={`Se conservaran ${selectedRetentionLabel} de historial en audit_log y se eliminara el resto. Esta accion no se puede deshacer.`}
+            confirmText="Rotar logs"
+            variant="destructive"
+            requireConfirmText="ROTAR"
+            isLoading={runningTask === 'rotate_logs'}
+            onConfirm={async () => {
+              const days = parseInt(retentionDays, 10)
+              await executeMaintenanceTask('rotate_logs', { days })
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="storage-cleanup" className="space-y-4 animate-in fade-in-50">
@@ -887,9 +1054,10 @@ interface MaintenanceTaskItemProps {
   icon: React.ReactNode
   onExecute: () => void
   loading: boolean
+  disabled: boolean
 }
 
-function MaintenanceTaskItem({ title, description, icon, onExecute, loading }: MaintenanceTaskItemProps) {
+function MaintenanceTaskItem({ title, description, icon, onExecute, loading, disabled }: MaintenanceTaskItemProps) {
   return (
     <div className="flex items-center justify-between p-4 border rounded-xl bg-card hover:bg-muted/30 transition-colors">
       <div className="space-y-1">
@@ -905,7 +1073,7 @@ function MaintenanceTaskItem({ title, description, icon, onExecute, loading }: M
         variant="outline"
         size="sm"
         onClick={onExecute}
-        disabled={loading}
+        disabled={disabled}
       >
         {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : 'Ejecutar'}
       </Button>

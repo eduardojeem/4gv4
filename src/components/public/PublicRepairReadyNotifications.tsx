@@ -217,7 +217,15 @@ export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNoti
       throw error
     }
 
-    const mapped = (data || []).map((repair: any) => {
+    const mapped = (data || []).map((repair: {
+      id: string | number
+      ticket_number?: string | null
+      device_brand?: string | null
+      device_model?: string | null
+      updated_at?: string | null
+      created_at?: string | null
+      status?: string | null
+    }) => {
       const brand = String(repair?.device_brand || '').trim()
       const model = String(repair?.device_model || '').trim()
       const deviceLabel = [brand, model].filter(Boolean).join(' ') || 'Equipo'
@@ -263,7 +271,6 @@ export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNoti
       if (cancelled) return
 
       if (error) {
-        console.error('Failed to resolve customer for public notifications:', error)
         setCustomerId(null)
         setNotifications([])
         setLoading(false)

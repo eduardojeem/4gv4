@@ -1,14 +1,25 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { CreditsClient } from '@/components/profile/credits/credits-client'
+import type { Metadata } from 'next'
 
-export const metadata = {
-  title: 'Mis Créditos - 4G',
-  description: 'Revisa tu historial de créditos y pagos.',
+export const metadata: Metadata = {
+  title: 'Mis Créditos',
+  description: 'Revisá tu historial de créditos y pagos pendientes.',
+  robots: { index: false, follow: false },
 }
 
-export default function CreditsPage() {
+export default async function CreditsPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login?next=/perfil/creditos')
+  }
+
   return (
     <div className="min-h-screen bg-background relative flex flex-col">
       <main className="container max-w-4xl py-12 px-4 relative flex-1">
@@ -25,14 +36,13 @@ export default function CreditsPage() {
                 Mis Créditos
               </h1>
               <p className="text-muted-foreground mt-1 font-medium">
-                Consulta los montos que tienes por pagar, fechas de vencimiento y tu historial.
+                Consultá los montos por pagar, fechas de vencimiento y tu historial.
               </p>
             </div>
           </div>
         </div>
 
         <CreditsClient />
-
       </main>
     </div>
   )

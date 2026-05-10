@@ -67,7 +67,7 @@ interface RepairFormDialogV2Props {
   initialData?: Partial<RepairFormData>
   repair?: Repair
   onClose: () => void
-  onSubmit: (data: RepairFormData) => Promise<void>
+  onSubmit: (data: RepairFormData) => Promise<boolean>
 }
 
 const deviceTypeOptions = [
@@ -100,6 +100,7 @@ export function RepairFormDialogV2({
   onClose,
   onSubmit
 }: RepairFormDialogV2Props) {
+  const formId = 'repair-form-dialog-form'
   const [quickMode, setQuickMode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false)
@@ -130,7 +131,7 @@ export function RepairFormDialogV2({
       customerDocument: initialData?.customerDocument || '',
       customerCity: initialData?.customerCity || '',
       customerCountry: initialData?.customerCountry || '',
-      existingCustomerId: initialData?.existingCustomerId,
+      existingCustomerId: initialData?.existingCustomerId || '',
       isNewCustomer: initialData?.isNewCustomer ?? false,
       priority: initialData?.priority || 'medium',
       urgency: initialData?.urgency || 'medium',
@@ -184,7 +185,7 @@ export function RepairFormDialogV2({
         customerDocument: initialData?.customerDocument || '',
         customerCity: initialData?.customerCity || '',
         customerCountry: initialData?.customerCountry || '',
-        existingCustomerId: initialData?.existingCustomerId,
+        existingCustomerId: initialData?.existingCustomerId || '',
         isNewCustomer: initialData?.isNewCustomer ?? false,
         priority: initialData?.priority || 'medium',
         urgency: initialData?.urgency || 'medium',
@@ -214,8 +215,8 @@ export function RepairFormDialogV2({
   const onSubmitForm = async (data: RepairFormData) => {
     setIsSubmitting(true)
     try {
-      await onSubmit(data)
-      toast.success(mode === 'add' ? 'Reparación creada exitosamente' : 'Reparación actualizada exitosamente')
+      const didSubmit = await onSubmit(data)
+      if (!didSubmit) return
       onClose()
     } catch (error) {
       const appError = AppError.from(error)
@@ -230,16 +231,16 @@ export function RepairFormDialogV2({
   // Handle quick customer creation
   const handleQuickCustomerCreated = (customer: { id: string; name: string; phone: string; email: string }) => {
     // Auto-select the new customer
-    setValue('existingCustomerId', customer.id)
-    setValue('customerName', customer.name)
-    setValue('customerPhone', customer.phone)
-    setValue('customerEmail', customer.email)
+    setValue('existingCustomerId', customer.id, { shouldDirty: true, shouldValidate: true })
+    setValue('customerName', customer.name, { shouldDirty: true, shouldValidate: true })
+    setValue('customerPhone', customer.phone, { shouldDirty: true, shouldValidate: true })
+    setValue('customerEmail', customer.email, { shouldDirty: true, shouldValidate: true })
   }
 
   const handleQuickCustomerUpdated = (customer: { id: string; name: string; phone: string; email: string }) => {
-    setValue('customerName', customer.name)
-    setValue('customerPhone', customer.phone)
-    setValue('customerEmail', customer.email)
+    setValue('customerName', customer.name, { shouldDirty: true, shouldValidate: true })
+    setValue('customerPhone', customer.phone, { shouldDirty: true, shouldValidate: true })
+    setValue('customerEmail', customer.email, { shouldDirty: true, shouldValidate: true })
     setEditingCustomer(null)
   }
 
@@ -314,7 +315,7 @@ export function RepairFormDialogV2({
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 bg-gradient-to-b from-background to-muted/10 dark:from-slate-950 dark:to-slate-900/50">
-          <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-5 max-w-[1800px] mx-auto">
+          <form id={formId} onSubmit={handleSubmit(onSubmitForm)} className="space-y-5 max-w-[1800px] mx-auto">
             {/* Quick Mode Toggle */}
             <div className="flex items-center justify-between p-5 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 rounded-xl border-2 border-amber-200/50 dark:border-amber-800/50 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center gap-4">
@@ -398,12 +399,20 @@ export function RepairFormDialogV2({
                     email: initialData.customerEmail || ''
                   } : undefined}
                   onChange={(customerId, customerData) => {
-                    setValue('existingCustomerId', customerId)
+                    setValue('existingCustomerId', customerId, { shouldDirty: true, shouldValidate: true })
+
+                    if (!customerId) {
+                      setValue('customerName', '', { shouldDirty: true, shouldValidate: true })
+                      setValue('customerPhone', '', { shouldDirty: true, shouldValidate: true })
+                      setValue('customerEmail', '', { shouldDirty: true, shouldValidate: true })
+                      return
+                    }
+
                     // Auto-fill customer data if available
                     if (customerData) {
-                      setValue('customerName', customerData.name)
-                      setValue('customerPhone', customerData.phone || '')
-                      setValue('customerEmail', customerData.email || '')
+                      setValue('customerName', customerData.name, { shouldDirty: true, shouldValidate: true })
+                      setValue('customerPhone', customerData.phone || '', { shouldDirty: true, shouldValidate: true })
+                      setValue('customerEmail', customerData.email || '', { shouldDirty: true, shouldValidate: true })
                     }
                   }}
                   error={errors.existingCustomerId?.message}
@@ -712,7 +721,18 @@ export function RepairFormDialogV2({
                             name={`devices.${index}.accessType`}
                             control={control}
                             render={({ field }) => (
-                              <Select value={field.value || 'none'} onValueChange={field.onChange}>
+                              <Select
+                                value={field.value || 'none'}
+                                onValueChange={(value) => {
+                                  if (value !== field.value) {
+                                    setValue(`devices.${index}.accessPassword`, '', {
+                                      shouldDirty: true,
+                                      shouldValidate: true
+                                    })
+                                  }
+                                  field.onChange(value)
+                                }}
+                              >
                                 <SelectTrigger className="h-9 text-sm border-green-200 dark:border-green-900/50">
                                   <SelectValue placeholder="Tipo de acceso" />
                                 </SelectTrigger>
@@ -1435,9 +1455,9 @@ export function RepairFormDialogV2({
                 Cancelar
               </Button>
               <Button
+                form={formId}
                 type="submit"
                 disabled={isSubmitting}
-                onClick={handleSubmit(onSubmitForm)}
                 className="min-w-[160px] h-11 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 dark:from-primary dark:to-primary/90 shadow-lg hover:shadow-xl transition-all"
               >
                 <Save className="h-4 w-4 mr-2" />

@@ -1,19 +1,16 @@
 'use client'
 
 import type { BrandTheme } from '@/lib/constants/brand-theme'
+import type { ProcessStep } from '@/types/website-settings'
 
 interface ProcessStepsProps {
   brand: BrandTheme
+  steps: ProcessStep[]
 }
 
-const steps = [
-  { number: 1, title: 'Diagnóstico', description: 'Evaluamos tu dispositivo de forma gratuita' },
-  { number: 2, title: 'Presupuesto', description: 'Te damos un precio claro y sin sorpresas' },
-  { number: 3, title: 'Reparación', description: 'Nuestros técnicos reparan tu celular' },
-  { number: 4, title: 'Entrega', description: 'Recoge tu dispositivo como nuevo' },
-]
+export function ProcessSteps({ brand, steps }: ProcessStepsProps) {
+  if (steps.length === 0) return null
 
-export function ProcessSteps({ brand }: ProcessStepsProps) {
   return (
     <section className="py-16 md:py-24">
       <div className="container">
@@ -22,15 +19,15 @@ export function ProcessSteps({ brand }: ProcessStepsProps) {
             Cómo funciona
           </h2>
           <p className="mt-4 text-muted-foreground">
-            Proceso simple y transparente en 4 pasos
+            Proceso simple y transparente en {steps.length} pasos
           </p>
         </div>
 
-        <div className="mx-auto mt-16 grid max-w-4xl gap-8 md:grid-cols-4">
-          {steps.map((step) => {
-            const isLast = step.number === steps.length
+        <div className="mx-auto mt-16 grid max-w-4xl gap-8 md:grid-cols-4" style={{ gridTemplateColumns: `repeat(${Math.min(steps.length, 4)}, minmax(0, 1fr))` }}>
+          {steps.map((step, i) => {
+            const isLast = i === steps.length - 1
             return (
-              <div key={step.number} className="text-center">
+              <div key={step.id} className="text-center">
                 <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${isLast ? 'bg-green-100 text-green-600' : `${brand.stepBg} ${brand.stepText}`} text-2xl font-bold`}>
                   {step.number}
                 </div>

@@ -94,6 +94,15 @@ export interface MaintenanceTaskParams {
   days?: number
 }
 
+export interface MaintenanceResponse {
+  success: boolean
+  message: string
+  task: MaintenanceTask
+  executedAt: string
+  retentionDays?: number
+  deletedCount?: number
+}
+
 interface DatabaseSizeInfoRow {
   total_size_bytes?: number
   total_size_mb?: number
@@ -658,7 +667,7 @@ class DatabaseMonitoringService {
   }
 
   // Realizar tarea de mantenimiento (usa el API del servidor para mayor seguridad)
-  async performMaintenanceTask(task: MaintenanceTask, params?: MaintenanceTaskParams): Promise<{ success: boolean; message: string }> {
+  async performMaintenanceTask(task: MaintenanceTask, params?: MaintenanceTaskParams): Promise<MaintenanceResponse> {
     try {
       const apiTask = task === 'rotate_logs' ? 'rotate_audit_logs' : task
       
@@ -673,18 +682,20 @@ class DatabaseMonitoringService {
         throw new Error(errorData.error || 'Error en el servidor')
       }
 
-      return await response.json()
+      return await response.json() as MaintenanceResponse
     } catch (error) {
       console.error('Error en tarea de mantenimiento:', error)
-      return { 
-        success: false, 
-        message: error instanceof Error ? error.message : 'Error al realizar el mantenimiento'
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Error al realizar el mantenimiento',
+        task,
+        executedAt: new Date().toISOString()
       }
     }
   }
 
   // Rotar logs de auditoría
-  async rotateAuditLogs(days: number): Promise<{ success: boolean; message: string }> {
+  async rotateAuditLogs(days: number): Promise<MaintenanceResponse> {
     return this.performMaintenanceTask('rotate_logs', { days })
   }
 }

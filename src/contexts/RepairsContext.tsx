@@ -36,6 +36,14 @@ export interface RepairFormData {
     notes?: any[]
 }
 
+export type RepairUpdateData = Omit<Partial<Repair>, 'customer' | 'technician' | 'images' | 'parts' | 'notes'> & {
+    customer_id?: string
+    technician_id?: string
+    images?: string[]
+    parts?: any[]
+    notes?: any[]
+}
+
 export interface RepairsContextValue {
     repairs: Repair[]
     isLoading: boolean
@@ -43,7 +51,7 @@ export interface RepairsContextValue {
 
     fetchRepairs: () => Promise<void>
     createRepair: (data: RepairFormData) => Promise<Repair | null>
-    updateRepair: (id: string, data: Partial<Repair>) => Promise<Repair | null>
+    updateRepair: (id: string, data: RepairUpdateData) => Promise<Repair | null>
     deleteRepair: (id: string) => Promise<boolean>
     updateStatus: (id: string, status: RepairStatus) => Promise<boolean>
     deliverRepair: (id: string, outcome: RepairDeliveryOutcome, note?: string) => Promise<boolean>
@@ -255,7 +263,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     // Update repair
     const updateRepair = useCallback(async (
         id: string,
-        data: Partial<Repair>
+        data: RepairUpdateData
     ): Promise<Repair | null> => {
         try {
             setError(null)

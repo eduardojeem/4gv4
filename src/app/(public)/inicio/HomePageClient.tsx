@@ -8,7 +8,6 @@ import { OffersCarousel } from '@/components/public/inicio/OffersCarousel'
 import type { OfferCard } from '@/components/public/inicio/OffersCarousel'
 import { ServicesGrid } from '@/components/public/inicio/ServicesGrid'
 import { ProcessSteps } from '@/components/public/inicio/ProcessSteps'
-import { TestimonialsGrid } from '@/components/public/inicio/TestimonialsGrid'
 import { ContactCTA } from '@/components/public/inicio/ContactCTA'
 import type { WebsiteSettings } from '@/types/website-settings'
 
@@ -48,10 +47,9 @@ export default function HomePageClient({ initialSettings }: HomePageClientProps)
     [services]
   )
 
-  const testimonials = settings.testimonials
-  const safeTestimonials = useMemo(
-    () => Array.isArray(testimonials) ? testimonials.filter(t => t.active !== false) : [],
-    [testimonials]
+  const processSteps = useMemo(
+    () => Array.isArray(settings.process_steps) ? settings.process_steps : [],
+    [settings.process_steps]
   )
 
   const companyName = company_info.name
@@ -146,9 +144,7 @@ export default function HomePageClient({ initialSettings }: HomePageClientProps)
 
       <ServicesGrid services={safeServices} />
 
-      <ProcessSteps brand={brand} />
-
-      <TestimonialsGrid testimonials={safeTestimonials} />
+      <ProcessSteps brand={brand} steps={processSteps} />
 
       <ContactCTA
         companyInfo={company_info}

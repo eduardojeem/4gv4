@@ -216,6 +216,31 @@ export function TestimonialsManager() {
                   className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 resize-none text-sm"
                 />
               </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor={`role-${testimonial.id}`} className="text-sm font-medium">Cargo / Rol (opcional)</Label>
+                  <Input
+                    id={`role-${testimonial.id}`}
+                    value={testimonial.role || ''}
+                    onChange={(e) => handleUpdate(testimonial.id, 'role', e.target.value)}
+                    placeholder="Cliente desde 2022"
+                    maxLength={80}
+                    className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 h-10"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`avatar-${testimonial.id}`} className="text-sm font-medium">URL de Foto (opcional)</Label>
+                  <Input
+                    id={`avatar-${testimonial.id}`}
+                    value={testimonial.avatarUrl || ''}
+                    onChange={(e) => handleUpdate(testimonial.id, 'avatarUrl', e.target.value)}
+                    placeholder="https://cdn.ejemplo.com/foto.jpg"
+                    maxLength={300}
+                    className="border-gray-200 focus:border-orange-500 focus:ring-orange-500 h-10"
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
         )})}

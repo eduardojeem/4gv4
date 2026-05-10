@@ -38,6 +38,7 @@ interface SupabaseRepairNote {
     note_text: string
     created_at: string
     author_name: string
+    is_internal?: boolean
 }
 
 interface SupabaseRepair {
@@ -141,7 +142,8 @@ export const mapSupabaseRepairToUi = (r: SupabaseRepair): Repair => {
             id: Number(n.id) || 0, // Fallback if UUID
             text: n.note_text,
             timestamp: n.created_at,
-            author: n.author_name
+            author: n.author_name,
+            isInternal: Boolean(n.is_internal)
         })),
         parts: (r.parts || []).map((p: SupabaseRepairPart) => ({
             id: Number(p.id) || 0, // Fallback if UUID

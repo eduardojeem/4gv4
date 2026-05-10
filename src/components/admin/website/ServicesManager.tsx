@@ -415,7 +415,41 @@ export function ServicesManager() {
                       value={editingService.description}
                       onChange={(e) => setEditingService({ ...editingService, description: e.target.value })}
                       placeholder="Escribe una breve descripción..."
-                      className="min-h-[120px] md:min-h-[140px] rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white transition-all resize-none text-xs md:text-sm leading-relaxed"
+                      className="min-h-[100px] md:min-h-[120px] rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white transition-all resize-none text-xs md:text-sm leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Precio</Label>
+                      <Input
+                        value={editingService.price || ''}
+                        onChange={(e) => setEditingService({ ...editingService, price: e.target.value })}
+                        placeholder="Desde $49.990"
+                        maxLength={30}
+                        className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Duración</Label>
+                      <Input
+                        value={editingService.duration || ''}
+                        onChange={(e) => setEditingService({ ...editingService, duration: e.target.value })}
+                        placeholder="30-60 min"
+                        maxLength={20}
+                        className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Enlace CTA (opcional)</Label>
+                    <Input
+                      value={editingService.ctaUrl || ''}
+                      onChange={(e) => setEditingService({ ...editingService, ctaUrl: e.target.value })}
+                      placeholder="/inicio#contacto"
+                      maxLength={200}
+                      className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
                     />
                   </div>
                 </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   buildQuickMetrics,
   databaseMonitoringService,
+  MaintenanceResponse,
   DatabaseMetrics,
   MaintenanceTask,
   MaintenanceTaskParams,
@@ -17,7 +18,7 @@ interface UseDatabaseMonitoringReturn {
   refreshing: boolean
   refresh: () => Promise<void>
   quickMetrics: QuickDatabaseMetrics | null
-  performMaintenance: (task: MaintenanceTask, params?: MaintenanceTaskParams) => Promise<{ success: boolean; message: string }>
+  performMaintenance: (task: MaintenanceTask, params?: MaintenanceTaskParams) => Promise<MaintenanceResponse>
 }
 
 interface UseDatabaseMonitoringOptions {

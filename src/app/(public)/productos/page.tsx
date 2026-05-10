@@ -5,6 +5,7 @@ import { getPublicProducts, getPublicCategories, resolveWholesaleStatus } from '
 import { ProductCard } from '@/components/public/ProductCard'
 import { ProductFilters } from '@/components/public/ProductFilters'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
+import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import {
   ProductSearch,
   ProductSort,
@@ -19,9 +20,18 @@ import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 
 export const revalidate = 60
 
-export const metadata: Metadata = {
-  title: 'Catálogo de Productos',
-  description: 'Explora nuestra amplia gama de celulares, repuestos y accesorios. Encuentra las mejores marcas y precios.',
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await fetchWebsiteSettings()
+  const name = settings?.company_info?.name || '4G Celulares'
+  return {
+    title: 'Catálogo de Productos',
+    description: `Explorá el catálogo de ${name}. Celulares, repuestos y accesorios con las mejores marcas y precios.`,
+    openGraph: {
+      title: `Catálogo de Productos | ${name}`,
+      description: `Celulares, repuestos y accesorios en ${name}`,
+      type: 'website',
+    },
+  }
 }
 
 const MAX_PRICE = PRODUCTS_MAX_PRICE

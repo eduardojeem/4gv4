@@ -38,7 +38,7 @@ export default function CustomerProfilePage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [stats, setStats] = useState({ totalRepairs: 0, activeRepairs: 0, completedRepairs: 0 })
-  const [recentRepairs, setRecentRepairs] = useState<any[]>([])
+  const [recentRepairs, setRecentRepairs] = useState<Array<{ id: string; brand?: string; model?: string; device?: string; status: string; created_at: string; final_cost?: number }>>([])
 
   const isDirty = useMemo(() => {
     if (!initialProfile) return false
