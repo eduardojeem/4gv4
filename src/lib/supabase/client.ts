@@ -1,6 +1,7 @@
 import { createBrowserClient } from '@supabase/ssr'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { config } from '../config'
+
+let browserClient: SupabaseClient | null = null
 
 export function createClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -10,7 +11,15 @@ export function createClient(): SupabaseClient {
     throw new Error('Supabase no configurado: faltan NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY.')
   }
 
-  return createBrowserClient(url, anonKey)
+  if (typeof window === 'undefined') {
+    return createBrowserClient(url, anonKey)
+  }
+
+  if (!browserClient) {
+    browserClient = createBrowserClient(url, anonKey)
+  }
+
+  return browserClient
 }
 
 export { createClient as createSupabaseClient }

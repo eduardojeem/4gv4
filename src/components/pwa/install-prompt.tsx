@@ -5,21 +5,29 @@ import { Button } from '@/components/ui/button'
 import { Download } from 'lucide-react'
 import { toast } from 'sonner'
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
+}
+
 export function InstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
-  const [isIOS, setIsIOS] = useState(false)
-  const [isStandalone, setIsStandalone] = useState(false)
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const [isIOS] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return /iPad|iPhone|iPod/.test(window.navigator.userAgent) && !('MSStream' in window)
+  })
+  const [isStandalone] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(display-mode: standalone)').matches
+  })
 
   useEffect(() => {
-    // Check if running in standalone mode
-    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches)
+    if (process.env.NODE_ENV !== 'production') return
 
-    // Check if device is iOS
-    setIsIOS(/iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream)
-
-    const handler = (e: any) => {
-      e.preventDefault()
-      setDeferredPrompt(e)
+    const handler = (e: Event) => {
+      const promptEvent = e as BeforeInstallPromptEvent
+      promptEvent.preventDefault()
+      setDeferredPrompt(promptEvent)
     }
 
     window.addEventListener('beforeinstallprompt', handler)

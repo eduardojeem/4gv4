@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -48,6 +48,14 @@ import {
 import { SystemSettings } from '@/hooks/use-admin-dashboard'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/contexts/theme-context'
+import {
+  DEFAULT_SYSTEM_COLOR_SCHEME,
+  getSystemColorSchemeOption,
+  isSystemColorScheme,
+  type SystemColorScheme,
+} from '@/lib/theme/color-schemes'
+import { SystemColorSchemePicker } from '@/components/system/system-color-scheme-picker'
 
 interface SystemConfigurationProps {
   settings: SystemSettings
@@ -71,12 +79,30 @@ export function SystemConfiguration({
   const [isSaving, setIsSaving] = useState(false)
   
   const { showConfirmation, ConfirmationDialog } = useConfirmationDialog()
+  const { setTheme, setColorScheme } = useTheme()
+
+  const applyAppearancePreview = useCallback((themeValue: unknown, colorValue: unknown) => {
+    if (themeValue === 'light' || themeValue === 'dark' || themeValue === 'system') {
+      setTheme(themeValue)
+    }
+
+    if (typeof colorValue === 'string' && isSystemColorScheme(colorValue)) {
+      setColorScheme(colorValue)
+      return
+    }
+
+    setColorScheme(DEFAULT_SYSTEM_COLOR_SCHEME)
+  }, [setColorScheme, setTheme])
 
   useEffect(() => {
     setFormData(settings)
   }, [settings])
 
-  const validateField = (field: keyof SystemSettings, value: any): string | undefined => {
+  useEffect(() => {
+    applyAppearancePreview(formData.theme, formData.primaryColor)
+  }, [applyAppearancePreview, formData.primaryColor, formData.theme])
+
+  const validateField = (field: keyof SystemSettings, value: unknown): string | undefined => {
     switch (field) {
       case 'companyName':
         if (!value || String(value).trim().length === 0) return 'El nombre es obligatorio'
@@ -93,23 +119,23 @@ export function SystemConfiguration({
         return undefined
       case 'taxRate':
         if (value === '' || value === null || isNaN(Number(value))) return 'Ingrese un número válido'
-        if (value < 0 || value > 100) return 'Debe estar entre 0 y 100'
+        if (Number(value) < 0 || Number(value) > 100) return 'Debe estar entre 0 y 100'
         return undefined
       case 'lowStockThreshold':
         if (value === '' || value === null || isNaN(Number(value))) return 'Ingrese un número válido'
-        if (value < 1) return 'Debe ser al menos 1'
+        if (Number(value) < 1) return 'Debe ser al menos 1'
         return undefined
       case 'sessionTimeout':
         if (value === '' || value === null || isNaN(Number(value))) return 'Ingrese un número válido'
-        if (value < 5 || value > 480) return 'Entre 5 y 480 minutos'
+        if (Number(value) < 5 || Number(value) > 480) return 'Entre 5 y 480 minutos'
         return undefined
       case 'maxLoginAttempts':
         if (value === '' || value === null || isNaN(Number(value))) return 'Ingrese un número válido'
-        if (value < 1 || value > 10) return 'Entre 1 y 10'
+        if (Number(value) < 1 || Number(value) > 10) return 'Entre 1 y 10'
         return undefined
       case 'passwordMinLength':
         if (value === '' || value === null || isNaN(Number(value))) return 'Ingrese un número válido'
-        if (value < 6 || value > 32) return 'Entre 6 y 32'
+        if (Number(value) < 6 || Number(value) > 32) return 'Entre 6 y 32'
         return undefined
       default:
         return undefined
@@ -124,7 +150,7 @@ export function SystemConfiguration({
     }
   }, [settingsSearchDebounced])
 
-  const handleInputChange = (field: keyof SystemSettings, value: any) => {
+  const handleInputChange = (field: keyof SystemSettings, value: unknown) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     setHasChanges(true)
     const err = validateField(field, value)
@@ -230,7 +256,8 @@ export function SystemConfiguration({
       reader.onload = (e) => {
         try {
           const importedSettings = JSON.parse(e.target?.result as string)
-          setFormData(prev => ({ ...prev, ...importedSettings }))
+          const mergedSettings = { ...formData, ...importedSettings }
+          setFormData(mergedSettings)
           setHasChanges(true)
           toast.success('Configuración importada. Revise los cambios antes de guardar.')
         } catch (error) {
@@ -284,6 +311,10 @@ export function SystemConfiguration({
     { id: 'notifications', label: 'Notificaciones', icon: Bell, color: 'green' },
     { id: 'system', label: 'Sistema', icon: Server, color: 'orange' },
   ]
+  const selectedColorScheme = getSystemColorSchemeOption(formData.primaryColor)
+  const quickColorValue = ['blue', 'purple', 'green', 'orange', 'red'].includes(formData.primaryColor)
+    ? formData.primaryColor
+    : '__catalog__'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
@@ -555,6 +586,7 @@ export function SystemConfiguration({
                         <SelectItem value="USD">🇺🇸 Dólar (USD)</SelectItem>
                         <SelectItem value="EUR">🇪🇺 Euro (EUR)</SelectItem>
                         <SelectItem value="MXN">🇲🇽 Peso Mexicano (MXN)</SelectItem>
+                        <SelectItem value="red">Rojo</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -603,7 +635,7 @@ export function SystemConfiguration({
                     <Label className="flex items-center gap-2">Tema por Defecto</Label>
                     <Select 
                       value={formData.theme} 
-                      onValueChange={(value: any) => handleInputChange('theme', value)}
+                      onValueChange={(value) => handleInputChange('theme', value)}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -617,15 +649,20 @@ export function SystemConfiguration({
                   </div>
 
                   <div className="space-y-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                    <Label className="flex items-center gap-2">Color Principal</Label>
+                    <Label className="flex items-center gap-2">Color Principal Rapido</Label>
                     <Select 
-                      value={formData.primaryColor} 
-                      onValueChange={(value) => handleInputChange('primaryColor', value)}
+                      value={quickColorValue}
+                      onValueChange={(value) => {
+                        if (value !== '__catalog__') {
+                          handleInputChange('primaryColor', value)
+                        }
+                      }}
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Atajo de seleccion" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__catalog__">Usar catalogo completo</SelectItem>
                         <SelectItem value="blue">🔵 Azul (Default)</SelectItem>
                         <SelectItem value="purple">💜 Violeta</SelectItem>
                         <SelectItem value="green">💚 Verde</SelectItem>
@@ -644,6 +681,51 @@ export function SystemConfiguration({
                       max={100}
                     />
                     <p className="text-xs text-gray-500">Filas por defecto en tablas</p>
+                  </div>
+                </div>
+                <div className="space-y-3 rounded-xl border border-pink-100 bg-pink-50/60 p-4 dark:border-pink-900/50 dark:bg-pink-950/20">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <Label className="flex items-center gap-2 text-sm font-semibold">
+                        <Palette className="h-4 w-4 text-pink-500" />
+                        Esquema de color del sistema
+                      </Label>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Elegi una paleta base para unificar botones, acentos y elementos destacados.
+                      </p>
+                    </div>
+
+                    <Badge variant="secondary" className="w-fit">
+                      {selectedColorScheme.label}
+                    </Badge>
+                  </div>
+
+                  <SystemColorSchemePicker
+                    value={formData.primaryColor}
+                    onChange={(value: SystemColorScheme) => handleInputChange('primaryColor', value)}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground">Vista rapida del sistema</p>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedColorScheme.description}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
+                        Accion principal
+                      </span>
+                      <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+                        Secundario
+                      </span>
+                      <span className="rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
+                        Resaltado
+                      </span>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -715,7 +797,7 @@ export function SystemConfiguration({
                     <Label>Moneda Principal</Label>
                     <Select 
                       value={formData.currency} 
-                      onValueChange={(value: any) => handleInputChange('currency', value)}
+                      onValueChange={(value) => handleInputChange('currency', value)}
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>

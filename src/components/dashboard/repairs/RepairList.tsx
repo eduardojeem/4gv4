@@ -7,6 +7,13 @@ import { Wrench } from 'lucide-react'
 import { Repair, RepairStatus } from '@/types/repairs'
 import { RepairRow } from './RepairRow'
 
+interface RepairListCompanyInfo {
+    name: string
+    phone: string
+    address: string
+    email: string
+}
+
 interface RepairListProps {
     repairs: Repair[]
     onStatusChange?: (id: string, status: RepairStatus) => void
@@ -15,6 +22,7 @@ interface RepairListProps {
     onDelete?: (id: string) => void
     onDeliver?: (repair: Repair) => void
     isLoading?: boolean
+    companyInfo?: RepairListCompanyInfo
 }
 
 export const RepairList = memo<RepairListProps>(function RepairList({
@@ -25,6 +33,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
     onDelete,
     onDeliver,
     isLoading,
+    companyInfo,
 }) {
     if (isLoading) {
         return (
@@ -78,6 +87,7 @@ export const RepairList = memo<RepairListProps>(function RepairList({
                                 onView={onView}
                                 onDelete={onDelete}
                                 onDeliver={onDeliver}
+                                companyInfo={companyInfo}
                             />
                         ))}
                     </TableBody>

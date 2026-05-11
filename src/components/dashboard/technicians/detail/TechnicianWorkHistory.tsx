@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -13,13 +14,16 @@ import {
 import { Repair } from '@/types/repairs'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ExternalLink, Star } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
+import { resolveRepairStatus } from '@/lib/constants/repair-status'
 
 interface TechnicianWorkHistoryProps {
     repairs: Repair[]
 }
+
+const INITIAL_VISIBLE_ROWS = 25
 
 const statusConfig = {
     listo: { label: 'Listo', color: 'bg-green-100 text-green-700' },
@@ -28,13 +32,19 @@ const statusConfig = {
 
 export function TechnicianWorkHistory({ repairs }: TechnicianWorkHistoryProps) {
     const router = useRouter()
+    const [visibleRows, setVisibleRows] = useState(INITIAL_VISIBLE_ROWS)
 
-    // Sort by completed date, most recent first
-    const sortedRepairs = [...repairs].sort((a, b) => {
-        const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0
-        const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0
-        return dateB - dateA
-    })
+    const sortedRepairs = useMemo(() => {
+        return [...repairs].sort((a, b) => {
+            const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0
+            const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0
+            return dateB - dateA
+        })
+    }, [repairs])
+
+    const visibleRepairs = useMemo(() => {
+        return sortedRepairs.slice(0, visibleRows)
+    }, [sortedRepairs, visibleRows])
 
     if (repairs.length === 0) {
         return (
@@ -44,7 +54,7 @@ export function TechnicianWorkHistory({ repairs }: TechnicianWorkHistoryProps) {
                 </CardHeader>
                 <CardContent>
                     <div className="text-center py-8 text-muted-foreground">
-                        <p>No hay trabajos completados aún</p>
+                        <p>No hay trabajos completados aun</p>
                     </div>
                 </CardContent>
             </Card>
@@ -56,7 +66,11 @@ export function TechnicianWorkHistory({ repairs }: TechnicianWorkHistoryProps) {
             <CardHeader>
                 <CardTitle>Historial de Trabajos ({repairs.length})</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                    Mostrando {visibleRepairs.length} de {sortedRepairs.length} trabajos
+                </div>
+
                 <div className="rounded-md border">
                     <Table>
                         <TableHeader>
@@ -67,20 +81,20 @@ export function TechnicianWorkHistory({ repairs }: TechnicianWorkHistoryProps) {
                                 <TableHead>Problema</TableHead>
                                 <TableHead>Fecha Inicio</TableHead>
                                 <TableHead>Fecha Fin</TableHead>
-                                <TableHead>Duración</TableHead>
+                                <TableHead>Duracion</TableHead>
                                 <TableHead>Estado</TableHead>
                                 <TableHead className="text-right">Acciones</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {sortedRepairs.map(repair => {
+                            {visibleRepairs.map(repair => {
                                 const startDate = new Date(repair.createdAt)
                                 const endDate = repair.completedAt ? new Date(repair.completedAt) : null
                                 const duration = endDate
                                     ? Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
                                     : null
-
-                                const statusInfo = statusConfig[repair.dbStatus as keyof typeof statusConfig]
+                                const resolvedStatus = resolveRepairStatus(repair)
+                                const statusInfo = statusConfig[resolvedStatus as keyof typeof statusConfig]
 
                                 return (
                                     <TableRow key={repair.id}>
@@ -132,6 +146,17 @@ export function TechnicianWorkHistory({ repairs }: TechnicianWorkHistoryProps) {
                         </TableBody>
                     </Table>
                 </div>
+
+                {visibleRows < sortedRepairs.length && (
+                    <div className="flex justify-center">
+                        <Button
+                            variant="outline"
+                            onClick={() => setVisibleRows(current => current + INITIAL_VISIBLE_ROWS)}
+                        >
+                            Mostrar mas
+                        </Button>
+                    </div>
+                )}
             </CardContent>
         </Card>
     )

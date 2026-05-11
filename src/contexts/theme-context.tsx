@@ -1,22 +1,13 @@
 'use client'
 
 import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
+import {
+  DEFAULT_SYSTEM_COLOR_SCHEME,
+  type ThemeColorScheme,
+} from '@/lib/theme/color-schemes'
 
 export type Theme = 'light' | 'dark' | 'system'
-export type ColorScheme =
-  | 'default'
-  | 'blue'
-  | 'green'
-  | 'purple'
-  | 'orange'
-  | 'red'
-  | 'corporate'
-  | 'indigo'
-  | 'teal'
-  | 'pink'
-  | 'amber'
-  | 'cyan'
-  | 'custom'
+export type ColorScheme = ThemeColorScheme
 
 type CustomPalette = {
   primary?: string
@@ -71,7 +62,7 @@ interface ThemeProviderProps {
 export function ThemeProvider({
   children,
   defaultTheme = 'system',
-  defaultColorScheme = 'indigo'
+  defaultColorScheme = DEFAULT_SYSTEM_COLOR_SCHEME
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === 'undefined') return defaultTheme

@@ -21,8 +21,13 @@ import { toast } from 'sonner'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useAuth } from '@/contexts/auth-context'
 import { useTheme } from '@/contexts/theme-context'
-
-const EDITABLE_COLOR_SCHEMES = ['blue', 'green', 'purple', 'orange', 'red'] as const
+import {
+  DEFAULT_SYSTEM_COLOR_SCHEME,
+  getSystemColorSchemeOption,
+  isSystemColorScheme,
+  type SystemColorScheme,
+} from '@/lib/theme/color-schemes'
+import { SystemColorSchemePicker } from '@/components/system/system-color-scheme-picker'
 
 export default function SettingsPage() {
   const {
@@ -61,9 +66,7 @@ export default function SettingsPage() {
     
     // Apply theme from loaded settings on first load
     setTheme(settings.theme as 'light' | 'dark' | 'system')
-    if (EDITABLE_COLOR_SCHEMES.includes(settings.primaryColor as typeof EDITABLE_COLOR_SCHEMES[number])) {
-      setColorScheme(settings.primaryColor as 'blue' | 'green' | 'purple' | 'orange' | 'red')
-    }
+    setColorScheme(isSystemColorScheme(settings.primaryColor) ? settings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME)
     initialSyncDone.current = true
   }, [isLoading, settings.theme, settings.primaryColor, setTheme, setColorScheme])
 
@@ -73,11 +76,9 @@ export default function SettingsPage() {
     setTheme(value as 'light' | 'dark' | 'system')
   }
 
-  const handleColorChange = (value: string) => {
+  const handleColorChange = (value: SystemColorScheme) => {
     updateSetting('primaryColor', value)
-    if (EDITABLE_COLOR_SCHEMES.includes(value as typeof EDITABLE_COLOR_SCHEMES[number])) {
-      setColorScheme(value as 'blue' | 'green' | 'purple' | 'orange' | 'red')
-    }
+    setColorScheme(value)
   }
 
   // Loading states
@@ -142,8 +143,15 @@ export default function SettingsPage() {
 
   const handleReset = () => {
     resetSettings()
+    setTheme(originalSettings.theme as 'light' | 'dark' | 'system')
+    setColorScheme(isSystemColorScheme(originalSettings.primaryColor) ? originalSettings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME)
     toast.info('Cambios descartados')
   }
+
+  const selectedColorScheme = getSystemColorSchemeOption(settings.primaryColor)
+  const quickColorValue = ['blue', 'green', 'purple', 'orange', 'red'].includes(settings.primaryColor)
+    ? settings.primaryColor
+    : '__catalog__'
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -373,10 +381,18 @@ export default function SettingsPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="primaryColor">Color primario</Label>
-                  <Select value={settings.primaryColor} onValueChange={handleColorChange}>
-                    <SelectTrigger id="primaryColor"><SelectValue /></SelectTrigger>
+                  <Label htmlFor="primaryColor">Seleccion rapida</Label>
+                  <Select
+                    value={quickColorValue}
+                    onValueChange={(value) => {
+                      if (value !== '__catalog__') {
+                        handleColorChange(value as SystemColorScheme)
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="primaryColor"><SelectValue placeholder="Elegi un color base" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="__catalog__">Usar catalogo completo</SelectItem>
                       <SelectItem value="blue">Azul</SelectItem>
                       <SelectItem value="green">Verde</SelectItem>
                       <SelectItem value="purple">Púrpura</SelectItem>
@@ -384,6 +400,36 @@ export default function SettingsPage() {
                       <SelectItem value="red">Rojo</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3 rounded-xl border border-primary/10 bg-primary/5 p-4">
+                <div>
+                  <Label>Catalogo de esquemas</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Usa el selector visual para gestionar mejor la paleta global del sistema.
+                  </p>
+                </div>
+
+                <SystemColorSchemePicker value={settings.primaryColor} onChange={handleColorChange} />
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{selectedColorScheme.label}</p>
+                    <p className="text-xs text-muted-foreground">{selectedColorScheme.description}</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
+                      Primario
+                    </span>
+                    <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+                      Superficie
+                    </span>
+                    <span className="rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
+                      Acento
+                    </span>
+                  </div>
                 </div>
               </div>
             </CardContent>

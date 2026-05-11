@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import {
+  DEFAULT_SYSTEM_COLOR_SCHEME,
+  SYSTEM_COLOR_SCHEME_VALUES,
+} from '@/lib/theme/color-schemes'
 
 /**
  * Esquema de validación para System Settings
@@ -56,7 +60,7 @@ export const SystemSettingsSchema = z.object({
 
   // Personalización e Interfaz
   theme: z.enum(['light', 'dark', 'system']).default('system'),
-  primaryColor: z.string().default('blue'),
+  primaryColor: z.enum(SYSTEM_COLOR_SCHEME_VALUES).default(DEFAULT_SYSTEM_COLOR_SCHEME),
   itemsPerPage: z.number().int().min(5).max(100).default(10),
 
   // Configuración Regional

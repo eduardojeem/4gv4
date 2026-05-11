@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { Key, Loader2, Eye, EyeOff, Check, X, Clock, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { logAuthEventClient } from '@/lib/auth-event-client'
 import { getSessionIdFromAccessToken } from '@/lib/session-id'
 import { z } from 'zod'
 
@@ -34,6 +35,11 @@ const passwordSchema = z.object({
 })
 
 const COOLDOWN_MS = 60000 // 1 minuto
+
+type UserActivityRow = {
+  action?: string
+  created_at?: string
+}
 
 export function ChangePasswordDialog() {
   const [open, setOpen] = useState(false)
@@ -60,10 +66,10 @@ export function ChangePasswordDialog() {
       })
       if (error) return
 
-      const activity = Array.isArray(data) ? data : []
+      const activity: UserActivityRow[] = Array.isArray(data) ? (data as UserActivityRow[]) : []
       const lastPasswordChange = activity
-        .filter((item: any) => item?.action === 'password_change')
-        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+        .filter((item) => item.action === 'password_change')
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0]
 
       if (!lastPasswordChange?.created_at) return
 
@@ -129,13 +135,13 @@ export function ChangePasswordDialog() {
 
       if (error) throw error
 
-      await supabase.rpc('log_auth_event', {
-        p_user_id: null,
-        p_action: 'password_change',
-        p_success: true,
-        p_ip_address: null,
-        p_user_agent: typeof window !== 'undefined' ? window.navigator.userAgent : null,
-        p_details: { source: 'dashboard_profile' }
+      await logAuthEventClient({
+        userId: null,
+        action: 'password_change',
+        success: true,
+        ipAddress: null,
+        userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : null,
+        details: { source: 'dashboard_profile' }
       })
 
       if (closeOtherSessions) {
@@ -162,8 +168,9 @@ export function ChangePasswordDialog() {
       setOpen(false)
       setFormData({ password: '', confirmPassword: '' })
       setCooldownRemaining(COOLDOWN_MS)
-    } catch (error: any) {
-      toast.error(error.message || 'Error al actualizar contrasena')
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error al actualizar contrasena'
+      toast.error(message)
     } finally {
       setIsLoading(false)
     }

@@ -15,14 +15,19 @@ interface SalesData {
   ventas: number
 }
 
+type SaleRow = {
+  total_amount: number | string | null
+  created_at: string
+}
+
 export function SalesChart() {
   const [data, setData] = useState<SalesData[]>([])
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
 
   useEffect(() => {
     const fetchSalesData = async () => {
       try {
+        const supabase = createClient()
         // Obtener ventas de los últimos 7 días
         const today = new Date()
         const sevenDaysAgo = new Date(today)
@@ -49,7 +54,7 @@ export function SalesChart() {
         }
 
         // Sumar ventas por día
-        sales?.forEach((sale: any) => {
+        ;(sales as SaleRow[] | null)?.forEach((sale) => {
           const date = new Date(sale.created_at)
           const dayName = dayNames[date.getDay()]
           salesByDay[dayName] = (salesByDay[dayName] || 0) + (Number(sale.total_amount) || 0)
@@ -99,8 +104,8 @@ export function SalesChart() {
   }
 
   return (
-    <div className="h-[300px]">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-[300px] w-full min-w-0">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis 

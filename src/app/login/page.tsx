@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { config } from '@/lib/config'
 import { sanitizeRedirectPath, isValidEmail } from '@/lib/auth/password-validation'
+import { logAuthEventClient } from '@/lib/auth-event-client'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -46,22 +47,6 @@ export default function LoginPage() {
 
       if (error) {
         const msg = error.message || (typeof error === 'string' ? error : 'Error al iniciar sesion')
-
-        // Registrar intento fallido
-        try {
-          const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
-          await supabase.rpc('log_auth_event', {
-            p_user_id: undefined,
-            p_action: 'login_failed',
-            p_success: false,
-            p_ip_address: undefined,
-            p_user_agent: userAgent,
-            p_details: { error: msg },
-          })
-        } catch (logError) {
-          console.error('Error logging failed login from page:', logError)
-        }
-
         if (/email not confirmed/i.test(msg)) {
           setUnconfirmed(true)
           setError('Credenciales incorrectas o cuenta no confirmada.')
@@ -76,13 +61,12 @@ export default function LoginPage() {
         if (data?.user) {
           try {
             const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
-            await supabase.rpc('log_auth_event', {
-              p_user_id: data.user.id,
-              p_action: 'login',
-              p_success: true,
-              p_ip_address: undefined,
-              p_user_agent: userAgent,
-              p_details: {},
+            await logAuthEventClient({
+              userId: data.user.id,
+              action: 'login',
+              success: true,
+              userAgent,
+              details: {},
             })
           } catch (logError) {
             console.error('Error logging auth event from login page:', logError)

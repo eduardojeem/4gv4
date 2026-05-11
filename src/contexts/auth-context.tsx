@@ -6,6 +6,7 @@ import { User as SupabaseUser, Session } from '@supabase/supabase-js'
 import { UserRole, hasEffectivePermission, canManageUser } from '../lib/auth/roles-permissions'
 import { normalizeRole } from '../lib/auth/role-utils'
 import { useToast } from '../components/ui/use-toast'
+import { logAuthEventClient } from '@/lib/auth-event-client'
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
@@ -184,33 +185,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       if (error) {
-        // Registrar intento fallido
-        try {
-          const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
-          await supabase.rpc('log_auth_event', {
-            p_user_id: undefined, // No tenemos UUID si falló
-            p_action: 'login_failed',
-            p_success: false,
-            p_ip_address: undefined,
-            p_user_agent: userAgent,
-            p_details: { email, error: error.message }
-          })
-        } catch (logError) {
-          console.error('Error logging failed login:', logError)
-        }
+        // La RPC requiere rol authenticated; en errores de login todavia no hay sesion valida.
         return { error: error.message }
       }
 
       if (data.user) {
         try {
           const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
-          await supabase.rpc('log_auth_event', {
-            p_user_id: data.user.id,
-            p_action: 'login',
-            p_success: true,
-            p_ip_address: undefined,
-            p_user_agent: userAgent,
-            p_details: { email, method: 'password' }
+          await logAuthEventClient({
+            userId: data.user.id,
+            action: 'login',
+            success: true,
+            userAgent,
+            details: { email, method: 'password' }
           })
         } catch (logError) {
           console.error('Error logging auth event (login):', logError)
@@ -286,13 +273,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (user) {
         try {
           const userAgent = typeof window !== 'undefined' ? window.navigator.userAgent : undefined
-          await supabase.rpc('log_auth_event', {
-            p_user_id: user.id,
-            p_action: 'logout',
-            p_success: true,
-            p_ip_address: undefined,
-            p_user_agent: userAgent,
-            p_details: {}
+          await logAuthEventClient({
+            userId: user.id,
+            action: 'logout',
+            success: true,
+            userAgent,
+            details: {}
           })
         } catch (logError) {
           console.error('Error logging auth event (logout):', logError)

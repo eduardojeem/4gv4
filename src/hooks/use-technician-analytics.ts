@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Repair } from '@/types/repairs'
 import { differenceInDays, format, subDays, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { isActiveRepair, isCompletedRepair, resolveRepairStatus } from '@/lib/constants/repair-status'
 
 export interface TechnicianMetrics {
   totalJobs: number
@@ -71,15 +72,9 @@ export function useTechnicianAnalytics(repairs: Repair[]): TechnicianAnalytics {
     }
 
     // Separar reparaciones activas y completadas
-    const activeRepairs = repairs.filter(r => 
-      r.dbStatus && !['listo', 'entregado', 'cancelado'].includes(r.dbStatus)
-    )
-    const completedRepairs = repairs.filter(r => 
-      r.dbStatus && ['listo', 'entregado'].includes(r.dbStatus)
-    )
-    const deliveredRepairs = repairs.filter(r =>
-      (r.dbStatus || r.status) === 'entregado'
-    )
+    const activeRepairs = repairs.filter(isActiveRepair)
+    const completedRepairs = repairs.filter(isCompletedRepair)
+    const deliveredRepairs = repairs.filter(r => resolveRepairStatus(r) === 'entregado')
 
     // Calcular métricas básicas
     const totalJobs = repairs.length
@@ -167,7 +162,7 @@ export function useTechnicianAnalytics(repairs: Repair[]): TechnicianAnalytics {
     // Distribución por estado
     const statusCounts = new Map<string, number>()
     repairs.forEach(r => {
-      const status = r.dbStatus || 'unknown'
+      const status = resolveRepairStatus(r)
       statusCounts.set(status, (statusCounts.get(status) || 0) + 1)
     })
 

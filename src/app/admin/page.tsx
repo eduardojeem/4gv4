@@ -1,17 +1,16 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { SalesChart } from '@/components/dashboard/sales-chart'
 import { RepairsChart } from '@/components/dashboard/repairs-chart'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
 import {
-  Users, Package, Shield, Globe, Database, Settings,
-  BarChart3, Wrench, AlertTriangle, TrendingUp, Clock, Activity
+  Users, Shield, Globe, Database, Settings,
+  BarChart3, AlertTriangle, TrendingUp, Clock, Activity
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -133,21 +132,21 @@ export default function AdminHome() {
 
       {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+        <Card className="border border-gray-200 dark:border-slate-800 shadow-sm min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Ventas</CardTitle>
             <CardDescription>Tendencia semanal</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-w-0">
             <SalesChart />
           </CardContent>
         </Card>
-        <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+        <Card className="border border-gray-200 dark:border-slate-800 shadow-sm min-w-0">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Reparaciones</CardTitle>
             <CardDescription>Distribución por estado</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-w-0">
             <RepairsChart />
           </CardContent>
         </Card>

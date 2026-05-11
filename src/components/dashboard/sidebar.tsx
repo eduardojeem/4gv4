@@ -30,7 +30,6 @@ import {
   Tag,
   Percent,
   Building2,
-  MessageCircle,
   Smartphone,
   LogOut
 } from 'lucide-react'
@@ -65,7 +64,6 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: 'Análisis',
     items: [
       { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, roles: ['admin', 'vendedor'] },
-      { name: 'WhatsApp', href: '/dashboard/whatsapp', icon: MessageCircle, roles: ['admin', 'vendedor'] },
       { name: 'Administración', href: '/admin', icon: Settings, roles: ['admin'] },
     ],
   },

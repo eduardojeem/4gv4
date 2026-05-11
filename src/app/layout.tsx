@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/auth-context";
 import { AppStateProvider } from "@/contexts/app-state-context";
 import { SWRProvider } from "@/providers/swr-provider";
 import { Toaster } from "sonner";
+import { DEFAULT_SYSTEM_COLOR_SCHEME } from "@/lib/theme/color-schemes";
 import "./globals.css";
 import { PredictivePrefetchInit } from "@/components/util/PredictivePrefetchInit";
 
@@ -34,11 +35,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" suppressHydrationWarning data-color-scheme="corporate">
+    <html lang="es" suppressHydrationWarning data-color-scheme={DEFAULT_SYSTEM_COLOR_SCHEME}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased theme-transition`}
       >
-        <ThemeProvider>
+        <ThemeProvider defaultColorScheme={DEFAULT_SYSTEM_COLOR_SCHEME}>
           <AccessibilityProvider>
             <AuthProvider>
               <AppStateProvider>

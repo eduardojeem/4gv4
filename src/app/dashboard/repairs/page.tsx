@@ -22,6 +22,7 @@ import { useRepairs } from '@/contexts/RepairsContext'
 import { useTechnicians } from '@/hooks/use-technicians'
 import { useComponentPreload, useAutoPreload } from '@/hooks/use-component-preload'
 import { useRepairFilters } from '@/hooks/use-repair-filters'
+import { useSharedSettings } from '@/hooks/use-shared-settings'
 
 // Repair Components
 import { RepairStats } from '@/components/dashboard/repairs/RepairStats'
@@ -82,6 +83,7 @@ function RepairsPageContent() {
   } = useRepairs()
 
   const { technicians } = useTechnicians()
+  const { settings: sharedSettings } = useSharedSettings()
 
   // New unified filter hook
   const {
@@ -581,6 +583,18 @@ function RepairsPageContent() {
     })
   }, [uiFiltered, calendarDate])
 
+  const repairListCompanyInfo = useMemo(() => ({
+    name: sharedSettings.companyName,
+    phone: sharedSettings.companyPhone,
+    address: sharedSettings.companyAddress,
+    email: sharedSettings.companyEmail
+  }), [
+    sharedSettings.companyAddress,
+    sharedSettings.companyEmail,
+    sharedSettings.companyName,
+    sharedSettings.companyPhone
+  ])
+
   return (
     <div className="flex flex-col gap-4 p-4 sm:gap-5 sm:p-5">
       <RepairHeader
@@ -668,6 +682,7 @@ function RepairsPageContent() {
             onDelete={handleDeleteClick}
             onDeliver={setDeliverTarget}
             isLoading={false}
+            companyInfo={repairListCompanyInfo}
           />
         ) : viewMode === 'cards' ? (
           <RepairCardsView

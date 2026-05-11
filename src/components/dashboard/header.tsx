@@ -140,7 +140,6 @@ export const Header = memo(function Header() {
       { prefix: '/dashboard/brands', label: 'Marcas' },
       { prefix: '/dashboard/categories', label: 'Categorías' },
       { prefix: '/dashboard/promotions', label: 'Promociones' },
-      { prefix: '/dashboard/whatsapp', label: 'WhatsApp' },
       { prefix: '/dashboard/credits', label: 'Créditos' },
       { prefix: '/admin', label: 'Administración' },
       { prefix: '/dashboard', label: 'Dashboard' },

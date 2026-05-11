@@ -88,6 +88,7 @@ export function usePredictivePrefetch() {
   // Exponer métrica via console en dev
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
+    if (window.localStorage.getItem("debug-prefetch") !== "1") return;
     const id = setInterval(() => {
       if (metricsRef.current.length === 0) return;
       // Mostrar últimas 5 métricas

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getSessionIdFromAccessToken } from '@/lib/session-id'
 
@@ -12,6 +12,9 @@ interface SessionInfo {
   country?: string
   city?: string
 }
+
+const REGISTERED_SESSION_STORAGE_KEY = 'dashboard-registered-session-id'
+const activeSessionRegistrations = new Set<string>()
 
 const detectDeviceType = (userAgent: string): 'mobile' | 'tablet' | 'desktop' => {
   if (/mobile/i.test(userAgent)) return 'mobile'
@@ -39,14 +42,13 @@ const detectOS = (userAgent: string): string => {
 
 const getGeolocation = async (): Promise<{ country?: string; city?: string }> => {
   try {
-    // Use ipapi.co for free IP geolocation with a 3-second timeout
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 3000)
 
     const response = await fetch('https://ipapi.co/json/', {
       method: 'GET',
       headers: {
-        'Accept': 'application/json'
+        Accept: 'application/json'
       },
       signal: controller.signal
     })
@@ -83,24 +85,32 @@ const getSessionInfo = async (): Promise<SessionInfo> => {
 }
 
 export function useSessionTracking() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
+  const lastActivityRef = useRef(0)
 
   const registerSession = useCallback(async () => {
+    let sessionId: string | null = null
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        console.log('⚠️ No session found, skipping registration')
         return
       }
 
-      console.log('📝 Registering session for user:', session.user.id)
-
       const sessionInfo = await getSessionInfo()
-      const sessionId = await getSessionIdFromAccessToken(session.access_token)
+      sessionId = await getSessionIdFromAccessToken(session.access_token)
       if (!sessionId) return
-      console.log('🌍 Session info:', sessionInfo)
 
-      // Registrar o actualizar la sesión en la base de datos
+      if (typeof window !== 'undefined' && sessionStorage.getItem(REGISTERED_SESSION_STORAGE_KEY) === sessionId) {
+        return
+      }
+
+      if (activeSessionRegistrations.has(sessionId)) {
+        return
+      }
+
+      activeSessionRegistrations.add(sessionId)
+
       const sessionData = {
         user_id: session.user.id,
         session_id: sessionId,
@@ -114,23 +124,27 @@ export function useSessionTracking() {
         last_activity: new Date().toISOString()
       }
 
-      console.log('💾 Attempting to save session:', sessionData)
-
-      const { data: upsertData, error } = await supabase
+      const { error } = await supabase
         .from('user_sessions')
         .upsert(sessionData, {
           onConflict: 'session_id'
         })
 
       if (error) {
-        const msg = (error as any)?.message || (error as any)?.hint || (error as any)?.details || JSON.stringify(error) || 'Unknown error'
-        console.warn('❌ Error registering session:', msg)
-        console.warn('Full error object:', error)
-      } else {
-        console.log('✅ Session registered successfully!')
+        const message = error.message || JSON.stringify(error) || 'Unknown error'
+        console.warn('Error registering session:', message)
+        return
+      }
+
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(REGISTERED_SESSION_STORAGE_KEY, sessionId)
       }
     } catch (error) {
       console.error('Error in registerSession:', error)
+    } finally {
+      if (sessionId) {
+        activeSessionRegistrations.delete(sessionId)
+      }
     }
   }, [supabase])
 
@@ -196,54 +210,37 @@ export function useSessionTracking() {
     }
   }, [supabase])
 
-  // Registrar sesión al montar el componente
   useEffect(() => {
-    registerSession()
+    void registerSession()
   }, [registerSession])
 
-  // Actualizar actividad cada 5 minutos
   useEffect(() => {
     const interval = setInterval(() => {
-      updateSessionActivity()
-    }, 5 * 60 * 1000) // 5 minutos
+      void updateSessionActivity()
+    }, 5 * 60 * 1000)
 
     return () => clearInterval(interval)
   }, [updateSessionActivity])
 
-  // Actualizar actividad en eventos de usuario
   useEffect(() => {
-    const handleActivity = () => {
-      updateSessionActivity()
-    }
-
-    // Eventos que indican actividad del usuario
-    window.addEventListener('click', handleActivity)
-    window.addEventListener('keydown', handleActivity)
-    window.addEventListener('scroll', handleActivity)
-    window.addEventListener('mousemove', handleActivity)
-
-    // Throttle para no actualizar demasiado frecuentemente
-    let lastUpdate = Date.now()
     const throttledActivity = () => {
       const now = Date.now()
-      if (now - lastUpdate > 60000) { // 1 minuto
-        handleActivity()
-        lastUpdate = now
+      if (now - lastActivityRef.current <= 60000) {
+        return
       }
+
+      lastActivityRef.current = now
+      void updateSessionActivity()
     }
 
-    window.addEventListener('click', throttledActivity)
+    const activityEvents: Array<keyof WindowEventMap> = ['click', 'keydown', 'scroll', 'mousemove']
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, throttledActivity, { passive: true }))
 
     return () => {
-      window.removeEventListener('click', handleActivity)
-      window.removeEventListener('keydown', handleActivity)
-      window.removeEventListener('scroll', handleActivity)
-      window.removeEventListener('mousemove', handleActivity)
-      window.removeEventListener('click', throttledActivity)
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, throttledActivity))
     }
   }, [updateSessionActivity])
 
-  // Cerrar sesión al cerrar la ventana/pestaña
   useEffect(() => {
     const handleBeforeUnload = async () => {
       const { data: { session } } = await supabase.auth.getSession()
@@ -252,7 +249,6 @@ export function useSessionTracking() {
       const sessionId = await getSessionIdFromAccessToken(session.access_token)
       if (!sessionId) return
 
-      // Usar sendBeacon para enviar la petición de forma asíncrona
       navigator.sendBeacon(
         '/api/close-session',
         JSON.stringify({ sessionId })

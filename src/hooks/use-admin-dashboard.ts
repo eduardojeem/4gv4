@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SystemSettings } from '@/lib/validations/system-settings'
+import { saveSystemSettingsViaSupabase } from '@/lib/system-settings-client'
+import { DEFAULT_SYSTEM_COLOR_SCHEME } from '@/lib/theme/color-schemes'
 
 export type { SystemSettings } from '@/lib/validations/system-settings'
 
@@ -176,7 +178,7 @@ export function useAdminDashboard() {
     currency: ((process.env.NEXT_PUBLIC_CURRENCY || 'PYG') as 'PYG' | 'USD' | 'EUR' | 'MXN'),
     taxRate: parseFloat(process.env.NEXT_PUBLIC_TAX_RATE || '0.10') * 100,
     theme: 'system',
-    primaryColor: 'blue',
+    primaryColor: DEFAULT_SYSTEM_COLOR_SCHEME,
     dateFormat: 'DD/MM/YYYY',
     timeZone: 'America/Asuncion',
     language: 'es',
@@ -337,7 +339,11 @@ export function useAdminDashboard() {
       })
 
       const responseData = await response.json().catch(() => ({}))
-      if (!response.ok || !responseData?.success || !responseData?.data) {
+      let persistedSettings = responseData?.data
+      if ((!response.ok || !responseData?.success || !responseData?.data) && response.status === 404) {
+        console.warn('System settings API returned 404, falling back to direct Supabase upsert')
+        persistedSettings = await saveSystemSettingsViaSupabase(supabase, validated)
+      } else if (!response.ok || !responseData?.success || !responseData?.data) {
         const errorMessage =
           responseData?.error || `No se pudo guardar la configuración (${response.status})`
         console.error('Error updating settings via API:', errorMessage)
@@ -365,7 +371,7 @@ export function useAdminDashboard() {
       
       // 5. Actualizar estado local
       const { mapDBToSettings } = await import('@/lib/validations/system-settings')
-      const updatedSettings = mapDBToSettings(responseData.data)
+      const updatedSettings = mapDBToSettings(persistedSettings)
       setSettings(updatedSettings)
       
       return { success: true }

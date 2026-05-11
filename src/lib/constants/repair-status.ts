@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
+import type { Repair, RepairStatus } from '@/types/repairs'
 import { Package, Clock, Wrench, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export type RepairStatusKey = 'recibido' | 'diagnostico' | 'reparacion' | 'pausado' | 'listo' | 'entregado' | 'cancelado'
@@ -94,6 +95,23 @@ export const REPAIR_TIMELINE_STEPS = [
   { id: 'listo', label: 'Listo' },
   { id: 'entregado', label: 'Entregado' },
 ] as const
+
+type RepairStatusSource = Pick<Repair, 'status' | 'dbStatus'>
+
+export const COMPLETED_REPAIR_STATUSES = new Set<RepairStatus>(['listo', 'entregado'])
+export const INACTIVE_REPAIR_STATUSES = new Set<RepairStatus>(['listo', 'entregado', 'cancelado'])
+
+export function resolveRepairStatus(repair: RepairStatusSource): RepairStatus {
+  return (repair.dbStatus || repair.status) as RepairStatus
+}
+
+export function isCompletedRepair(repair: RepairStatusSource): boolean {
+  return COMPLETED_REPAIR_STATUSES.has(resolveRepairStatus(repair))
+}
+
+export function isActiveRepair(repair: RepairStatusSource): boolean {
+  return !INACTIVE_REPAIR_STATUSES.has(resolveRepairStatus(repair))
+}
 
 export function getRepairStatusConfig(status: string): RepairStatusConfig {
   return REPAIR_STATUS_CONFIG[status.toLowerCase() as RepairStatusKey] ?? REPAIR_STATUS_CONFIG.recibido

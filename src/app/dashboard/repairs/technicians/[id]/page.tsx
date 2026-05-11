@@ -1,17 +1,19 @@
 'use client'
 
 import { useState, useMemo, Suspense, use } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { OptimizedTechnicianHeader } from '@/components/dashboard/technicians/detail/OptimizedTechnicianHeader'
 import { OptimizedTechnicianActiveJobs } from '@/components/dashboard/technicians/detail/OptimizedTechnicianActiveJobs'
 import { TechnicianWorkHistory } from '@/components/dashboard/technicians/detail/TechnicianWorkHistory'
-import { TechnicianMetricsTab } from '@/components/dashboard/technicians/detail/TechnicianMetricsTab'
 import { useTechnicians } from '@/hooks/use-technicians'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useTechnicianAnalytics } from '@/hooks/use-technician-analytics'
 import { Activity, BarChart3, History, User } from 'lucide-react'
+import { isActiveRepair, isCompletedRepair } from '@/lib/constants/repair-status'
+import { type Repair } from '@/types/repairs'
 
 function HeaderSkeleton() {
   return (
@@ -56,6 +58,14 @@ function ContentSkeleton() {
   )
 }
 
+const TechnicianMetricsTab = dynamic(
+  () => import('@/components/dashboard/technicians/detail/TechnicianMetricsTab').then(mod => ({ default: mod.TechnicianMetricsTab })),
+  {
+    loading: () => <ContentSkeleton />,
+    ssr: false
+  }
+)
+
 export default function OptimizedTechnicianDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
@@ -67,35 +77,43 @@ export default function OptimizedTechnicianDetailPage({ params }: { params: Prom
     return technicians.find((item) => item.id === resolvedParams.id)
   }, [technicians, resolvedParams.id])
 
-  const technicianRepairs = useMemo(() => {
-    return repairs.filter((repair) => repair.technician?.id === resolvedParams.id)
+  const { technicianRepairs, activeRepairs, completedRepairs, averageRating } = useMemo(() => {
+    const nextTechnicianRepairs: Repair[] = []
+    const nextActiveRepairs: Repair[] = []
+    const nextCompletedRepairs: Repair[] = []
+    let ratingTotal = 0
+    let ratedRepairsCount = 0
+
+    repairs.forEach((repair) => {
+      if (repair.technician?.id !== resolvedParams.id) {
+        return
+      }
+
+      nextTechnicianRepairs.push(repair)
+
+      if (isActiveRepair(repair)) {
+        nextActiveRepairs.push(repair)
+      }
+
+      if (isCompletedRepair(repair)) {
+        nextCompletedRepairs.push(repair)
+      }
+
+      if (typeof repair.customerRating === 'number') {
+        ratingTotal += repair.customerRating
+        ratedRepairsCount += 1
+      }
+    })
+
+    return {
+      technicianRepairs: nextTechnicianRepairs,
+      activeRepairs: nextActiveRepairs,
+      completedRepairs: nextCompletedRepairs,
+      averageRating: ratedRepairsCount > 0 ? ratingTotal / ratedRepairsCount : undefined
+    }
   }, [repairs, resolvedParams.id])
 
-  const { activeRepairs, completedRepairs } = useMemo(() => {
-    const active = technicianRepairs.filter((repair) => {
-      const status = repair.dbStatus || repair.status
-      return !['listo', 'entregado', 'cancelado'].includes(status)
-    })
-
-    const completed = technicianRepairs.filter((repair) => {
-      const status = repair.dbStatus || repair.status
-      return ['listo', 'entregado'].includes(status)
-    })
-
-    return { activeRepairs: active, completedRepairs: completed }
-  }, [technicianRepairs])
-
   const analytics = useTechnicianAnalytics(technicianRepairs)
-  const averageRating = useMemo(() => {
-    const ratedRepairs = technicianRepairs.filter((repair) => typeof repair.customerRating === 'number')
-
-    if (ratedRepairs.length === 0) {
-      return undefined
-    }
-
-    const totalRating = ratedRepairs.reduce((sum, repair) => sum + (repair.customerRating || 0), 0)
-    return totalRating / ratedRepairs.length
-  }, [technicianRepairs])
 
   const isLoading = isLoadingTechs || isLoadingRepairs
 
@@ -187,9 +205,7 @@ export default function OptimizedTechnicianDetailPage({ params }: { params: Prom
         </TabsContent>
 
         <TabsContent value="metrics" className="mt-6">
-          <Suspense fallback={<ContentSkeleton />}>
-            <TechnicianMetricsTab analytics={analytics} />
-          </Suspense>
+          <TechnicianMetricsTab analytics={analytics} />
         </TabsContent>
       </Tabs>
     </div>

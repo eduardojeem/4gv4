@@ -114,8 +114,8 @@ export function RepairsChart() {
   }
 
   return (
-    <div className="h-[300px]">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-[300px] w-full min-w-0">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
         <PieChart>
           <Pie
             data={data}
@@ -150,4 +150,6 @@ export function RepairsChart() {
       </ResponsiveContainer>
     </div>
   )
-}export default RepairsChart
+}
+
+export default RepairsChart

@@ -47,11 +47,6 @@ import {
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { logger } from '@/lib/logger'
 import { formatWhatsAppPhone, getWhatsAppLink } from '@/lib/whatsapp'
-import {
-  notifyDashboardWhatsAppUpdated,
-  sendDashboardWhatsAppMessage,
-  updateDashboardWhatsAppMessage,
-} from '@/lib/dashboard-whatsapp-api'
 
 interface RepairDetailDialogProps {
   open: boolean
@@ -273,88 +268,15 @@ export function RepairDetailDialog({
     setIsSendingStatusWhatsApp(true)
 
     try {
-      const result = await sendDashboardWhatsAppMessage({
-        phone: normalizedPhone,
-        message,
-        source: 'manual',
-        transport: 'cloud',
-        customerId: repair.customer?.id || null,
-        recipientName: repair.customer?.name || null,
-        metadata: {
-          context: 'repair_detail_status',
-          repairId: repair.id,
-          ticketNumber: repair.ticketNumber || null,
-          status: repair.status,
-        },
-      })
-
-      if (result.sent) {
-        toast.success('Estado enviado por WhatsApp Cloud')
-        notifyDashboardWhatsAppUpdated()
-        return
-      }
-
       const opened = openManualWhatsApp(normalizedPhone, message)
       if (!opened) {
         toast.error('No se pudo abrir WhatsApp manualmente')
         return
       }
 
-      if (result.message?.id) {
-        await updateDashboardWhatsAppMessage({
-          id: result.message.id,
-          status: 'sent',
-          provider: 'wa.me',
-          providerReason: 'manual_fallback',
-        })
-      } else {
-        await sendDashboardWhatsAppMessage({
-          phone: normalizedPhone,
-          message,
-          source: 'manual',
-          transport: 'manual',
-          customerId: repair.customer?.id || null,
-          recipientName: repair.customer?.name || null,
-          metadata: {
-            context: 'repair_detail_status',
-            repairId: repair.id,
-            ticketNumber: repair.ticketNumber || null,
-            status: repair.status,
-          },
-        })
-      }
-
-      notifyDashboardWhatsAppUpdated()
-      toast.success('Cloud no disponible. Se abrio WhatsApp manualmente')
+      toast.success('WhatsApp abierto con el aviso de estado')
     } catch (error) {
       logger.error('Failed to send repair status via WhatsApp', { error, repairId: repair.id })
-
-      const opened = openManualWhatsApp(normalizedPhone, message)
-      if (opened) {
-        try {
-          await sendDashboardWhatsAppMessage({
-            phone: normalizedPhone,
-            message,
-            source: 'manual',
-            transport: 'manual',
-            customerId: repair.customer?.id || null,
-            recipientName: repair.customer?.name || null,
-            metadata: {
-              context: 'repair_detail_status',
-              repairId: repair.id,
-              ticketNumber: repair.ticketNumber || null,
-              status: repair.status,
-              reason: 'manual_on_error',
-            },
-          })
-          notifyDashboardWhatsAppUpdated()
-        } catch (fallbackError) {
-          logger.error('Failed to log manual WhatsApp fallback', { error: fallbackError, repairId: repair.id })
-        }
-        toast.success('No se pudo enviar por Cloud. Se abrio WhatsApp manualmente')
-        return
-      }
-
       toast.error('No se pudo enviar el aviso por WhatsApp')
     } finally {
       setIsSendingStatusWhatsApp(false)

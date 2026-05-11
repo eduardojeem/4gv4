@@ -26,10 +26,23 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { WarrantyBadge } from './WarrantyBadge'
 import { printRepairReceipt, RepairPrintPayload } from '@/lib/repair-receipt'
-import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
+
+interface RepairPrintCompanyInfo {
+  name: string
+  phone: string
+  address: string
+  email: string
+}
+
+type RepairCustomerDetails = Repair['customer'] & {
+  address?: string
+  city?: string
+  country?: string
+  document?: string
+}
 
 interface RepairRowProps {
   repair: Repair
@@ -38,14 +51,23 @@ interface RepairRowProps {
   onView?: (repair: Repair) => void
   onDelete?: (id: string) => void
   onDeliver?: (repair: Repair) => void
+  companyInfo?: RepairPrintCompanyInfo
+}
+
+const DEFAULT_COMPANY_INFO: RepairPrintCompanyInfo = {
+  name: 'Mi Empresa',
+  phone: '',
+  address: '',
+  email: 'info@empresa.com'
 }
 
 export const RepairRow = memo<RepairRowProps>(
-  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver }) {
+  function RepairRow({ repair, onStatusChange, onEdit, onView, onDelete, onDeliver, companyInfo }) {
     const StatusIcon = statusConfig[repair.status].icon
     const priority = priorityConfig[repair.priority]
-    const { settings } = useSharedSettings()
     const { notifyRepairStatus, notifyRepairReady, sendPaymentReminder } = useWhatsApp()
+    const resolvedCompanyInfo = companyInfo || DEFAULT_COMPANY_INFO
+    const customerDetails = repair.customer as RepairCustomerDetails
     
     // Safely handle date formatting with validation
     const timeAgo = (() => {
@@ -86,10 +108,10 @@ export const RepairRow = memo<RepairRowProps>(
           customerCode: repair.customer.customerCode,
           phone: repair.customer.phone,
           email: repair.customer.email,
-          address: (repair.customer as any).address,
-          city: (repair.customer as any).city,
-          country: (repair.customer as any).country,
-          document: (repair.customer as any).document,
+          address: customerDetails.address,
+          city: customerDetails.city,
+          country: customerDetails.country,
+          document: customerDetails.document,
         },
         devices: [{
           typeLabel: deviceTypeConfig[repair.deviceType]?.label || repair.deviceType,
@@ -102,10 +124,10 @@ export const RepairRow = memo<RepairRowProps>(
           ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()
         }],
         company: {
-          name: settings.companyName,
-          phone: settings.companyPhone,
-          address: settings.companyAddress,
-          email: settings.companyEmail,
+          name: resolvedCompanyInfo.name,
+          phone: resolvedCompanyInfo.phone,
+          address: resolvedCompanyInfo.address,
+          email: resolvedCompanyInfo.email,
         }
       }
     }
