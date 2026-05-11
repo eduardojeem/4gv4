@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { AlertCircle, RefreshCw, Home, ChevronRight, UserPlus, LayoutGrid, List, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -9,105 +9,45 @@ import { TechnicianStatsGrid } from '@/components/dashboard/technicians/Technici
 import { TechnicianFilters } from '@/components/dashboard/technicians/TechnicianFilters'
 import { TechnicianCard } from '@/components/dashboard/technicians/TechnicianCard'
 import { TechnicianListItem } from '@/components/dashboard/technicians/TechnicianListItem'
-import { useTechnicians } from '@/hooks/use-technicians'
-import { useRepairs } from '@/contexts/RepairsContext'
-
-const COMPLETED_STATUSES = new Set(['listo', 'entregado'])
+import { useTechnicianStats } from '@/hooks/use-technician-stats'
+import { useDebounce } from '@/hooks/use-debounce'
 
 export default function TechniciansPage() {
     const router = useRouter()
-    const { technicians, isLoading: isLoadingTechs, error: techniciansError, refreshTechnicians } = useTechnicians()
-    const { repairs, isLoading: isLoadingRepairs, error: repairsError, refreshRepairs } = useRepairs()
+    const { technicians: technicianData, isLoading, error, refresh } = useTechnicianStats()
 
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [sortBy, setSortBy] = useState('name')
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-    const handleAddTechnician = () => {
+
+    // Debounce search to avoid recalculating on every keystroke
+    const debouncedSearch = useDebounce(searchTerm, 300)
+
+    const handleAddTechnician = useCallback(() => {
         router.push('/admin/users')
-    }
-    const handleRefresh = async () => {
-        await Promise.allSettled([refreshTechnicians(), refreshRepairs()])
-    }
+    }, [router])
 
-    // Calculate technician stats
-    const technicianData = useMemo(() => {
-        return technicians.map(tech => {
-            const techRepairs = repairs.filter(r => r.technician?.id === tech.id)
-            const activeJobs = techRepairs.filter(r =>
-                !COMPLETED_STATUSES.has(r.dbStatus || r.status) &&
-                (r.dbStatus || r.status) !== 'cancelado'
-            ).length
+    const handleRefresh = useCallback(async () => {
+        await refresh()
+    }, [refresh])
 
-            // Calculate completed this month
-            const now = new Date()
-            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-            const completedThisMonth = techRepairs.filter(r => {
-                const completedDate = r.completedAt ? new Date(r.completedAt) : null
-                return completedDate && completedDate >= startOfMonth &&
-                    COMPLETED_STATUSES.has(r.dbStatus || r.status)
-            }).length
-
-            const totalCompleted = techRepairs.filter(r =>
-                COMPLETED_STATUSES.has(r.dbStatus || r.status)
-            ).length
-            const completedWithDates = techRepairs.filter(r =>
-                COMPLETED_STATUSES.has(r.dbStatus || r.status) &&
-                !!r.createdAt &&
-                !!r.completedAt
-            )
-            const avgCompletionDays = completedWithDates.length > 0
-                ? completedWithDates.reduce((sum, r) => {
-                    const start = new Date(r.createdAt).getTime()
-                    const end = new Date(r.completedAt as string).getTime()
-                    return sum + Math.max(0, (end - start) / (1000 * 60 * 60 * 24))
-                }, 0) / completedWithDates.length
-                : 0
-
-            // Determine status based on active jobs
-            let status: 'available' | 'busy' | 'offline' | 'unavailable'
-            if (activeJobs === 0) {
-                status = 'available'
-            } else if (activeJobs <= 3) {
-                status = 'busy'
-            } else {
-                status = 'unavailable'
-            }
-
-            // Calculate workload percentage (assuming max 10 jobs = 100%)
-            const workloadPercentage = Math.min((activeJobs / 10) * 100, 100)
-
-            return {
-                id: tech.id,
-                name: tech.name,
-                specialty: tech.specialty,
-                status,
-                activeJobs,
-                completedThisMonth,
-                totalCompleted,
-                avgCompletionDays,
-                workloadPercentage
-            }
-        })
-    }, [technicians, repairs])
-
-    // Filter technicians
+    // Filter technicians with debounced search
     const filteredTechnicians = useMemo(() => {
         let filtered = [...technicianData]
 
-        // Search filter
-        if (searchTerm) {
+        if (debouncedSearch) {
+            const normalizedSearch = debouncedSearch.toLowerCase()
             filtered = filtered.filter(tech =>
-                tech.name.toLowerCase().includes(searchTerm.toLowerCase())
+                tech.name.toLowerCase().includes(normalizedSearch) ||
+                tech.specialty?.toLowerCase().includes(normalizedSearch)
             )
         }
 
-        // Status filter
         if (statusFilter !== 'all') {
             filtered = filtered.filter(tech => tech.status === statusFilter)
         }
 
-        // Sort
         filtered.sort((a, b) => {
             switch (sortBy) {
                 case 'name':
@@ -116,7 +56,7 @@ export default function TechniciansPage() {
                     return b.activeJobs - a.activeJobs
                 case 'completedThisMonth':
                     return b.completedThisMonth - a.completedThisMonth
-                case 'rating':
+                case 'totalCompleted':
                     return b.totalCompleted - a.totalCompleted
                 case 'workload':
                     return b.workloadPercentage - a.workloadPercentage
@@ -126,7 +66,7 @@ export default function TechniciansPage() {
         })
 
         return filtered
-    }, [technicianData, searchTerm, statusFilter, sortBy])
+    }, [technicianData, debouncedSearch, statusFilter, sortBy])
 
     // Calculate overall stats
     const overallStats = useMemo(() => {
@@ -138,12 +78,8 @@ export default function TechniciansPage() {
             ? technicianData.reduce((sum, t) => sum + t.avgCompletionDays, 0) / technicianData.length
             : 0
 
-        // Find best performer
         const bestPerformer = technicianData.reduce((best, current) => {
-            if (current.completedThisMonth === 0) {
-                return best
-            }
-
+            if (current.completedThisMonth === 0) return best
             return !best || current.completedThisMonth > best.completedThisMonth ? current : best
         }, undefined as (typeof technicianData)[number] | undefined)
 
@@ -157,10 +93,7 @@ export default function TechniciansPage() {
         }
     }, [technicianData])
 
-    const dataErrors = [techniciansError, repairsError?.message].filter(Boolean) as string[]
-    const errorMessage = dataErrors.join(' ')
-    const isLoading = isLoadingTechs || isLoadingRepairs
-    const showErrorState = !isLoading && dataErrors.length > 0 && technicianData.length === 0
+    const showErrorState = !isLoading && !!error && technicianData.length === 0
 
     return (
         <div className="flex flex-col gap-6 p-6">
@@ -250,13 +183,11 @@ export default function TechniciansPage() {
                 </div>
             </div>
 
-            {dataErrors.length > 0 && (
+            {error && (
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Error al cargar datos</AlertTitle>
-                    <AlertDescription>
-                        {errorMessage}
-                    </AlertDescription>
+                    <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
 
@@ -274,9 +205,9 @@ export default function TechniciansPage() {
                         <AlertCircle className="h-8 w-8 text-destructive" />
                     </div>
                     <div className="max-w-md space-y-2">
-                        <h3 className="text-lg font-semibold">No pudimos cargar los tecnicos</h3>
+                        <h3 className="text-lg font-semibold">No pudimos cargar los técnicos</h3>
                         <p className="text-sm text-muted-foreground">
-                            Revisa la conexion o la configuracion de datos y vuelve a intentarlo.
+                            Revisa la conexión o la configuración de datos y vuelve a intentarlo.
                         </p>
                     </div>
                     <Button onClick={handleRefresh} variant="outline" className="gap-2">

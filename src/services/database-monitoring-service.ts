@@ -212,25 +212,34 @@ function formatBytes(bytes: number): string {
 class DatabaseMonitoringService {
   private supabase = createClient()
 
-  // Obtener métricas generales de la base de datos
-  async getDatabaseMetrics(): Promise<{ success: boolean; data?: DatabaseMetrics; error?: string }> {
+  // Cache for metrics to avoid redundant fetches
+  private metricsCache: { data: DatabaseMetrics; timestamp: number } | null = null
+  private indexStatsCache: { data: IndexStats[]; timestamp: number } | null = null
+  private growthHistoryCache: { data: DatabaseGrowthPoint[]; timestamp: number } | null = null
+  private static CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+  private isCacheValid<T>(cache: { data: T; timestamp: number } | null): cache is { data: T; timestamp: number } {
+    return cache !== null && (Date.now() - cache.timestamp) < DatabaseMonitoringService.CACHE_TTL
+  }
+
+  // Obtener métricas generales de la base de datos (parallelized + cached)
+  async getDatabaseMetrics(forceRefresh = false): Promise<{ success: boolean; data?: DatabaseMetrics; error?: string }> {
+    // Return cached data if still fresh
+    if (!forceRefresh && this.isCacheValid(this.metricsCache)) {
+      return { success: true, data: this.metricsCache.data }
+    }
+
     try {
-      // Obtener tamaño total de la base de datos
-      const totalSizeInfo = await this.getDatabaseSizeInfo()
+      // Execute all independent RPC calls in parallel
+      const [totalSizeInfo, tablesSizes, connectionStats, queryPerformance] = await Promise.all([
+        this.getDatabaseSizeInfo(),
+        this.getTablesSizes(),
+        this.getConnectionStats(),
+        this.getQueryPerformance(),
+      ])
       
-      // Obtener tamaños de tablas
-      const tablesSizes = await this.getTablesSizes()
-      
-      // Obtener estadísticas de conexiones
-      const connectionStats = await this.getConnectionStats()
-      
-      // Obtener rendimiento de queries
-      const queryPerformance = await this.getQueryPerformance()
-      
-      // Obtener desglose de almacenamiento
+      // These depend on the results above but are synchronous/fast
       const storageBreakdown = await this.getStorageBreakdown(tablesSizes)
-      
-      // Generar alertas
       const alerts = await this.generateAlerts(totalSizeInfo.totalSize, tablesSizes, connectionStats, queryPerformance)
 
       const metrics: DatabaseMetrics = {
@@ -242,6 +251,9 @@ class DatabaseMonitoringService {
         alerts,
         isMockData: totalSizeInfo.isMock || tablesSizes.some(t => t.isMock) || connectionStats.isMock || queryPerformance.isMock,
       }
+
+      // Update cache
+      this.metricsCache = { data: metrics, timestamp: Date.now() }
 
       return { success: true, data: metrics }
     } catch (error) {
@@ -542,8 +554,12 @@ class DatabaseMonitoringService {
     return alerts
   }
 
-  // Obtener estadísticas de índices
-  async getIndexStats(): Promise<IndexStats[]> {
+  // Obtener estadísticas de índices (cached)
+  async getIndexStats(forceRefresh = false): Promise<IndexStats[]> {
+    if (!forceRefresh && this.isCacheValid(this.indexStatsCache)) {
+      return this.indexStatsCache.data
+    }
+
     try {
       const { data, error } = await this.supabase.rpc('get_index_stats')
       
@@ -553,7 +569,7 @@ class DatabaseMonitoringService {
       }
 
       if (data && Array.isArray(data)) {
-        return (data as IndexStatsRow[]).map((idx) => ({
+        const result = (data as IndexStatsRow[]).map((idx) => ({
           tableName: idx.table_name,
           indexName: idx.index_name,
           sizeBytes: idx.size_bytes || 0,
@@ -562,6 +578,8 @@ class DatabaseMonitoringService {
           isUnused: (idx.idx_scan || 0) === 0,
           isMock: false
         }))
+        this.indexStatsCache = { data: result, timestamp: Date.now() }
+        return result
       }
 
       return this.getMockIndexStats()
@@ -583,8 +601,12 @@ class DatabaseMonitoringService {
     ]
   }
 
-  // Obtener historial de crecimiento de la BD
-  async getDatabaseGrowthHistory(days: number = 30): Promise<DatabaseGrowthPoint[]> {
+  // Obtener historial de crecimiento de la BD (cached)
+  async getDatabaseGrowthHistory(days: number = 30, forceRefresh = false): Promise<DatabaseGrowthPoint[]> {
+    if (!forceRefresh && this.isCacheValid(this.growthHistoryCache)) {
+      return this.growthHistoryCache.data
+    }
+
     try {
       // En un entorno real, esto vendría de una tabla de métricas históricas
       const { data, error } = await this.supabase.rpc('get_database_growth_history', { days_back: days })
@@ -598,7 +620,7 @@ class DatabaseMonitoringService {
         return []
       }
 
-      return (data as GrowthHistoryRow[])
+      const result = (data as GrowthHistoryRow[])
         .map((point) => {
           const date = point.date || point.snapshot_date || point.recorded_at?.split('T')[0] || ''
           const size = point.size_mb || point.total_size_mb || ((point.total_size_bytes || 0) / (1024 * 1024))
@@ -607,6 +629,9 @@ class DatabaseMonitoringService {
         })
         .filter(point => point.date.length > 0)
         .sort((a, b) => a.date.localeCompare(b.date))
+
+      this.growthHistoryCache = { data: result, timestamp: Date.now() }
+      return result
     } catch (error) {
       console.error('Error obteniendo historial de crecimiento:', error)
       return []
@@ -639,7 +664,7 @@ class DatabaseMonitoringService {
     error?: string;
   }> {
     try {
-      const metrics = await this.getDatabaseMetrics()
+      const metrics = await this.getDatabaseMetrics() // Uses cache automatically
       
       if (!metrics.success || !metrics.data) {
         return {

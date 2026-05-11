@@ -224,14 +224,15 @@ export default function DatabaseMonitoring() {
     performMaintenance
   } = useDatabaseMonitoring({
     autoRefresh,
-    refreshIntervalMs: 30000,
+    refreshIntervalMs: 2 * 60 * 1000, // 2 minutes - metrics don't change that fast
   })
 
   const [growthHistory, setGrowthHistory] = useState<{ date: string; size: number }[]>([])
   const [recommendations, setRecommendations] = useState<string[]>([])
   const [indexStats, setIndexStats] = useState<IndexStats[]>([])
 
-  // Cargar datos adicionales
+  // Load additional data (growth history + index stats) in parallel with main metrics
+  // Instead of waiting for metrics to load first, we fetch everything at once
   useEffect(() => {
     let isActive = true
 
@@ -248,25 +249,32 @@ export default function DatabaseMonitoring() {
 
         setGrowthHistory(historyData)
         setIndexStats(indexData)
-        setRecommendations(databaseMonitoringService.getOptimizationRecommendations(metrics, indexData))
+
+        if (metrics) {
+          setRecommendations(databaseMonitoringService.getOptimizationRecommendations(metrics, indexData))
+        }
       } catch (err) {
         console.error('Error cargando datos adicionales:', err)
         if (isActive) {
           setGrowthHistory([])
           setIndexStats([])
-          setRecommendations(databaseMonitoringService.getOptimizationRecommendations(metrics, []))
         }
       }
     }
 
-    if (metrics) {
-      void loadAdditionalData()
-    }
+    void loadAdditionalData()
 
     return () => {
       isActive = false
     }
-  }, [metrics])
+  }, []) // Load once on mount - cache handles freshness
+
+  // Update recommendations when metrics arrive (if additional data loaded first)
+  useEffect(() => {
+    if (metrics && indexStats.length > 0) {
+      setRecommendations(databaseMonitoringService.getOptimizationRecommendations(metrics, indexStats))
+    }
+  }, [metrics, indexStats])
 
   const handleResolveAlert = () => {
     if (!metrics) return

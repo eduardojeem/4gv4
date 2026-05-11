@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/contexts/auth-context'
+import { logAuthEventClient } from '@/lib/auth-event-client'
 
 export interface SecurityLog {
   id: string
@@ -28,9 +29,111 @@ export interface SecurityStats {
   uniqueIPs: number
 }
 
+// ============================================================================
+// Cache
+// ============================================================================
+
+interface SecurityLogsCache {
+  logs: SecurityLog[]
+  stats: SecurityStats
+  timestamp: number
+  filterKey: string
+}
+
+let logsCache: SecurityLogsCache | null = null
+const CACHE_TTL = 2 * 60 * 1000 // 2 minutes
+
+// Profiles cache persists across fetches to avoid re-fetching known users
+const profilesCache = new Map<string, string>()
+
+function buildFilterKey(filters?: { timeRange?: string; severity?: string; userId?: string; action?: string }): string {
+  return `${filters?.timeRange || '24h'}|${filters?.severity || 'all'}|${filters?.userId || ''}|${filters?.action || ''}`
+}
+
+function isCacheValid(filterKey: string): boolean {
+  return logsCache !== null &&
+    logsCache.filterKey === filterKey &&
+    (Date.now() - logsCache.timestamp) < CACHE_TTL
+}
+
+// ============================================================================
+// Event mapping
+// ============================================================================
+
+const EVENT_MAP: Record<string, { event: string; severity: SecurityLog['severity'] }> = {
+  'create': { event: 'Creación de registro', severity: 'low' },
+  'update': { event: 'Actualización de registro', severity: 'low' },
+  'delete': { event: 'Eliminación de registro', severity: 'medium' },
+  'login': { event: 'Inicio de sesión exitoso', severity: 'low' },
+  'login_failed': { event: 'Intento de acceso fallido', severity: 'medium' },
+  'logout': { event: 'Cierre de sesión', severity: 'low' },
+  'password_change': { event: 'Cambio de contraseña', severity: 'low' },
+  'role_change': { event: 'Cambio de rol de usuario', severity: 'high' },
+  'grant_admin_self_rpc': { event: 'Auto-promoción a administrador', severity: 'critical' },
+  'grant_admin_migration': { event: 'Promoción a administrador', severity: 'high' },
+  'permission_denied': { event: 'Acceso denegado', severity: 'medium' },
+  'suspicious_activity': { event: 'Actividad sospechosa detectada', severity: 'high' },
+  'data_export': { event: 'Exportación de datos', severity: 'medium' },
+  'bulk_operation': { event: 'Operación masiva', severity: 'medium' }
+}
+
+function mapAuditLogToSecurityEvent(auditLog: any): SecurityLog {
+  const mapped = EVENT_MAP[auditLog.action] || { event: `Acción: ${auditLog.action}`, severity: 'low' as const }
+
+  return {
+    id: auditLog.id,
+    event: mapped.event,
+    user: auditLog.user_display || auditLog.user_id || 'Sistema',
+    timestamp: auditLog.created_at,
+    ip: auditLog.ip_address || 'N/A',
+    severity: mapped.severity,
+    details: auditLog.resource ? `Recurso: ${auditLog.resource}${auditLog.resource_id ? ` (ID: ${auditLog.resource_id})` : ''}` : undefined,
+    user_id: auditLog.user_id || undefined,
+    action: auditLog.action,
+    resource: auditLog.resource || undefined,
+    resource_id: auditLog.resource_id || undefined,
+    user_agent: auditLog.user_agent || undefined
+  }
+}
+
+function computeStatsFromLogs(logs: SecurityLog[]): SecurityStats {
+  const uniqueUsers = new Set<string>()
+  const uniqueIPs = new Set<string>()
+  let criticalEvents = 0
+  let highRiskEvents = 0
+  let failedAttempts = 0
+
+  for (const log of logs) {
+    if (log.user && log.user !== 'Sistema') uniqueUsers.add(log.user)
+    if (log.ip && log.ip !== 'N/A') uniqueIPs.add(log.ip)
+
+    switch (log.severity) {
+      case 'critical': criticalEvents++; break
+      case 'high': highRiskEvents++; break
+    }
+
+    if (log.action?.includes('failed') || log.action === 'permission_denied') {
+      failedAttempts++
+    }
+  }
+
+  return {
+    totalEvents: logs.length,
+    criticalEvents,
+    highRiskEvents,
+    failedAttempts,
+    uniqueUsers: uniqueUsers.size,
+    uniqueIPs: uniqueIPs.size
+  }
+}
+
+// ============================================================================
+// Hook
+// ============================================================================
+
 export function useSecurityLogs() {
-  const [logs, setLogs] = useState<SecurityLog[]>([])
-  const [stats, setStats] = useState<SecurityStats>({
+  const [logs, setLogs] = useState<SecurityLog[]>(logsCache?.logs || [])
+  const [stats, setStats] = useState<SecurityStats>(logsCache?.stats || {
     totalEvents: 0,
     criticalEvents: 0,
     highRiskEvents: 0,
@@ -38,125 +141,11 @@ export function useSecurityLogs() {
     uniqueUsers: 0,
     uniqueIPs: 0
   })
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(logsCache === null)
   const [error, setError] = useState<string | null>(null)
-  
+
   const { user } = useAuth()
   const supabase = createClient()
-
-  // Mapear eventos de audit_log a eventos de seguridad legibles
-  const mapAuditLogToSecurityEvent = useCallback((auditLog: any): SecurityLog => {
-    const eventMap: Record<string, { event: string; severity: SecurityLog['severity'] }> = {
-      'create': { event: 'Creación de registro', severity: 'low' },
-      'update': { event: 'Actualización de registro', severity: 'low' },
-      'delete': { event: 'Eliminación de registro', severity: 'medium' },
-      'login': { event: 'Inicio de sesión exitoso', severity: 'low' },
-      'login_failed': { event: 'Intento de acceso fallido', severity: 'medium' },
-      'logout': { event: 'Cierre de sesión', severity: 'low' },
-      'password_change': { event: 'Cambio de contraseña', severity: 'low' },
-      'role_change': { event: 'Cambio de rol de usuario', severity: 'high' },
-      'grant_admin_self_rpc': { event: 'Auto-promoción a administrador', severity: 'critical' },
-      'grant_admin_migration': { event: 'Promoción a administrador', severity: 'high' },
-      'permission_denied': { event: 'Acceso denegado', severity: 'medium' },
-      'suspicious_activity': { event: 'Actividad sospechosa detectada', severity: 'high' },
-      'data_export': { event: 'Exportación de datos', severity: 'medium' },
-      'bulk_operation': { event: 'Operación masiva', severity: 'medium' }
-    }
-
-    const mapped = eventMap[auditLog.action] || { event: `Acción: ${auditLog.action}`, severity: 'low' as const }
-    
-    return {
-      id: auditLog.id,
-      event: mapped.event,
-      user: auditLog.user_email || auditLog.user_id || 'Sistema',
-      timestamp: auditLog.created_at,
-      ip: auditLog.ip_address || 'N/A',
-      severity: mapped.severity,
-      details: auditLog.resource ? `Recurso: ${auditLog.resource}${auditLog.resource_id ? ` (ID: ${auditLog.resource_id})` : ''}` : undefined,
-      user_id: auditLog.user_id || undefined,
-      action: auditLog.action,
-      resource: auditLog.resource || undefined,
-      resource_id: auditLog.resource_id || undefined,
-      user_agent: auditLog.user_agent || undefined
-    }
-  }, [])
-
-  // Función para obtener estadísticas desde Supabase
-  const fetchStatsFromSupabase = useCallback(async (hours: number = 24) => {
-    if (!user) return
-
-    try {
-      console.log('Fetching stats for', hours, 'hours')
-      
-      // Intentar usar la función RPC si existe
-      const { data, error } = await supabase.rpc('get_security_stats', { p_hours: hours })
-      
-      if (error) {
-        console.warn('RPC function not available, calculating stats manually:', error)
-        
-        // Fallback: calcular estadísticas manualmente
-        const startDate = new Date()
-        startDate.setHours(startDate.getHours() - hours)
-        
-        const { data: logs, error: logsError } = await supabase
-          .from('audit_log')
-          .select('action, new_values')
-          .gte('created_at', startDate.toISOString())
-        
-        if (logsError) {
-          console.error('Error fetching logs for stats:', logsError)
-          return
-        }
-        
-        const totalEvents = logs?.length || 0
-        const criticalEvents = logs?.filter(log => 
-          log.new_values && typeof log.new_values === 'object' && 
-          (log.new_values as any).severity === 'critical'
-        ).length || 0
-        const highRiskEvents = logs?.filter(log => 
-          log.new_values && typeof log.new_values === 'object' && 
-          (log.new_values as any).severity === 'high'
-        ).length || 0
-        const failedAttempts = logs?.filter(log => 
-          log.action?.includes('failed') || log.action === 'permission_denied'
-        ).length || 0
-        
-        setStats({
-          totalEvents,
-          criticalEvents,
-          highRiskEvents,
-          failedAttempts,
-          uniqueUsers: 0, // Difícil de calcular sin más queries
-          uniqueIPs: 0
-        })
-        
-        return
-      }
-
-      if (data) {
-        console.log('Stats from RPC:', data)
-        setStats({
-          totalEvents: data.totalEvents || 0,
-          criticalEvents: data.criticalEvents || 0,
-          highRiskEvents: data.highRiskEvents || 0,
-          failedAttempts: data.failedAttempts || 0,
-          uniqueUsers: data.uniqueUsers || 0,
-          uniqueIPs: data.uniqueIPs || 0
-        })
-      }
-    } catch (err) {
-      console.error('Error calling get_security_stats:', err)
-      // No lanzar error, solo usar estadísticas por defecto
-      setStats({
-        totalEvents: 0,
-        criticalEvents: 0,
-        highRiskEvents: 0,
-        failedAttempts: 0,
-        uniqueUsers: 0,
-        uniqueIPs: 0
-      })
-    }
-  }, [user, supabase])
 
   const fetchSecurityLogs = useCallback(async (filters?: {
     limit?: number
@@ -165,30 +154,24 @@ export function useSecurityLogs() {
     timeRange?: string
     userId?: string
     action?: string
-  }) => {
-    if (!user) {
-      console.log('No user authenticated, skipping security logs fetch')
+  }, forceRefresh = false) => {
+    if (!user) return
+
+    const filterKey = buildFilterKey(filters)
+
+    // Use cache if valid and not forcing refresh
+    if (!forceRefresh && isCacheValid(filterKey)) {
+      setLogs(logsCache!.logs)
+      setStats(logsCache!.stats)
+      setIsLoading(false)
       return
     }
 
-    console.log('Starting security logs fetch for user:', user.id)
     setIsLoading(true)
     setError(null)
 
     try {
-      // Verificar primero si podemos acceder a la tabla
-      const { count, error: countError } = await supabase
-        .from('audit_log')
-        .select('*', { count: 'exact', head: true })
-      
-      if (countError) {
-        console.error('Cannot access audit_log table:', countError)
-        throw new Error(`No se puede acceder a la tabla de auditoría: ${countError.message}`)
-      }
-      
-      console.log('Audit log table accessible, total records:', count)
-      console.log('Fetching security logs with filters:', filters)
-      
+      // Single query — no redundant COUNT check
       let query = supabase
         .from('audit_log')
         .select(`
@@ -197,23 +180,18 @@ export function useSecurityLogs() {
           action,
           resource,
           resource_id,
-          old_values,
-          new_values,
           ip_address,
           user_agent,
           created_at
         `)
         .order('created_at', { ascending: false })
 
-      // Aplicar filtros
-      if (filters?.limit) {
-        query = query.limit(filters.limit)
-      } else {
-        query = query.limit(100) // Límite por defecto
-      }
+      // Apply filters
+      const limit = filters?.limit || 200
+      query = query.limit(limit)
 
       if (filters?.offset) {
-        query = query.range(filters.offset, filters.offset + (filters.limit || 100) - 1)
+        query = query.range(filters.offset, filters.offset + limit - 1)
       }
 
       if (filters?.userId) {
@@ -242,7 +220,7 @@ export function useSecurityLogs() {
             startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
             break
           default:
-            startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000) // 24h por defecto
+            startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000)
         }
 
         query = query.gte('created_at', startDate.toISOString())
@@ -251,91 +229,91 @@ export function useSecurityLogs() {
       const { data, error: queryError } = await query
 
       if (queryError) {
-        console.error('Supabase query error:', queryError)
         throw queryError
       }
 
-      console.log('Raw audit log data:', data)
+      // Resolve user display names — only fetch uncached profiles
+      const userIds = [...new Set((data || []).map(log => log.user_id).filter(Boolean))] as string[]
+      const uncachedIds = userIds.filter(id => !profilesCache.has(id))
 
-      // Obtener emails de usuarios si hay datos
-      let userEmails: Record<string, string> = {}
-      if (data && data.length > 0) {
-        const userIds = [...new Set(data.map(log => log.user_id).filter(Boolean))]
-        
-        if (userIds.length > 0) {
-          const { data: profiles, error: profileError } = await supabase
-            .from('profiles')
-            .select('id, email, full_name')
-            .in('id', userIds)
-          
-          if (!profileError && profiles) {
-            userEmails = profiles.reduce((acc, profile) => {
-              const name = profile.full_name || ''
-              const email = profile.email || ''
-              
-              if (name && email) {
-                acc[profile.id] = `${name} (${email})`
-              } else if (name || email) {
-                acc[profile.id] = name || email
-              } else {
-                acc[profile.id] = 'Usuario desconocido'
-              }
-              
-              return acc
-            }, {} as Record<string, string>)
+      if (uncachedIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .in('id', uncachedIds)
+
+        if (profiles) {
+          for (const profile of profiles) {
+            const name = profile.full_name || ''
+            const email = profile.email || ''
+            let display: string
+
+            if (name && email) {
+              display = `${name} (${email})`
+            } else if (name || email) {
+              display = name || email
+            } else {
+              display = 'Usuario desconocido'
+            }
+
+            profilesCache.set(profile.id, display)
           }
         }
       }
 
-      // Mapear los datos a SecurityLog
+      // Map audit logs to security events with cached profile names
       const securityLogs: SecurityLog[] = (data || []).map((auditLog: any) => {
-        const userEmail = auditLog.user_id ? 
-          (userEmails[auditLog.user_id] || 'Usuario desconocido') : 
-          'Sistema'
-        
+        const userDisplay = auditLog.user_id
+          ? (profilesCache.get(auditLog.user_id) || 'Usuario desconocido')
+          : 'Sistema'
+
         return mapAuditLogToSecurityEvent({
           ...auditLog,
-          user_email: userEmail
+          user_display: userDisplay
         })
       })
 
-      // Filtrar por severidad si se especifica
+      // Filter by severity client-side (severity is derived, not a DB column)
       const filteredLogs = filters?.severity && filters.severity !== 'all'
         ? securityLogs.filter(log => log.severity === filters.severity)
         : securityLogs
 
-      console.log('Processed security logs:', filteredLogs.length)
+      // Compute stats from the fetched data — no extra query needed
+      const computedStats = computeStatsFromLogs(securityLogs)
+
+      // Try RPC for more accurate stats (non-blocking)
+      fetchStatsRPC(filters?.timeRange).then(rpcStats => {
+        if (rpcStats) {
+          setStats(rpcStats)
+          if (logsCache && logsCache.filterKey === filterKey) {
+            logsCache.stats = rpcStats
+          }
+        }
+      }).catch(() => { /* RPC unavailable, use computed stats */ })
+
       setLogs(filteredLogs)
+      setStats(computedStats)
 
-      // Obtener estadísticas desde Supabase si están disponibles
-      const timeHours = filters?.timeRange === '1h' ? 1 : 
-                       filters?.timeRange === '24h' ? 24 : 
-                       filters?.timeRange === '7d' ? 168 : 
-                       filters?.timeRange === '30d' ? 720 : 24
-
-      await fetchStatsFromSupabase(timeHours)
+      // Update cache
+      logsCache = {
+        logs: filteredLogs,
+        stats: computedStats,
+        timestamp: Date.now(),
+        filterKey
+      }
 
     } catch (err) {
       console.error('Error fetching security logs:', err)
-      console.error('Error details:', {
-        message: err instanceof Error ? err.message : 'Unknown error',
-        code: (err as any)?.code,
-        details: (err as any)?.details,
-        hint: (err as any)?.hint,
-        user: user?.id,
-        filters
-      })
-      
-      // Si hay error, mostrar datos mock como fallback
-      console.log('Using mock data as fallback')
-      const mockLogs = [
+
+      // Fallback to mock data
+      const mockLogs: SecurityLog[] = [
         {
           id: 'mock-1',
           event: 'Inicio de sesión exitoso',
           user: user?.email || 'usuario@ejemplo.com',
           timestamp: new Date().toISOString(),
           ip: '192.168.1.100',
-          severity: 'low' as const,
+          severity: 'low',
           details: 'Datos de ejemplo - Configure Supabase para ver datos reales'
         },
         {
@@ -344,11 +322,11 @@ export function useSecurityLogs() {
           user: 'Sistema',
           timestamp: new Date(Date.now() - 60000).toISOString(),
           ip: 'N/A',
-          severity: 'high' as const,
+          severity: 'high',
           details: 'La tabla audit_log no está disponible o no tiene permisos'
         }
       ]
-      
+
       setLogs(mockLogs)
       setStats({
         totalEvents: 2,
@@ -358,14 +336,40 @@ export function useSecurityLogs() {
         uniqueUsers: 1,
         uniqueIPs: 1
       })
-      
-      setError(`Error de configuración: ${err instanceof Error ? err.message : 'Error desconocido al cargar logs'}. Mostrando datos de ejemplo.`)
+
+      setError(`Error de configuración: ${err instanceof Error ? err.message : 'Error desconocido'}. Mostrando datos de ejemplo.`)
     } finally {
       setIsLoading(false)
     }
-  }, [user, supabase, fetchStatsFromSupabase, mapAuditLogToSecurityEvent])
+  }, [user, supabase])
 
-  // Función para crear un log de seguridad personalizado usando la función de Supabase
+  // Non-blocking RPC call for accurate stats (if available)
+  const fetchStatsRPC = useCallback(async (timeRange?: string): Promise<SecurityStats | null> => {
+    if (!user) return null
+
+    const hours = timeRange === '1h' ? 1 :
+      timeRange === '24h' ? 24 :
+        timeRange === '7d' ? 168 :
+          timeRange === '30d' ? 720 : 24
+
+    try {
+      const { data, error } = await supabase.rpc('get_security_stats', { p_hours: hours })
+      if (error || !data) return null
+
+      return {
+        totalEvents: data.totalEvents || 0,
+        criticalEvents: data.criticalEvents || 0,
+        highRiskEvents: data.highRiskEvents || 0,
+        failedAttempts: data.failedAttempts || 0,
+        uniqueUsers: data.uniqueUsers || 0,
+        uniqueIPs: data.uniqueIPs || 0
+      }
+    } catch {
+      return null
+    }
+  }, [user, supabase])
+
+  // Create a security log entry
   const createSecurityLog = useCallback(async (logData: {
     action: string
     resource?: string
@@ -377,7 +381,6 @@ export function useSecurityLogs() {
     if (!user) return
 
     try {
-      // Usar la función de Supabase para crear el log
       const { data, error } = await supabase.rpc('log_data_event', {
         p_user_id: user.id,
         p_action: logData.action,
@@ -387,22 +390,20 @@ export function useSecurityLogs() {
         p_ip_address: logData.ip_address
       })
 
-      if (error) {
-        throw error
-      }
+      if (error) throw error
 
-      // Refrescar los logs después de crear uno nuevo
+      // Invalidate cache and refresh
+      logsCache = null
       await fetchSecurityLogs()
 
       return data
-
     } catch (err) {
       console.error('Error creating security log:', err)
       throw err
     }
   }, [user, supabase, fetchSecurityLogs])
 
-  // Función para registrar eventos de autenticación
+  // Log authentication events
   const logAuthEvent = useCallback(async (eventData: {
     action: 'login' | 'login_failed' | 'logout' | 'password_change' | 'role_change' | 'permission_denied' | 'suspicious_activity'
     success?: boolean
@@ -411,28 +412,24 @@ export function useSecurityLogs() {
     details?: Record<string, any>
   }) => {
     try {
-      const { data, error } = await supabase.rpc('log_auth_event', {
-        p_user_id: user?.id,
-        p_action: eventData.action,
-        p_success: eventData.success ?? true,
-        p_ip_address: eventData.ip_address,
-        p_user_agent: eventData.user_agent,
-        p_details: eventData.details || {}
+      const ok = await logAuthEventClient({
+        userId: user?.id,
+        action: eventData.action,
+        success: eventData.success ?? true,
+        ipAddress: eventData.ip_address,
+        userAgent: eventData.user_agent,
+        details: eventData.details || {}
       })
 
-      if (error) {
-        throw error
-      }
-
-      return data
-
+      if (!ok) throw new Error('Failed to log auth event')
+      return true
     } catch (err) {
       console.error('Error logging auth event:', err)
       throw err
     }
-  }, [user, supabase])
+  }, [user])
 
-  // Función para exportar logs a CSV
+  // Export logs to CSV
   const exportLogsToCSV = useCallback(() => {
     const headers = ['ID', 'Evento', 'Usuario', 'Fecha/Hora', 'IP', 'Severidad', 'Detalles']
     const csvContent = [
@@ -459,7 +456,7 @@ export function useSecurityLogs() {
     document.body.removeChild(link)
   }, [logs])
 
-  // Cargar logs iniciales
+  // Initial fetch
   useEffect(() => {
     if (user) {
       fetchSecurityLogs({ timeRange: '24h' })
@@ -475,6 +472,6 @@ export function useSecurityLogs() {
     createSecurityLog,
     logAuthEvent,
     exportLogsToCSV,
-    refreshLogs: () => fetchSecurityLogs({ timeRange: '24h' })
+    refreshLogs: () => fetchSecurityLogs({ timeRange: '24h' }, true)
   }
 }

@@ -29,7 +29,7 @@ interface UseDatabaseMonitoringOptions {
 
 export function useDatabaseMonitoring({
   autoRefresh = false,
-  refreshIntervalMs = 5 * 60 * 1000,
+  refreshIntervalMs = 2 * 60 * 1000, // Default: 2 minutes (was 30s, too aggressive)
   includeQuickMetrics = false,
 }: UseDatabaseMonitoringOptions = {}): UseDatabaseMonitoringReturn {
   const [metrics, setMetrics] = useState<DatabaseMetrics | null>(null)
@@ -38,11 +38,11 @@ export function useDatabaseMonitoring({
   const [refreshing, setRefreshing] = useState(false)
   const [quickMetrics, setQuickMetrics] = useState<QuickDatabaseMetrics | null>(null)
 
-  const loadMetrics = useCallback(async () => {
+  const loadMetrics = useCallback(async (forceRefresh = false) => {
     try {
       setRefreshing(true)
 
-      const result = await databaseMonitoringService.getDatabaseMetrics()
+      const result = await databaseMonitoringService.getDatabaseMetrics(forceRefresh)
 
       if (result.success && result.data) {
         setMetrics(result.data)
@@ -60,7 +60,7 @@ export function useDatabaseMonitoring({
   }, [includeQuickMetrics])
 
   const refresh = useCallback(async () => {
-    await loadMetrics()
+    await loadMetrics(true) // Force refresh bypasses cache
   }, [loadMetrics])
 
   const performMaintenance = useCallback(async (task: MaintenanceTask, params?: MaintenanceTaskParams) => {
@@ -68,7 +68,7 @@ export function useDatabaseMonitoring({
     try {
       const result = await databaseMonitoringService.performMaintenanceTask(task, params)
       if (result.success) {
-        await loadMetrics()
+        await loadMetrics(true) // Force refresh after maintenance
       }
       return result
     } finally {
@@ -77,11 +77,11 @@ export function useDatabaseMonitoring({
   }, [loadMetrics])
 
   useEffect(() => {
-    void loadMetrics()
+    void loadMetrics() // Initial load uses cache if available
 
     if (autoRefresh) {
       const interval = setInterval(() => {
-        void loadMetrics()
+        void loadMetrics(true) // Auto-refresh bypasses cache
       }, refreshIntervalMs)
       return () => clearInterval(interval)
     }

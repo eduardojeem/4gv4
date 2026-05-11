@@ -41,12 +41,22 @@ interface SaleData {
   notes?: string
 }
 
+// ============================================================================
+// Products Cache (stale-while-revalidate)
+// ============================================================================
+let productsCache: UnifiedProduct[] | null = null
+let productsCacheTimestamp = 0
+const PRODUCTS_CACHE_TTL = 3 * 60 * 1000 // 3 minutes - realtime handles freshness
+
+function isProductsCacheFresh(): boolean {
+  return productsCache !== null && (Date.now() - productsCacheTimestamp) < PRODUCTS_CACHE_TTL
+}
 
 
 export function usePOSProducts() {
-  const [products, setProducts] = useState<UnifiedProduct[]>([])
+  const [products, setProducts] = useState<UnifiedProduct[]>(productsCache || [])
   const [cart, setCart] = useState<CartItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(!isProductsCacheFresh())
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -60,10 +70,8 @@ export function usePOSProducts() {
       const productIndex = prevProducts.findIndex(p => p.id === updatedProduct.id)
       
       if (productIndex >= 0) {
-        // Actualizar producto existente
         const newProducts = [...prevProducts]
         
-        // Intentar mantener la categoría si cambió el ID
         const newCategoryId = updatedProduct.category_id
         const currentCategory = newProducts[productIndex].category
         const categoryChanged = newCategoryId !== newProducts[productIndex].category_id
@@ -85,9 +93,12 @@ export function usePOSProducts() {
           is_active: updatedProduct.is_active,
           purchase_price: (updatedProduct as any).cost_price || (newProducts[productIndex] as any).purchase_price || 0
         }
+
+        // Keep cache in sync
+        productsCache = newProducts
+        productsCacheTimestamp = Date.now()
         return newProducts
       } else if (updatedProduct.is_active) {
-        // Agregar nuevo producto activo
         const newProduct = {
           id: updatedProduct.id,
           name: updatedProduct.name,
@@ -103,7 +114,10 @@ export function usePOSProducts() {
           is_active: updatedProduct.is_active,
           purchase_price: (updatedProduct as any).cost_price || 0
         } as unknown as UnifiedProduct
-        return [...prevProducts, newProduct]
+        const updated = [...prevProducts, newProduct]
+        productsCache = updated
+        productsCacheTimestamp = Date.now()
+        return updated
       }
       
       return prevProducts
@@ -135,36 +149,16 @@ export function usePOSProducts() {
     setError(null)
     
     try {
-      console.log('🔄 [usePOSProducts] Cargando productos desde Supabase...')
-
-      // 1. Obtener conteo total (para detectar filtros ocultos)
-      const { count, error: countError } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-      
-      if (countError) {
-        console.error('❌ [usePOSProducts] Error contando productos:', countError)
-        setError('Error al conectar con la base de datos')
-        // No retornamos, intentamos cargar igual
-      } else {
-        console.log('📊 [usePOSProducts] Total real en DB (count):', count)
-      }
-
-      // 2. Cargar productos
+      // Load products (no redundant COUNT query)
       const { data: dbProducts, error } = await supabase
         .from('products')
         .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active, image_url, images, categories(name)')
+        .eq('is_active', true)
         .order('name')
         .limit(5000)
 
       if (error) {
           throw error
-      }
-
-      console.log(`📦 [usePOSProducts] Productos cargados: ${dbProducts?.length || 0}`)
-      
-      if (count !== null && dbProducts && dbProducts.length < count) {
-          console.warn(`⚠️ [usePOSProducts] Discrepancia: DB=${count} vs Cargados=${dbProducts.length}. Verifique RLS.`)
       }
 
       // Transformar a formato unificado
@@ -185,8 +179,11 @@ export function usePOSProducts() {
       } as unknown as UnifiedProduct))
 
       setProducts(unifiedProducts)
+      // Update cache
+      productsCache = unifiedProducts
+      productsCacheTimestamp = Date.now()
     } catch (err) {
-      console.error('❌ [usePOSProducts] Error cargando productos:', err)
+      console.error('[usePOSProducts] Error cargando productos:', err)
       setError(`Error al cargar productos: ${err instanceof Error ? err.message : 'Error desconocido'}`)
       setProducts([])
     } finally {
@@ -194,17 +191,19 @@ export function usePOSProducts() {
     }
   }, [supabase])
 
-  // Cargar productos iniciales
+  // Cargar productos iniciales (use cache if fresh)
   useEffect(() => {
+    if (isProductsCacheFresh() && productsCache) {
+      setProducts(productsCache)
+      setLoading(false)
+      return
+    }
     fetchProducts()
   }, [fetchProducts])
 
   // Función para buscar producto por código de barras
   const findProductByBarcode = useCallback(async (barcode: string): Promise<UnifiedProduct | null> => {
     try {
-      // FORZAR USO DE SUPABASE
-      console.log('Buscando producto por código de barras en Supabase:', barcode)
-
       const { data, error } = await supabase
         .from('products')
         .select(`
@@ -379,9 +378,7 @@ export function usePOSProducts() {
       const { data, error: rpcError } = await supabase.rpc('process_pos_sale', payload)
 
       if (rpcError) {
-        console.error('RPC Error details:', JSON.stringify(rpcError, null, 2))
-        
-        // Handle empty error object (which can happen with some Supabase connection errors) or missing function
+        // Handle empty error object or missing function
         if (Object.keys(rpcError).length === 0 || rpcError.code === 'P0001' || (rpcError.message && rpcError.message.includes('function process_pos_sale'))) {
           throw new Error('La función de base de datos "process_pos_sale" no existe o ocurrió un error de conexión. Por favor, verificá las migraciones de Supabase.')
         }
@@ -398,11 +395,6 @@ export function usePOSProducts() {
         data: data
       }
     } catch (err: any) {
-      console.error('Error processing sale:', err)
-      if (typeof err === 'object') {
-         console.error('Error details:', JSON.stringify(err, null, 2))
-      }
-
       const errorMsg = err.message || (typeof err === 'object' && Object.keys(err).length === 0 ? 'Error desconocido (Posible error de red o función faltante)' : 'Error desconocido')
       setError(`Error al procesar venta: ${errorMsg}`)
       return { 
@@ -446,12 +438,7 @@ export function usePOSProducts() {
     return cart.reduce((count, item) => count + item.quantity, 0)
   }, [cart])
 
-  // Cargar productos al montar el componente
-  useEffect(() => {
-    fetchProducts()
-  }, [fetchProducts])
-
-  // Inicializar sincronización en tiempo real (dependencias estables)
+  // Realtime sync (products already loaded above)
   useEffect(() => {
     if (!config.supabase.isConfigured) return
     if (!realTimeEnabled) return

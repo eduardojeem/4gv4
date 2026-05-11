@@ -60,23 +60,38 @@ export function SecurityPanel({}: SecurityPanelProps) {
   const { toast } = useToast()
   
   const { user, isAdmin, isSuperAdmin } = useAuth()
-  const [locations, setLocations] = useState<Record<string, string>>({})
+  const [locations, setLocations] = useState<Record<string, string>>(() => {
+    // Initialize from sessionStorage cache
+    try {
+      const cached = sessionStorage.getItem('ip-locations-cache')
+      return cached ? JSON.parse(cached) : {}
+    } catch {
+      return {}
+    }
+  })
   const [isBlocking, setIsBlocking] = useState<string | null>(null)
   const supabase = createClient()
 
-  // Function to fetch location from IP
+  // Function to fetch location from IP (with sessionStorage cache + timeout)
   const fetchLocation = async (ip: string) => {
     if (!ip || ip === 'N/A' || locations[ip]) return
     try {
-      const res = await fetch(`https://ipapi.co/${ip}/json/`)
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3000) // 3s timeout
+
+      const res = await fetch(`https://ipapi.co/${ip}/json/`, { signal: controller.signal })
+      clearTimeout(timeoutId)
+
       const data = await res.json()
-      if (data && data.city) {
-        setLocations(prev => ({ ...prev, [ip]: `${data.city}, ${data.country_name}` }))
-      } else {
-        setLocations(prev => ({ ...prev, [ip]: 'Desconocida' }))
-      }
+      const location = data?.city ? `${data.city}, ${data.country_name}` : 'Desconocida'
+
+      setLocations(prev => {
+        const updated = { ...prev, [ip]: location }
+        try { sessionStorage.setItem('ip-locations-cache', JSON.stringify(updated)) } catch {}
+        return updated
+      })
     } catch {
-      setLocations(prev => ({ ...prev, [ip]: 'Error al obtener' }))
+      setLocations(prev => ({ ...prev, [ip]: 'No disponible' }))
     }
   }
 
@@ -98,7 +113,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
       if (error) throw error
       
       toast({ title: "Usuario bloqueado", description: "El usuario ha sido bloqueado exitosamente." })
-      fetchSecurityLogs(requestFilters)
+      fetchSecurityLogs(requestFilters, true) // Force refresh after blocking
     } catch (err: any) {
       toast({ title: "Error al bloquear", description: err.message || "No se pudo bloquear al usuario.", variant: "destructive" })
     } finally {
@@ -162,7 +177,7 @@ export function SecurityPanel({}: SecurityPanelProps) {
 
   const handleRefresh = async () => {
     try {
-      await fetchSecurityLogs(requestFilters)
+      await fetchSecurityLogs(requestFilters, true) // Force refresh bypasses cache
       toast({
         title: "Logs actualizados",
         description: "Los logs de seguridad se han actualizado correctamente.",

@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, CheckCircle2, Clock3, User, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -18,7 +19,7 @@ interface TechnicianListItemProps {
     workloadPercentage: number
 }
 
-export function TechnicianListItem({
+export const TechnicianListItem = memo(function TechnicianListItem({
     id,
     name,
     specialty,
@@ -104,4 +105,4 @@ export function TechnicianListItem({
             </div>
         </div>
     )
-}
+})
