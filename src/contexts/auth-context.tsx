@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo } from 'react'
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useMemo, useRef } from 'react'
 import { createClient as createSupabaseClient } from '../lib/supabase/client'
 import { User as SupabaseUser, Session } from '@supabase/supabase-js'
 import { UserRole, hasEffectivePermission, canManageUser } from '../lib/auth/roles-permissions'
@@ -89,6 +89,33 @@ const buildAuthUser = (
   profile: userProfile.profile ?? {}
 })
 
+const toStoredAuthProfile = (authUser: AuthUser | null): Partial<AuthUser> | null => {
+  if (!authUser) return null
+
+  return {
+    role: authUser.role,
+    status: authUser.status,
+    permissions: authUser.permissions ?? [],
+    profile: authUser.profile ?? {},
+  }
+}
+
+const isDefaultAuthProfile = (profile: Partial<AuthUser>): boolean => {
+  const role = profile.role ?? 'cliente'
+  const status = profile.status ?? 'active'
+  const permissions = profile.permissions ?? []
+  const profileFields = profile.profile ?? {}
+
+  return role === 'cliente'
+    && status === 'active'
+    && permissions.length === 0
+    && !profileFields.name
+    && !profileFields.avatar_url
+    && !profileFields.department
+    && !profileFields.phone
+    && !profileFields.location
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
 
@@ -121,8 +148,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
+  const latestUserRef = useRef<AuthUser | null>(null)
 
   const supabase = useMemo(() => createSupabaseClient(), [])
+
+  useEffect(() => {
+    latestUserRef.current = user
+  }, [user])
 
 
 
@@ -207,6 +239,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [supabase])
 
+  const resolveStableProfile = useCallback((sessionUser: SupabaseUser, profile: Partial<AuthUser>) => {
+    const latestUser = latestUserRef.current
+    const latestProfile = latestUser?.id === sessionUser.id ? toStoredAuthProfile(latestUser) : null
+
+    if (latestProfile && isDefaultAuthProfile(profile)) {
+      return latestProfile
+    }
+
+    return profile
+  }, [])
+
   // Función para refrescar los datos del usuario
   const refreshUser = useCallback(async () => {
     if (!session?.user) return
@@ -217,12 +260,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         AUTH_PROFILE_TIMEOUT_MS,
         getDefaultAuthProfile()
       )
-      setUser(buildAuthUser(session.user, userProfile))
+      setUser(buildAuthUser(session.user, resolveStableProfile(session.user, userProfile)))
     } catch (error) {
       console.error('Error refreshing user:', error)
-      setUser(buildAuthUser(session.user))
+      const fallbackProfile = resolveStableProfile(session.user, getDefaultAuthProfile())
+      setUser(buildAuthUser(session.user, fallbackProfile))
     }
-  }, [session, fetchUserProfile])
+  }, [session, fetchUserProfile, resolveStableProfile])
 
   // Función para iniciar sesión
   const signIn = useCallback(async (email: string, password: string) => {
@@ -471,7 +515,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             getDefaultAuthProfile()
           )
           if (!isMounted) return
-          setUser(buildAuthUser(nextSession.user, userProfile))
+          setUser(buildAuthUser(nextSession.user, resolveStableProfile(nextSession.user, userProfile)))
         } else {
           setUser(null)
         }
@@ -502,14 +546,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               getDefaultAuthProfile()
             )
             if (!isMounted) return
-            setUser(buildAuthUser(nextUser, userProfile))
+            setUser(buildAuthUser(nextUser, resolveStableProfile(nextUser, userProfile)))
           } else {
             setUser(null)
           }
         } catch {
           if (!isMounted) return
           if (nextUser) {
-            setUser(buildAuthUser(nextUser))
+            const fallbackProfile = resolveStableProfile(nextUser, getDefaultAuthProfile())
+            setUser(buildAuthUser(nextUser, fallbackProfile))
           } else {
             setUser(null)
           }
@@ -525,7 +570,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [fetchUserProfile, supabase])
+  }, [fetchUserProfile, resolveStableProfile, supabase])
 
   const value = useMemo<AuthContextType>(() => ({
     user,
