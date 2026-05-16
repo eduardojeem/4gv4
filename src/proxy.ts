@@ -2,6 +2,26 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { normalizeRole } from '@/lib/auth/role-utils'
 
+const PROXY_AUTH_TIMEOUT_MS = 4000
+const PROXY_PROFILE_TIMEOUT_MS = 3000
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallbackValue), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+    }
+  }
+}
+
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -42,8 +62,14 @@ export async function proxy(request: NextRequest) {
   // Verificar autenticacion (una sola vez)
   let user = null
   try {
-    const { data: { user: authUser } } = await supabase.auth.getUser()
-    user = authUser
+    user = await withTimeout(
+      supabase.auth
+        .getUser()
+        .then(({ data: { user: authUser } }) => authUser)
+        .catch(() => null),
+      PROXY_AUTH_TIMEOUT_MS,
+      null
+    )
   } catch {
     // Si falla la conexion, asumimos sin usuario
   }
@@ -54,27 +80,39 @@ export async function proxy(request: NextRequest) {
   let profileIsActive = true
   if (user) {
     try {
-      const { data: roleWithStatus, error: roleWithStatusError } = await supabase
-        .from('user_roles')
-        .select('role,is_active')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const { data: roleWithStatus, error: roleWithStatusError } = await withTimeout(
+        supabase
+          .from('user_roles')
+          .select('role,is_active')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        PROXY_PROFILE_TIMEOUT_MS,
+        { data: null, error: null }
+      )
 
       let rawRole = roleWithStatus?.role as string | undefined
 
       if (!roleWithStatusError) {
         roleIsActive = roleWithStatus?.is_active !== false
       } else if (roleWithStatusError.message?.includes('is_active')) {
-        const { data: roleOnly } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .maybeSingle()
+        const { data: roleOnly } = await withTimeout(
+          supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          PROXY_PROFILE_TIMEOUT_MS,
+          { data: null, error: null }
+        )
 
         rawRole = roleOnly?.role as string | undefined
       }
 
-      const profile = await getProfileState(supabase, user.id)
+      const profile = await withTimeout(
+        getProfileState(supabase, user.id),
+        PROXY_PROFILE_TIMEOUT_MS,
+        {}
+      )
       profileIsActive = !profile.status || profile.status === 'active'
 
       if (!rawRole) {

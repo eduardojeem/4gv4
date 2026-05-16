@@ -68,6 +68,44 @@ const toProfileStatus = (value: unknown): ProfileStatus => {
   return 'active'
 }
 
+const AUTH_SESSION_TIMEOUT_MS = 5000
+const AUTH_PROFILE_TIMEOUT_MS = 4000
+
+const getDefaultAuthProfile = (): Partial<AuthUser> => ({
+  role: toUserRole('cliente'),
+  status: 'active',
+  profile: {},
+  permissions: []
+})
+
+const buildAuthUser = (
+  sessionUser: SupabaseUser,
+  userProfile: Partial<AuthUser> = getDefaultAuthProfile()
+): AuthUser => ({
+  ...sessionUser,
+  role: userProfile.role ?? 'cliente',
+  status: userProfile.status ?? 'active',
+  permissions: userProfile.permissions ?? [],
+  profile: userProfile.profile ?? {}
+})
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallbackValue), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+    }
+  }
+}
+
 // Hook para usar el contexto de autenticación
 export function useAuth() {
   const context = useContext(AuthContext)
@@ -91,12 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Función para obtener el perfil del usuario y sus permisos
   const fetchUserProfile = useCallback(async (userId: string): Promise<Partial<AuthUser>> => {
     // Valores por defecto seguros
-    const defaultProfile: Partial<AuthUser> = {
-      role: toUserRole('cliente'),
-      status: 'active',
-      profile: {},
-      permissions: []
-    }
+    const defaultProfile = getDefaultAuthProfile()
 
     try {
       if (!userId || typeof userId !== 'string') {
@@ -109,9 +142,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Ejecutar las 3 queries en paralelo para evitar bloqueos secuenciales
       const [roleResult, profileResult, permissionsResult] = await Promise.allSettled([
-        supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle(),
-        supabase.from('profiles').select('full_name, avatar_url, phone, status').eq('id', userId).maybeSingle(),
-        supabase.from('user_permissions').select('permission,is_active').eq('user_id', userId),
+        withTimeout(
+          supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle(),
+          AUTH_PROFILE_TIMEOUT_MS,
+          { data: null, error: null }
+        ),
+        withTimeout(
+          supabase.from('profiles').select('full_name, avatar_url, phone, status').eq('id', userId).maybeSingle(),
+          AUTH_PROFILE_TIMEOUT_MS,
+          { data: null, error: null }
+        ),
+        withTimeout(
+          supabase.from('user_permissions').select('permission,is_active').eq('user_id', userId),
+          AUTH_PROFILE_TIMEOUT_MS,
+          { data: null, error: null }
+        ),
       ])
 
       // Extraer resultados de forma segura
@@ -120,21 +165,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       let directPermissions: string[] = []
       if (permissionsResult.status === 'fulfilled') {
+        type PermissionRow = { permission?: unknown; is_active?: boolean | null }
         const { data: permData, error: permError } = permissionsResult.value
         if (!permError && permData) {
           directPermissions = permData
-            .filter((row: any) => row?.is_active !== false)
-            .map((row: any) => row?.permission)
+            .filter((row: PermissionRow) => row?.is_active !== false)
+            .map((row: PermissionRow) => row?.permission)
             .filter((permission: unknown): permission is string => typeof permission === 'string' && permission.length > 0)
         } else if (permError?.message?.includes('is_active')) {
           // Compatibilidad con esquemas antiguos sin user_permissions.is_active
-          const { data: directPermissionsOnly } = await supabase
-            .from('user_permissions')
-            .select('permission')
-            .eq('user_id', userId)
+          const { data: directPermissionsOnly } = await withTimeout(
+            supabase
+              .from('user_permissions')
+              .select('permission')
+              .eq('user_id', userId),
+            AUTH_PROFILE_TIMEOUT_MS,
+            { data: null, error: null }
+          )
 
           directPermissions = (directPermissionsOnly || [])
-            .map((row: any) => row?.permission)
+            .map((row: PermissionRow) => row?.permission)
             .filter((permission: unknown): permission is string => typeof permission === 'string' && permission.length > 0)
         }
       }
@@ -162,16 +212,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session?.user) return
 
     try {
-      const userProfile = await fetchUserProfile(session.user.id)
-      setUser({
-        ...session.user,
-        role: userProfile.role,
-        status: userProfile.status,
-        permissions: userProfile.permissions,
-        profile: userProfile.profile
-      } as AuthUser)
+      const userProfile = await withTimeout(
+        fetchUserProfile(session.user.id),
+        AUTH_PROFILE_TIMEOUT_MS,
+        getDefaultAuthProfile()
+      )
+      setUser(buildAuthUser(session.user, userProfile))
     } catch (error) {
       console.error('Error refreshing user:', error)
+      setUser(buildAuthUser(session.user))
     }
   }, [session, fetchUserProfile])
 
@@ -403,36 +452,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const getSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const nextSession = await withTimeout(
+          supabase.auth
+            .getSession()
+            .then(({ data: { session } }) => session)
+            .catch(() => null),
+          AUTH_SESSION_TIMEOUT_MS,
+          null
+        )
         if (!isMounted) return
 
-        setSession(session)
+        setSession(nextSession)
 
-        if (session?.user) {
-          try {
-            const userProfile = await fetchUserProfile(session.user.id)
-            if (!isMounted) return
-            setUser({
-              ...session.user,
-              role: userProfile.role,
-              status: userProfile.status,
-              permissions: userProfile.permissions,
-              profile: userProfile.profile
-            } as AuthUser)
-          } catch {
-            if (!isMounted) return
-            setUser({
-              ...session.user,
-              role: 'cliente' as UserRole,
-              profile: {},
-              permissions: []
-            } as AuthUser)
-          }
+        if (nextSession?.user) {
+          const userProfile = await withTimeout(
+            fetchUserProfile(nextSession.user.id),
+            AUTH_PROFILE_TIMEOUT_MS,
+            getDefaultAuthProfile()
+          )
+          if (!isMounted) return
+          setUser(buildAuthUser(nextSession.user, userProfile))
         } else {
           setUser(null)
         }
       } catch {
         if (!isMounted) return
+        setSession(null)
         // Session retrieval failed — user will be set by onAuthStateChange if available
         setUser(null)
       } finally {
@@ -443,49 +488,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (_event, nextSession) => {
         if (!isMounted) return
-        try {
-          setSession(session)
+        const nextUser = nextSession?.user
 
-          if (session?.user) {
-            try {
-              const userProfile = await fetchUserProfile(session.user.id)
-              if (!isMounted) return
-              setUser({
-                ...session.user,
-                role: userProfile.role,
-                status: userProfile.status,
-                permissions: userProfile.permissions,
-                profile: userProfile.profile
-              } as AuthUser)
-            } catch {
-              if (!isMounted) return
-              setUser({
-                ...session.user,
-                role: 'cliente' as UserRole,
-                profile: {},
-                permissions: []
-              } as AuthUser)
-            }
+        try {
+          setSession(nextSession)
+
+          if (nextUser) {
+            const userProfile = await withTimeout(
+              fetchUserProfile(nextUser.id),
+              AUTH_PROFILE_TIMEOUT_MS,
+              getDefaultAuthProfile()
+            )
+            if (!isMounted) return
+            setUser(buildAuthUser(nextUser, userProfile))
           } else {
             setUser(null)
           }
         } catch {
           if (!isMounted) return
-          if (session?.user) {
-            setUser({
-              ...session.user,
-              role: 'cliente' as UserRole,
-              profile: {},
-              permissions: []
-            } as AuthUser)
+          if (nextUser) {
+            setUser(buildAuthUser(nextUser))
           } else {
             setUser(null)
           }
+        } finally {
+          if (isMounted) {
+            setLoading(false)
+          }
         }
-
-        setLoading(false)
       }
     )
 
