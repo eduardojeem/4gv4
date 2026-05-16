@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createClient as createServerSupabase } from '@/lib/supabase/server'
-import { createAdminSupabase } from '@/lib/supabase/admin'
-import { normalizeRole, type AppRole } from '@/lib/auth/role-utils'
+import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
+import type { AppRole } from '@/lib/auth/role-utils'
 
 export type AuthResult =
   | { authenticated: true; user: { id: string; email?: string }; role: AppRole }
@@ -19,42 +18,29 @@ export function getAuthResponse(auth: AuthResult): NextResponse | null {
  * Role priority: user_roles > profiles > 'cliente'
  */
 export async function requireAuth(): Promise<AuthResult> {
-  const supabase = await createServerSupabase()
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser()
+  const result = await resolveRequestAuthUser()
 
-  if (error || !user) {
+  if ('reason' in result) {
+    const status = result.reason === 'unauthenticated' ? 401 : 403
+    const error =
+      result.reason === 'unauthenticated'
+        ? 'No autenticado'
+        : 'Cuenta inactiva o suspendida'
+
     return {
       authenticated: false,
-      response: NextResponse.json({ error: 'No autenticado' }, { status: 401 }),
+      response: NextResponse.json({ error }, { status }),
     }
   }
 
-  // user_roles is the source of truth (same as middleware)
-  const admin = createAdminSupabase()
-  const { data: roleRow } = await admin
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user.id)
-    .maybeSingle()
-
-  let rawRole = roleRow?.role as string | undefined
-
-  // Fallback to profiles only if user_roles has no row
-  if (!rawRole) {
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle()
-    rawRole = profile?.role as string | undefined
+  return {
+    authenticated: true,
+    user: {
+      id: result.user.id,
+      email: result.user.email,
+    },
+    role: result.user.role,
   }
-
-  const role: AppRole = normalizeRole(rawRole) ?? 'cliente'
-
-  return { authenticated: true, user, role }
 }
 
 /**

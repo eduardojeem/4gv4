@@ -24,7 +24,7 @@ type CanonicalRole = 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente
 const DEFAULT_ROLE: CanonicalRole = 'cliente'
 const DEFAULT_STATUS: ProfileStatus = 'active'
 
-const ROLE_WRITE_CANDIDATES: Record<CanonicalRole, string[]> = {
+const ROLE_WRITE_CANDIDATES: Record<CanonicalRole, CanonicalRole[]> = {
   super_admin: ['super_admin'],
   admin: ['admin'],
   vendedor: ['vendedor'],
@@ -67,11 +67,11 @@ function isRoleConstraintViolation(error: { message?: string; code?: string } | 
 
 function getRoleWriteCandidates(role: unknown): CanonicalRole[] {
   if (typeof role !== 'string' || role.trim().length === 0) {
-    return ROLE_WRITE_CANDIDATES[DEFAULT_ROLE]
+    return [...ROLE_WRITE_CANDIDATES[DEFAULT_ROLE]]
   }
 
   const canonical = normalizeRole(role)
-  return Array.from(new Set(ROLE_WRITE_CANDIDATES[canonical]))
+  return Array.from(new Set(ROLE_WRITE_CANDIDATES[canonical])) as CanonicalRole[]
 }
 
 async function upsertUserRole(
@@ -339,6 +339,13 @@ export function useUsersSupabase({
         throw currentUserRoleError
       }
 
+      const currentCanonicalRole = normalizeRole(currentUserRole?.role ?? currentProfile?.role)
+      const mergedRole = normalizeRole(userData.role ?? currentCanonicalRole)
+      if (mergedRole === 'super_admin' && !isSuperAdmin) {
+        throw new Error('Solo un super admin puede asignar el rol super_admin')
+      }
+
+      const mergedStatus = normalizeStatus(userData.status ?? currentProfile?.status)
       const profileUpdatePayload: Record<string, unknown> = {}
 
       if (typeof userData.name === 'string') profileUpdatePayload.full_name = userData.name
@@ -366,23 +373,16 @@ export function useUsersSupabase({
         updatedProfile = data
       }
 
-      const mergedRole = normalizeRole(userData.role ?? currentProfile?.role)
-      if (mergedRole === 'super_admin' && !isSuperAdmin) {
-        throw new Error('Solo un super admin puede asignar el rol super_admin')
-      }
-      const mergedStatus = normalizeStatus(userData.status ?? currentProfile?.status)
-
       const shouldSyncRoleRow =
         typeof userData.role === 'string' ||
         typeof userData.status === 'string' ||
         !currentUserRole?.role
 
       if (shouldSyncRoleRow) {
-        const normalizedCurrentRole = normalizeRole(currentUserRole?.role)
         const roleForSync =
           typeof userData.role === 'string'
             ? mergedRole
-            : normalizedCurrentRole ?? mergedRole
+            : currentCanonicalRole ?? mergedRole
 
         const roleCandidates = getRoleWriteCandidates(roleForSync)
         let synced = false

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { logger } from '@/lib/logger'
 
 export interface AdminAuthContext {
@@ -17,12 +18,12 @@ export type AdminAuthenticatedHandler = (
 
 /**
  * Middleware para proteger rutas API que requieren permisos de administrador
- * 
+ *
  * Verifica que:
- * 1. El usuario esté autenticado
+ * 1. El usuario este autenticado
  * 2. El usuario tenga rol de 'admin' o 'super_admin'
- * 3. Registra el acceso en logs de auditoría
- * 
+ * 3. Registra el acceso en logs de auditoria
+ *
  * @example
  * export const POST = withAdminAuth(async (request, { user }) => {
  *   // user.role es 'admin' o 'super_admin' garantizado
@@ -32,93 +33,23 @@ export type AdminAuthenticatedHandler = (
 export function withAdminAuth(handler: AdminAuthenticatedHandler) {
   return async (request: NextRequest) => {
     try {
-      const supabase = await createClient()
-      
-      // Verificar autenticación
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      
-      if (authError || !user) {
-        logger.warn('Unauthorized admin API access attempt', {
-          path: request.nextUrl.pathname,
-          error: authError?.message
-        })
-        
-        return NextResponse.json(
-          { error: 'Unauthorized', message: 'Authentication required' },
-          { status: 401 }
-        )
-      }
-      
-      // user_roles is the only trusted source for privileged role checks.
-      let userRoleData: { role: string; is_active?: boolean } | null = null
-      const { data: roleWithStatus, error: roleWithStatusError } = await supabase
-        .from('user_roles')
-        .select('role,is_active')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const auth = await resolveRequestAuthUser()
 
-      if (!roleWithStatusError) {
-        userRoleData = roleWithStatus as { role: string; is_active?: boolean } | null
-      } else if (roleWithStatusError.message?.includes('is_active')) {
-        // Backwards compatibility for older schemas without user_roles.is_active
-        const { data: roleOnly, error: roleOnlyError } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .maybeSingle()
-
-        if (roleOnlyError) {
-          logger.error('Failed to fetch user_roles fallback role', {
-            userId: user.id,
-            error: roleOnlyError.message,
+      if ('reason' in auth) {
+        if (auth.reason === 'unauthenticated') {
+          logger.warn('Unauthorized admin API access attempt', {
+            path: request.nextUrl.pathname,
           })
-        } else {
-          userRoleData = roleOnly ? { role: roleOnly.role, is_active: true } : null
+
+          return NextResponse.json(
+            { error: 'Unauthorized', message: 'Authentication required' },
+            { status: 401 }
+          )
         }
-      } else {
-        logger.error('Failed to fetch user_roles', {
-          userId: user.id,
-          error: roleWithStatusError.message,
-        })
-      }
 
-      let profileData: { status?: string | null } | null = null
-      const { data: profileWithStatus, error: profileStatusError } = await supabase
-        .from('profiles')
-        .select('status')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (!profileStatusError) {
-        profileData = profileWithStatus as { status?: string | null } | null
-      } else if (!profileStatusError.message?.includes('status')) {
-        logger.error('Failed to fetch profile status', {
-          userId: user.id,
-          error: profileStatusError.message,
-        })
-      }
-
-      if (!userRoleData?.role) {
-        logger.error('No user_roles record found for user', {
-          userId: user.id,
-        })
-
-        return NextResponse.json(
-          { error: 'Forbidden', message: 'No role assigned in user_roles' },
-          { status: 403 }
-        )
-      }
-
-      const userRole = userRoleData.role
-      const roleIsActive = userRoleData.is_active !== false
-      const profileIsActive = !profileData?.status || profileData.status === 'active'
-
-      if (!roleIsActive || !profileIsActive) {
         logger.warn('Inactive user attempted admin API access', {
           path: request.nextUrl.pathname,
-          userId: user.id,
-          roleIsActive,
-          profileStatus: profileData?.status ?? null,
+          reason: auth.reason,
         })
 
         return NextResponse.json(
@@ -129,74 +60,73 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
           { status: 403 }
         )
       }
-      
-      // Verificar que el usuario sea admin o super_admin
+
       const allowedRoles = ['admin', 'super_admin']
-      if (!allowedRoles.includes(userRole)) {
+      const supabase = await createClient()
+
+      if (!allowedRoles.includes(auth.user.role)) {
         logger.warn('Forbidden admin API access attempt', {
           path: request.nextUrl.pathname,
-          userId: user.id,
-          userRole: userRole,
-          requiredRoles: allowedRoles
+          userId: auth.user.id,
+          userRole: auth.user.role,
+          requiredRoles: allowedRoles,
         })
-        
-        // Registrar intento de acceso no autorizado en audit_log
+
         try {
           await supabase.from('audit_log').insert({
-            user_id: user.id,
+            user_id: auth.user.id,
             action: 'unauthorized_admin_access_attempt',
             resource: 'admin_api',
             resource_id: request.nextUrl.pathname,
             new_values: {
               path: request.nextUrl.pathname,
               method: request.method,
-              userRole: userRole
-            }
+              userRole: auth.user.role,
+            },
           })
         } catch (err) {
           logger.error('Failed to log unauthorized access attempt', { error: err })
         }
-        
+
         return NextResponse.json(
-          { 
-            error: 'Forbidden', 
-            message: 'Administrator privileges required' 
+          {
+            error: 'Forbidden',
+            message: 'Administrator privileges required',
           },
           { status: 403 }
         )
       }
-      
-      // Registrar acceso exitoso (solo para operaciones de escritura)
+
       if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
         try {
           await supabase.from('audit_log').insert({
-            user_id: user.id,
+            user_id: auth.user.id,
             action: 'admin_api_access',
             resource: 'admin_api',
             resource_id: request.nextUrl.pathname,
             new_values: {
               path: request.nextUrl.pathname,
               method: request.method,
-              userRole: userRole
-            }
+              userRole: auth.user.role,
+            },
           })
         } catch (err) {
           logger.error('Failed to log admin access', { error: err })
         }
       }
-      
+
       const context: AdminAuthContext = {
         user: {
-          id: user.id,
-          email: user.email,
-          role: userRole
-        }
+          id: auth.user.id,
+          email: auth.user.email,
+          role: auth.user.role,
+        },
       }
-      
+
       return await handler(request, context)
     } catch (error) {
       logger.error('Admin auth middleware error', { error })
-      
+
       return NextResponse.json(
         { error: 'Internal server error' },
         { status: 500 }
@@ -206,7 +136,7 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
 }
 
 /**
- * Middleware para proteger rutas que requieren específicamente super_admin
+ * Middleware para proteger rutas que requieren especificamente super_admin
  */
 export function withSuperAdminAuth(handler: AdminAuthenticatedHandler) {
   return withAdminAuth(async (request, context) => {
@@ -214,18 +144,18 @@ export function withSuperAdminAuth(handler: AdminAuthenticatedHandler) {
       logger.warn('Super admin access denied', {
         path: request.nextUrl.pathname,
         userId: context.user.id,
-        userRole: context.user.role
+        userRole: context.user.role,
       })
-      
+
       return NextResponse.json(
-        { 
-          error: 'Forbidden', 
-          message: 'Super administrator privileges required' 
+        {
+          error: 'Forbidden',
+          message: 'Super administrator privileges required',
         },
         { status: 403 }
       )
     }
-    
+
     return await handler(request, context)
   })
 }

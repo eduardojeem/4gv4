@@ -28,6 +28,7 @@ import { UsersTable } from './users-table'
 import { UsersFilters } from './users-filters'
 import { UserDetailDialog } from './user-detail-dialog'
 import { useDebounce } from '@/hooks/use-debounce'
+import { normalizeRole as normalizeAppRole } from '@/lib/auth/role-utils'
 import { toast } from 'sonner'
 import { EditUserForm } from './EditUserForm'
 
@@ -120,7 +121,7 @@ export function UserManagement() {
     id: profile.id,
     name: profile.full_name || profile.email?.split('@')[0] || 'Usuario',
     email: profile.email || '',
-    role: profile.role === 'technician' ? 'tecnico' : (profile.role || 'cliente'),
+    role: normalizeAppRole(profile.role) ?? 'cliente',
     status: profile.status === 'inactive' || profile.status === 'suspended' ? profile.status : 'active',
     department: profile.department || '',
     phone: profile.phone || '',

@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Rol invalido: ${uiRole}` }, { status: 400 })
     }
 
-    if (dbRole === 'super_admin' && auth.user.role !== 'super_admin') {
+    if (dbRole === 'super_admin' && auth.role !== 'super_admin') {
       return NextResponse.json({ error: 'No tienes permisos para asignar super_admin' }, { status: 403 })
     }
 
@@ -98,4 +98,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
-

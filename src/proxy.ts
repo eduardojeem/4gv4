@@ -50,28 +50,49 @@ export async function proxy(request: NextRequest) {
 
   // Obtener rol del usuario (una sola query) - solo si esta autenticado y lo necesitamos
   let normalizedRole: string | undefined
+  let roleIsActive = true
+  let profileIsActive = true
   if (user) {
     try {
-      // Una sola query a user_roles (fuente de verdad para roles)
-      const { data: roleRow } = await supabase
+      const { data: roleWithStatus, error: roleWithStatusError } = await supabase
         .from('user_roles')
-        .select('role')
+        .select('role,is_active')
         .eq('user_id', user.id)
         .maybeSingle()
 
-      const rawRole = (roleRow?.role as string | undefined)
-        // Fallback a profiles solo si user_roles no tiene dato
-        || (await getProfileRole(supabase, user.id))
+      let rawRole = roleWithStatus?.role as string | undefined
+
+      if (!roleWithStatusError) {
+        roleIsActive = roleWithStatus?.is_active !== false
+      } else if (roleWithStatusError.message?.includes('is_active')) {
+        const { data: roleOnly } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        rawRole = roleOnly?.role as string | undefined
+      }
+
+      const profile = await getProfileState(supabase, user.id)
+      profileIsActive = !profile.status || profile.status === 'active'
+
+      if (!rawRole) {
+        rawRole = profile.role
+      }
 
       normalizedRole = normalizeRole(rawRole)
     } catch {
       normalizedRole = undefined
+      roleIsActive = true
+      profileIsActive = true
     }
   }
 
   const effectiveRole = normalizedRole ?? 'cliente'
-  const isClientOrViewer = effectiveRole === 'cliente'
-  const isAdmin = effectiveRole === 'admin' || effectiveRole === 'super_admin'
+  const isActiveUser = roleIsActive && profileIsActive
+  const isClientOrViewer = !isActiveUser || effectiveRole === 'cliente'
+  const isAdmin = isActiveUser && (effectiveRole === 'admin' || effectiveRole === 'super_admin')
 
   // Rutas protegidas (dashboard) - requieren autenticacion y rol no-cliente
   if (isProtectedRoute && (!user || isClientOrViewer)) {
@@ -100,10 +121,28 @@ export async function proxy(request: NextRequest) {
 /**
  * Fallback: obtener rol de la tabla profiles solo si user_roles no tiene dato.
  */
-async function getProfileRole(
+async function getProfileState(
   supabase: ReturnType<typeof createServerClient>,
   userId: string
-): Promise<string | undefined> {
+): Promise<{ role?: string; status?: string }> {
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role,status')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (typeof profile === 'object' && profile && 'role' in profile) {
+      const typedProfile = profile as { role?: string | null; status?: string | null }
+      return {
+        role: typedProfile.role ?? undefined,
+        status: typedProfile.status ?? undefined,
+      }
+    }
+  } catch {
+    // silenciar
+  }
+
   try {
     const { data: profile } = await supabase
       .from('profiles')
@@ -112,12 +151,15 @@ async function getProfileRole(
       .maybeSingle()
 
     if (typeof profile === 'object' && profile && 'role' in profile) {
-      return (profile as { role?: string | null }).role ?? undefined
+      return {
+        role: (profile as { role?: string | null }).role ?? undefined,
+      }
     }
   } catch {
     // silenciar
   }
-  return undefined
+
+  return {}
 }
 
 export const config = {

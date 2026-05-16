@@ -33,13 +33,8 @@ import { useSecurityLogs, type SecurityLog } from '@/hooks/use-security-logs'
 import { useToast } from '@/components/ui/use-toast'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/contexts/auth-context'
-import { createClient } from '@/lib/supabase/client'
 
-interface SecurityPanelProps {
-  // Props opcionales para compatibilidad hacia atrás
-}
-
-export function SecurityPanel({}: SecurityPanelProps) {
+export function SecurityPanel() {
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [severityFilter, setSeverityFilter] = useState<string>('all')
@@ -70,7 +65,6 @@ export function SecurityPanel({}: SecurityPanelProps) {
     }
   })
   const [isBlocking, setIsBlocking] = useState<string | null>(null)
-  const supabase = createClient()
 
   // Function to fetch location from IP (with sessionStorage cache + timeout)
   const fetchLocation = async (ip: string) => {
@@ -108,14 +102,22 @@ export function SecurityPanel({}: SecurityPanelProps) {
     
     try {
       setIsBlocking(userId)
-      // Bloquear usuario actualizando su perfil (si tienes una columna is_active) o a través de RPC
-      const { error } = await supabase.from('profiles').update({ is_active: false }).eq('id', userId)
-      if (error) throw error
+      const response = await fetch(`/api/admin/users/${userId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'suspended' })
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo suspender al usuario')
+      }
       
-      toast({ title: "Usuario bloqueado", description: "El usuario ha sido bloqueado exitosamente." })
+      toast({ title: "Usuario bloqueado", description: "La cuenta fue suspendida y ya no deberia poder acceder al sistema." })
       fetchSecurityLogs(requestFilters, true) // Force refresh after blocking
-    } catch (err: any) {
-      toast({ title: "Error al bloquear", description: err.message || "No se pudo bloquear al usuario.", variant: "destructive" })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "No se pudo bloquear al usuario."
+      toast({ title: "Error al bloquear", description: message, variant: "destructive" })
     } finally {
       setIsBlocking(null)
     }
@@ -677,5 +679,3 @@ export function SecurityPanel({}: SecurityPanelProps) {
     </div>
   )
 }
-
-
