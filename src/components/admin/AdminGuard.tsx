@@ -11,10 +11,11 @@ interface AdminGuardProps {
 }
 
 /**
- * AdminGuard - Protege rutas administrativas
- * 
- * Verifica que el usuario esté autenticado y tenga rol de admin.
- * Redirige a /dashboard si no tiene permisos.
+ * AdminGuard - Protege rutas administrativas.
+ *
+ * Redirige a /login si no hay sesion.
+ * Si el usuario existe pero no es admin, mantiene la URL actual
+ * y muestra un estado estable de acceso denegado.
  */
 export function AdminGuard({ children, fallback }: AdminGuardProps) {
   const { user, isAdmin, loading } = useAuth()
@@ -24,12 +25,9 @@ export function AdminGuard({ children, fallback }: AdminGuardProps) {
     if (loading) return
     if (!user) {
       router.replace('/login')
-    } else if (!isAdmin) {
-      router.replace('/dashboard')
     }
-  }, [user, isAdmin, loading, router])
+  }, [user, loading, router])
 
-  // Still loading — show spinner
   if (loading) {
     return fallback || (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -41,7 +39,6 @@ export function AdminGuard({ children, fallback }: AdminGuardProps) {
     )
   }
 
-  // No user — redirect happening, show spinner
   if (!user) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -53,7 +50,6 @@ export function AdminGuard({ children, fallback }: AdminGuardProps) {
     )
   }
 
-  // User exists but not admin — show access denied while redirect happens
   if (!isAdmin) {
     return fallback || (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -63,7 +59,7 @@ export function AdminGuard({ children, fallback }: AdminGuardProps) {
             Acceso Denegado
           </h2>
           <p className="text-muted-foreground">
-            No tienes permisos para acceder a esta sección.
+            No tienes permisos para acceder a esta seccion.
           </p>
         </div>
       </div>

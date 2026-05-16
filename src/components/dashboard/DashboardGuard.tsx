@@ -10,28 +10,27 @@ interface DashboardGuardProps {
 }
 
 /**
- * DashboardGuard - Protege el dashboard de usuarios con rol 'cliente'.
+ * DashboardGuard - Protege el dashboard de usuarios sin acceso.
  *
- * Solo los roles admin, vendedor y tecnico tienen acceso.
- * Redirige a /login si no hay sesión, o a /inicio si el usuario es cliente.
+ * Redirige a /login si no hay sesion.
+ * Si el usuario existe pero no tiene permisos, mantiene la URL actual
+ * y muestra un estado estable de acceso denegado.
  */
 export function DashboardGuard({ children }: DashboardGuardProps) {
   const { user, loading } = useAuth()
   const router = useRouter()
 
   const role = user?.role
-  const isClientRole = role === 'cliente'
+  const isInactiveUser = user?.status === 'inactive' || user?.status === 'suspended'
+  const isAccessDenied = Boolean(user && (role === 'cliente' || isInactiveUser))
 
   useEffect(() => {
     if (loading) return
     if (!user) {
       router.replace('/login')
-    } else if (isClientRole) {
-      router.replace('/inicio')
     }
-  }, [user, loading, isClientRole, router])
+  }, [user, loading, router])
 
-  // Still loading auth state — show spinner
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -43,7 +42,6 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
     )
   }
 
-  // No user — redirect is happening via useEffect, show spinner while it navigates
   if (!user) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -55,8 +53,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
     )
   }
 
-  // User exists but has client role — show access denied briefly while redirect happens
-  if (isClientRole) {
+  if (isAccessDenied) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="text-center">
@@ -65,7 +62,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
             Acceso Denegado
           </h2>
           <p className="text-muted-foreground">
-            No tienes permisos para acceder al panel de administración.
+            No tienes permisos para acceder a esta seccion del dashboard.
           </p>
         </div>
       </div>

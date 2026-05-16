@@ -22,6 +22,35 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackVa
   }
 }
 
+function applyResponseCookies(target: NextResponse, source: NextResponse): NextResponse {
+  source.cookies.getAll().forEach((cookie) => {
+    target.cookies.set(cookie)
+  })
+
+  return target
+}
+
+function redirectWithCookies(request: NextRequest, source: NextResponse, pathname: string): NextResponse {
+  return applyResponseCookies(
+    NextResponse.redirect(new URL(pathname, request.url)),
+    source
+  )
+}
+
+function rewriteForbiddenResponse(
+  request: NextRequest,
+  source: NextResponse,
+  reason: 'admin' | 'dashboard'
+): NextResponse {
+  const url = request.nextUrl.clone()
+  url.pathname = '/forbidden'
+  url.search = ''
+  url.searchParams.set('reason', reason)
+  url.searchParams.set('from', `${request.nextUrl.pathname}${request.nextUrl.search}`)
+
+  return applyResponseCookies(NextResponse.rewrite(url), source)
+}
+
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -133,24 +162,30 @@ export async function proxy(request: NextRequest) {
   const isAdmin = isActiveUser && (effectiveRole === 'admin' || effectiveRole === 'super_admin')
 
   // Rutas protegidas (dashboard) - requieren autenticacion y rol no-cliente
-  if (isProtectedRoute && (!user || isClientOrViewer)) {
-    return NextResponse.redirect(new URL('/inicio', request.url))
+  if (isProtectedRoute) {
+    if (!user) {
+      return redirectWithCookies(request, supabaseResponse, '/login')
+    }
+
+    if (isClientOrViewer) {
+      return rewriteForbiddenResponse(request, supabaseResponse, 'dashboard')
+    }
   }
 
   // Rutas admin - requieren autenticacion y rol admin/super_admin
   if (isAdminRoute) {
     if (!user) {
-      return NextResponse.redirect(new URL('/login', request.url))
+      return redirectWithCookies(request, supabaseResponse, '/login')
     }
     if (!isAdmin) {
-      return NextResponse.redirect(new URL('/inicio', request.url))
+      return rewriteForbiddenResponse(request, supabaseResponse, 'admin')
     }
   }
 
   // Si ya autenticado y en ruta de auth, redirigir segun rol
   if (isAuthRoute && user) {
     const target = isClientOrViewer ? '/inicio' : '/dashboard'
-    return NextResponse.redirect(new URL(target, request.url))
+    return redirectWithCookies(request, supabaseResponse, target)
   }
 
   return supabaseResponse
