@@ -14,6 +14,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import type { SupabaseUser } from '@/hooks/use-users-supabase'
 import { PERMISSION_GROUPS } from './permissions'
 import { ROLE_PERMISSIONS, WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/roles-permissions'
+import { BranchAssignment } from './BranchAssignment'
 
 const schema = z.object({
   name: z.string().min(1, 'El nombre es requerido'),
@@ -231,6 +232,9 @@ export function EditUserForm({
             )}
           />
         </div>
+
+        {/* Branch Assignment - only for staff roles */}
+        <BranchAssignment userId={user.id} userRole={role} />
 
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-900/10">
           <div className="flex items-start justify-between gap-4">

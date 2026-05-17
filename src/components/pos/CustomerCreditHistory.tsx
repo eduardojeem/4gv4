@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import {
   Table,
@@ -449,6 +449,9 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Registrar Pago</DialogTitle>
+            <DialogDescription className="sr-only">
+              Registra un pago del cliente sobre su saldo pendiente de crédito.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>

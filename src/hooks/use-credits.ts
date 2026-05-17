@@ -306,9 +306,48 @@ export function useCredits() {
             return { success: false, error: message }
         }
 
+        // Register cash movement in the active register session (if any)
+        // This ensures credit payments show up in the cash register report
+        try {
+            // Find the open session matching the default register ('principal')
+            // The POS caja uses 'principal' as the default activeRegisterId
+            const { data: openSessions } = await supabase
+                .from('cash_closures')
+                .select('id, register_id')
+                .is('date', null)
+                .order('created_at', { ascending: false })
+
+            // Prefer 'principal' (lowercase) which is the default in the UI
+            const targetSession = (openSessions || []).find(
+                s => s.register_id?.toLowerCase() === 'principal'
+            ) || (openSessions || [])[0]
+
+            if (targetSession) {
+                const credit = credits.find(c => c.id === current.credit_id)
+                const customerName = credit?.customer_name || ''
+                const reason = `Cobro cuota crédito${customerName ? ` - ${customerName}` : ''}${notes ? ` (${notes})` : ''}`
+
+                // Get current user ID for audit trail
+                const { data: { user: currentUser } } = await supabase.auth.getUser()
+
+                await supabase.from('cash_movements').insert({
+                    session_id: targetSession.id,
+                    type: 'cash_in',
+                    amount: selectedAmount,
+                    reason,
+                    payment_method: method,
+                    created_by: currentUser?.id || null,
+                    created_at: new Date().toISOString()
+                })
+            }
+        } catch (cashErr) {
+            // Non-blocking: credit payment was already registered successfully
+            console.warn('No se pudo registrar movimiento en caja:', cashErr)
+        }
+
         await loadData()
         return { success: true, appliedAmount: selectedAmount, installmentId }
-    }, [installments, supabase, loadData])
+    }, [installments, supabase, loadData, credits])
 
 
     // Derived Data Helpers

@@ -19,6 +19,7 @@ interface MobileFiltersProps {
   priceRange: { min: number; max: number }
   categories: any[]
   brands: string[]
+  branches?: Array<{ id: string; name: string; city: string | null }>
 }
 
 export function MobileFilters({ activeFiltersCount, ...props }: MobileFiltersProps) {

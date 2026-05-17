@@ -22,6 +22,7 @@ import { LogoutDialog } from '@/components/profile/logout-dialog'
 import { useAuth } from '@/contexts/auth-context'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useDashboardSearch } from '@/hooks/use-dashboard-search'
+import { BranchSelector } from '@/components/branches/branch-selector'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { cn } from '@/lib/utils'
@@ -224,6 +225,9 @@ export const Header = memo(function Header() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+          <div className="hidden lg:block">
+            <BranchSelector compact={isCompact} />
+          </div>
           <InstallPrompt />
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" className="md:hidden h-9 w-9" onClick={() => setSearchOpen(true)}>
@@ -241,6 +245,10 @@ export const Header = memo(function Header() {
 
             {/* Theme Toggle */}
             <ThemeToggle />
+          </div>
+
+          <div className="lg:hidden">
+            <BranchSelector compact />
           </div>
 
           {/* Separator */}

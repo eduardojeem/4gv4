@@ -7,7 +7,7 @@ import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { 
   Users, 
@@ -341,6 +341,9 @@ export function CustomerSelection({
           <DialogContent className="max-w-md w-[92vw] sm:w-auto">
             <DialogHeader>
               <DialogTitle>Nuevo cliente</DialogTitle>
+              <DialogDescription className="sr-only">
+                Crea rápidamente un nuevo cliente para asociarlo a la venta actual.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

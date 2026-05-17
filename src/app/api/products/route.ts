@@ -3,6 +3,9 @@ import { withAuth } from '@/lib/api/withAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
+import type { AppRole } from '@/lib/auth/role-utils'
+import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } from '@/lib/branches/server'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
 
 // GET /api/products - Get products with variants
 export const GET = withAuth(async (request, { user }) => {
@@ -15,8 +18,15 @@ export const GET = withAuth(async (request, { user }) => {
     const inStock = searchParams.get('in_stock') === 'true'
     const page = parseInt(searchParams.get('page') || '1')
     const perPage = parseInt(searchParams.get('per_page') || '50')
+    const requestedBranchId = getRequestedBranchId(request)
     
     const supabase = await createClient()
+    const branchScope = await resolveBranchScopeForUser({
+      userId: user.id,
+      role: user.role as AppRole | undefined,
+      requestedBranchId,
+      strict: Boolean(requestedBranchId),
+    })
     
     // Build query
     let queryBuilder = supabase
@@ -38,7 +48,7 @@ export const GET = withAuth(async (request, { user }) => {
       queryBuilder = queryBuilder.eq('brand', brand)
     }
     
-    if (inStock) {
+    if (inStock && !branchScope.branchId) {
       queryBuilder = queryBuilder.gt('stock_quantity', 0)
     }
     
@@ -55,11 +65,22 @@ export const GET = withAuth(async (request, { user }) => {
       throw error
     }
     
+    const baseProducts = (products || []) as Array<Record<string, unknown> & { id: string; stock_quantity?: number | null }>
+    const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+      supabase,
+      branchScope.branchId,
+      baseProducts.map((product) => product.id)
+    )
+    const branchAwareProducts = applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped)
+    const filteredProducts = inStock
+      ? branchAwareProducts.filter((product) => Number(product.stock_quantity || 0) > 0)
+      : branchAwareProducts
+
     return NextResponse.json({
       success: true,
       data: {
-        products: products || [],
-        total: count || 0,
+        products: filteredProducts,
+        total: branchScoped && inStock ? filteredProducts.length : (count || 0),
         page,
         per_page: perPage
       }
@@ -78,6 +99,14 @@ export const POST = withAuth(async (request, { user }) => {
   try {
     const body = await request.json()
     const supabase = await createClient()
+    const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
+    const branchScope = await resolveBranchScopeForUser({
+      userId: user.id,
+      role: user.role as AppRole | undefined,
+      requestedBranchId,
+      strict: Boolean(requestedBranchId),
+    })
+    const defaultBranch = await getDefaultBranch()
     
     // Validate input with Zod
     const validationResult = productSchema.safeParse(body)
@@ -96,6 +125,13 @@ export const POST = withAuth(async (request, { user }) => {
     }
     
     const validated = validationResult.data
+    const requestedStock = Number(validated.stock_quantity || 0)
+    const branchScopedCreate = Boolean(branchScope.branchId)
+    const shouldZeroGlobalStock = Boolean(
+      branchScope.branchId &&
+      defaultBranch?.id &&
+      branchScope.branchId !== defaultBranch.id
+    )
     
     const { data: product, error } = await supabase
       .from('products')
@@ -106,7 +142,7 @@ export const POST = withAuth(async (request, { user }) => {
         category_id: validated.category_id,
         supplier_id: validated.supplier_id,
         brand: validated.brand,
-        stock_quantity: validated.stock_quantity,
+        stock_quantity: shouldZeroGlobalStock ? 0 : requestedStock,
         min_stock: validated.min_stock,
         purchase_price: validated.purchase_price,
         sale_price: validated.sale_price,
@@ -130,12 +166,53 @@ export const POST = withAuth(async (request, { user }) => {
       
       throw error
     }
+
+    if (branchScopedCreate && branchScope.branchId) {
+      try {
+        if (defaultBranch?.id && defaultBranch.id !== branchScope.branchId) {
+          await upsertBranchInventoryStock({
+            supabase,
+            branchId: defaultBranch.id,
+            productId: product.id,
+            stockQuantity: 0,
+          })
+        }
+
+        await upsertBranchInventoryStock({
+          supabase,
+          branchId: branchScope.branchId,
+          productId: product.id,
+          stockQuantity: requestedStock,
+        })
+      } catch (branchError) {
+        logger.error('Failed to sync branch inventory after product creation', {
+          error: branchError instanceof Error ? branchError.message : branchError,
+          productId: product.id,
+          branchId: branchScope.branchId,
+        })
+
+        await supabase.from('products').delete().eq('id', product.id)
+
+        return NextResponse.json(
+          { success: false, error: 'No se pudo sincronizar el stock inicial de la sucursal.' },
+          { status: 500 }
+        )
+      }
+    }
     
     logger.info('Product created', { productId: product.id, userId: user.id })
+
+    const responseProduct = branchScopedCreate && branchScope.branchId
+      ? applyBranchInventoryToProducts(
+          [product as Record<string, unknown> & { id: string; stock_quantity?: number | null }],
+          new Map([[product.id, requestedStock]]),
+          true
+        )[0]
+      : product
     
     return NextResponse.json({
       success: true,
-      data: product
+      data: responseProduct
     }, { status: 201 })
   } catch (error) {
     logger.error('Product creation error', { error })
@@ -151,6 +228,13 @@ export const PUT = withAuth(async (request, { user }) => {
   try {
     const body = await request.json()
     const supabase = await createClient()
+    const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
+    const branchScope = await resolveBranchScopeForUser({
+      userId: user.id,
+      role: user.role as AppRole | undefined,
+      requestedBranchId,
+      strict: Boolean(requestedBranchId),
+    })
     
     if (!body.id) {
       return NextResponse.json(
@@ -176,37 +260,84 @@ export const PUT = withAuth(async (request, { user }) => {
     }
     
     const validated = validationResult.data
-    
-    const { data: product, error } = await supabase
-      .from('products')
-      .update({
-        name: validated.name,
-        description: validated.description,
-        category_id: validated.category_id,
-        supplier_id: validated.supplier_id,
-        brand: validated.brand,
-        stock_quantity: validated.stock_quantity,
-        min_stock: validated.min_stock,
-        purchase_price: validated.purchase_price,
-        sale_price: validated.sale_price,
-        is_active: validated.is_active,
-        barcode: validated.barcode,
-        unit_measure: validated.unit_measure
-      })
-      .eq('id', validated.id)
-      .select()
-      .single()
-    
-    if (error) {
-      logger.error('Failed to update product', { error: error.message, productId: validated.id })
-      throw error
+    const desiredStockQuantity = validated.stock_quantity
+    const updatePayload: Record<string, unknown> = {
+      name: validated.name,
+      description: validated.description,
+      category_id: validated.category_id,
+      supplier_id: validated.supplier_id,
+      brand: validated.brand,
+      min_stock: validated.min_stock,
+      purchase_price: validated.purchase_price,
+      sale_price: validated.sale_price,
+      is_active: validated.is_active,
+      barcode: validated.barcode,
+      unit_measure: validated.unit_measure
     }
-    
+
+    if (!branchScope.branchId && desiredStockQuantity !== undefined) {
+      updatePayload.stock_quantity = desiredStockQuantity
+    }
+
+    const normalizedPayload = Object.fromEntries(
+      Object.entries(updatePayload).filter(([, value]) => value !== undefined)
+    )
+
+    let product = null as Record<string, unknown> | null
+    if (Object.keys(normalizedPayload).length > 0) {
+      const { data, error } = await supabase
+        .from('products')
+        .update(normalizedPayload)
+        .eq('id', validated.id)
+        .select()
+        .single()
+
+      if (error) {
+        logger.error('Failed to update product', { error: error.message, productId: validated.id })
+        throw error
+      }
+
+      product = data as Record<string, unknown>
+    }
+
+    if (branchScope.branchId && desiredStockQuantity !== undefined) {
+      await upsertBranchInventoryStock({
+        supabase,
+        branchId: branchScope.branchId,
+        productId: validated.id,
+        stockQuantity: Number(desiredStockQuantity),
+      })
+    }
+
+    const { data: refreshedProduct, error: refreshedProductError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', validated.id)
+      .single()
+
+    if (refreshedProductError) {
+      logger.error('Failed to reload product after update', {
+        error: refreshedProductError.message,
+        productId: validated.id,
+      })
+      throw refreshedProductError
+    }
+
+    product = refreshedProduct as Record<string, unknown>
+
     logger.info('Product updated', { productId: product.id, userId: user.id })
+
+    const responseProduct = branchScope.branchId && desiredStockQuantity !== undefined
+      ? applyBranchInventoryToProducts(
+          [product as Record<string, unknown> & { id: string; stock_quantity?: number | null }],
+          new Map([[String(product.id), Number(desiredStockQuantity)]]),
+          true
+        )[0]
+      : product
     
     return NextResponse.json({
       success: true,
-      data: product
+      data: responseProduct
     })
   } catch (error) {
     logger.error('Product update error', { error })

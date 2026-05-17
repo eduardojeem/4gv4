@@ -1,17 +1,19 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { Repair, RepairStatus, RepairDeliveryOutcome } from '@/types/repairs'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 import { useErrorHandler } from './use-error-handler'
-import { useDebounce } from './use-debounce'
-import { measure, trackMetric } from '@/lib/performance'
+import { measure } from '@/lib/performance'
 import type { RepairFormData } from '@/schemas'
 import { isDemoMode } from '@/lib/config'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 
 export function useRepairs() {
   const [repairs, setRepairs] = useState<Repair[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const { selectedBranchId } = useBranch()
 
   // Initialize error handler with default context
   const { handleError } = useErrorHandler({
@@ -31,7 +33,7 @@ export function useRepairs() {
             try {
               const supabase = createSupabaseClient()
               // Optimized: Select only necessary fields
-              const response = await supabase
+              let query = supabase
                 .from('repairs')
                 .select(`
                   id,
@@ -71,10 +73,12 @@ export function useRepairs() {
                 `)
                 .order('created_at', { ascending: false })
                 .limit(200)
-                
-              const { data, error } = response
+
+              query = withBranchFilter(query, selectedBranchId)
+                 
+              const { data, error } = await query
               if (error) {
-                const msg = (error as any)?.message || String(error)
+                const msg = error instanceof Error ? error.message : String(error)
                 const missing = msg.includes('relation "repairs" does not exist') || msg.includes("Could not find the table 'public.repairs'")
                 if (missing) {
                   setRepairs([])
@@ -107,21 +111,26 @@ export function useRepairs() {
     } finally {
       setIsLoading(false)
     }
-  }, [handleError, repairs.length])
+  }, [handleError, repairs.length, selectedBranchId])
 
   useEffect(() => {
     fetchRepairs()
     const supabase = createSupabaseClient()
-    const channel = (supabase as any)
-      .channel('repairs-all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => {
+    const channel = supabase
+      .channel(`repairs-${selectedBranchId || 'all'}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'repairs',
+        ...(selectedBranchId ? { filter: `branch_id=eq.${selectedBranchId}` } : {}),
+      }, () => {
         fetchRepairs()
       })
       .subscribe()
     return () => {
-      (supabase as any).removeChannel?.(channel)
+      void supabase.removeChannel(channel)
     }
-  }, [fetchRepairs])
+  }, [fetchRepairs, selectedBranchId])
 
 
 
@@ -137,12 +146,13 @@ export function useRepairs() {
     try {
       // Ya no necesitamos mapear - usamos el estado directamente en español
       const supabase = createSupabaseClient()
-      const response = await supabase
+      let query = supabase
         .from('repairs')
         .update({ status: newStatus })
         .eq('id', id)
 
-      const { error } = response as any
+      query = withBranchFilter(query, selectedBranchId)
+      const { error } = await query
       if (error) throw error
 
       toast.success('Estado actualizado correctamente')
@@ -186,7 +196,9 @@ export function useRepairs() {
         // We include the note text in the update for convenience here
         updates.solution = note.trim()
       }
-      const { error } = await supabase.from('repairs').update(updates).eq('id', id)
+      let query = supabase.from('repairs').update(updates).eq('id', id)
+      query = withBranchFilter(query, selectedBranchId)
+      const { error } = await query
       if (error) throw error
       toast.success('Reparación marcada como entregada')
       // Refresh to get latest server state
@@ -245,7 +257,7 @@ export function useRepairs() {
 
       const device = data.devices[0]
       const supabase = createSupabaseClient()
-      const response = await supabase
+      const query = supabase
         .from('repairs')
         .insert({
           customer_id: customerId,
@@ -257,10 +269,11 @@ export function useRepairs() {
           estimated_cost: device.estimatedCost,
           access_type: device.accessType || 'none',
           access_password: device.accessPassword || null,
-          status: 'recibido'
+          status: 'recibido',
+          ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
         })
 
-      const { error } = response as any
+      const { error } = await query
       if (error) throw error
 
       toast.success('Reparación creada')
@@ -280,7 +293,7 @@ export function useRepairs() {
 
     try {
       const supabase = createSupabaseClient()
-      const response = await supabase
+      let query = supabase
         .from('repairs')
         .update({
           device_brand: data.brand,
@@ -296,7 +309,8 @@ export function useRepairs() {
         })
         .eq('id', id)
 
-      const { error } = response as any
+      query = withBranchFilter(query, selectedBranchId)
+      const { error } = await query
       if (error) throw error
 
       toast.success('Reparación actualizada')
@@ -316,12 +330,13 @@ export function useRepairs() {
 
     try {
       const supabase = createSupabaseClient()
-      const response = await supabase
+      let query = supabase
         .from('repairs')
         .delete()
         .eq('id', id)
 
-      const { error } = response as any
+      query = withBranchFilter(query, selectedBranchId)
+      const { error } = await query
       if (error) throw error
 
       toast.success('Reparación eliminada')

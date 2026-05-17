@@ -8,6 +8,9 @@ import type { Product as UnifiedProduct, Category as UnifiedCategory } from '@/t
 import { config } from '@/lib/config'
 import { useProductRealTimeSync } from './useRealTimeSync'
 import { SALE_STATUS } from '@/lib/sales-status'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders } from '@/lib/branches/client'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 
 type DbProductRow = Database['public']['Tables']['products']['Row']
 type DbCategoryRow = Database['public']['Tables']['categories']['Row']
@@ -44,17 +47,34 @@ interface SaleData {
 // ============================================================================
 // Products Cache (stale-while-revalidate)
 // ============================================================================
-let productsCache: UnifiedProduct[] | null = null
-let productsCacheTimestamp = 0
+let productsCacheByBranch: Record<string, UnifiedProduct[] | undefined> = {}
+let productsCacheTimestampsByBranch: Record<string, number | undefined> = {}
+let productsFetchPromisesByBranch: Record<string, Promise<UnifiedProduct[]> | undefined> = {}
 const PRODUCTS_CACHE_TTL = 3 * 60 * 1000 // 3 minutes - realtime handles freshness
 
-function isProductsCacheFresh(): boolean {
-  return productsCache !== null && (Date.now() - productsCacheTimestamp) < PRODUCTS_CACHE_TTL
+function getBranchCacheKey(branchId?: string | null) {
+  return branchId || 'global'
+}
+
+function getProductsCache(branchId?: string | null) {
+  return productsCacheByBranch[getBranchCacheKey(branchId)] || null
+}
+
+function setProductsCache(branchId: string | null | undefined, products: UnifiedProduct[]) {
+  const cacheKey = getBranchCacheKey(branchId)
+  productsCacheByBranch[cacheKey] = products
+  productsCacheTimestampsByBranch[cacheKey] = Date.now()
+}
+
+function isProductsCacheFresh(branchId?: string | null): boolean {
+  const cacheKey = getBranchCacheKey(branchId)
+  const timestamp = productsCacheTimestampsByBranch[cacheKey]
+  return Array.isArray(productsCacheByBranch[cacheKey]) && typeof timestamp === 'number' && (Date.now() - timestamp) < PRODUCTS_CACHE_TTL
 }
 
 
 export function usePOSProducts() {
-  const [products, setProducts] = useState<UnifiedProduct[]>(productsCache || [])
+  const [products, setProducts] = useState<UnifiedProduct[]>(getProductsCache(null) || [])
   const [cart, setCart] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(!isProductsCacheFresh())
   const [error, setError] = useState<string | null>(null)
@@ -63,6 +83,7 @@ export function usePOSProducts() {
   const [realTimeEnabled, setRealTimeEnabled] = useState(true)
 
   const supabase = useMemo(() => createClient(), [])
+  const { selectedBranchId } = useBranch()
 
   // Función para actualizar un producto específico en tiempo real
   const updateProductInState = useCallback((updatedProduct: Product) => {
@@ -95,8 +116,7 @@ export function usePOSProducts() {
         }
 
         // Keep cache in sync
-        productsCache = newProducts
-        productsCacheTimestamp = Date.now()
+        setProductsCache(selectedBranchId, newProducts)
         return newProducts
       } else if (updatedProduct.is_active) {
         const newProduct = {
@@ -115,14 +135,13 @@ export function usePOSProducts() {
           purchase_price: (updatedProduct as any).cost_price || 0
         } as unknown as UnifiedProduct
         const updated = [...prevProducts, newProduct]
-        productsCache = updated
-        productsCacheTimestamp = Date.now()
+        setProductsCache(selectedBranchId, updated)
         return updated
       }
       
       return prevProducts
     })
-  }, [])
+  }, [selectedBranchId])
 
   // Función para actualizar stock en tiempo real
   const updateStockInState = useCallback((stockMovement: StockMovement) => {
@@ -145,43 +164,61 @@ export function usePOSProducts() {
 
   // Función para cargar productos desde Supabase
   const fetchProducts = useCallback(async () => {
+    if (isProductsCacheFresh(selectedBranchId)) {
+      setProducts(getProductsCache(selectedBranchId) || [])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError(null)
     
     try {
-      // Load products (no redundant COUNT query)
-      const { data: dbProducts, error } = await supabase
-        .from('products')
-        .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active, image_url, images, categories(name)')
-        .eq('is_active', true)
-        .order('name')
-        .limit(5000)
+      const cacheKey = getBranchCacheKey(selectedBranchId)
+      if (!productsFetchPromisesByBranch[cacheKey]) {
+        productsFetchPromisesByBranch[cacheKey] = (async () => {
+          const { data: dbProducts, error } = await supabase
+            .from('products')
+            .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active, image_url, images, categories(name)')
+            .eq('is_active', true)
+            .order('name')
+            .limit(5000)
 
-      if (error) {
-          throw error
+          if (error) {
+            throw error
+          }
+
+          const baseProducts = (dbProducts || []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            sku: p.sku || '',
+            barcode: p.barcode,
+            sale_price: Number(p.sale_price),
+            stock_quantity: p.stock_quantity,
+            category_id: p.category_id,
+            category: p.categories ? { id: p.category_id, name: p.categories.name } : undefined,
+            description: p.description,
+            image: (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : undefined) || p.image_url || undefined,
+            unit_measure: 'unidad',
+            is_active: p.is_active,
+            purchase_price: 0
+          } as unknown as UnifiedProduct))
+
+          const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+            supabase,
+            selectedBranchId,
+            baseProducts.map((product) => product.id)
+          )
+
+          return applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped)
+        })().finally(() => {
+          delete productsFetchPromisesByBranch[cacheKey]
+        })
       }
 
-      // Transformar a formato unificado
-      const unifiedProducts: UnifiedProduct[] = (dbProducts || []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        sku: p.sku || '',
-        barcode: p.barcode,
-        sale_price: Number(p.sale_price),
-        stock_quantity: p.stock_quantity,
-        category_id: p.category_id,
-        category: p.categories ? { id: p.category_id, name: p.categories.name } : undefined,
-        description: p.description,
-        image: (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : undefined) || p.image_url || undefined,
-        unit_measure: 'unidad',
-        is_active: p.is_active, 
-        purchase_price: 0 
-      } as unknown as UnifiedProduct))
-
+      const unifiedProducts = await productsFetchPromisesByBranch[cacheKey]
       setProducts(unifiedProducts)
-      // Update cache
-      productsCache = unifiedProducts
-      productsCacheTimestamp = Date.now()
+      setProductsCache(selectedBranchId, unifiedProducts)
     } catch (err) {
       console.error('[usePOSProducts] Error cargando productos:', err)
       setError(`Error al cargar productos: ${err instanceof Error ? err.message : 'Error desconocido'}`)
@@ -189,17 +226,17 @@ export function usePOSProducts() {
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Cargar productos iniciales (use cache if fresh)
   useEffect(() => {
-    if (isProductsCacheFresh() && productsCache) {
-      setProducts(productsCache)
+    if (isProductsCacheFresh(selectedBranchId)) {
+      setProducts(getProductsCache(selectedBranchId) || [])
       setLoading(false)
       return
     }
     fetchProducts()
-  }, [fetchProducts])
+  }, [fetchProducts, selectedBranchId])
 
   // Función para buscar producto por código de barras
   const findProductByBarcode = useCallback(async (barcode: string): Promise<UnifiedProduct | null> => {
@@ -225,7 +262,7 @@ export function usePOSProducts() {
         return null
       }
 
-      return {
+      const baseProduct = {
         id: data.id,
         name: data.name,
         sku: data.sku,
@@ -240,11 +277,16 @@ export function usePOSProducts() {
         is_active: data.is_active,
         purchase_price: (data as any).cost_price || 0
       } as unknown as UnifiedProduct
+
+      const [branchAwareProduct] = await loadBranchInventoryStockMap(supabase, selectedBranchId, [baseProduct.id])
+        .then(({ stockMap, branchScoped }) => applyBranchInventoryToProducts([baseProduct], stockMap, branchScoped))
+
+      return branchAwareProduct
     } catch (err) {
       console.error('Error buscando producto por código de barras:', err)
       return null
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Función para agregar producto al carrito
   const addToCart = useCallback((product: UnifiedProduct, quantity: number = 1) => {
@@ -332,7 +374,7 @@ export function usePOSProducts() {
     setError(null)
   }, [])
 
-  // Función para procesar venta
+  // Procesa la venta de inventario vía API server-side para evitar depender de RPCs del cliente.
   const processSale = useCallback(async (saleData: SaleData) => {
     if (cart.length === 0 && (!saleData.items || saleData.items.length === 0)) {
       setError('El carrito está vacío')
@@ -375,14 +417,24 @@ export function usePOSProducts() {
         ]
       }
 
-      const { data, error: rpcError } = await supabase.rpc('process_pos_sale', payload)
+      const response = await fetch('/api/pos/process-sale', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...branchHeaders(selectedBranchId),
+        },
+        body: JSON.stringify(payload),
+      })
 
-      if (rpcError) {
-        // Handle empty error object or missing function
-        if (Object.keys(rpcError).length === 0 || rpcError.code === 'P0001' || (rpcError.message && rpcError.message.includes('function process_pos_sale'))) {
-          throw new Error('La función de base de datos "process_pos_sale" no existe o ocurrió un error de conexión. Por favor, verificá las migraciones de Supabase.')
-        }
-        throw rpcError
+      const result = await response.json().catch(() => null) as {
+        success?: boolean
+        error?: string
+        saleId?: string
+        data?: { id?: string }
+      } | null
+
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || 'No se pudo procesar la venta POS')
       }
 
       // Limpiar carrito y recargar productos
@@ -391,11 +443,15 @@ export function usePOSProducts() {
 
       return { 
         success: true, 
-        saleId: data?.id, // Use optional chaining just in case
-        data: data
+        saleId: result?.saleId || result?.data?.id,
+        data: result?.data
       }
-    } catch (err: any) {
-      const errorMsg = err.message || (typeof err === 'object' && Object.keys(err).length === 0 ? 'Error desconocido (Posible error de red o función faltante)' : 'Error desconocido')
+    } catch (error) {
+      const errorMsg = error instanceof Error
+        ? error.message
+        : (typeof error === 'object' && error && Object.keys(error).length === 0
+            ? 'Error desconocido (Posible error de red o endpoint faltante)'
+            : 'Error desconocido')
       setError(`Error al procesar venta: ${errorMsg}`)
       return { 
         success: false, 
@@ -404,7 +460,7 @@ export function usePOSProducts() {
     } finally {
       setLoading(false)
     }
-  }, [cart, supabase, clearCart, fetchProducts])
+  }, [cart, clearCart, fetchProducts, selectedBranchId])
 
   // Productos filtrados
   const filteredProducts = useMemo(() => {

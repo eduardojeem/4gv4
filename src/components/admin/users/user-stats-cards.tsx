@@ -1,7 +1,8 @@
 'use client'
 
 import { Card, CardContent } from '@/components/ui/card'
-import { Users, UserCheck, UserX, Shield, TrendingUp } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Users, UserCheck, UserX, Shield, UserPlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface UserStats {
@@ -20,48 +21,55 @@ interface UserStatsCardsProps {
 export function UserStatsCards({ stats, isLoading }: UserStatsCardsProps) {
     const items = [
         {
-            label: 'Total Usuarios',
+            label: 'Total',
             value: stats.totalUsers,
             icon: Users,
             color: 'text-blue-600 dark:text-blue-400',
-            bg: 'bg-blue-50 dark:bg-blue-900/20',
-            trend: '+12% vs mes anterior'
+            bg: 'bg-blue-50 dark:bg-blue-950/30',
+            border: 'border-l-blue-500',
         },
         {
-            label: 'Usuarios Activos',
+            label: 'Activos',
             value: stats.activeUsers,
             icon: UserCheck,
-            color: 'text-green-600 dark:text-green-400',
-            bg: 'bg-green-50 dark:bg-green-900/20',
-            trend: '98% tasa de actividad'
+            color: 'text-emerald-600 dark:text-emerald-400',
+            bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+            border: 'border-l-emerald-500',
         },
         {
             label: 'Inactivos',
             value: stats.inactiveUsers,
             icon: UserX,
-            color: 'text-red-600 dark:text-red-400',
-            bg: 'bg-red-50 dark:bg-red-900/20',
-            trend: 'Requieren atención'
+            color: 'text-rose-600 dark:text-rose-400',
+            bg: 'bg-rose-50 dark:bg-rose-950/30',
+            border: 'border-l-rose-500',
         },
         {
-            label: 'Administradores',
+            label: 'Admins',
             value: stats.adminsCount,
             icon: Shield,
-            color: 'text-purple-600 dark:text-purple-400',
-            bg: 'bg-purple-50 dark:bg-purple-900/20',
-            trend: 'Acceso privilegiado'
-        }
+            color: 'text-violet-600 dark:text-violet-400',
+            bg: 'bg-violet-50 dark:bg-violet-950/30',
+            border: 'border-l-violet-500',
+        },
+        {
+            label: 'Nuevos este mes',
+            value: stats.newUsersThisMonth,
+            icon: UserPlus,
+            color: 'text-amber-600 dark:text-amber-400',
+            bg: 'bg-amber-50 dark:bg-amber-950/30',
+            border: 'border-l-amber-500',
+        },
     ]
 
     if (isLoading) {
         return (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {[1, 2, 3, 4].map((i) => (
-                    <Card key={i} className="animate-pulse dark:bg-gray-800">
-                        <CardContent className="p-6">
-                            <div className="h-12 w-12 bg-gray-200 dark:bg-gray-700 rounded-full mb-4" />
-                            <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
-                            <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+                {[1, 2, 3, 4, 5].map((i) => (
+                    <Card key={i} className="border shadow-sm">
+                        <CardContent className="p-4">
+                            <Skeleton className="h-4 w-16 mb-2" />
+                            <Skeleton className="h-7 w-10" />
                         </CardContent>
                     </Card>
                 ))}
@@ -70,26 +78,22 @@ export function UserStatsCards({ stats, isLoading }: UserStatsCardsProps) {
     }
 
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
             {items.map((item) => (
-                <Card key={item.label} className="border-none shadow-md hover:shadow-lg transition-shadow duration-200 dark:bg-gray-800 dark:shadow-none">
-                    <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className={cn("p-3 rounded-full", item.bg)}>
-                                <item.icon className={cn("h-6 w-6", item.color)} />
+                <Card key={item.label} className={`border-l-4 ${item.border} shadow-sm hover:shadow-md transition-shadow`}>
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                    {item.label}
+                                </p>
+                                <p className="text-2xl font-bold mt-1 tabular-nums">
+                                    {item.value}
+                                </p>
                             </div>
-                            <span className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full flex items-center">
-                                <TrendingUp className="h-3 w-3 mr-1" />
-                                {item.trend}
-                            </span>
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-muted-foreground dark:text-gray-400">
-                                {item.label}
-                            </p>
-                            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
-                                {item.value}
-                            </h3>
+                            <div className={cn('p-2 rounded-lg', item.bg)}>
+                                <item.icon className={cn('h-4 w-4', item.color)} />
+                            </div>
                         </div>
                     </CardContent>
                 </Card>

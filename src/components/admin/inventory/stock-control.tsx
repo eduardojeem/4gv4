@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
+import { useBranch } from '@/contexts/branch-context'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 import { 
   AlertTriangle, 
   TrendingUp, 
@@ -97,6 +99,7 @@ const StockControl: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   
   const supabase = createClient()
+  const { selectedBranchId } = useBranch()
 
   // Cargar datos de Supabase
   const fetchData = useCallback(async () => {

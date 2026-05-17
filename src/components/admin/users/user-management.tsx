@@ -341,23 +341,22 @@ export function UserManagement() {
   if (accessDenied) return accessDenied
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Gestión de Usuarios</h2>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Administra el acceso y roles del sistema</p>
+          <h2 className="text-2xl font-bold tracking-tight">Usuarios</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {stats.total} usuarios registrados · {stats.active} activos
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => syncUsers()} disabled={dataLoading} title="Sincronizar con Auth">
-            <RefreshCw className={`h-4 w-4 mr-2 ${dataLoading ? 'animate-spin' : ''}`} />
+          <Button variant="outline" size="sm" onClick={() => syncUsers()} disabled={dataLoading}>
+            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${dataLoading ? 'animate-spin' : ''}`} />
             Sincronizar
           </Button>
-          <Button
-            onClick={() => setIsCreateDialogOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-blue-200 transition-all dark:hover:shadow-blue-900/30"
-          >
-            <UserPlus className="h-4 w-4 mr-2" />
+          <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+            <UserPlus className="h-3.5 w-3.5 mr-1.5" />
             Nuevo Usuario
           </Button>
         </div>
@@ -367,15 +366,15 @@ export function UserManagement() {
       <UserStatsCards stats={dashboardStats} isLoading={dataLoading} />
 
       {/* Main Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-white dark:bg-gray-800 border dark:border-gray-700 p-1 rounded-lg">
-          <TabsTrigger value="users" className="data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-900/20 data-[state=active]:text-blue-700 dark:data-[state=active]:text-blue-400">
-            <Users className="h-4 w-4 mr-2" />
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="h-9">
+          <TabsTrigger value="users" className="text-xs gap-1.5">
+            <Users className="h-3.5 w-3.5" />
             Usuarios
           </TabsTrigger>
-          <TabsTrigger value="activity" className="data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-900/20 data-[state=active]:text-blue-700 dark:data-[state=active]:text-blue-400">
-            <Activity className="h-4 w-4 mr-2" />
-            Actividad Reciente
+          <TabsTrigger value="activity" className="text-xs gap-1.5">
+            <Activity className="h-3.5 w-3.5" />
+            Actividad
           </TabsTrigger>
         </TabsList>
 
@@ -389,7 +388,7 @@ export function UserManagement() {
             onStatusFilterChange={setStatusFilter}
           />
 
-          <Card className="border-0 shadow-lg dark:shadow-none overflow-hidden dark:bg-gray-800 dark:border dark:border-gray-700">
+          <Card className="border shadow-sm overflow-hidden">
             <CardContent className="p-0">
               <UsersTable
                 users={users}
@@ -413,7 +412,7 @@ export function UserManagement() {
         </TabsContent>
 
         <TabsContent value="activity">
-          <Card className="dark:bg-gray-800 dark:border-gray-700">
+          <Card className="border shadow-sm">
             <CardContent className="p-6">
               <UserActivityTimeline />
             </CardContent>
@@ -474,10 +473,14 @@ export function UserManagement() {
                 />
               </div>
             </div>
-            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 text-sm text-yellow-800">
+            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 text-sm text-yellow-800 dark:bg-yellow-900/10 dark:border-yellow-800 dark:text-yellow-300">
               <AlertTriangle className="h-4 w-4 inline mr-2" />
-              Nota: Esta accion crea la cuenta en autenticacion y sincroniza perfil/rol automaticamente.
-              Verifica email, rol y estado antes de confirmar.
+              Se crea la cuenta y sincroniza perfil/rol automáticamente.
+              {(formData.role === 'vendedor' || formData.role === 'tecnico') && (
+                <span className="block mt-1 text-xs">
+                  Después de crear, editá el usuario para asignarle una sucursal.
+                </span>
+              )}
             </div>
           </div>
           <DialogFooter>

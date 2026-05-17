@@ -270,7 +270,7 @@ export const CashRegisterOverview = React.memo(function CashRegisterOverview({
                       <Banknote className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                       <p className="text-[11px] uppercase tracking-wide font-semibold text-emerald-900 dark:text-emerald-300">Efectivo</p>
                     </div>
-                    <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(register.balance || 0)}</p>
+                    <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{formatCurrency(distribution.cash)}</p>
                   </div>
 
                   <div className="flex flex-col p-3 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/50 rounded-xl">

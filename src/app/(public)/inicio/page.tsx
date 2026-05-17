@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { getPublicBranchLocations } from '@/lib/api/products-server'
 import HomePageClient from './HomePageClient'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -24,10 +25,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const settings = await fetchWebsiteSettings()
+  const [settings, branches] = await Promise.all([
+    fetchWebsiteSettings(),
+    getPublicBranchLocations(),
+  ])
 
   // Even if the DB fetch fails, render with defaults so the page is never blank
   const safeSettings = settings ?? getWebsiteSettingsDefaults()
 
-  return <HomePageClient initialSettings={safeSettings} />
+  return <HomePageClient initialSettings={safeSettings} branches={branches} />
 }

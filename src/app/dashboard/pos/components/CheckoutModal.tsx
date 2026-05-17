@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -219,6 +220,9 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             <DollarSign className="h-4 w-4 text-primary" />
             Procesar Pago
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Revisa los items, selecciona el método de pago y confirma la venta desde el POS.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="px-6 py-3 border-b bg-background/90">

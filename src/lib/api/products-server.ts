@@ -39,6 +39,7 @@ export type ProductFilters = {
   query?: string
   categoryId?: string
   brand?: string
+  branchId?: string
   minPrice?: number
   maxPrice?: number
   inStock?: boolean
@@ -69,6 +70,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     query: rawQuery = '',
     categoryId,
     brand,
+    branchId,
     minPrice = 0,
     maxPrice = MAX_PRICE,
     inStock = false,
@@ -146,6 +148,36 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
   if (inStock) {
     queryBuilder = queryBuilder.gt('stock_quantity', 0)
+  }
+
+  // Branch filter: only show products available at the selected branch
+  if (branchId) {
+    try {
+      const { data: branchProducts } = await supabase
+        .from('branch_inventory')
+        .select('product_id')
+        .eq('branch_id', branchId)
+        .gt('stock_quantity', 0)
+
+      if (branchProducts && branchProducts.length > 0) {
+        const productIds = branchProducts.map(bp => bp.product_id)
+        queryBuilder = queryBuilder.in('id', productIds)
+      } else {
+        // No products in this branch — return empty
+        return {
+          products: [],
+          total: 0,
+          page,
+          perPage,
+          totalPages: 0,
+          brands: [],
+          priceRange: { min: 0, max: MAX_PRICE },
+          isWholesale,
+        }
+      }
+    } catch {
+      // branch_inventory table might not exist — ignore filter
+    }
   }
 
   // Apply sorting
@@ -346,4 +378,147 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
   }
 
   return { product, isWholesale }
+}
+
+// ============================================================================
+// Branch Stock Availability (for product detail page)
+// ============================================================================
+
+export interface BranchStockInfo {
+  branchId: string
+  branchName: string
+  city: string | null
+  phone: string | null
+  stockQuantity: number
+  isAvailable: boolean
+}
+
+/**
+ * Get stock availability per branch for a specific product.
+ * Used in the public product detail page to show "Available at X sucursales".
+ * Returns empty array if branch_inventory table doesn't exist yet.
+ */
+export async function getProductBranchStock(productId: string): Promise<BranchStockInfo[]> {
+  const supabase = await createClient()
+
+  try {
+    const { data, error } = await supabase
+      .from('branch_inventory')
+      .select(`
+        stock_quantity,
+        branch:branches(id, name, city, phone, is_active)
+      `)
+      .eq('product_id', productId)
+
+    if (error) {
+      // Table might not exist yet — graceful fallback
+      const msg = error.message?.toLowerCase() || ''
+      if (msg.includes('does not exist') || msg.includes('could not find') || msg.includes('relation')) {
+        return []
+      }
+      console.error('[getProductBranchStock] Error:', error.message)
+      return []
+    }
+
+    if (!data || data.length === 0) return []
+
+    // Filter only active branches and map to public-safe format
+    return data
+      .filter((row: any) => row.branch?.is_active === true)
+      .map((row: any) => ({
+        branchId: row.branch.id,
+        branchName: row.branch.name,
+        city: row.branch.city,
+        phone: row.branch.phone,
+        stockQuantity: row.stock_quantity ?? 0,
+        isAvailable: (row.stock_quantity ?? 0) > 0,
+      }))
+      .sort((a: BranchStockInfo, b: BranchStockInfo) => b.stockQuantity - a.stockQuantity)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Get active branches for the public branch filter.
+ * Returns empty array if branches table doesn't exist yet.
+ */
+export interface PublicBranch {
+  id: string
+  name: string
+  city: string | null
+}
+
+export async function getPublicBranches(): Promise<PublicBranch[]> {
+  const supabase = await createClient()
+
+  try {
+    const { data, error } = await supabase
+      .from('branches')
+      .select('id, name, city')
+      .eq('is_active', true)
+      .order('is_default', { ascending: false })
+      .order('name', { ascending: true })
+
+    if (error) {
+      const msg = error.message?.toLowerCase() || ''
+      if (msg.includes('does not exist') || msg.includes('could not find') || msg.includes('relation')) {
+        return []
+      }
+      return []
+    }
+
+    return (data || []) as PublicBranch[]
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Get branches with full contact info for the homepage locations section.
+ * Returns empty array if branches table doesn't exist.
+ */
+export interface BranchLocationInfo {
+  id: string
+  name: string
+  address: string | null
+  city: string | null
+  phone: string | null
+  email: string | null
+  managerName: string | null
+  isDefault: boolean
+}
+
+export async function getPublicBranchLocations(): Promise<BranchLocationInfo[]> {
+  const supabase = await createClient()
+
+  try {
+    const { data, error } = await supabase
+      .from('branches')
+      .select('id, name, address, city, phone, email, manager_name, is_default')
+      .eq('is_active', true)
+      .order('is_default', { ascending: false })
+      .order('name', { ascending: true })
+
+    if (error) {
+      const msg = error.message?.toLowerCase() || ''
+      if (msg.includes('does not exist') || msg.includes('could not find') || msg.includes('relation')) {
+        return []
+      }
+      return []
+    }
+
+    return (data || []).map(b => ({
+      id: b.id,
+      name: b.name,
+      address: b.address,
+      city: b.city,
+      phone: b.phone,
+      email: b.email,
+      managerName: b.manager_name,
+      isDefault: b.is_default,
+    }))
+  } catch {
+    return []
+  }
 }

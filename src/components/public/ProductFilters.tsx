@@ -11,6 +11,7 @@ import { clearAllProductFilters } from '@/lib/utils/product-filters'
 import { Accordion } from '@/components/ui/accordion'
 import { CategoryFilter } from './filters/CategoryFilter'
 import { BrandFilter } from './filters/BrandFilter'
+import { BranchFilter } from './filters/BranchFilter'
 import { StockFilter } from './filters/StockFilter'
 import { PriceFilter } from './filters/PriceFilter'
 
@@ -25,6 +26,7 @@ interface ProductFiltersProps {
   priceRange: { min: number; max: number }
   categories?: Category[]
   brands?: string[]
+  branches?: Array<{ id: string; name: string; city: string | null }>
   onCollapseChange?: (collapsed: boolean) => void
 }
 
@@ -32,6 +34,7 @@ export function ProductFilters({
   priceRange = { min: 0, max: PRODUCTS_MAX_PRICE },
   categories = [],
   brands = [],
+  branches = [],
   onCollapseChange,
 }: ProductFiltersProps) {
   const router = useRouter()
@@ -40,6 +43,7 @@ export function ProductFilters({
 
   const categoryId = searchParams.get('category_id') || ''
   const brand = searchParams.get('brand') || ''
+  const branchId = searchParams.get('branch_id') || ''
   const minPrice = Number(searchParams.get('min_price')) || 0
   const maxPrice = Number(searchParams.get('max_price')) || PRODUCTS_MAX_PRICE
   const inStock = searchParams.get('in_stock') === 'true'
@@ -88,6 +92,7 @@ export function ProductFilters({
   const activeFiltersCount = [
     categoryId !== '',
     brand !== '',
+    branchId !== '',
     inStock,
     minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE,
   ].filter(Boolean).length
@@ -166,6 +171,14 @@ export function ProductFilters({
                 </button>
               </Badge>
             )}
+            {branchId && (
+              <Badge variant="secondary" className="gap-1.5 text-xs font-normal rounded-full bg-background hover:bg-background shadow-sm">
+                📍 {branches.find(b => b.id === branchId)?.name || 'Sucursal'}
+                <button type="button" className="inline-flex items-center justify-center rounded-full hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors" onClick={() => updateFilters({ branch_id: null })} aria-label="Quitar filtro de sucursal">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )}
             {inStock && (
               <Badge variant="secondary" className="gap-1.5 text-xs font-normal rounded-full bg-background hover:bg-background shadow-sm">
                 En stock
@@ -185,8 +198,9 @@ export function ProductFilters({
           </div>
         )}
 
-        <Accordion type="multiple" defaultValue={['category', 'brand', 'stock', 'price']} className="w-full rounded-xl border border-border/60 bg-card shadow-sm">
+        <Accordion type="multiple" defaultValue={['category', 'branch', 'brand', 'stock', 'price']} className="w-full rounded-xl border border-border/60 bg-card shadow-sm">
           <CategoryFilter categories={categories} selectedCategoryId={categoryId} onSelect={(id) => updateFilters({ category_id: id })} />
+          <BranchFilter branches={branches} selectedBranchId={branchId} onSelect={(id) => updateFilters({ branch_id: id })} />
           <BrandFilter brands={brands} selectedBrand={brand} onSelect={(b) => updateFilters({ brand: b })} />
           <StockFilter inStock={inStock} onChange={(checked) => updateFilters({ in_stock: checked })} />
           <PriceFilter priceRange={priceRange} localRange={localPriceRange} onChange={setLocalPriceRange} onCommit={(values) => updateFilters({ min_price: values[0] > 0 ? values[0] : null, max_price: values[1] < PRODUCTS_MAX_PRICE ? values[1] : null })} />

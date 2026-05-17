@@ -27,6 +27,8 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 import { formatCurrency } from '@/lib/currency'
 import { COMPLETED_SALE_STATUSES, PENDING_SALE_STATUSES, isCompletedSaleStatus } from '@/lib/sales-status'
 
@@ -168,6 +170,7 @@ function KpiCard({ stat, loading }: { stat: KpiStat; loading: boolean }) {
 export default function DashboardPage() {
   const [isPending, startTransition] = useTransition()
   const supabase = useMemo(() => createClient(), [])
+  const { selectedBranchId } = useBranch()
   const [loadingStats, setLoadingStats] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<number>(-Infinity)
   const [stats, setStats] = useState<KpiStat[]>([
@@ -206,15 +209,27 @@ export default function DashboardPage() {
         { count: repairsActiveCount },
         { data: salesWeek }
       ] = await Promise.all([
-        supabase.from('sales').select('total:total_amount,status,created_at')
-          .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
-        supabase.from('sales').select('id', { count: 'exact', head: true }).in('status', [...PENDING_SALE_STATUSES]),
+        withBranchFilter(
+          supabase.from('sales').select('total:total_amount,status,created_at')
+            .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
+          selectedBranchId
+        ),
+        withBranchFilter(
+          supabase.from('sales').select('id', { count: 'exact', head: true }).in('status', [...PENDING_SALE_STATUSES]),
+          selectedBranchId
+        ),
         supabase.from('customers').select('id', { count: 'exact', head: true }).gte('created_at', startOfWeek.toISOString()),
         supabase.from('products').select('id', { count: 'exact', head: true }),
         supabase.from('products').select('stock_quantity, min_stock').gt('stock_quantity', 0),
-        supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', ['recibido', 'diagnostico', 'reparacion', 'listo']),
-        supabase.from('sales').select('total_amount,created_at,status')
-          .gte('created_at', last7Days[0].toISOString()).in('status', [...COMPLETED_SALE_STATUSES])
+        withBranchFilter(
+          supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', ['recibido', 'diagnostico', 'reparacion', 'listo']),
+          selectedBranchId
+        ),
+        withBranchFilter(
+          supabase.from('sales').select('total_amount,created_at,status')
+            .gte('created_at', last7Days[0].toISOString()).in('status', [...COMPLETED_SALE_STATUSES]),
+          selectedBranchId
+        )
       ])
 
       type SaleRow = { total: number; status: string; created_at: string }
@@ -262,7 +277,7 @@ export default function DashboardPage() {
     } finally {
       setLoadingStats(false)
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   useEffect(() => {
     if (config.supabase.isConfigured) {

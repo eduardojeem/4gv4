@@ -1,6 +1,9 @@
+'use client'
+
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Search, RotateCw } from 'lucide-react'
 
 interface UsersFiltersProps {
   searchTerm: string
@@ -19,20 +22,29 @@ export function UsersFilters({
   statusFilter,
   onStatusFilterChange
 }: UsersFiltersProps) {
+  const hasFilters = searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
+
+  const clearFilters = () => {
+    onSearchChange('')
+    onRoleFilterChange('all')
+    onStatusFilterChange('all')
+  }
+
   return (
-    <div className="grid gap-4 md:grid-cols-4 bg-white dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 shadow-sm">
-      <div className="relative md:col-span-2">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="relative flex-1 min-w-[220px] max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Buscar por nombre, email o departamento..."
+          placeholder="Buscar por nombre o email..."
           value={searchTerm}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-10 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700"
+          className="pl-9 h-9 text-sm"
         />
       </div>
+
       <Select value={roleFilter} onValueChange={onRoleFilterChange}>
-        <SelectTrigger className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
-          <SelectValue placeholder="Filtrar por rol" />
+        <SelectTrigger className="w-[150px] h-9 text-sm">
+          <SelectValue placeholder="Rol" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Todos los roles</SelectItem>
@@ -43,17 +55,25 @@ export function UsersFilters({
           <SelectItem value="cliente">Cliente</SelectItem>
         </SelectContent>
       </Select>
+
       <Select value={statusFilter} onValueChange={onStatusFilterChange}>
-        <SelectTrigger className="bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700">
-          <SelectValue placeholder="Filtrar por estado" />
+        <SelectTrigger className="w-[140px] h-9 text-sm">
+          <SelectValue placeholder="Estado" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">Todos los estados</SelectItem>
-          <SelectItem value="active">Activo</SelectItem>
-          <SelectItem value="inactive">Inactivo</SelectItem>
-          <SelectItem value="suspended">Suspendido</SelectItem>
+          <SelectItem value="all">Todos</SelectItem>
+          <SelectItem value="active">Activos</SelectItem>
+          <SelectItem value="inactive">Inactivos</SelectItem>
+          <SelectItem value="suspended">Suspendidos</SelectItem>
         </SelectContent>
       </Select>
+
+      {hasFilters && (
+        <Button variant="ghost" size="sm" className="h-9 text-xs text-muted-foreground" onClick={clearFilters}>
+          <RotateCw className="h-3.5 w-3.5 mr-1" />
+          Limpiar
+        </Button>
+      )}
     </div>
   )
 }

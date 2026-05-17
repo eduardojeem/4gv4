@@ -5,6 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import type { Database } from '@/lib/supabase/types'
 import type { Product, ProductAlert, Category, Supplier, Brand } from '@/types/product-unified'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders } from '@/lib/branches/client'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 
 type ProductMovement = Database['public']['Tables']['product_movements']['Row']
 
@@ -74,6 +77,21 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   })
 
   const supabase = createClient()
+  const { selectedBranchId } = useBranch()
+
+  const applySelectedBranchStock = useCallback(async <T extends { id: string; stock_quantity?: number | null }>(items: T[]) => {
+    if (!selectedBranchId || items.length === 0) {
+      return items as Array<T & { branch_stock_quantity?: number }>
+    }
+
+    const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+      supabase,
+      selectedBranchId,
+      items.map((item) => item.id)
+    )
+
+    return applyBranchInventoryToProducts(items, stockMap, branchScoped)
+  }, [selectedBranchId, supabase])
 
   // Función para obtener estadísticas del dashboard
   const fetchDashboardStats = useCallback(async () => {
@@ -108,7 +126,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       if (brandsError) throw brandsError
 
       // Calcular estadísticas
-      const productList = products as unknown as Product[]
+      const productList = await applySelectedBranchStock((products || []) as unknown as Product[])
       const totalProducts = productList?.length || 0
       const activeProducts = productList?.filter(p => p.is_active)?.length || 0
       const totalStockValue = productList?.reduce((sum, p) => sum + ((p.sale_price || 0) * (p.stock_quantity || 0)), 0) || 0
@@ -135,7 +153,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       console.error('Error fetching dashboard stats:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
     }
-  }, [supabase, enabled])
+  }, [applySelectedBranchStock, supabase, enabled])
 
   // Función para obtener productos con filtros y paginación
   const fetchProducts = useCallback(async (
@@ -196,13 +214,13 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       }
 
       if (activeFilters.stockStatus && activeFilters.stockStatus !== 'all') {
-        if (activeFilters.stockStatus === 'in_stock') {
+        if (activeFilters.stockStatus === 'in_stock' && !selectedBranchId) {
           query = query.filter('stock_quantity', 'gt', 0)
-        } else if (activeFilters.stockStatus === 'low_stock') {
+        } else if (activeFilters.stockStatus === 'low_stock' && !selectedBranchId) {
           // PostgREST no permite comparar columnas directamente (stock_quantity <= min_stock).
           // Filtramos parcialmente en SQL y completamos en memoria más abajo.
           query = query.filter('stock_quantity', 'gt', 0)
-        } else if (activeFilters.stockStatus === 'out_of_stock') {
+        } else if (activeFilters.stockStatus === 'out_of_stock' && !selectedBranchId) {
           query = query.filter('stock_quantity', 'eq', 0)
         }
       }
@@ -238,11 +256,15 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         throw error
       }
       
-      let resultData = (data || []) as unknown as Product[]
+      let resultData = await applySelectedBranchStock((data || []) as unknown as Product[])
       if (activeFilters.stockStatus === 'low_stock') {
         resultData = resultData.filter(
           p => (p.stock_quantity || 0) <= (p.min_stock || 0) && (p.stock_quantity || 0) > 0
         )
+      } else if (activeFilters.stockStatus === 'in_stock') {
+        resultData = resultData.filter((product) => Number(product.stock_quantity || 0) > 0)
+      } else if (activeFilters.stockStatus === 'out_of_stock') {
+        resultData = resultData.filter((product) => Number(product.stock_quantity || 0) === 0)
       }
 
       if (!resultData || resultData.length === 0) {
@@ -258,7 +280,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     } finally {
       setLoading(false)
     }
-  }, [supabase, filters, sort, pagination, enabled])
+  }, [applySelectedBranchStock, supabase, filters, sort, pagination, enabled])
 
   // Función para obtener categorías
   const fetchCategories = useCallback(async () => {
@@ -330,7 +352,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       const generatedAlerts: ProductAlert[] = []
       let alertId = 1
 
-      const productsToCheck = productsData as unknown as Product[]
+      const productsToCheck = await applySelectedBranchStock((productsData || []) as unknown as Product[])
 
       for (const product of productsToCheck || []) {
         // Alerta de stock bajo
@@ -421,25 +443,27 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       console.error('Error fetching alerts:', err)
       setAlerts([])
     }
-  }, [supabase, enabled])
+  }, [applySelectedBranchStock, supabase, enabled])
 
   // Función para crear producto
   const createProduct = useCallback(async (productData: Database['public']['Tables']['products']['Insert']) => {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .insert(productData)
-        .select(`
-          *,
-          category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, phone, address)
-        `)
-        .single()
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...branchHeaders(selectedBranchId),
+        },
+        body: JSON.stringify(productData),
+      })
+      const payload = await response.json().catch(() => null) as { success?: boolean; data?: Product; error?: string } | null
 
-      if (error) throw error
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.error || 'Error al crear el producto')
+      }
 
       // Actualizar estado local inmediatamente
-      const newProduct = data as unknown as Product
+      const newProduct = payload.data as Product
       
       // Ensure local state update happens with functional update to avoid stale closures
       setProducts(prev => {
@@ -458,17 +482,17 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       // Force refresh of product list to ensure sync with DB triggers/defaults
       fetchProducts().catch(err => console.error('Error refreshing products after create:', err))
 
-      return { success: true, data }
-    } catch (err: any) {
+      return { success: true, data: newProduct }
+    } catch (err: unknown) {
       console.error('Error creating product:', err)
       if (typeof err === 'object' && err !== null) {
         console.error('Error details:', JSON.stringify(err, null, 2))
       }
       let errorMessage = 'Error al crear el producto'
       
-      if (err.code === '23505') { // Unique constraint violation
+      if (typeof err === 'object' && err !== null && 'code' in err && err.code === '23505') { // Unique constraint violation
         errorMessage = 'Ya existe un producto con este SKU'
-      } else if (err.message) {
+      } else if (err instanceof Error) {
         errorMessage = err.message
       }
       
@@ -477,7 +501,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         error: errorMessage
       }
     }
-  }, [supabase, fetchDashboardStats, fetchProducts])
+  }, [selectedBranchId, fetchDashboardStats, fetchProducts])
 
   // Función para actualizar producto
   const updateProduct = useCallback(async (
@@ -485,37 +509,38 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     productData: Database['public']['Tables']['products']['Update']
   ) => {
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .update(productData)
-        .eq('id', id)
-        .select(`
-          *,
-          category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, phone, address)
-        `)
-        .single()
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...branchHeaders(selectedBranchId),
+        },
+        body: JSON.stringify(productData),
+      })
+      const payload = await response.json().catch(() => null) as { success?: boolean; data?: Product; error?: string } | null
 
-      if (error) throw error
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.error || 'Error al actualizar el producto')
+      }
 
       // Actualizar estado local inmediatamente
-      const updatedProduct = data as unknown as Product
+      const updatedProduct = payload.data as Product
       setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p))
 
       // Refrescar estadísticas en segundo plano
       fetchDashboardStats().catch(err => console.error('Error refreshing data after update:', err))
 
-      return { success: true, data }
-    } catch (err: any) {
+      return { success: true, data: updatedProduct }
+    } catch (err: unknown) {
       console.error('Error updating product:', err)
       if (typeof err === 'object' && err !== null) {
         console.error('Error details:', JSON.stringify(err, null, 2))
       }
       let errorMessage = 'Error al actualizar el producto'
       
-      if (err.code === '23505') {
+      if (typeof err === 'object' && err !== null && 'code' in err && err.code === '23505') {
         errorMessage = 'Ya existe un producto con este SKU'
-      } else if (err.message) {
+      } else if (err instanceof Error) {
         errorMessage = err.message
       }
       
@@ -524,17 +549,20 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         error: errorMessage
       }
     }
-  }, [supabase, fetchDashboardStats])
+  }, [selectedBranchId, fetchDashboardStats])
 
   // Función para eliminar producto
   const deleteProduct = useCallback(async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id)
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'DELETE',
+        headers: branchHeaders(selectedBranchId),
+      })
+      const payload = await response.json().catch(() => null) as { success?: boolean; error?: string } | null
 
-      if (error) throw error
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'Error al eliminar el producto')
+      }
 
       // Refrescar datos en segundo plano
       Promise.all([
@@ -553,7 +581,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         error: err instanceof Error ? err.message : 'Error desconocido' 
       }
     }
-  }, [supabase, fetchProducts, fetchDashboardStats])
+  }, [selectedBranchId, fetchProducts, fetchDashboardStats])
 
   // Función para actualizar stock
   const updateStock = useCallback(async (
@@ -565,14 +593,43 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     referenceType?: string
   ) => {
     try {
-      const { data, error } = await supabase.rpc('update_product_stock', {
-        product_id: productId,
-        quantity_change: quantityChange,
-        movement_type: movementType,
-        reason,
-        reference_id: referenceId,
-        reference_type: referenceType
-      })
+      let data = null
+      let error = null as { message?: string } | null
+
+      if (selectedBranchId) {
+        const currentProduct = products.find((product) => product.id === productId)
+        const currentStock = Number(currentProduct?.stock_quantity || 0)
+        const nextStock = currentStock + quantityChange
+
+        if (nextStock < 0) {
+          throw new Error('El ajuste dejaría el stock en negativo.')
+        }
+
+        const response = await supabase.rpc('set_branch_inventory_stock', {
+          p_product_id: productId,
+          p_branch_id: selectedBranchId,
+          p_new_stock: nextStock,
+          p_movement_type: movementType,
+          p_reason: reason ?? null,
+          p_reference_id: referenceId ?? null,
+          p_reference_type: referenceType ?? null,
+        })
+
+        data = response.data
+        error = response.error
+      } else {
+        const response = await supabase.rpc('update_product_stock', {
+          product_id: productId,
+          quantity_change: quantityChange,
+          movement_type: movementType,
+          reason,
+          reference_id: referenceId,
+          reference_type: referenceType
+        })
+
+        data = response.data
+        error = response.error
+      }
 
       if (error) throw error
 
@@ -591,7 +648,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         error: err instanceof Error ? err.message : 'Error desconocido' 
       }
     }
-  }, [supabase, fetchProducts, fetchDashboardStats, fetchAlerts])
+  }, [selectedBranchId, products, supabase, fetchProducts, fetchDashboardStats, fetchAlerts])
 
   // Función para obtener movimientos de un producto
   const getProductMovements = useCallback(async (productId: string, limit = 50) => {

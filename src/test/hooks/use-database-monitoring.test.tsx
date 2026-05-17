@@ -12,12 +12,12 @@ vi.mock('@/services/database-monitoring-service', () => ({
   buildQuickMetrics: (metrics: DatabaseMetrics) => ({
     totalSize: `${metrics.totalSize} bytes`,
     totalSizeBytes: metrics.totalSize,
-    activeConnections: metrics.connectionStats.activeConnections,
-    connectionUsage: metrics.connectionStats.connectionUsage,
-    avgQueryTime: metrics.queryPerformance.avgQueryTime,
-    cacheHitRatio: metrics.queryPerformance.cacheHitRatio,
-    alertsCount: metrics.alerts.filter(alert => !alert.resolved).length,
-    status: 'good' as const,
+    activeConnections: metrics.connectionStats?.activeConnections ?? null,
+    connectionUsage: metrics.connectionStats?.connectionUsage ?? null,
+    avgQueryTime: metrics.queryPerformance?.avgQueryTime ?? null,
+    cacheHitRatio: metrics.queryPerformance?.cacheHitRatio ?? null,
+    alertsCount: metrics.alerts.filter((alert) => !alert.resolved).length,
+    status: metrics.overallStatus,
   }),
   databaseMonitoringService: {
     getDatabaseMetrics: serviceMocks.getDatabaseMetrics,
@@ -26,6 +26,10 @@ vi.mock('@/services/database-monitoring-service', () => ({
 }))
 
 const metrics: DatabaseMetrics = {
+  collectedAt: '2026-01-01T00:00:00.000Z',
+  overallStatus: 'ok',
+  sources: [],
+  missingMetrics: [],
   totalSize: 1024,
   tablesSizes: [],
   connectionStats: {
@@ -41,13 +45,13 @@ const metrics: DatabaseMetrics = {
     cacheHitRatio: 90,
   },
   storageBreakdown: {
-    tables: 700,
+    relations: 700,
     indexes: 200,
-    logs: 80,
-    temp: 20,
-    other: 24,
+    unclassified: 24,
   },
   alerts: [],
+  indexStats: [],
+  growthHistory: [],
 }
 
 describe('useDatabaseMonitoring', () => {
@@ -60,6 +64,8 @@ describe('useDatabaseMonitoring', () => {
     serviceMocks.performMaintenanceTask.mockResolvedValue({
       success: true,
       message: 'ok',
+      task: 'rotate_logs',
+      executedAt: '2026-01-01T00:00:00.000Z',
     })
   })
 

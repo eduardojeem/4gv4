@@ -81,6 +81,9 @@ export function CashRegisterAudit({ onOpenFullAudit }: CashRegisterAuditProps) {
   const { auditLog } = useCashRegisterContext()
   const [searchTerm, setSearchTerm] = useState('')
   const [actionFilter, setActionFilter] = useState<'all' | 'session_open' | 'session_close' | 'cash_in' | 'cash_out' | 'sale' | 'other'>('all')
+  // Fix #15: paginación en lugar de slice hardcodeado
+  const PAGE_SIZE = 25
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   const entries = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -100,7 +103,22 @@ export function CashRegisterAudit({ onOpenFullAudit }: CashRegisterAuditProps) {
         )
       })
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  // Fix #15: resetear página cuando cambian filtros
   }, [auditLog, searchTerm, actionFilter])
+
+  // Patrón React recomendado para resetear estado derivado de props/estado:
+  // comparar valores anteriores durante el render en lugar de useEffect.
+  // Ver: https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevSearch, setPrevSearch] = useState(searchTerm)
+  const [prevFilter, setPrevFilter] = useState(actionFilter)
+  if (searchTerm !== prevSearch || actionFilter !== prevFilter) {
+    setPrevSearch(searchTerm)
+    setPrevFilter(actionFilter)
+    setVisibleCount(PAGE_SIZE)
+  }
+
+  const visibleEntries = entries.slice(0, visibleCount)
+  const hasMore = visibleCount < entries.length
 
   const getUserDisplay = (name?: string, email?: string, id?: string) => {
     const n = (name || '').trim()
@@ -222,9 +240,9 @@ export function CashRegisterAudit({ onOpenFullAudit }: CashRegisterAuditProps) {
 
         <CardContent className="p-0">
           <ScrollArea className="h-[520px] w-full">
-            {entries.length > 0 ? (
+            {visibleEntries.length > 0 ? (
               <div className="divide-y divide-border/40">
-                {entries.slice(0, 80).map((entry) => {
+                {visibleEntries.map((entry) => {
                   const meta = getActionMeta(entry.action)
                   return (
                     <div key={entry.id} className="p-4 hover:bg-muted/30 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -280,6 +298,27 @@ export function CashRegisterAudit({ onOpenFullAudit }: CashRegisterAuditProps) {
               </div>
             )}
           </ScrollArea>
+          {/* Fix #15: botón paginación */}
+          {hasMore && (
+            <div className="p-3 border-t border-border/40 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                Mostrando {visibleCount} de {entries.length} eventos
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+              >
+                Cargar {Math.min(PAGE_SIZE, entries.length - visibleCount)} más
+              </Button>
+            </div>
+          )}
+          {!hasMore && entries.length > PAGE_SIZE && (
+            <div className="p-2 border-t border-border/40 text-center">
+              <span className="text-xs text-muted-foreground">Todos los {entries.length} eventos cargados</span>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

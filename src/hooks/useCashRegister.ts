@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { toast } from 'sonner'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 
 export interface CashMovement {
     id: string
@@ -36,27 +38,21 @@ export interface CashRegister {
     id: string
     name: string
     is_active: boolean
+    branch_id?: string
 }
 
 export function useCashRegister() {
     const [currentSession, setCurrentSession] = useState<CashRegisterSession | null>(null)
     const [loading, setLoading] = useState(false)
     const [registers, setRegisters] = useState<CashRegister[]>([])
-    const [initialized, setInitialized] = useState(false)
 
     const [history, setHistory] = useState<CashRegisterSession[]>([])
     const [auditLog, setAuditLog] = useState<CashMovement[]>([])
+    const { selectedBranchId } = useBranch()
 
-    let supabase: ReturnType<typeof createClient> | null = null
-    try {
-        supabase = createClient()
-    } catch (e) {
-        supabase = null
-    }
-
-    // Load initialization
-    useEffect(() => {
-        setInitialized(true)
+    // Fix #4: memoize Supabase client — no instanciar en cada render
+    const supabase = useMemo(() => {
+        try { return createClient() } catch { return null }
     }, [])
 
     const resolveActorId = useCallback(async (explicitUserId?: string) => {
@@ -80,11 +76,14 @@ export function useCashRegister() {
             return
         }
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('cash_registers')
             .select('*')
             .eq('is_active', true)
             .order('name')
+
+        query = withBranchFilter(query, selectedBranchId)
+        const { data, error } = await query
 
         if (error) {
             setRegisters(prev => prev.length ? prev : [{ id: 'principal', name: 'Caja Principal', is_active: true }])
@@ -92,7 +91,7 @@ export function useCashRegister() {
         }
 
         setRegisters(data || [])
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Fetch history (closed sessions)
     const fetchHistory = useCallback(async (limit = 20) => {
@@ -101,12 +100,15 @@ export function useCashRegister() {
         }
 
         // Fetch sessions first (avoiding join to prevent relationship errors)
-        const { data: sessions, error: sessionsError } = await supabase
+        let sessionsQuery = supabase
             .from('cash_closures')
             .select('*')
             .not('date', 'is', null) // Closed sessions
             .order('date', { ascending: false })
             .limit(limit)
+
+        sessionsQuery = withBranchFilter(sessionsQuery, selectedBranchId)
+        const { data: sessions, error: sessionsError } = await sessionsQuery
 
         if (sessionsError) {
             console.error('Error fetching history sessions:', sessionsError, JSON.stringify(sessionsError))
@@ -120,11 +122,14 @@ export function useCashRegister() {
 
         // Fetch movements for these sessions
         const sessionIds = sessions.map(s => s.id)
-        const { data: movements, error: movementsError } = await supabase
+        let movementsQuery = supabase
             .from('cash_movements')
             .select('*')
             .in('session_id', sessionIds)
             .order('created_at', { ascending: true })
+
+        movementsQuery = withBranchFilter(movementsQuery, selectedBranchId)
+        const { data: movements, error: movementsError } = await movementsQuery
 
         if (movementsError) {
             console.error('Error fetching history movements:', movementsError)
@@ -164,7 +169,7 @@ export function useCashRegister() {
 
         setHistory(formatted)
         return formatted
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Fetch audit log (all movements)
     const fetchAuditLog = useCallback(async (limit = 100) => {
@@ -172,11 +177,14 @@ export function useCashRegister() {
             return []
         }
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('cash_movements')
             .select('*')
             .order('created_at', { ascending: false })
             .limit(limit)
+
+        query = withBranchFilter(query, selectedBranchId)
+        const { data, error } = await query
 
         if (error) {
             console.error('Error fetching audit log:', error)
@@ -233,36 +241,54 @@ export function useCashRegister() {
 
         setAuditLog(formatted)
         return formatted
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
-    // Analytics
+    // Analytics — Fix #10: calcular datos reales desde movimientos
     const getDailyAnalytics = useCallback(async (date?: string) => {
         if (!config.supabase.isConfigured || !supabase) return null
 
         const targetDate = date || new Date().toISOString().split('T')[0]
-        const { data, error } = await supabase
-            .from('cash_closures')
-            .select('sales_total_cash, sales_total_card, movements_count') // Adjusted fields based on script
-            .not('date', 'is', null) // Closed sessions
-            .gte('date', `${targetDate}T00:00:00`)
-            .lte('date', `${targetDate}T23:59:59`)
+        const startIso = `${targetDate}T00:00:00.000Z`
+        const endIso = `${targetDate}T23:59:59.999Z`
+
+        let movementQuery = supabase
+            .from('cash_movements')
+            .select('type, amount, payment_method')
+            .gte('created_at', startIso)
+            .lte('created_at', endIso)
+
+        movementQuery = withBranchFilter(movementQuery, selectedBranchId)
+        const { data: movements, error } = await movementQuery
 
         if (error) return null
 
-        // Note: total_sales might need to be calculated if not stored in session
-        // Assuming we need to calculate from movements if columns don't exist
-        // But let's assume for now we might need to adjust based on schema.
-        // For safety, let's fetch movements if needed, but for performance, using columns is better.
-        // Let's stick to the Context interface which returns calculated values.
+        const safeMovements = movements || []
+        const sales = safeMovements.filter(m => m.type === 'sale')
+        const totalSales = sales.reduce((s, m) => s + (Number(m.amount) || 0), 0)
+        const totalTransactions = sales.length
+        const averageTicket = totalTransactions > 0 ? totalSales / totalTransactions : 0
+
+        // Contar cierres con discrepancia (desde cash_closures)
+        let closureQuery = supabase
+            .from('cash_closures')
+            .select('discrepancy')
+            .not('date', 'is', null)
+            .gte('date', startIso)
+            .lte('date', endIso)
+
+        closureQuery = withBranchFilter(closureQuery, selectedBranchId)
+        const { data: closures } = await closureQuery
+
+        const discrepancies = (closures || []).filter(c => Math.abs(Number(c.discrepancy)) > 0).length
 
         return {
             date: targetDate,
-            totalSales: 0, // Placeholder
-            totalTransactions: 0,
-            averageTicket: 0,
-            discrepancies: 0
+            totalSales,
+            totalTransactions,
+            averageTicket,
+            discrepancies
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Check for open session
     const checkOpenSession = useCallback(async (registerId: string) => {
@@ -287,22 +313,27 @@ export function useCashRegister() {
             }
 
             // Fetch session first (using cash_closures as session table)
-            const { data: session, error: sessionError } = await supabase
+            let sessionQuery = supabase
                 .from('cash_closures')
                 .select('*')
                 .eq('register_id', registerId)
                 .is('date', null)
-                .maybeSingle()
+            
+            sessionQuery = withBranchFilter(sessionQuery, selectedBranchId)
+            const { data: session, error: sessionError } = await sessionQuery.maybeSingle()
 
             if (sessionError) throw sessionError
 
             if (session) {
                 // Fetch movements separately
-                const { data: movements, error: movementsError } = await supabase
+                let movementsQuery = supabase
                     .from('cash_movements')
                     .select('*')
                     .eq('session_id', session.id)
                     .order('created_at', { ascending: true })
+
+                movementsQuery = withBranchFilter(movementsQuery, selectedBranchId)
+                const { data: movements, error: movementsError } = await movementsQuery
 
                 if (movementsError) {
                     console.error('Error fetching session movements:', movementsError)
@@ -335,7 +366,7 @@ export function useCashRegister() {
             }
             return null
         }
-    }, [supabase, currentSession])
+    }, [selectedBranchId, supabase, currentSession])
 
     // Open cash register
     const openRegister = useCallback(async (registerId: string, openingBalance: number, userId?: string) => {
@@ -353,7 +384,8 @@ export function useCashRegister() {
                 return false
             }
 
-            // Create new session
+            const actorId = await resolveActorId(userId)
+
             // Create new session (closure record with status implicitly open)
             const { data: session, error: sessionError } = await supabase
                 .from('cash_closures')
@@ -361,14 +393,14 @@ export function useCashRegister() {
                     register_id: registerId,
                     opening_balance: openingBalance,
                     type: 'z',
-                    date: null // Explicitly null to mark as open
+                    date: null, // Explicitly null to mark as open
+                    opened_by: actorId || null,
+                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
                 })
                 .select()
                 .single()
 
             if (sessionError) throw sessionError
-
-            const actorId = await resolveActorId(userId)
 
             // Create opening movement
             const { error: movementError } = await supabase
@@ -379,12 +411,13 @@ export function useCashRegister() {
                     amount: openingBalance,
                     reason: 'Apertura de caja',
                     created_by: actorId,
-                    created_at: new Date().toISOString()
+                    created_at: new Date().toISOString(),
+                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
                 })
 
             if (movementError) throw movementError
 
-            setCurrentSession({
+            const nextSession: CashRegisterSession = {
                 ...session,
                 id: session.id,
                 register_id: session.register_id,
@@ -399,18 +432,21 @@ export function useCashRegister() {
                     reason: 'Apertura de caja',
                     created_at: new Date().toISOString()
                 }]
-            } as any)
+            }
+
+            setCurrentSession(nextSession)
 
             toast.success('Caja abierta exitosamente')
             return true
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Desconocido'
             console.error('Error opening register:', error)
-            toast.error(`Error al abrir caja: ${error.message || 'Desconocido'}`)
+            toast.error(`Error al abrir caja: ${message}`)
             return false
         } finally {
             setLoading(false)
         }
-    }, [checkOpenSession, supabase, resolveActorId])
+    }, [checkOpenSession, resolveActorId, selectedBranchId, supabase])
 
     // Close cash register
     const closeRegister = useCallback(async (closingBalance: number, userId?: string) => {
@@ -421,13 +457,15 @@ export function useCashRegister() {
 
         try {
             setLoading(true)
+
             if (!config.supabase.isConfigured || !supabase) {
+                // Sin DB configurada: solo modo local (desarrollo/demo)
                 setCurrentSession(null)
-                toast.success('Caja cerrada correctamente')
+                toast.success('Caja cerrada correctamente (modo local)')
                 return true
             }
 
-            // Calculate expected balance
+            // Calcular balance esperado desde movimientos
             const expectedBalance = currentSession.movements.reduce((sum, mov) => {
                 if (mov.type === 'opening' || mov.type === 'sale' || mov.type === 'cash_in') {
                     return sum + mov.amount
@@ -438,24 +476,26 @@ export function useCashRegister() {
             }, 0)
 
             const discrepancy = closingBalance - expectedBalance
+            const actorId = await resolveActorId(userId)
 
-            // Update session (closure)
-            const { error: updateError } = await supabase
+            // Fix #3: actualizar en DB primero — si falla, NO limpiar estado local
+            let closureUpdate = supabase
                 .from('cash_closures')
                 .update({
-                    // closed_by: userId, // Removing closed_by as it likely doesn't exist in the simple schema
+                    closed_by: actorId || null,
                     closing_balance: closingBalance,
-                    // expected_balance: expectedBalance, // Removing if unsure
-                    // discrepancy, // Removing if unsure
-                    date: new Date().toISOString() // Set date to mark as closed
+                    expected_balance: expectedBalance,
+                    discrepancy,
+                    date: new Date().toISOString()
                 })
                 .eq('id', currentSession.id)
 
+            closureUpdate = withBranchFilter(closureUpdate, selectedBranchId)
+            const { error: updateError } = await closureUpdate
+
             if (updateError) throw updateError
 
-            const actorId = await resolveActorId(userId)
-
-            // Create closing movement
+            // Insertar movimiento de cierre (no crítico si falla)
             await supabase
                 .from('cash_movements')
                 .insert({
@@ -464,27 +504,30 @@ export function useCashRegister() {
                     amount: closingBalance,
                     reason: 'Cierre de caja',
                     created_by: actorId,
-                    created_at: new Date().toISOString()
+                    created_at: new Date().toISOString(),
+                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
                 })
 
+            // Solo limpiar estado local DESPUÉS de confirmar éxito en DB
             setCurrentSession(null)
 
             if (Math.abs(discrepancy) > 0) {
-                toast.warning(`Caja cerrada. Diferencia: ${discrepancy.toLocaleString()} Gs.`)
+                const sign = discrepancy > 0 ? '+' : ''
+                toast.warning(`Caja cerrada. Diferencia: ${sign}${discrepancy.toLocaleString()} Gs.`)
             } else {
                 toast.success('Caja cerrada correctamente')
             }
 
             return true
         } catch (error: unknown) {
-            // Fallback: cerrar sesión local
-            setCurrentSession(null)
-            toast.success('Caja cerrada (modo local)')
-            return true
+            // Fix #3: NO limpiar sesión local si DB falló → evitar inconsistencia
+            console.error('Error al cerrar caja:', error)
+            toast.error('Error al cerrar caja. Verifique la conexión e intente nuevamente.')
+            return false
         } finally {
             setLoading(false)
         }
-    }, [currentSession, supabase, resolveActorId])
+    }, [currentSession, resolveActorId, selectedBranchId, supabase])
 
     // Add cash in
     const addCashIn = useCallback(async (amount: number, reason: string, userId?: string) => {
@@ -508,7 +551,8 @@ export function useCashRegister() {
                     amount,
                     reason,
                     created_by: actorId,
-                    created_at: new Date().toISOString()
+                    created_at: new Date().toISOString(),
+                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
                 })
                 .select()
                 .single()
@@ -522,12 +566,13 @@ export function useCashRegister() {
 
             toast.success('Entrada de efectivo registrada')
             return true
-        } catch (error: any) {
-            console.error('Error adding cash in:', JSON.stringify(error, null, 2), error.message, error.code)
-            toast.error(`Error al registrar entrada: ${error.message || 'Desconocido'}`)
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Desconocido'
+            console.error('Error adding cash in:', error)
+            toast.error(`Error al registrar entrada: ${message}`)
             return false
         }
-    }, [currentSession, supabase, resolveActorId])
+    }, [currentSession, resolveActorId, selectedBranchId, supabase])
 
     // Add cash out
     const addCashOut = useCallback(async (amount: number, reason: string, userId?: string) => {
@@ -551,7 +596,8 @@ export function useCashRegister() {
                     amount,
                     reason,
                     created_by: actorId,
-                    created_at: new Date().toISOString()
+                    created_at: new Date().toISOString(),
+                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
                 })
                 .select()
                 .single()
@@ -570,7 +616,7 @@ export function useCashRegister() {
             toast.error('Error al registrar salida de efectivo')
             return false
         }
-    }, [currentSession, supabase, resolveActorId])
+    }, [currentSession, resolveActorId, selectedBranchId, supabase])
 
     // Register sale
     const registerSale = useCallback(async (saleId: string, amount: number, method?: 'cash' | 'card' | 'transfer' | 'mixed') => {
@@ -592,7 +638,8 @@ export function useCashRegister() {
                     reason: `Venta ${saleId}`,
                     payment_method: method,
                     created_by: actorId,
-                    created_at: new Date().toISOString()
+                    created_at: new Date().toISOString(),
+                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
                 })
                 .select()
                 .single()
@@ -607,15 +654,16 @@ export function useCashRegister() {
             } : null)
 
             return true
-        } catch (error: any) {
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Error desconocido'
             console.error('Error registering sale movement:', error)
             // We do NOT modify local state on error. The sale might have happened in database but cash movement failed?
             // This is a critical consistency issue. 
             // Ideally we should alert.
-            toast.error(`Error al registrar movimiento de caja para la venta: ${error.message}`)
+            toast.error(`Error al registrar movimiento de caja para la venta: ${message}`)
             return false
         }
-    }, [currentSession, supabase, resolveActorId])
+    }, [currentSession, resolveActorId, selectedBranchId, supabase])
 
     // Get current balance
     const getCurrentBalance = useCallback(() => {
@@ -664,11 +712,14 @@ export function useCashRegister() {
         const endIso = end.toISOString()
 
         // Fetch all movements in range
-        const { data: movements, error } = await supabase
+        let movementsQuery = supabase
             .from('cash_movements')
             .select('*')
             .gte('created_at', startIso)
             .lte('created_at', endIso)
+
+        movementsQuery = withBranchFilter(movementsQuery, selectedBranchId)
+        const { data: movements, error } = await movementsQuery
 
         if (error) {
             console.error('Error fetching report movements:', error)
@@ -710,14 +761,16 @@ export function useCashRegister() {
         })
 
         // Fetch opening balance of the first session in the period
-        const { data: firstSession } = await supabase
+        let firstSessionQuery = supabase
             .from('cash_closures')
             .select('opening_balance, created_at')
             .gte('created_at', startIso)
             .lte('created_at', endIso)
             .order('created_at', { ascending: true })
             .limit(1)
-            .maybeSingle()
+
+        firstSessionQuery = withBranchFilter(firstSessionQuery, selectedBranchId)
+        const { data: firstSession } = await firstSessionQuery.maybeSingle()
 
         const openingBalance = Number(firstSession?.opening_balance) || 0
         const closingBalance = (openingBalance + report.incomes) - report.expenses
@@ -735,7 +788,46 @@ export function useCashRegister() {
             mixedSales: report.mixedSales,
             discrepancy: 0
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
+
+    // Realtime subscription: sync movements added externally (e.g., credit payments)
+    useEffect(() => {
+        if (!config.supabase.isConfigured || !supabase || !currentSession) return
+
+        // Capture id so the subscription filter doesn't change on every movement insert
+        const sessionId = currentSession.id
+
+        const channel = supabase
+            .channel('cash_movements_sync')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'cash_movements',
+                    filter: `session_id=eq.${sessionId}`
+                },
+                (payload) => {
+                    // Only add if not already in local state (avoid duplicates from own inserts)
+                    const newMovement = payload.new as CashMovement
+                    setCurrentSession(prev => {
+                        if (!prev) return prev
+                        const exists = prev.movements.some(m => m.id === newMovement.id)
+                        if (exists) return prev
+                        return {
+                            ...prev,
+                            movements: [...prev.movements, newMovement]
+                        }
+                    })
+                }
+            )
+            .subscribe()
+
+        return () => {
+            supabase!.removeChannel(channel)
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- currentSession.id used via sessionId capture; full object excluded to avoid re-subscribing on every movement
+    }, [selectedBranchId, supabase, currentSession?.id])
 
     return {
         currentSession,

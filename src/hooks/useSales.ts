@@ -3,10 +3,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 
 export interface Sale {
     id: string
     sale_number: string
+    branch_id?: string
     customer_id?: string
     customer_name?: string
     subtotal: number
@@ -52,6 +55,7 @@ export function useSales() {
     })
 
     const supabase = createClient()
+    const { selectedBranchId } = useBranch()
 
     // Fetch sales
     const fetchSales = useCallback(async (dateFilter?: { from: string; to: string }) => {
@@ -68,6 +72,8 @@ export function useSales() {
           )
         `)
                 .order('created_at', { ascending: false })
+
+            query = withBranchFilter(query, selectedBranchId)
 
             if (dateFilter) {
                 query = query
@@ -101,7 +107,7 @@ export function useSales() {
         } finally {
             setLoading(false)
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Calculate stats
     const calculateStats = (salesData: Sale[]) => {
@@ -147,7 +153,7 @@ export function useSales() {
     // Get sale by ID
     const getSale = useCallback(async (saleId: string) => {
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('sales')
                 .select(`
           *,
@@ -158,7 +164,9 @@ export function useSales() {
           payments (*)
         `)
                 .eq('id', saleId)
-                .single()
+
+            query = withBranchFilter(query, selectedBranchId)
+            const { data, error } = await query.single()
 
             if (error) throw error
 
@@ -168,21 +176,23 @@ export function useSales() {
             toast.error('Error al cargar venta')
             return null
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Cancel sale
     const cancelSale = useCallback(async (saleId: string, reason: string) => {
         try {
-            const { data: sale, error: fetchError } = await supabase
+            let saleQuery = supabase
                 .from('sales')
                 .select('*, sale_items (*)')
                 .eq('id', saleId)
-                .single()
+
+            saleQuery = withBranchFilter(saleQuery, selectedBranchId)
+            const { data: sale, error: fetchError } = await saleQuery.single()
 
             if (fetchError) throw fetchError
 
             // Update sale status
-            const { error: updateError } = await supabase
+            let updateQuery = supabase
                 .from('sales')
                 .update({
                     payment_status: 'cancelled',
@@ -190,6 +200,9 @@ export function useSales() {
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', saleId)
+
+            updateQuery = withBranchFilter(updateQuery, selectedBranchId)
+            const { error: updateError } = await updateQuery
 
             if (updateError) throw updateError
 
@@ -208,6 +221,27 @@ export function useSales() {
                             stock_quantity: (product.stock_quantity || 0) + item.quantity
                         })
                         .eq('id', item.product_id)
+
+                    if (selectedBranchId) {
+                        const { data: branchInventory } = await supabase
+                            .from('branch_inventory')
+                            .select('stock_quantity')
+                            .eq('branch_id', selectedBranchId)
+                            .eq('product_id', item.product_id)
+                            .maybeSingle()
+
+                        const nextBranchStock = Number(branchInventory?.stock_quantity || 0) + item.quantity
+
+                        await supabase
+                            .from('branch_inventory')
+                            .upsert({
+                                branch_id: selectedBranchId,
+                                product_id: item.product_id,
+                                stock_quantity: nextBranchStock,
+                            }, {
+                                onConflict: 'branch_id,product_id',
+                            })
+                    }
                 }
             }
 
@@ -217,7 +251,7 @@ export function useSales() {
             console.error('Error cancelling sale:', error)
             toast.error('Error al cancelar venta')
         }
-    }, [fetchSales, supabase])
+    }, [fetchSales, selectedBranchId, supabase])
 
     // Real-time subscription
     useEffect(() => {
@@ -241,7 +275,7 @@ export function useSales() {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [fetchSales, supabase])
+    }, [fetchSales, selectedBranchId, supabase])
 
     return {
         sales,

@@ -5,7 +5,7 @@ import { TrendingUp, TrendingDown, X, FileText } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -199,6 +199,9 @@ export function CashRegisterManager() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Abrir Caja Registradora</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Define el monto inicial para abrir la caja registradora.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div>
@@ -229,6 +232,9 @@ export function CashRegisterManager() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Cerrar Caja Registradora</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Ingresa el monto final contado para cerrar la caja registradora.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         {report && (
@@ -288,6 +294,9 @@ export function CashRegisterManager() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Entrada de Efectivo</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Registra un ingreso manual de efectivo en la caja.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div>
@@ -332,6 +341,9 @@ export function CashRegisterManager() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Salida de Efectivo</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Registra una salida manual de efectivo de la caja.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                         <div>
@@ -376,6 +388,9 @@ export function CashRegisterManager() {
                 <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>Reporte de Sesión</DialogTitle>
+                        <DialogDescription className="sr-only">
+                            Revisa el resumen financiero de la sesión actual de caja.
+                        </DialogDescription>
                     </DialogHeader>
                     {report && (
                         <div className="space-y-4">

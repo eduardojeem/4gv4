@@ -8,6 +8,8 @@ import {
     BarChart3,
     Database,
     Globe,
+    Monitor,
+    Building2,
     type LucideIcon
 } from 'lucide-react'
 
@@ -64,6 +66,14 @@ export const adminNavCategories: NavCategory[] = [
         label: 'Operaciones',
         items: [
             {
+                key: 'cash-monitor',
+                label: 'Monitor de Cajas',
+                icon: Monitor,
+                href: '/admin/cash-monitor',
+                description: 'Control y monitoreo de cajas en tiempo real',
+                permissions: [] // Visible para todos los admins
+            },
+            {
                 key: 'inventory',
                 label: 'Inventario',
                 icon: Package,
@@ -94,6 +104,14 @@ export const adminNavCategories: NavCategory[] = [
                 permissions: ['users.read']
             },
             {
+                key: 'branches',
+                label: 'Sucursales',
+                icon: Building2,
+                href: '/admin/branches',
+                description: 'Gestión multi sucursal y cobertura operativa',
+                permissions: ['settings.read']
+            },
+            {
                 key: 'website',
                 label: 'Sitio Web',
                 icon: Globe,
@@ -107,6 +125,14 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Database,
                 href: '/admin/database-monitoring',
                 description: 'Monitoreo de base de datos y rendimiento',
+                permissions: ['settings.read']
+            },
+            {
+                key: 'storage-cleanup',
+                label: 'Storage Cleanup',
+                icon: Database,
+                href: '/admin/storage-cleanup',
+                description: 'Limpieza controlada de archivos huerfanos',
                 permissions: ['settings.read']
             },
             {
@@ -161,17 +187,18 @@ export function filterNavItemsByPermissions(
     isAdmin: boolean
 ): NavItem[] {
     return items.filter(item => {
-        // Si es admin y no hay permisos específicos, permitir acceso
-        if (isAdmin && (!item.permissions || item.permissions.length === 0)) {
+        // Si es admin, permitir acceso a todo (ya pasó AdminGuard)
+        if (isAdmin) {
             return true
         }
 
-        // Si hay permisos específicos, verificar que el usuario los tenga
-        if (item.permissions && item.permissions.length > 0) {
-            return item.permissions.some(permission => hasPermission(permission))
+        // Si no hay permisos específicos, solo admins pueden ver
+        if (!item.permissions || item.permissions.length === 0) {
+            return false
         }
 
-        return isAdmin
+        // Si hay permisos específicos, verificar que el usuario los tenga
+        return item.permissions.some(permission => hasPermission(permission))
     })
 }
 

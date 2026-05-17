@@ -8,6 +8,7 @@ import { Breadcrumbs } from '@/components/ui/breadcrumbs'
 import { GlobalSearch } from '@/components/ui/global-search'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { BranchSelector } from '@/components/branches/branch-selector'
 import { ChevronDown, ChevronRight, ArrowLeft, Search } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
@@ -22,7 +23,7 @@ interface AdminLayoutProps {
 function AdminLayoutContent({ children }: AdminLayoutProps) {
     const [searchOpen, setSearchOpen] = useState(false)
     const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration'])
-    const { hasPermission, isAdmin } = useAuth()
+    const { hasPermission, isAdmin, loading } = useAuth()
     const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
 
     const searchParams = useSearchParams()
@@ -32,9 +33,18 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
     const active = searchParams.get('tab') ?? 'overview'
 
     // Filter categories based on user permissions
+    // AdminGuard already ensures only admins reach this layout,
+    // so we show all categories. Permission filtering is a secondary check.
     const visibleCategories = useMemo(
-        () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin),
-        [hasPermission, isAdmin]
+        () => {
+            // Always show all categories since AdminGuard protects access
+            // Only filter if we have a confirmed non-admin (shouldn't happen)
+            if (!isAdmin && !loading) {
+                return filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin)
+            }
+            return adminNavCategories
+        },
+        [hasPermission, isAdmin, loading]
     )
 
     const currentItem = useMemo(() => getNavItemByKey(active), [active])
@@ -234,6 +244,8 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                                 </kbd>
                             </div>
                         </div>
+
+                        <BranchSelector compact />
 
                         <div className="mx-2 h-6 w-px bg-border/60" />
 

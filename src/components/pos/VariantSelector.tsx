@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { formatCurrency } from '@/lib/currency'
 import { X, Package, AlertTriangle } from 'lucide-react'
@@ -128,6 +128,9 @@ export function VariantSelector({ product, isOpen, onClose, onAddToCart }: Varia
             <Package className="h-5 w-5" />
             Seleccionar Variante
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Elige la variante del producto y la cantidad antes de agregarla al carrito.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">

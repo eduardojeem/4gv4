@@ -9,13 +9,16 @@ import type { OfferCard } from '@/components/public/inicio/OffersCarousel'
 import { ServicesGrid } from '@/components/public/inicio/ServicesGrid'
 import { ProcessSteps } from '@/components/public/inicio/ProcessSteps'
 import { ContactCTA } from '@/components/public/inicio/ContactCTA'
+import { BranchLocations } from '@/components/public/inicio/BranchLocations'
+import type { BranchLocationData } from '@/components/public/inicio/BranchLocations'
 import type { WebsiteSettings } from '@/types/website-settings'
 
 interface HomePageClientProps {
   initialSettings: WebsiteSettings
+  branches?: BranchLocationData[]
 }
 
-export default function HomePageClient({ initialSettings }: HomePageClientProps) {
+export default function HomePageClient({ initialSettings, branches = [] }: HomePageClientProps) {
   // SWR picks up realtime updates; initialSettings avoids the loading spinner on first paint
   const { settings: liveSettings } = useWebsiteSettings()
   const settings = liveSettings ?? initialSettings
@@ -145,6 +148,8 @@ export default function HomePageClient({ initialSettings }: HomePageClientProps)
       <ServicesGrid services={safeServices} />
 
       <ProcessSteps brand={brand} steps={processSteps} />
+
+      <BranchLocations branches={branches} brand={brand} />
 
       <ContactCTA
         companyInfo={company_info}

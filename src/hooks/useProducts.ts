@@ -14,6 +14,9 @@ import type {
   Supplier,
   PaginationOptions
 } from '@/types/products'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders } from '@/lib/branches/client'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([])
@@ -23,6 +26,21 @@ export function useProducts() {
   const [error, setError] = useState<string | null>(null)
 
   const supabase = createClient()
+  const { selectedBranchId } = useBranch()
+
+  const applySelectedBranchStock = useCallback(async <T extends { id: string; stock_quantity?: number | null }>(items: T[]) => {
+    if (!selectedBranchId || items.length === 0) {
+      return items as Array<T & { branch_stock_quantity?: number }>
+    }
+
+    const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+      supabase,
+      selectedBranchId,
+      items.map((item) => item.id)
+    )
+
+    return applyBranchInventoryToProducts(items, stockMap, branchScoped)
+  }, [selectedBranchId, supabase])
 
   // Función para cargar productos con filtros y paginación
   const loadProducts = useCallback(async (
@@ -84,13 +102,19 @@ export function useProducts() {
       if (filters.stock_status) {
         switch (filters.stock_status) {
           case 'out_of_stock':
-            query = query.eq('stock_quantity', 0)
+            if (!selectedBranchId) {
+              query = query.eq('stock_quantity', 0)
+            }
             break
           case 'low_stock':
-            query = query.gt('stock_quantity', 0).filter('stock_quantity', 'lte', 'min_stock')
+            if (!selectedBranchId) {
+              query = query.gt('stock_quantity', 0).filter('stock_quantity', 'lte', 'min_stock')
+            }
             break
           case 'in_stock':
-            query = query.filter('stock_quantity', 'gt', 'min_stock')
+            if (!selectedBranchId) {
+              query = query.filter('stock_quantity', 'gt', 'min_stock')
+            }
             break
         }
       }
@@ -108,7 +132,18 @@ export function useProducts() {
       if (queryError) throw queryError
 
       // Procesar productos con campos calculados
-      const processedProducts: Product[] = (data || []).map(product => ({
+      const branchAwareProducts = await applySelectedBranchStock((data || []) as Array<Product & { id: string }>)
+      let filteredProducts = branchAwareProducts
+
+      if (filters.stock_status === 'out_of_stock') {
+        filteredProducts = branchAwareProducts.filter((product) => Number(product.stock_quantity || 0) === 0)
+      } else if (filters.stock_status === 'low_stock') {
+        filteredProducts = branchAwareProducts.filter((product) => Number(product.stock_quantity || 0) > 0 && Number(product.stock_quantity || 0) <= Number(product.min_stock || 0))
+      } else if (filters.stock_status === 'in_stock') {
+        filteredProducts = branchAwareProducts.filter((product) => Number(product.stock_quantity || 0) > Number(product.min_stock || 0))
+      }
+
+      const processedProducts: Product[] = filteredProducts.map(product => ({
         ...product,
         stock_status: getStockStatus(product.stock_quantity, product.min_stock),
         margin: product.sale_price - (product.purchase_price || 0),
@@ -139,7 +174,7 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [applySelectedBranchStock, selectedBranchId, supabase])
 
   // Función para obtener un producto por ID
   const getProduct = useCallback(async (id: string): Promise<Product | null> => {
@@ -158,14 +193,16 @@ export function useProducts() {
 
       if (error) throw error
 
+      const [branchAwareProduct] = await applySelectedBranchStock([data as Product & { id: string }])
+
       return {
-        ...data,
-        stock_status: getStockStatus(data.stock_quantity, data.min_stock),
+        ...branchAwareProduct,
+        stock_status: getStockStatus(Number(branchAwareProduct.stock_quantity || 0), data.min_stock),
         margin: data.sale_price - (data.purchase_price || 0),
         margin_percentage: data.purchase_price > 0 
           ? ((data.sale_price - data.purchase_price) / data.purchase_price) * 100 
           : 0,
-        total_value: data.stock_quantity * data.sale_price
+        total_value: Number(branchAwareProduct.stock_quantity || 0) * data.sale_price
       }
 
     } catch (err: unknown) {
@@ -173,7 +210,7 @@ export function useProducts() {
       setError(errorMessage)
       return null
     }
-  }, [supabase])
+  }, [applySelectedBranchStock, supabase])
 
   // Función para crear producto
   const createProduct = useCallback(async (productData: ProductFormData): Promise<Product | null> => {
@@ -194,27 +231,21 @@ export function useProducts() {
         throw new Error('Ya existe un producto con este SKU')
       }
 
-      const { data, error } = await supabase
-        .from('products')
-        .insert([productData])
-        .select(`
-          *,
-          category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, phone)
-        `)
-        .single()
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...branchHeaders(selectedBranchId),
+        },
+        body: JSON.stringify(productData),
+      })
+      const payload = await response.json().catch(() => null) as { success?: boolean; data?: Product; error?: string } | null
 
-      if (error) throw error
-
-      const newProduct: Product = {
-        ...data,
-        stock_status: getStockStatus(data.stock_quantity, data.min_stock),
-        margin: data.sale_price - (data.purchase_price || 0),
-        margin_percentage: data.purchase_price > 0 
-          ? ((data.sale_price - data.purchase_price) / data.purchase_price) * 100 
-          : 0,
-        total_value: data.stock_quantity * data.sale_price
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.error || 'Error al crear producto')
       }
+
+      const newProduct = payload.data as Product
 
       setProducts(prev => [newProduct, ...prev])
       return newProduct
@@ -226,7 +257,7 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Función para actualizar producto
   const updateProduct = useCallback(async (id: string, productData: Partial<ProductFormData>): Promise<Product | null> => {
@@ -250,28 +281,21 @@ export function useProducts() {
         }
       }
 
-      const { data, error } = await supabase
-        .from('products')
-        .update(productData)
-        .eq('id', id)
-        .select(`
-          *,
-          category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, phone)
-        `)
-        .single()
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...branchHeaders(selectedBranchId),
+        },
+        body: JSON.stringify(productData),
+      })
+      const payload = await response.json().catch(() => null) as { success?: boolean; data?: Product; error?: string } | null
 
-      if (error) throw error
-
-      const updatedProduct: Product = {
-        ...data,
-        stock_status: getStockStatus(data.stock_quantity, data.min_stock),
-        margin: data.sale_price - (data.purchase_price || 0),
-        margin_percentage: data.purchase_price > 0 
-          ? ((data.sale_price - data.purchase_price) / data.purchase_price) * 100 
-          : 0,
-        total_value: data.stock_quantity * data.sale_price
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.error || 'Error al actualizar producto')
       }
+
+      const updatedProduct = payload.data as Product
 
       setProducts(prev => prev.map(p => p.id === id ? updatedProduct : p))
       return updatedProduct
@@ -283,7 +307,7 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Función para eliminar producto
   const deleteProduct = useCallback(async (id: string): Promise<boolean> => {
@@ -293,12 +317,15 @@ export function useProducts() {
     setError(null)
 
     try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id)
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'DELETE',
+        headers: branchHeaders(selectedBranchId),
+      })
+      const payload = await response.json().catch(() => null) as { success?: boolean; error?: string } | null
 
-      if (error) throw error
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'Error al eliminar producto')
+      }
 
       setProducts(prev => prev.filter(p => p.id !== id))
       return true
@@ -310,7 +337,7 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Función para actualizar stock
   const updateStock = useCallback(async (
@@ -322,10 +349,24 @@ export function useProducts() {
     if (!config.supabase.isConfigured) return false
 
     try {
-      const { error } = await supabase
-        .from('products')
-        .update({ stock_quantity: newStock })
-        .eq('id', id)
+      let error = null as { message?: string } | null
+
+      if (selectedBranchId) {
+        const response = await supabase.rpc('set_branch_inventory_stock', {
+          p_product_id: id,
+          p_branch_id: selectedBranchId,
+          p_new_stock: newStock,
+          p_movement_type: movementType === 'entrada' ? 'in' : movementType === 'salida' ? 'out' : 'adjustment',
+          p_reason: notes ?? null,
+        })
+        error = response.error
+      } else {
+        const response = await supabase
+          .from('products')
+          .update({ stock_quantity: newStock })
+          .eq('id', id)
+        error = response.error
+      }
 
       if (error) throw error
 
@@ -348,7 +389,7 @@ export function useProducts() {
       setError(errorMessage)
       return false
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Función para cargar categorías
   const loadCategories = useCallback(async (): Promise<Category[]> => {

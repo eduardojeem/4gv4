@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -164,6 +164,9 @@ export function PermissionsModal({ isOpen, onClose }: PermissionsModalProps) {
               <Shield className="h-5 w-5 text-red-500" />
               Acceso Denegado
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Este modal informa que el usuario actual no puede gestionar permisos de caja.
+            </DialogDescription>
           </DialogHeader>
           <div className="text-center py-8">
             <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-red-500" />
@@ -189,6 +192,9 @@ export function PermissionsModal({ isOpen, onClose }: PermissionsModalProps) {
               </Badge>
             )}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Configura permisos operativos, de caja, reportes y auditoría para el usuario actual.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-6">

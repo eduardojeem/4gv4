@@ -1,7 +1,7 @@
 
 import { Suspense } from 'react'
 import { Metadata } from 'next'
-import { getPublicProducts, getPublicCategories, resolveWholesaleStatus } from '@/lib/api/products-server'
+import { getPublicProducts, getPublicCategories, resolveWholesaleStatus, getPublicBranches } from '@/lib/api/products-server'
 import { ProductCard } from '@/components/public/ProductCard'
 import { ProductFilters } from '@/components/public/ProductFilters'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
@@ -44,6 +44,7 @@ export default async function ProductsPage(props: {
   const query = searchParams.query as string || ''
   const categoryId = searchParams.category_id as string || ''
   const brand = searchParams.brand as string || ''
+  const branchId = searchParams.branch_id as string || ''
   const minPrice = Number(searchParams.min_price) || 0
   const maxPrice = Number(searchParams.max_price) || MAX_PRICE
   const inStock = searchParams.in_stock === 'true'
@@ -53,11 +54,12 @@ export default async function ProductsPage(props: {
   const { isWholesale } = await resolveWholesaleStatus()
 
   // Fetch data in parallel (categories don't need session)
-  const [productsData, categories] = await Promise.all([
+  const [productsData, categories, branches] = await Promise.all([
     getPublicProducts({
       query,
       categoryId,
       brand,
+      branchId: branchId || undefined,
       minPrice,
       maxPrice,
       inStock,
@@ -66,7 +68,8 @@ export default async function ProductsPage(props: {
       perPage: 16,
       isWholesale,
     }),
-    getPublicCategories()
+    getPublicCategories(),
+    getPublicBranches(),
   ])
 
   const { products, total, totalPages, brands, priceRange } = productsData
@@ -74,6 +77,7 @@ export default async function ProductsPage(props: {
   const hasActiveFilters = (
     categoryId !== '' ||
     brand !== '' ||
+    branchId !== '' ||
     inStock ||
     minPrice > 0 ||
     maxPrice < MAX_PRICE
@@ -82,6 +86,7 @@ export default async function ProductsPage(props: {
   const activeFiltersCount = [
     categoryId !== '',
     brand !== '',
+    branchId !== '',
     inStock,
     minPrice > 0 || maxPrice < MAX_PRICE,
   ].filter(Boolean).length
@@ -135,6 +140,7 @@ export default async function ProductsPage(props: {
                      priceRange={priceRange}
                     categories={categories}
                     brands={brands}
+                    branches={branches}
                   />
                 </Suspense>
                </div>
@@ -152,6 +158,7 @@ export default async function ProductsPage(props: {
                   priceRange={priceRange}
                   categories={categories}
                   brands={brands}
+                  branches={branches}
                 />
                 <Suspense fallback={<div className="h-9 w-[150px] bg-muted animate-pulse rounded-lg" />}>
                   <ProductSort />

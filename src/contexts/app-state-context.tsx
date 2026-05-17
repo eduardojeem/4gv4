@@ -124,16 +124,23 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
     channel.onmessage = (ev) => {
       const incoming: AppState = ev.data;
-      dispatch({ type: "SET_STATE", payload: mergeStates(state, incoming) });
+      // Only dispatch if the incoming version is newer (avoids echo loops)
+      if (incoming && incoming.version > state.version) {
+        dispatch({ type: "SET_STATE", payload: mergeStates(state, incoming) });
+      }
     };
     return () => channel.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Anunciar cambios a otras pestañas
+  const lastAnnouncedVersionRef = useRef(0);
   useEffect(() => {
     const ch = channelRef.current;
     if (!ch) return;
+    // Only announce if version actually changed (prevents echo)
+    if (state.version <= lastAnnouncedVersionRef.current) return;
+    lastAnnouncedVersionRef.current = state.version;
     try {
       ch.postMessage(state);
     } catch (err) {

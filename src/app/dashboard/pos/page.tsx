@@ -711,40 +711,23 @@ function POSPageContent() {
 
           if (method === 'credit' && selectedCustomer) {
             try {
-              const termMonths = 12
-              const interestRate = 0
-              const { data: creditRow, error: creditError } = await supabase
-                .from('customer_credits')
-                .insert({
-                  customer_id: selectedCustomer,
-                  sale_id: saleId,
-                  principal: totalValue,
-                  interest_rate: interestRate,
-                  term_months: termMonths,
-                  start_date: new Date().toISOString(),
-                  status: 'active'
+              const creditResponse = await fetch('/api/credits/sale', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  customerId: selectedCustomer,
+                  amount: totalValue,
+                  interestRate: 0,
+                  installments: { count: 12, frequency: 'monthly' },
                 })
-                .select()
-                .single()
-              if (creditError) throw new Error(creditError.message)
-              const creditId = creditRow?.id as string
-              if (creditId) {
-                const installmentAmount = Math.round((totalValue / termMonths) * 100) / 100
-                const base = Date.now()
-                const installments = Array.from({ length: termMonths }).map((_, idx) => ({
-                  credit_id: creditId,
-                  installment_number: idx + 1,
-                  due_date: new Date(base + (idx + 1) * 30 * 24 * 60 * 60 * 1000).toISOString(),
-                  amount: installmentAmount,
-                  status: 'pending'
-                }))
-                const { error: instError } = await supabase
-                  .from('credit_installments')
-                  .insert(installments)
-                if (instError) throw new Error(instError.message)
+              })
+
+              const creditResult = await creditResponse.json().catch(() => null) as { error?: string } | null
+              if (!creditResponse.ok) {
+                throw new Error(creditResult?.error || 'No se pudo crear la venta a crédito')
               }
-            } catch (e: any) {
-              const msg = String(e?.message || e || '')
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : String(error || '')
               const missingCreditsTables = msg.includes('relation "customer_credits" does not exist')
                 || msg.includes('relation "credit_installments" does not exist')
               if (missingCreditsTables) {
@@ -1544,7 +1527,7 @@ function POSPageContent() {
       setLastSaleData(receiptData)
       setCurrentReceipt(receiptData)
 
-      // Procesar venta en el inventario usando el hook de Supabase
+      // Procesar venta de inventario usando la API interna del POS.
       setPaymentStatus('processing')
       setPaymentError('')
       addPaymentAttempt({ status: 'processing', method: 'single', amount: (cartCalculations as any).total, message: 'Procesando pago simple' })
@@ -1569,6 +1552,10 @@ function POSPageContent() {
             customer_id: selectedCustomer || undefined,
             notes: notes || undefined
           })
+
+          if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
+            throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta de inventario'))
+          }
         }
 
         // Persistir en Supabase (venta, items y stock)
@@ -1733,6 +1720,10 @@ function POSPageContent() {
           customer_id: selectedCustomer || undefined,
           notes: notes || undefined
         })
+
+        if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
+          throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta de inventario'))
+        }
       }
       
       // Persistir en Supabase como pago mixto
@@ -2932,6 +2923,9 @@ function POSPageContent() {
               <Settings className="h-5 w-5 text-muted-foreground" />
               Gestionar cajas
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Administra las cajas disponibles del POS, incluyendo creación y renombrado.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6">
@@ -3101,6 +3095,9 @@ function POSPageContent() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Atajos de Teclado</DialogTitle>
+            <DialogDescription className="sr-only">
+              Consulta los atajos de teclado disponibles para operar más rápido el punto de venta.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
@@ -3153,6 +3150,9 @@ function POSPageContent() {
               <Printer className="h-5 w-5" />
               Ticket de Venta
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Visualiza, imprime, descarga o comparte el comprobante generado para la venta actual.
+            </DialogDescription>
           </DialogHeader>
 
           {currentReceipt && (

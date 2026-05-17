@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/contexts/theme-context";
 import { AccessibilityProvider } from "@/contexts/accessibility-context";
 import { AuthProvider } from "@/contexts/auth-context";
 import { AppStateProvider } from "@/contexts/app-state-context";
+import { BranchProvider } from "@/contexts/branch-context";
 import { SWRProvider } from "@/providers/swr-provider";
 import { Toaster } from "sonner";
 import { DEFAULT_SYSTEM_COLOR_SCHEME } from "@/lib/theme/color-schemes";
@@ -43,53 +44,55 @@ export default function RootLayout({
           <AccessibilityProvider>
             <AuthProvider>
               <AppStateProvider>
-                <SWRProvider>
-                  <PredictivePrefetchInit />
-                  <main id="main-content" tabIndex={-1}>
-                    {children}
-                  </main>
-                  <Toaster
-                    position="top-right"
-                    richColors
-                    closeButton
-                    duration={4000}
-                    visibleToasts={5}
-                    expand={true}
-                    gap={8}
-                    offset={16}
-                    toastOptions={{
-                      style: {
-                        background: 'hsl(var(--background))',
-                        border: '1px solid hsl(var(--border))',
-                        color: 'hsl(var(--foreground))',
-                        fontSize: '14px',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                        backdropFilter: 'blur(8px)',
-                      },
-                      className: 'toast-optimized',
-                      descriptionClassName: 'toast-description',
-                      actionButtonStyle: {
-                        background: 'hsl(var(--primary))',
-                        color: 'hsl(var(--primary-foreground))',
-                        border: 'none',
-                        borderRadius: '6px',
-                        padding: '8px 12px',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                      },
-                      cancelButtonStyle: {
-                        background: 'hsl(var(--secondary))',
-                        color: 'hsl(var(--secondary-foreground))',
-                        border: 'none',
-                        borderRadius: '6px',
-                        padding: '8px 12px',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                      }
-                    }}
-                  />
-                </SWRProvider>
+                <BranchProvider>
+                  <SWRProvider>
+                    <PredictivePrefetchInit />
+                    <main id="main-content" tabIndex={-1}>
+                      {children}
+                    </main>
+                    <Toaster
+                      position="top-right"
+                      richColors
+                      closeButton
+                      duration={4000}
+                      visibleToasts={5}
+                      expand={true}
+                      gap={8}
+                      offset={16}
+                      toastOptions={{
+                        style: {
+                          background: 'hsl(var(--background))',
+                          border: '1px solid hsl(var(--border))',
+                          color: 'hsl(var(--foreground))',
+                          fontSize: '14px',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                          backdropFilter: 'blur(8px)',
+                        },
+                        className: 'toast-optimized',
+                        descriptionClassName: 'toast-description',
+                        actionButtonStyle: {
+                          background: 'hsl(var(--primary))',
+                          color: 'hsl(var(--primary-foreground))',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '8px 12px',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                        },
+                        cancelButtonStyle: {
+                          background: 'hsl(var(--secondary))',
+                          color: 'hsl(var(--secondary-foreground))',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '8px 12px',
+                          fontSize: '12px',
+                          fontWeight: '500',
+                        }
+                      }}
+                    />
+                  </SWRProvider>
+                </BranchProvider>
               </AppStateProvider>
             </AuthProvider>
           </AccessibilityProvider>

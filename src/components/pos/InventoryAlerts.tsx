@@ -5,7 +5,7 @@ import { AlertTriangle, Package, X, CheckCircle, AlertCircle, XCircle } from 'lu
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { InventoryAlert, getInventoryManager } from '@/lib/inventory-manager'
 
 interface InventoryAlertsProps {
@@ -201,6 +201,9 @@ export const InventoryAlerts: React.FC<InventoryAlertsProps> = ({
               Alertas de Inventario
               <Badge variant="outline">{alerts.length} activas</Badge>
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Consulta las alertas activas de inventario para productos con stock crítico o bajo.
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">

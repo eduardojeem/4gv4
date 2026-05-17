@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { PieChart } from 'recharts/es6/chart/PieChart'
 import { Pie } from 'recharts/es6/polar/Pie'
 import { Cell } from 'recharts/es6/component/Cell'
@@ -8,6 +8,8 @@ import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { Tooltip } from 'recharts/es6/component/Tooltip'
 import { Legend } from 'recharts/es6/component/Legend'
 import { createClient } from '@/lib/supabase/client'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 
 const COLORS = {
   'recibido': '#ef4444',
@@ -28,8 +30,9 @@ type ChartData = {
 export function RepairsChart() {
   const [data, setData] = useState<ChartData[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const { selectedBranchId } = useBranch()
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const supabase = createClient()
       
@@ -43,9 +46,12 @@ export function RepairsChart() {
       }
       
       // Obtener conteos por estado
-      const { data: repairs, error } = await supabase
+      let query = supabase
         .from('repairs')
         .select('status')
+
+      query = withBranchFilter(query, selectedBranchId)
+      const { data: repairs, error } = await query
 
       if (error) {
         console.error('Error fetching repairs:', error)
@@ -79,7 +85,7 @@ export function RepairsChart() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [selectedBranchId])
 
   useEffect(() => {
     fetchData()
@@ -87,7 +93,12 @@ export function RepairsChart() {
     const supabase = createClient()
     const channel = supabase
       .channel('repairs-chart-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'repairs' }, () => {
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'repairs',
+        ...(selectedBranchId ? { filter: `branch_id=eq.${selectedBranchId}` } : {}),
+      }, () => {
         fetchData()
       })
       .subscribe()
@@ -95,7 +106,7 @@ export function RepairsChart() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [fetchData, selectedBranchId])
 
   if (isLoading) {
     return (

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -115,6 +115,9 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
                 </Badge>
                 )}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Consulta el resumen completo de la venta, sus items y la información del comprobante.
+            </DialogDescription>
             {!loading && sale && (
                 <Button variant="outline" size="sm" onClick={handlePrintReceipt}>
                     <Printer className="mr-2 h-4 w-4" />
@@ -281,4 +284,3 @@ export function SaleDetailsModal({ isOpen, onClose, saleId }: SaleDetailsModalPr
     </Dialog>
   )
 }
-

@@ -2,11 +2,31 @@ import { describe, expect, it } from 'vitest'
 import {
   buildOptimizationRecommendations,
   buildQuickMetrics,
+  isUnusedIndexReviewCandidate,
   type DatabaseMetrics,
   type IndexStats,
 } from '@/services/database-monitoring-service'
 
+const indexStats: IndexStats[] = [
+  {
+    tableName: 'public.products',
+    indexName: 'products_search_idx',
+    sizeBytes: 20 * 1024,
+    scans: 0,
+    reads: 0,
+    isUnused: true,
+    isPrimary: false,
+    isUnique: false,
+    isConstraintBacked: false,
+    statsResetAt: '2026-01-01T00:00:00.000Z',
+  },
+]
+
 const metrics: DatabaseMetrics = {
+  collectedAt: '2026-01-01T00:00:00.000Z',
+  overallStatus: 'partial',
+  sources: [],
+  missingMetrics: [],
   totalSize: 900 * 1024 * 1024,
   tablesSizes: [
     { tableName: 'public.audit_log', size: 300 * 1024 * 1024, rowCount: 12000, indexSize: 40 * 1024 * 1024, percentage: 48 },
@@ -25,11 +45,9 @@ const metrics: DatabaseMetrics = {
     cacheHitRatio: 72,
   },
   storageBreakdown: {
-    tables: 420 * 1024 * 1024,
+    relations: 420 * 1024 * 1024,
     indexes: 60 * 1024 * 1024,
-    logs: 40 * 1024 * 1024,
-    temp: 10 * 1024 * 1024,
-    other: 5 * 1024 * 1024,
+    unclassified: 5 * 1024 * 1024,
   },
   alerts: [
     {
@@ -40,22 +58,13 @@ const metrics: DatabaseMetrics = {
       description: 'Pool saturado',
       value: 82,
       threshold: 70,
-      timestamp: new Date('2026-01-01T00:00:00.000Z'),
+      timestamp: '2026-01-01T00:00:00.000Z',
       resolved: false,
     },
   ],
+  indexStats,
+  growthHistory: [],
 }
-
-const indexStats: IndexStats[] = [
-  {
-    tableName: 'public.products',
-    indexName: 'products_search_idx',
-    sizeBytes: 20 * 1024,
-    scans: 0,
-    reads: 0,
-    isUnused: true,
-  },
-]
 
 describe('database monitoring helpers', () => {
   it('builds quick metrics from loaded metrics', () => {
@@ -67,7 +76,7 @@ describe('database monitoring helpers', () => {
       avgQueryTime: 640,
       cacheHitRatio: 72,
       alertsCount: 1,
-      status: 'critical',
+      status: 'partial',
     })
   })
 
@@ -76,8 +85,37 @@ describe('database monitoring helpers', () => {
     const second = buildOptimizationRecommendations(metrics, indexStats)
 
     expect(first).toEqual(second)
-    expect(first.some(message => message.includes('índices sin uso'))).toBe(true)
-    expect(first.some(message => message.includes('uso de conexiones'))).toBe(true)
-    expect(first.some(message => message.includes('audit_log'))).toBe(true)
+    expect(first.some((message) => message.includes('Connection pressure is high'))).toBe(true)
+    expect(first.some((message) => message.includes('audit_log'))).toBe(true)
+    expect(first.some((message) => message.includes('large non-constraint indexes show zero scans'))).toBe(false)
+  })
+
+  it('only flags non-constraint indexes with enough observation window', () => {
+    const candidate: IndexStats = {
+      tableName: 'public.repairs',
+      indexName: 'repairs_status_created_at_idx',
+      sizeBytes: 8 * 1024 * 1024,
+      scans: 0,
+      reads: 0,
+      isUnused: true,
+      isPrimary: false,
+      isUnique: false,
+      isConstraintBacked: false,
+      statsResetAt: '2026-01-01T00:00:00.000Z',
+    }
+    const primaryKey: IndexStats = {
+      ...candidate,
+      indexName: 'repairs_pkey',
+      isPrimary: true,
+    }
+    const smallIndex: IndexStats = {
+      ...candidate,
+      indexName: 'repairs_small_idx',
+      sizeBytes: 64 * 1024,
+    }
+
+    expect(isUnusedIndexReviewCandidate(candidate, new Date('2026-02-01T00:00:00.000Z'))).toBe(true)
+    expect(isUnusedIndexReviewCandidate(primaryKey, new Date('2026-02-01T00:00:00.000Z'))).toBe(false)
+    expect(isUnusedIndexReviewCandidate(smallIndex, new Date('2026-02-01T00:00:00.000Z'))).toBe(false)
   })
 })

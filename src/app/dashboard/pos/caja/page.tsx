@@ -1,6 +1,6 @@
-﻿'use client'
+'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -41,7 +41,33 @@ export default function CashRegisterPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const canAccessAudit = user?.role === 'admin' || userPermissions.canViewAuditLog === true
-  const [viewMode, setViewMode] = useState<'simple' | 'advanced'>('simple')
+
+  const [viewMode, setViewMode] = useState<'simple' | 'advanced'>(() => {
+    if (typeof window === 'undefined') return 'simple'
+    if (!isAdmin) return 'simple'
+    try {
+      const saved = localStorage.getItem('pos_caja_view_mode')
+      return saved === 'advanced' || saved === 'simple' ? saved : 'advanced'
+    } catch {
+      return 'advanced'
+    }
+  })
+
+  // Adjust state during render based on prop/context changes
+  const [prevIsAdmin, setPrevIsAdmin] = useState(isAdmin)
+  if (isAdmin !== prevIsAdmin) {
+    setPrevIsAdmin(isAdmin)
+    if (!isAdmin) {
+      setViewMode('simple')
+    } else {
+      try {
+        const saved = localStorage.getItem('pos_caja_view_mode')
+        setViewMode(saved === 'advanced' || saved === 'simple' ? saved : 'advanced')
+      } catch {
+        setViewMode('advanced')
+      }
+    }
+  }
 
   const [isOpenRegisterDialogOpen, setIsOpenRegisterDialogOpen] = useState(false)
   const [openingAmount, setOpeningAmount] = useState('')
@@ -72,12 +98,17 @@ export default function CashRegisterPage() {
     return Number.isFinite(n) && n > 0 ? n : 0
   }, [movementAmount])
 
-  const openMovementDialog = (type: 'in' | 'out') => {
-    setMovementType(type)
-    setMovementAmount('')
-    setMovementNote('')
-    setIsMovementDialogOpen(true)
-  }
+  // Fix #13: monto de apertura requiere > 0 para ser válido (monto 0 no permitido)
+  const isOpeningAmountValid = parsedOpeningAmount > 0
+
+  const [closingCountedAmount, setClosingCountedAmount] = useState('')
+
+  const parsedClosingAmount = useMemo(() => {
+    const n = Number(closingCountedAmount)
+    return Number.isFinite(n) && n >= 0 ? n : null
+  }, [closingCountedAmount])
+
+  const currentRegister = getCurrentRegister
 
   const openAuditPage = () => {
     router.push('/dashboard/pos/caja/auditoria')
@@ -86,6 +117,14 @@ export default function CashRegisterPage() {
   const openHistoryPage = () => {
     router.push('/dashboard/pos/caja/historial')
   }
+
+  // Fix #12: estabilizar openMovementDialog con useCallback para keyboard shortcut deps
+  const openMovementDialog = useCallback((type: 'in' | 'out') => {
+    setMovementType(type)
+    setMovementAmount('')
+    setMovementNote('')
+    setIsMovementDialogOpen(true)
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -109,30 +148,13 @@ export default function CashRegisterPage() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  // Fix #12: incluir openMovementDialog en deps (ahora estabilizado con useCallback)
+  }, [openMovementDialog])
 
-  useEffect(() => {
-    if (!canAccessAudit && activeTab === 'audit') {
-      setActiveTab('overview')
-    }
-  }, [canAccessAudit, activeTab])
-
-  useEffect(() => {
-    if (!isAdmin) {
-      setViewMode('simple')
-      return
-    }
-    try {
-      const saved = localStorage.getItem('pos_caja_view_mode')
-      if (saved === 'advanced' || saved === 'simple') {
-        setViewMode(saved)
-      } else {
-        setViewMode('advanced')
-      }
-    } catch {
-      setViewMode('advanced')
-    }
-  }, [isAdmin])
+  // Adjust activeTab during render if permissions restrict it
+  if (!canAccessAudit && activeTab === 'audit') {
+    setActiveTab('overview')
+  }
 
   useEffect(() => {
     if (!isAdmin) return
@@ -248,30 +270,122 @@ export default function CashRegisterPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsOpenRegisterDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => {
-              openRegister(parsedOpeningAmount, openingNote, user?.id)
-              setIsOpenRegisterDialogOpen(false)
-              setOpeningAmount('')
-              setOpeningNote('')
-            }}>Abrir Caja</Button>
+            <Button
+              disabled={!isOpeningAmountValid}
+              onClick={() => {
+                openRegister(parsedOpeningAmount, openingNote, user?.id)
+                setIsOpenRegisterDialogOpen(false)
+                setOpeningAmount('')
+                setOpeningNote('')
+              }}
+            >
+              Abrir Caja
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>
+      <Dialog open={isCloseDialogOpen} onOpenChange={(open) => {
+        setIsCloseDialogOpen(open)
+        if (!open) setClosingCountedAmount('')
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cerrar Caja</DialogTitle>
             <DialogDescription>
-              Confirmar cierre del turno actual. El saldo permanecera registrado y podras ver el detalle en reportes.
+              Registre el monto físico contado en caja para calcular diferencias.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Fix #2: Resumen financiero antes de confirmar cierre */}
+          <div className="rounded-lg border bg-muted/40 p-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Apertura:</span>
+              <span className="font-semibold">
+                {new Intl.NumberFormat('es-PY').format(currentRegister.movements.find(m => m.type === 'opening')?.amount ?? 0)} Gs.
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Ventas:</span>
+              <span className="font-semibold text-emerald-600">
+                +{new Intl.NumberFormat('es-PY').format(
+                  currentRegister.movements.filter(m => m.type === 'sale').reduce((s, m) => s + m.amount, 0)
+                )} Gs.
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Entradas:</span>
+              <span className="font-semibold text-emerald-600">
+                +{new Intl.NumberFormat('es-PY').format(
+                  currentRegister.movements.filter(m => m.type === 'cash_in').reduce((s, m) => s + m.amount, 0)
+                )} Gs.
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Salidas:</span>
+              <span className="font-semibold text-rose-600">
+                -{new Intl.NumberFormat('es-PY').format(
+                  currentRegister.movements.filter(m => m.type === 'cash_out').reduce((s, m) => s + m.amount, 0)
+                )} Gs.
+              </span>
+            </div>
+            <div className="h-px bg-border" />
+            <div className="flex justify-between font-bold">
+              <span>Esperado en caja:</span>
+              <span className="text-blue-700 dark:text-blue-400">
+                {new Intl.NumberFormat('es-PY').format(currentRegister.balance)} Gs.
+              </span>
+            </div>
+            {parsedClosingAmount !== null && (
+              <div className={`flex justify-between font-bold ${
+                parsedClosingAmount === currentRegister.balance
+                  ? 'text-emerald-600'
+                  : Math.abs(parsedClosingAmount - currentRegister.balance) > 0
+                    ? 'text-amber-600'
+                    : ''
+              }`}>
+                <span>Diferencia:</span>
+                <span>
+                  {parsedClosingAmount > currentRegister.balance ? '+' : ''}
+                  {new Intl.NumberFormat('es-PY').format(parsedClosingAmount - currentRegister.balance)} Gs.
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="closing-counted">Monto real contado en caja</Label>
+            <Input
+              id="closing-counted"
+              type="number"
+              inputMode="decimal"
+              value={closingCountedAmount}
+              onChange={(e) => setClosingCountedAmount(e.target.value)}
+              placeholder={`Ej: ${new Intl.NumberFormat('es-PY').format(currentRegister.balance)}`}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              Cuente el efectivo físico y escriba el total aquí.
+            </p>
+          </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCloseDialogOpen(false)}>Cancelar</Button>
-            <Button variant="destructive" onClick={() => {
-              closeRegister()
+            <Button variant="outline" onClick={() => {
               setIsCloseDialogOpen(false)
-            }}>Cerrar Caja</Button>
+              setClosingCountedAmount('')
+            }}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={parsedClosingAmount === null}
+              onClick={() => {
+                if (parsedClosingAmount === null) return
+                closeRegister(parsedClosingAmount, user?.id)
+                setIsCloseDialogOpen(false)
+                setClosingCountedAmount('')
+              }}
+            >
+              Confirmar Cierre
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -331,7 +445,8 @@ export default function CashRegisterPage() {
               onClick={() => {
                 if (parsedMovementAmount <= 0) return
                 addMovement(
-                  movementType,
+                  // Fix: tipos correctos 'cash_in' / 'cash_out'
+                  movementType === 'in' ? 'cash_in' : 'cash_out',
                   parsedMovementAmount,
                   movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
                 )

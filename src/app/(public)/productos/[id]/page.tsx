@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
 import { ProductCard } from '@/components/public/ProductCard'
-import { getPublicProduct, getPublicProducts, resolveWholesaleStatus } from '@/lib/api/products-server'
+import { getPublicProduct, getPublicProducts, resolveWholesaleStatus, getProductBranchStock } from '@/lib/api/products-server'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { generateProductSchema } from '@/lib/seo'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import { ProductGallery, ProductActions } from './client-components'
+import { BranchAvailability } from '@/components/public/BranchAvailability'
 
 // Allow ISR with 2-minute revalidation
 export const revalidate = 120
@@ -95,10 +96,13 @@ export default async function ProductDetailPage(props: Props) {
     ? Math.round(((product.sale_price - product.wholesale_price!) / product.sale_price) * 100)
     : 0
 
-  // Fetch related products — pass isWholesale to avoid another session lookup
-  const relatedData = product.category
-    ? await getPublicProducts({ categoryId: product.category.id, perPage: 4, isWholesale })
-    : { products: [] as typeof result.product[] }
+  // Fetch related products and branch stock in parallel
+  const [relatedData, branchStock] = await Promise.all([
+    product.category
+      ? getPublicProducts({ categoryId: product.category.id, perPage: 4, isWholesale })
+      : Promise.resolve({ products: [] as typeof result.product[] }),
+    getProductBranchStock(product.id),
+  ])
 
   const relatedProducts = (relatedData.products as typeof result.product[])
     .filter((p) => p.id !== product.id)
@@ -256,6 +260,9 @@ export default async function ProductDetailPage(props: Props) {
 
               {/* Contact CTA - Client Component */}
               <ProductActions product={product} isInStock={isInStock} />
+
+              {/* Branch availability */}
+              <BranchAvailability branches={branchStock} />
             </div>
           </div>
 

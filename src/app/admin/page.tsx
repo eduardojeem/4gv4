@@ -10,7 +10,7 @@ import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
 import {
   Users, Shield, Globe, Database, Settings,
-  BarChart3, AlertTriangle, TrendingUp, Clock, Activity
+  BarChart3, AlertTriangle, TrendingUp, Clock, Activity, Building2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +38,7 @@ export default function AdminHome() {
 
   const navSections = [
     { title: 'Usuarios', description: 'Gestión de cuentas y roles', icon: Users, href: '/admin/users', color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-950/30' },
+    { title: 'Sucursales', description: 'Cobertura multi sucursal y control operativo', icon: Building2, href: '/admin/branches', color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-950/30' },
     { title: 'Sitio Web', description: 'Configuración pública', icon: Globe, href: '/admin/website', color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-950/30' },
     { title: 'Seguridad', description: 'Auditoría y accesos', icon: Shield, href: '/admin/security', color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-950/30' },
     { title: 'Base de Datos', description: 'Monitoreo y salud', icon: Database, href: '/admin/database-monitoring', color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-950/30' },

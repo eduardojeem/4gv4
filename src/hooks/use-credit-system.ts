@@ -5,7 +5,7 @@
  * SINCRONIZADO CON useCustomerCredits - Usa datos reales de Supabase
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Customer } from './use-customer-state'
 import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
@@ -265,9 +265,10 @@ export function useCreditSystem(): UseCreditSystemReturn {
       setInstallments(installmentsData || [])
       setPayments(paymentsData || [])
 
-    } catch (err: any) {
-      setError(err.message || 'Error al cargar datos de créditos')
-      console.error('Error loading credit data:', err)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Error al cargar datos de créditos'
+      setError(message)
+      console.error('Error loading credit data:', error)
       // En caso de error, usar datos vacíos
       setCredits([])
       setInstallments([])
@@ -319,65 +320,23 @@ export function useCreditSystem(): UseCreditSystemReturn {
         return false
       }
 
-      const installmentCount = saleData.installments?.count || 1
-      const frequency = saleData.installments?.frequency || 'monthly'
-
-      // 1. Crear el crédito principal
-      const { data: creditData, error: creditError } = await supabase
-        .from('customer_credits')
-        .insert({
-          customer_id: customer.id,
-          principal: saleData.amount,
-          interest_rate: 0, // Por ahora 0% interés en POS
-          term_months: installmentCount, // Aproximación si es mensual
-          start_date: new Date().toISOString(),
-          status: 'active'
+      const response = await fetch('/api/credits/sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: customer.id,
+          amount: saleData.amount,
+          interestRate: 0,
+          dueDate: saleData.dueDate,
+          installments: saleData.installments ?? { count: 1, frequency: 'monthly' },
         })
-        .select()
-        .single()
+      })
 
-      if (creditError) {
-        console.error('Error creating credit header:', creditError)
-        throw new Error('Error al crear el registro de crédito')
+      const result = await response.json().catch(() => null) as { error?: string } | null
+
+      if (!response.ok) {
+        throw new Error(result?.error || 'No se pudo registrar la venta a crédito')
       }
-
-      const creditId = creditData.id
-
-      // 2. Generar cuotas
-      const installmentsToInsert = []
-      const baseAmount = Math.floor(saleData.amount / installmentCount)
-      const remainder = saleData.amount % installmentCount
-
-      for (let i = 0; i < installmentCount; i++) {
-        const dueDate = new Date()
-        // Calcular fecha según frecuencia
-        if (frequency === 'weekly') dueDate.setDate(dueDate.getDate() + (7 * (i + 1)))
-        else if (frequency === 'biweekly') dueDate.setDate(dueDate.getDate() + (14 * (i + 1)))
-        else dueDate.setMonth(dueDate.getMonth() + (i + 1)) // Mensual default
-
-        installmentsToInsert.push({
-          credit_id: creditId,
-          installment_number: i + 1,
-          amount: i === installmentCount - 1 ? baseAmount + remainder : baseAmount,
-          due_date: dueDate.toISOString(),
-          status: 'pending'
-        })
-      }
-
-      const { error: installmentsError } = await supabase
-        .from('credit_installments')
-        .insert(installmentsToInsert)
-
-      if (installmentsError) {
-        console.error('Error creating installments:', installmentsError)
-        // Idealmente aquí haríamos rollback del credit header
-        await supabase.from('customer_credits').delete().eq('id', creditId)
-        throw new Error('Error al generar las cuotas')
-      }
-
-      // 3. (Opcional) Vincular reparaciones si existen
-      // Esto requeriría una tabla intermedia o actualizar la tabla repairs con el credit_id
-      // Por ahora el CheckoutModal maneja la actualización de estado de repairs a 'entregado'
 
       toast.success(`Venta a crédito creada exitosamente`)
       
@@ -385,12 +344,13 @@ export function useCreditSystem(): UseCreditSystemReturn {
       await loadCreditData(customer.id)
       
       return true
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating credit sale:', error)
-      toast.error(error.message || 'Error al crear la venta a crédito')
+      const message = error instanceof Error ? error.message : 'Error al crear la venta a crédito'
+      toast.error(message)
       return false
     }
-  }, [canSellOnCredit, loadCreditData, supabase])
+  }, [canSellOnCredit, loadCreditData])
 
   // Registrar un pago (Implementación REAL con Supabase)
   const recordPayment = useCallback(async (
@@ -463,9 +423,10 @@ export function useCreditSystem(): UseCreditSystemReturn {
       await loadCreditData(customerId)
       
       return true
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error recording payment:', error)
-      toast.error(error.message || 'Error al registrar el pago')
+      const message = error instanceof Error ? error.message : 'Error al registrar el pago'
+      toast.error(message)
       return false
     }
   }, [credits, installments, loadCreditData, supabase])

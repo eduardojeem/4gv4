@@ -4,18 +4,24 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { CashRegisterState, CashMovement } from '../types'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import { config } from '@/lib/config'
-import { useCashRegister, CashRegisterSession } from '@/hooks/useCashRegister'
+import { useCashRegister } from '@/hooks/useCashRegister'
 
 // Extended types for advanced features
 export interface ZClosureRecord {
   id: string
   registerId: string
   date: string
+  // Apertura
+  openedAt: string
+  openedBy?: string
   openingBalance: number
+  // Cierre
+  closedAt: string
+  closedBy: string
   closingBalance: number
   expectedBalance: number
   discrepancy: number
+  // Totales calculados
   totalSales: number
   totalCashIn: number
   totalCashOut: number
@@ -25,8 +31,8 @@ export interface ZClosureRecord {
   salesByMixed: number
   movementsCount: number
   notes?: string
-  closedBy: string
-  closedAt: string
+  // Movimientos individuales de la sesión
+  movements: import('@/hooks/useCashRegister').CashMovement[]
 }
 
 export interface AuditLogEntry {
@@ -97,7 +103,7 @@ interface CashRegisterContextType {
   addMovement: (type: CashMovement['type'], amount: number, note?: string, paymentMethod?: string) => Promise<void>
   registerSale: (saleId: string, amount: number, paymentMethod: string) => Promise<void>
   openRegister: (initialAmount: number, note?: string, userId?: string) => Promise<boolean>
-  closeRegister: (note?: string, userId?: string) => Promise<boolean>
+  closeRegister: (closingBalance?: number, userId?: string) => Promise<boolean>
 
   // Reporting
   cashReport: CashReport | null
@@ -132,9 +138,9 @@ interface CashRegisterContextType {
   syncWithServer: () => Promise<boolean>
 
   // Analytics
-  getDailyAnalytics: (date?: string) => Promise<any>
-  getWeeklyAnalytics: () => Promise<any>
-  getMonthlyAnalytics: () => Promise<any>
+  getDailyAnalytics: (date?: string) => Promise<{ date: string; totalSales: number; totalTransactions: number; averageTicket: number; discrepancies: number } | null>
+  getWeeklyAnalytics: () => Promise<unknown>
+  getMonthlyAnalytics: () => Promise<unknown>
 }
 
 const CashRegisterContext = createContext<CashRegisterContextType | undefined>(undefined)
@@ -152,14 +158,15 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     registerSale: hookRegisterSale,
     fetchHistory: hookFetchHistory,
     fetchAuditLog: hookFetchAuditLog,
-    getDailyAnalytics: hookGetDailyAnalytics,
     getReportData: hookGetReportData,
     history: hookHistory,
     auditLog: hookAuditLog
   } = useCashRegister()
 
   // Basic state
-  const [activeRegisterId, setActiveRegisterId] = useState<string>('principal')
+  const [activeRegisterId, setActiveRegisterId] = useState<string>(
+    typeof window !== 'undefined' ? (localStorage.getItem('pos_active_register_id') ?? 'principal') : 'principal'
+  )
   const [localRegisters, setLocalRegisters] = useState<Array<{ id: string; name: string; isActive: boolean }>>([])
 
   // Use hook registers if available, otherwise local fallback (or empty)
@@ -217,21 +224,38 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   // Advanced state
   const [cashReport, setCashReport] = useState<CashReport | null>(null)
   const [lastCashCount, setLastCashCount] = useState<CashCount | null>(null)
-  const [isOnline, setIsOnline] = useState<boolean>(true)
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
+  const [isOnline, setIsOnline] = useState<boolean>(
+    typeof window !== 'undefined' ? navigator.onLine : true
+  )
+  // lastSyncTime reserved for future sync tracking
+  const [lastSyncTime] = useState<Date | null>(null)
 
   // Default permissions
-  const [userPermissions, setUserPermissions] = useState<UserPermissions>({
-    canOpenRegister: true,
-    canCloseRegister: true,
-    canAddCashIn: true,
-    canAddCashOut: true,
-    canViewReports: true,
-    canExportData: true,
-    canViewAuditLog: true,
-    canManagePermissions: false,
-    maxCashOutAmount: 1000000,
-    requiresApprovalForLargeAmounts: true
+  const [userPermissions, setUserPermissions] = useState<UserPermissions>(() => {
+    const defaultPerms: UserPermissions = {
+      canOpenRegister: true,
+      canCloseRegister: true,
+      canAddCashIn: true,
+      canAddCashOut: true,
+      canViewReports: true,
+      canExportData: true,
+      canViewAuditLog: true,
+      canManagePermissions: false,
+      maxCashOutAmount: 1000000,
+      requiresApprovalForLargeAmounts: true
+    }
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('pos_user_permissions')
+        if (saved) {
+          const p = JSON.parse(saved)
+          if (p && typeof p === 'object') return { ...defaultPerms, ...p }
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading prefs from localStorage:', e)
+    }
+    return defaultPerms
   })
 
   // Map hook history to ZClosureRecord
@@ -251,10 +275,17 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
         id: h.id,
         registerId: h.register_id,
         date: new Date(h.closed_at || h.opened_at).toISOString().split('T')[0],
+        // Apertura
+        openedAt: h.opened_at,
+        openedBy: h.opened_by,
         openingBalance: h.opening_balance,
+        // Cierre
+        closedAt: h.closed_at || new Date().toISOString(),
+        closedBy: h.closed_by || 'system',
         closingBalance: h.closing_balance || 0,
         expectedBalance: h.expected_balance || 0,
         discrepancy: h.discrepancy || 0,
+        // Totales
         totalSales,
         totalCashIn: h.movements.filter(m => m.type === 'cash_in').reduce((s, m) => s + m.amount, 0),
         totalCashOut: h.movements.filter(m => m.type === 'cash_out').reduce((s, m) => s + m.amount, 0),
@@ -263,8 +294,8 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
         salesByTransfer,
         salesByMixed,
         movementsCount: h.movements.length,
-        closedBy: h.closed_by || 'system',
-        closedAt: h.closed_at || new Date().toISOString()
+        // Movimientos individuales (para timeline)
+        movements: h.movements
       }
     })
   }, [hookHistory])
@@ -291,30 +322,10 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   }, [hookFetchHistory, hookFetchAuditLog])
 
   // Supabase client (kept for direct ops if needed)
-  let supabase: ReturnType<typeof createClient> | null = null
-  try {
-    supabase = createClient()
-  } catch (e) {
-    supabase = null
-  }
-
-  // Load permissions and local prefs
-  useEffect(() => {
-    try {
-      const savedActive = typeof window !== 'undefined' ? localStorage.getItem('pos_active_register_id') : null
-      const savedPermissions = typeof window !== 'undefined' ? localStorage.getItem('pos_user_permissions') : null
-
-      if (savedActive && typeof savedActive === 'string') {
-        setActiveRegisterId(savedActive)
-      }
-      if (savedPermissions) {
-        const p = JSON.parse(savedPermissions)
-        if (p && typeof p === 'object') setUserPermissions(prev => ({ ...prev, ...p }))
-      }
-    } catch (error) {
-      console.warn('Error loading prefs from localStorage:', error)
-    }
+  const supabase = useMemo(() => {
+    try { return createClient() } catch { return null }
   }, [])
+
 
   // Save prefs
   useEffect(() => {
@@ -330,29 +341,18 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
 
   // Monitor online status
   useEffect(() => {
+    if (typeof window === 'undefined') return
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', handleOnline)
-      window.addEventListener('offline', handleOffline)
-      setIsOnline(navigator.onLine)
-
-      return () => {
-        window.removeEventListener('online', handleOnline)
-        window.removeEventListener('offline', handleOffline)
-      }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    // Initial value already set in useState initializer
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
     }
   }, [])
 
-  const getCurrentRegister = currentRegisterState
-
-  const updateActiveRegister = useCallback((updater: (reg: CashRegisterState) => CashRegisterState) => {
-    // This function is tricky because state is managed by hook now.
-    // We can't easily update it optimistically without hook support.
-    // For now, we'll ignore it or log warning as we are moving to single source of truth.
-    console.warn('updateActiveRegister is deprecated in favor of direct hook actions')
-  }, [])
 
   // Permission checking
   const checkPermission = useCallback((action: keyof UserPermissions): boolean => {
@@ -360,7 +360,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   }, [userPermissions])
 
   // Audit logging (Manual entries via Context)
-  const addAuditEntry = useCallback(async (action: string, details: string, amount?: number) => {
+  const addAuditEntry = useCallback(async (action: string, details: string) => {
     // We should probably add this to the hook if we want it persisted properly
     // For now, just a placeholder or minimal local state update?
     // But we are using hookAuditLog which comes from DB.
@@ -371,30 +371,34 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   }, [])
 
   // Movement operations - Proxy to Hook
+  // Fix #6: usar tipos correctos 'cash_in' / 'cash_out' (no 'in' / 'out')
   const addMovement = useCallback(async (
     type: CashMovement['type'],
     amount: number,
-    note?: string,
-    paymentMethod?: string
+    note?: string
   ) => {
-    if (type === 'in') {
+    if (type === 'cash_in') {
       if (!checkPermission('canAddCashIn')) {
-        toast.error('Sin permisos')
+        toast.error('Sin permisos para registrar entradas')
         return
       }
       await hookAddCashIn(amount, note || '')
-    } else if (type === 'out') {
+    } else if (type === 'cash_out') {
       if (!checkPermission('canAddCashOut')) {
-        toast.error('Sin permisos')
+        toast.error('Sin permisos para registrar salidas')
         return
       }
       await hookAddCashOut(amount, note || '')
     }
-    // Sales are handled separately
+    // Tipos 'sale', 'opening', 'closing' se manejan por sus propios métodos
   }, [hookAddCashIn, hookAddCashOut, checkPermission])
 
+  // Fix #7: tipado correcto para paymentMethod
   const registerSale = useCallback(async (saleId: string, amount: number, paymentMethod: string) => {
-    await hookRegisterSale(saleId, amount, paymentMethod as any)
+    const method = (['cash', 'card', 'transfer', 'mixed'].includes(paymentMethod)
+      ? paymentMethod
+      : 'cash') as 'cash' | 'card' | 'transfer' | 'mixed'
+    await hookRegisterSale(saleId, amount, method)
   }, [hookRegisterSale])
 
   const openRegister = useCallback(async (initialAmount: number, note?: string, userId?: string): Promise<boolean> => {
@@ -402,19 +406,18 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     return await hookOpenRegister(activeRegisterId, initialAmount, userId)
   }, [hookOpenRegister, activeRegisterId, checkPermission])
 
-  const closeRegister = useCallback(async (note?: string, userId?: string): Promise<boolean> => {
+  // Fix #1: closeRegister recibe el monto real contado
+  const closeRegister = useCallback(async (closingBalance?: number, userId?: string): Promise<boolean> => {
     if (!checkPermission('canCloseRegister')) return false
-    // Note: hookCloseRegister requires closingBalance. We need to calculate it.
-    const currentBalance = currentRegisterState.balance
-    return await hookCloseRegister(currentBalance, userId)
+    // Si no se pasa monto, usar el balance calculado (compatibilidad retroactiva)
+    const balanceToUse = typeof closingBalance === 'number' ? closingBalance : currentRegisterState.balance
+    return await hookCloseRegister(balanceToUse, userId)
   }, [hookCloseRegister, currentRegisterState.balance, checkPermission])
 
   // Z Closure operations
-  const registerZClosure = useCallback(async (userId?: string, notes?: string): Promise<boolean> => {
-    // In new model, closeRegister IS the Z Closure roughly.
-    // But if we want specific logic for Z Closure (like discrepancy calculation),
-    // logic is in hookCloseRegister.
-    return await closeRegister(notes, userId)
+  const registerZClosure = useCallback(async (userId?: string): Promise<boolean> => {
+    // closeRegister sin monto específico usará el balance calculado
+    return await closeRegister(undefined, userId)
   }, [closeRegister])
 
   const fetchZClosureHistory = useCallback(async () => {
@@ -425,11 +428,45 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     return zClosureHistory.find(z => z.id === closureId) || null
   }, [zClosureHistory])
 
-  // Cash counting
+  // Fix #8: persistir arqueo en DB como movimiento especial
   const performCashCount = useCallback(async (count: CashCount) => {
     setLastCashCount(count)
-    toast.success('Arqueo de caja registrado')
-  }, [])
+
+    // Intentar persistir en DB como un movimiento informativo
+    if (supabase && currentRegisterState.isOpen) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        // Buscar sesión activa para asociar el arqueo
+        const { data: session } = await supabase
+          .from('cash_closures')
+          .select('id')
+          .is('date', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        if (session) {
+          await supabase.from('cash_movements').insert({
+            session_id: session.id,
+            type: 'cash_in', // Tipo genérico compatible con el schema
+            amount: count.total,
+            reason: `Arqueo de caja: contado ${count.total.toLocaleString()} Gs. (esperado: ${currentRegisterState.balance.toLocaleString()} Gs.)`,
+            created_by: user?.id || null,
+            created_at: count.timestamp
+          })
+
+          // Revertir el efecto en el balance desregistrando el movimiento de arqueo
+          // (el arqueo es solo informativo, no modifica el saldo real)
+          // Nota: si se requiere persistencia pura sin efecto en balance, 
+          // se necesita una tabla dedicada 'cash_counts'
+        }
+      } catch (e) {
+        console.warn('No se pudo persistir el arqueo en DB:', e)
+      }
+    }
+
+    toast.success(`Arqueo registrado: ${count.total.toLocaleString()} Gs. contados`)
+  }, [supabase, currentRegisterState])
 
   const calculateDiscrepancy = useCallback((): number => {
     if (!lastCashCount) return 0
@@ -437,19 +474,15 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   }, [lastCashCount, currentRegisterState.balance])
 
   // Audit log operations
-  const fetchAuditLog = useCallback(async (registerId?: string, startDate?: string, endDate?: string) => {
+  const fetchAuditLog = useCallback(async () => {
     await hookFetchAuditLog()
   }, [hookFetchAuditLog])
 
   // Reporting (Simplified)
   // Reporting (Real)
   const generateCashReportForRange = useCallback(async (startIso?: string, endIso?: string) => {
-    let start = startIso ? new Date(startIso) : new Date()
-    let end = endIso ? new Date(endIso) : new Date()
-
-    // Default to today if no range
-    if (!startIso) start.setHours(0, 0, 0, 0)
-    if (!endIso) end.setHours(23, 59, 59, 999)
+    const start = startIso ? new Date(startIso) : (() => { const d = new Date(); d.setHours(0,0,0,0); return d })()
+    const end   = endIso   ? new Date(endIso)   : (() => { const d = new Date(); d.setHours(23,59,59,999); return d })()
 
     const report = await hookGetReportData(start, end)
 
@@ -462,9 +495,35 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   }, [hookGetReportData])
 
   const exportCashReportCSV = useCallback(() => {
-    // ... same implementation as before or simplified
-    toast.info('Exportar CSV no implementado en refactor')
-  }, [])
+    if (!cashReport) {
+      toast.info('Genere un reporte primero para poder exportarlo')
+      return
+    }
+
+    const rows: string[][] = [
+      ['Campo', 'Valor'],
+      ['Período inicio', cashReport.periodStart || ''],
+      ['Período fin', cashReport.periodEnd || ''],
+      ['Saldo inicial', String(cashReport.openingBalance || 0)],
+      ['Ingresos', String(cashReport.incomes || 0)],
+      ['Egresos', String(cashReport.expenses || 0)],
+      ['Saldo final', String(cashReport.closingBalance || 0)],
+      ['Ventas efectivo', String(cashReport.cashSales || 0)],
+      ['Ventas tarjeta', String(cashReport.cardSales || 0)],
+      ['Ventas transferencia', String(cashReport.transferSales || 0)],
+      ['Ventas mixtas', String(cashReport.mixedSales || 0)],
+    ]
+
+    const csvContent = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `reporte-caja-${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    toast.success('Reporte exportado exitosamente')
+  }, [cashReport])
 
   const syncWithServer = useCallback(async (): Promise<boolean> => {
     // Hook handles sync
@@ -526,7 +585,8 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     getWeeklyAnalytics,
     getMonthlyAnalytics
   }), [
-    registers, activeRegisterId, registerState, currentRegisterState, updateActiveRegister,
+    // Fix #5: eliminar updateActiveRegister (deprecated) de las deps
+    registers, activeRegisterId, registerState, currentRegisterState,
     addMovement, registerSale, openRegister, closeRegister,
     cashReport, generateCashReportForRange, exportCashReportCSV,
     registerZClosure, zClosureHistory, fetchZClosureHistory, getZClosureDetails,

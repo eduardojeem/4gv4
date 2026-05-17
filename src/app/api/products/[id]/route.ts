@@ -3,10 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import { requireAuth, requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
 import { productUpdateSchema } from '@/lib/validation/schemas'
 import { logger } from '@/lib/logger'
+import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
 
 // GET /api/products/[id] - Obtener producto especifico (usuario autenticado)
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -18,6 +20,13 @@ export async function GET(
 
     const { id } = await params
     const supabase = await createClient()
+    const requestedBranchId = getRequestedBranchId(request)
+    const branchScope = await resolveBranchScopeForUser({
+      userId: auth.user.id,
+      role: auth.role,
+      requestedBranchId,
+      strict: Boolean(requestedBranchId),
+    })
 
     const { data: product, error } = await supabase
       .from('products')
@@ -37,9 +46,20 @@ export async function GET(
       )
     }
 
+    const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+      supabase,
+      branchScope.branchId,
+      [product.id]
+    )
+    const responseProduct = applyBranchInventoryToProducts(
+      [product as Record<string, unknown> & { id: string; stock_quantity?: number | null }],
+      stockMap,
+      branchScoped
+    )[0]
+
     return NextResponse.json({
       success: true,
-      data: product,
+      data: responseProduct,
     })
   } catch (error) {
     logger.error('Product detail API error', { error })
@@ -65,6 +85,13 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
     const supabase = await createClient()
+    const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
+    const branchScope = await resolveBranchScopeForUser({
+      userId: auth.user.id,
+      role: auth.role,
+      requestedBranchId,
+      strict: Boolean(requestedBranchId),
+    })
 
     const validationResult = productUpdateSchema.safeParse({
       ...body,
@@ -85,6 +112,7 @@ export async function PUT(
 
     const validated = validationResult.data
     const updatePayload: Record<string, unknown> = {}
+    const desiredStockQuantity = validated.stock_quantity
 
     const allowedKeys: Array<keyof typeof validated> = [
       'name',
@@ -92,7 +120,6 @@ export async function PUT(
       'category_id',
       'supplier_id',
       'brand',
-      'stock_quantity',
       'min_stock',
       'purchase_price',
       'sale_price',
@@ -108,35 +135,74 @@ export async function PUT(
       }
     }
 
-    if (Object.keys(updatePayload).length === 0) {
+    if (Object.keys(updatePayload).length === 0 && desiredStockQuantity === undefined) {
       return NextResponse.json(
         { success: false, error: 'No hay campos para actualizar' },
         { status: 400 }
       )
     }
 
-    const { data: updatedProduct, error } = await supabase
-      .from('products')
-      .update(updatePayload)
-      .eq('id', id)
-      .select('*, category:categories(id, name)')
-      .maybeSingle()
-
-    if (error) {
-      logger.error('Failed to update product by id', { productId: id, error: error.message })
-      throw error
+    if (!branchScope.branchId && desiredStockQuantity !== undefined) {
+      updatePayload.stock_quantity = desiredStockQuantity
     }
 
-    if (!updatedProduct) {
+    let updatedProduct = null as Record<string, unknown> | null
+    if (Object.keys(updatePayload).length > 0) {
+      const { data, error } = await supabase
+        .from('products')
+        .update(updatePayload)
+        .eq('id', id)
+        .select('*, category:categories(id, name)')
+        .maybeSingle()
+
+      if (error) {
+        logger.error('Failed to update product by id', { productId: id, error: error.message })
+        throw error
+      }
+
+      updatedProduct = data as Record<string, unknown> | null
+    }
+
+    if (branchScope.branchId && desiredStockQuantity !== undefined) {
+      await upsertBranchInventoryStock({
+        supabase,
+        branchId: branchScope.branchId,
+        productId: id,
+        stockQuantity: Number(desiredStockQuantity),
+      })
+    }
+
+    const { data: refreshedProduct, error: refreshedProductError } = await supabase
+      .from('products')
+      .select('*, category:categories(id, name)')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (refreshedProductError) {
+      logger.error('Failed to reload product after update by id', { productId: id, error: refreshedProductError.message })
+      throw refreshedProductError
+    }
+
+    if (!refreshedProduct) {
       return NextResponse.json(
         { success: false, error: 'Producto no encontrado' },
         { status: 404 }
       )
     }
 
+    updatedProduct = refreshedProduct as Record<string, unknown>
+
+    const responseProduct = branchScope.branchId && desiredStockQuantity !== undefined
+      ? applyBranchInventoryToProducts(
+          [updatedProduct as Record<string, unknown> & { id: string; stock_quantity?: number | null }],
+          new Map([[id, Number(desiredStockQuantity)]]),
+          true
+        )[0]
+      : updatedProduct
+
     return NextResponse.json({
       success: true,
-      data: updatedProduct,
+      data: responseProduct,
     })
   } catch (error) {
     logger.error('Product update by id API error', { error })

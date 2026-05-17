@@ -9,6 +9,8 @@ import { CartesianGrid } from 'recharts/es6/cartesian/CartesianGrid'
 import { Tooltip } from 'recharts/es6/component/Tooltip'
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer'
 import { createClient } from '@/lib/supabase/client'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 
 interface SalesData {
   name: string
@@ -23,6 +25,7 @@ type SaleRow = {
 export function SalesChart() {
   const [data, setData] = useState<SalesData[]>([])
   const [loading, setLoading] = useState(true)
+  const { selectedBranchId } = useBranch()
 
   useEffect(() => {
     const fetchSalesData = async () => {
@@ -33,11 +36,14 @@ export function SalesChart() {
         const sevenDaysAgo = new Date(today)
         sevenDaysAgo.setDate(today.getDate() - 7)
 
-        const { data: sales, error } = await supabase
+        let query = supabase
           .from('sales')
           .select('total_amount, created_at')
           .gte('created_at', sevenDaysAgo.toISOString())
           .order('created_at', { ascending: true })
+
+        query = withBranchFilter(query, selectedBranchId)
+        const { data: sales, error } = await query
 
         if (error) throw error
 
@@ -85,7 +91,7 @@ export function SalesChart() {
     }
 
     fetchSalesData()
-  }, [])
+  }, [selectedBranchId])
 
   if (loading) {
     return (

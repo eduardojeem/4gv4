@@ -8,7 +8,7 @@ import { FilterPanel } from '@/components/shared'
 import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, Search } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useCredits, InstallmentRow, isInstallmentLate } from '@/hooks/use-credits'
-import { CreditStats } from '@/components/dashboard/credits/CreditStats'
+import { CreditOverview } from '@/components/dashboard/credits/CreditOverview'
 import { CreditList } from '@/components/dashboard/credits/CreditList'
 import { UpcomingInstallments } from '@/components/dashboard/credits/UpcomingInstallments'
 import { CreditPaymentDialog, PaymentMethod, PaymentConfirmResult } from '@/components/dashboard/credits/CreditPaymentDialog'
@@ -41,7 +41,7 @@ export default function CreditsDashboardPage() {
   const pageSize = 10
   const [sortField] = useState<keyof InstallmentRow | null>(null)
   const [sortDirection] = useState<'asc' | 'desc'>('asc')
-  const [activeTab, setActiveTab] = useState('cuotas')
+  const [activeTab, setActiveTab] = useState('overview')
   const [creditViewMode, setCreditViewMode] = useState<'cards' | 'list' | 'table'>('cards')
 
   // Sort y paginación de cuotas (memoizado para evitar computation en cada render)
@@ -109,6 +109,53 @@ export default function CreditsDashboardPage() {
     const paidAmount = Math.max(0, Number(installment.amount_paid || 0))
     return Math.max(0, installmentAmount - paidAmount)
   }
+
+  const collectionSummary = useMemo(() => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+    let visibleOutstanding = 0
+    let visibleOverdue = 0
+    let visibleDueToday = 0
+    let partialOpenCount = 0
+    const visibleCustomers = new Set<string>()
+
+    for (const installment of filteredInstallments) {
+      const amount = Number(installment.amount || 0)
+      const paidAmount = Math.max(0, Number(installment.amount_paid || 0))
+      const outstanding = Math.max(0, amount - paidAmount)
+
+      visibleCustomers.add(creditById[installment.credit_id]?.customer_name || installment.credit_id)
+      visibleOutstanding += outstanding
+
+      if (paidAmount > 0 && outstanding > 0) {
+        partialOpenCount += 1
+      }
+
+      if (isInstallmentLate(installment)) {
+        visibleOverdue += outstanding
+      }
+
+      const dueDate = new Date(installment.due_date)
+      dueDate.setHours(0, 0, 0, 0)
+
+      if (
+        outstanding > 0 &&
+        dueDate.getTime() === today.getTime() &&
+        (installment.status === 'pending' || installment.status === 'late')
+      ) {
+        visibleDueToday += outstanding
+      }
+    }
+
+    return {
+      visibleCustomers: visibleCustomers.size,
+      visibleOutstanding,
+      visibleOverdue,
+      visibleDueToday,
+      partialOpenCount,
+    }
+  }, [filteredInstallments, creditById])
 
   const openPaymentDialogForInstallment = (installment: InstallmentRow) => {
     const outstanding = getInstallmentOutstanding(installment)
@@ -306,18 +353,15 @@ export default function CreditsDashboardPage() {
         dueTodayCount={dueTodayCount}
       />
 
-      {/* Stats */}
-      <CreditStats credits={credits} installments={installments} />
-
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
-          <TabsTrigger value="resumen" className="gap-2">
+          <TabsTrigger value="overview" className="gap-2">
             <LayoutDashboard className="h-4 w-4" />
             Resumen
           </TabsTrigger>
           <TabsTrigger value="cuotas" className="gap-2">
             <CalendarClock className="h-4 w-4" />
-            Cuotas
+            Cobranza
             {(overdueCount + dueTodayCount) > 0 && (
               <Badge variant="destructive" className="ml-1 h-5 min-w-5 p-0 px-1 text-xs">
                 {overdueCount + dueTodayCount}
@@ -331,8 +375,15 @@ export default function CreditsDashboardPage() {
         </TabsList>
 
         {/* Tab Content: Resumen */}
-        <TabsContent value="resumen" className="space-y-6">
+        <TabsContent value="overview" className="space-y-6">
           {/* Active Credits List — view toggle embedded in component header */}
+          <CreditOverview
+            credits={credits}
+            installments={installments}
+            creditById={creditById}
+            remainingByCredit={remainingByCredit}
+          />
+
           <CreditList
             credits={credits.filter(c => c.status === 'active')}
             remainingByCredit={remainingByCredit}
@@ -354,6 +405,55 @@ export default function CreditsDashboardPage() {
 
         {/* Tab Content: Cuotas */}
         <TabsContent value="cuotas" className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/[0.02]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Saldo visible
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+                {formatCurrency(collectionSummary.visibleOutstanding)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {filteredInstallments.length} cuota{filteredInstallments.length !== 1 ? 's' : ''} en {collectionSummary.visibleCustomers} cliente{collectionSummary.visibleCustomers !== 1 ? 's' : ''}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-red-200/80 bg-red-50/70 px-4 py-3 shadow-sm dark:border-red-900/50 dark:bg-red-950/20">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-red-700 dark:text-red-300">
+                Saldo vencido visible
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-red-700 dark:text-red-300">
+                {formatCurrency(collectionSummary.visibleOverdue)}
+              </p>
+              <p className="text-xs text-red-700/80 dark:text-red-300/80">
+                Prioridad alta de recuperacion
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/20">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">
+                Vence hoy
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-700 dark:text-amber-300">
+                {formatCurrency(collectionSummary.visibleDueToday)}
+              </p>
+              <p className="text-xs text-amber-700/80 dark:text-amber-300/80">
+                Cobranza inmediata del filtro actual
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 px-4 py-3 shadow-sm dark:border-blue-900/50 dark:bg-blue-950/20">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">
+                Pagos parciales abiertos
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-blue-700 dark:text-blue-300">
+                {collectionSummary.partialOpenCount}
+              </p>
+              <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
+                Cuotas con saldo aun no cerrado
+              </p>
+            </div>
+          </div>
 
           {/* Unified filter toolbar */}
           <div className="flex flex-wrap items-center gap-2">
@@ -628,7 +728,7 @@ export default function CreditsDashboardPage() {
                 <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total cobrado</p>
+                <p className="text-xs text-muted-foreground">Cobrado (ultimos 50)</p>
                 <p className="text-base font-bold text-green-700 dark:text-green-300">
                   {formatCurrency(recentPayments.reduce((acc, p) => acc + Number(p.amount || 0), 0))}
                 </p>
@@ -639,7 +739,7 @@ export default function CreditsDashboardPage() {
                 <Receipt className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Pagos registrados</p>
+                <p className="text-xs text-muted-foreground">Pagos visibles</p>
                 <p className="text-base font-bold text-blue-700 dark:text-blue-300">{recentPayments.length}</p>
               </div>
             </div>
@@ -648,7 +748,7 @@ export default function CreditsDashboardPage() {
                 <CreditCard className="h-4 w-4 text-purple-600 dark:text-purple-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Créditos involucrados</p>
+                <p className="text-xs text-muted-foreground">Creditos visibles</p>
                 <p className="text-base font-bold text-purple-700 dark:text-purple-300">
                   {new Set(recentPayments.map(p => p.credit_id)).size}
                 </p>

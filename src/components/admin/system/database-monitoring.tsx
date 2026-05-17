@@ -1,137 +1,78 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { 
-  Database, 
-  HardDrive, 
-  Activity, 
-  Clock, 
-  Users, 
+import Link from 'next/link'
+import { useMemo, useState } from 'react'
+import {
+  Activity,
   AlertTriangle,
-  CheckCircle,
-  XCircle,
-  RefreshCw,
-  Download,
-  TrendingUp,
-  TrendingDown,
-  Zap,
   BarChart3,
-  PieChart,
-  Table as TableIcon,
-  Settings,
-  Wrench,
-  Trash2,
-  Search,
-  FileSearch,
-  ShieldCheck,
-  Package,
+  CheckCircle,
+  Clock,
+  Database,
+  Download,
+  HardDrive,
   History,
-  Info
+  Info,
+  PieChart,
+  RefreshCw,
+  Settings,
+  ShieldCheck,
+  Users,
+  Wrench,
+  XCircle,
+  Zap,
 } from 'lucide-react'
-import { 
-  AreaChart, 
-  Area, 
-  BarChart, 
-  Bar, 
-  PieChart as RechartsPieChart, 
-  Pie, 
-  Cell, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer 
-} from 'recharts';
-import { databaseMonitoringService, DatabaseAlert, IndexStats, MaintenanceResponse, MaintenanceTask } from '@/services/database-monitoring-service'
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie as RechartsPie,
+  PieChart as RechartsPieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  databaseMonitoringService,
+  type DatabaseAlert,
+  type MaintenanceTask,
+  type MonitoringSource,
+  isUnusedIndexReviewCandidate,
+} from '@/services/database-monitoring-service'
 import { useDatabaseMonitoring } from '@/hooks/use-database-monitoring'
-import { useStorageCleanup } from '@/hooks/use-storage-cleanup'
-import { storageCleanupService } from '@/services/storage-cleanup-service'
-import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
-// Colores para gráficos
-const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff88', '#ff8042', '#8dd1e1', '#d084d0']
+const COLORS = ['#0f766e', '#f59e0b', '#2563eb', '#ef4444']
+
+type MaintenanceAction = MaintenanceTask | 'refresh_metrics'
 
 interface MetricCardProps {
   title: string
-  value: string | number
+  value: string | number | null
   unit?: string
+  description: string
   icon: React.ReactNode
-  trend?: 'up' | 'down' | 'stable'
-  trendValue?: number
   status?: 'good' | 'warning' | 'critical'
-  description?: string
-  isMock?: boolean
-}
-
-function MetricCard({ title, value, unit = '', icon, trend, trendValue, status = 'good', description, isMock }: MetricCardProps) {
-  const getStatusColor = () => {
-    switch (status) {
-      case 'good': return 'text-green-600'
-      case 'warning': return 'text-yellow-600'
-      case 'critical': return 'text-red-600'
-      default: return 'text-gray-600'
-    }
-  }
-
-  const getTrendIcon = () => {
-    switch (trend) {
-      case 'up': return <TrendingUp className="h-3 w-3 text-red-500" />
-      case 'down': return <TrendingDown className="h-3 w-3 text-green-500" />
-      default: return null
-    }
-  }
-
-  return (
-    <Card className="relative overflow-hidden transition-all hover:shadow-md">
-      {isMock && (
-        <div className="absolute top-0 right-0 p-1">
-          <Badge variant="outline" className="text-[10px] h-4 px-1 text-muted-foreground bg-muted/50">Simulado</Badge>
-        </div>
-      )}
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <div className={cn("p-2 rounded-full bg-muted/30", getStatusColor())}>
-          {icon}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className={cn("text-2xl font-bold", getStatusColor())}>
-          {typeof value === 'number' ? value.toLocaleString() : value}{unit}
-        </div>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
-        )}
-        {trend && trendValue !== undefined && (
-          <div className="flex items-center text-xs text-muted-foreground mt-1">
-            {getTrendIcon()}
-            <span className="ml-1">
-              {Math.abs(trendValue).toFixed(1)}% desde ayer
-            </span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
 }
 
 interface AlertCardProps {
   alert: DatabaseAlert
-  onResolve?: () => void
 }
-
-type MaintenanceAction = MaintenanceTask | 'refresh_metrics'
 
 interface MaintenanceActivity {
   success: boolean
@@ -147,7 +88,111 @@ const RETENTION_LABELS: Record<string, string> = {
   '30': '30 dias',
   '60': '60 dias',
   '90': '90 dias',
-  '180': '180 dias'
+  '180': '180 dias',
+}
+
+function getBadgeVariantForStatus(status: 'good' | 'warning' | 'critical') {
+  if (status === 'critical') return 'destructive'
+  if (status === 'warning') return 'secondary'
+  return 'default'
+}
+
+function getBadgeVariantForSource(source: MonitoringSource) {
+  if (source.status === 'unavailable') return 'destructive'
+  if (source.status === 'partial') return 'secondary'
+  return 'outline'
+}
+
+function MetricCard({ title, value, unit = '', description, icon, status = 'good' }: MetricCardProps) {
+  const textClass =
+    status === 'critical'
+      ? 'text-red-600'
+      : status === 'warning'
+        ? 'text-amber-600'
+        : 'text-green-600'
+
+  return (
+    <Card className="transition-all hover:shadow-md">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <div className={cn('rounded-full bg-muted/30 p-2', textClass)}>{icon}</div>
+      </CardHeader>
+      <CardContent>
+        <div className={cn('text-2xl font-bold', textClass)}>
+          {value === null ? 'Unavailable' : typeof value === 'number' ? value.toLocaleString() : value}
+          {value === null ? '' : unit}
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function AlertCard({ alert }: AlertCardProps) {
+  const severityClass =
+    alert.severity === 'critical'
+      ? 'border-red-200 bg-red-50 text-red-900'
+      : alert.severity === 'high'
+        ? 'border-orange-200 bg-orange-50 text-orange-900'
+        : alert.severity === 'medium'
+          ? 'border-amber-200 bg-amber-50 text-amber-900'
+          : 'border-blue-200 bg-blue-50 text-blue-900'
+
+  return (
+    <div className={cn('rounded-lg border p-4', severityClass)}>
+      <div className="flex items-start gap-3">
+        {alert.severity === 'critical' ? (
+          <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+        ) : (
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+        )}
+        <div className="space-y-1">
+          <div className="font-medium">{alert.title}</div>
+          <div className="text-sm opacity-90">{alert.description}</div>
+          <div className="text-xs opacity-75">{new Date(alert.timestamp).toLocaleString()}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SourceCoverageCard({ source }: { source: MonitoringSource }) {
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-medium">{source.label}</div>
+        <Badge variant={getBadgeVariantForSource(source)}>{source.status}</Badge>
+      </div>
+      <div className="mt-2 text-xs text-muted-foreground">{source.source}</div>
+      {source.error && <div className="mt-1 text-xs text-red-600">{source.error}</div>}
+    </div>
+  )
+}
+
+interface MaintenanceTaskItemProps {
+  title: string
+  description: string
+  icon: React.ReactNode
+  loading: boolean
+  disabled: boolean
+  onExecute: () => void
+}
+
+function MaintenanceTaskItem({ title, description, icon, loading, disabled, onExecute }: MaintenanceTaskItemProps) {
+  return (
+    <div className="flex items-center justify-between rounded-xl border bg-card p-4 transition-colors hover:bg-muted/30">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 font-medium">
+          {icon}
+          {title}
+        </div>
+        <div className="max-w-[280px] text-xs text-muted-foreground">{description}</div>
+      </div>
+      <Button variant="outline" size="sm" onClick={onExecute} disabled={disabled}>
+        {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : 'Ejecutar'}
+      </Button>
+    </div>
+  )
 }
 
 function getMaintenanceActionTitle(task: MaintenanceAction): string {
@@ -163,51 +208,6 @@ function getMaintenanceActionTitle(task: MaintenanceAction): string {
   }
 }
 
-function AlertCard({ alert, onResolve }: AlertCardProps) {
-  const getSeverityStyles = (severity: DatabaseAlert['severity']) => {
-    switch (severity) {
-      case 'low': return { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', icon: 'text-blue-600' }
-      case 'medium': return { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-800', icon: 'text-yellow-600' }
-      case 'high': return { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-800', icon: 'text-orange-600' }
-      case 'critical': return { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-800', icon: 'text-red-600' }
-    }
-  }
-
-  const styles = getSeverityStyles(alert.severity)
-
-  const getSeverityIcon = (severity: DatabaseAlert['severity']) => {
-    switch (severity) {
-      case 'critical': return <XCircle className={cn("h-5 w-5", styles.icon)} />
-      default: return <AlertTriangle className={cn("h-5 w-5", styles.icon)} />
-    }
-  }
-
-  return (
-    <div className={cn("flex items-start justify-between p-4 rounded-lg border", styles.bg, styles.border)}>
-      <div className="flex items-start gap-3">
-        {getSeverityIcon(alert.severity)}
-        <div>
-          <div className={cn("font-medium", styles.text)}>{alert.title}</div>
-          <div className={cn("text-sm mt-1 opacity-90", styles.text)}>{alert.description}</div>
-          <div className={cn("text-xs mt-2 opacity-75", styles.text)}>
-            {alert.timestamp.toLocaleString()}
-          </div>
-        </div>
-      </div>
-      {onResolve && !alert.resolved && (
-        <Button 
-          size="sm" 
-          variant="outline"
-          className="bg-white/50 hover:bg-white/80 border-transparent shadow-sm"
-          onClick={onResolve}
-        >
-          Resolver
-        </Button>
-      )}
-    </div>
-  )
-}
-
 export default function DatabaseMonitoring() {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [retentionDays, setRetentionDays] = useState('90')
@@ -215,97 +215,42 @@ export default function DatabaseMonitoring() {
   const [confirmRotateOpen, setConfirmRotateOpen] = useState(false)
   const [confirmResetOpen, setConfirmResetOpen] = useState(false)
   const [lastMaintenanceActivity, setLastMaintenanceActivity] = useState<MaintenanceActivity | null>(null)
-  const { 
-    metrics, 
-    loading, 
-    error, 
-    refreshing, 
+
+  const {
+    metrics,
+    loading,
+    error,
+    refreshing,
     refresh,
-    performMaintenance
+    performMaintenance,
   } = useDatabaseMonitoring({
     autoRefresh,
-    refreshIntervalMs: 2 * 60 * 1000, // 2 minutes - metrics don't change that fast
+    refreshIntervalMs: 2 * 60 * 1000,
   })
 
-  const [growthHistory, setGrowthHistory] = useState<{ date: string; size: number }[]>([])
-  const [recommendations, setRecommendations] = useState<string[]>([])
-  const [indexStats, setIndexStats] = useState<IndexStats[]>([])
-
-  // Load additional data (growth history + index stats) in parallel with main metrics
-  // Instead of waiting for metrics to load first, we fetch everything at once
-  useEffect(() => {
-    let isActive = true
-
-    const loadAdditionalData = async () => {
-      try {
-        const [historyData, indexData] = await Promise.all([
-          databaseMonitoringService.getDatabaseGrowthHistory(30),
-          databaseMonitoringService.getIndexStats()
-        ])
-
-        if (!isActive) {
-          return
-        }
-
-        setGrowthHistory(historyData)
-        setIndexStats(indexData)
-
-        if (metrics) {
-          setRecommendations(databaseMonitoringService.getOptimizationRecommendations(metrics, indexData))
-        }
-      } catch (err) {
-        console.error('Error cargando datos adicionales:', err)
-        if (isActive) {
-          setGrowthHistory([])
-          setIndexStats([])
-        }
-      }
-    }
-
-    void loadAdditionalData()
-
-    return () => {
-      isActive = false
-    }
-  }, []) // Load once on mount - cache handles freshness
-
-  // Update recommendations when metrics arrive (if additional data loaded first)
-  useEffect(() => {
-    if (metrics && indexStats.length > 0) {
-      setRecommendations(databaseMonitoringService.getOptimizationRecommendations(metrics, indexStats))
-    }
-  }, [metrics, indexStats])
-
-  const handleResolveAlert = () => {
-    if (!metrics) return
-    // En una implementación real, esto haría una llamada a la API
-    refresh()
-  }
-
-  const handleMaintenanceResult = (result: MaintenanceResponse) => {
-    setLastMaintenanceActivity({
-      success: result.success,
-      task: result.task,
-      title: getMaintenanceActionTitle(result.task),
-      message: result.message,
-      executedAt: result.executedAt,
-      retentionDays: result.retentionDays,
-      deletedCount: result.deletedCount
-    })
-
-    if (result.success) {
-      toast.success(result.message)
-    } else {
-      toast.error(result.message)
-    }
-  }
+  const formatBytes = (bytes: number | null) => databaseMonitoringService.formatBytes(bytes)
 
   const executeMaintenanceTask = async (task: MaintenanceTask, params?: { days?: number }) => {
     setRunningTask(task)
 
     try {
       const result = await performMaintenance(task, params)
-      handleMaintenanceResult(result)
+
+      setLastMaintenanceActivity({
+        success: result.success,
+        task: result.task,
+        title: getMaintenanceActionTitle(result.task),
+        message: result.message,
+        executedAt: result.executedAt,
+        retentionDays: result.retentionDays,
+        deletedCount: result.deletedCount,
+      })
+
+      if (result.success) {
+        toast.success(result.message)
+      } else {
+        toast.error(result.message)
+      }
     } finally {
       setRunningTask(null)
     }
@@ -322,62 +267,65 @@ export default function DatabaseMonitoring() {
     }
   }
 
-  const formatBytes = (bytes: number): string => {
-    return databaseMonitoringService.formatBytes(bytes)
-  }
-
   const exportMetrics = () => {
     if (!metrics) return
-    
+
     const data = {
-      timestamp: new Date().toISOString(),
-      totalSize: formatBytes(metrics.totalSize),
-      tables: metrics.tablesSizes.map(table => ({
-        name: table.tableName,
-        size: formatBytes(table.size),
-        rows: table.rowCount,
-        percentage: table.percentage.toFixed(2) + '%'
-      })),
+      exportedAt: new Date().toISOString(),
+      collectedAt: metrics.collectedAt,
+      overallStatus: metrics.overallStatus,
+      missingMetrics: metrics.missingMetrics,
+      sources: metrics.sources,
+      totalSize: metrics.totalSize,
+      tables: metrics.tablesSizes,
       connections: metrics.connectionStats,
       performance: metrics.queryPerformance,
-      alerts: metrics.alerts.filter(alert => !alert.resolved)
+      storageBreakdown: metrics.storageBreakdown,
+      indexStats: metrics.indexStats,
+      growthHistory: metrics.growthHistory,
+      alerts: metrics.alerts.filter((alert) => !alert.resolved),
     }
-    
+
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `database-metrics-${new Date().toISOString().split('T')[0]}.json`
-    a.click()
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `database-monitoring-${new Date().toISOString().split('T')[0]}.json`
+    anchor.click()
     URL.revokeObjectURL(url)
   }
 
+  const recommendations = useMemo(() => {
+    if (!metrics) return []
+    return databaseMonitoringService.getOptimizationRecommendations(metrics, metrics.indexStats)
+  }, [metrics])
+
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[50vh] space-y-4">
+      <div className="flex h-[50vh] flex-col items-center justify-center space-y-4">
         <div className="relative">
-          <div className="h-12 w-12 rounded-full border-4 border-muted border-t-primary animate-spin" />
-          <Database className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted border-t-primary" />
+          <Database className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 text-muted-foreground" />
         </div>
-        <p className="text-muted-foreground animate-pulse">Cargando métricas de base de datos...</p>
+        <p className="animate-pulse text-muted-foreground">Cargando metricas de base de datos...</p>
       </div>
     )
   }
 
   if (error) {
     return (
-      <Alert variant="destructive" className="mx-auto max-w-2xl mt-8">
+      <Alert variant="destructive" className="mx-auto mt-8 max-w-2xl">
         <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>Error de conexión</AlertTitle>
+        <AlertTitle>Error de conexion</AlertTitle>
         <AlertDescription className="mt-2">
           <p>{error}</p>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => window.location.reload()}
-            className="mt-4 bg-white/10 hover:bg-white/20 border-white/20"
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refresh()}
+            className="mt-4 bg-white/10 hover:bg-white/20"
           >
-            Reintentar conexión
+            Reintentar
           </Button>
         </AlertDescription>
       </Alert>
@@ -386,418 +334,512 @@ export default function DatabaseMonitoring() {
 
   if (!metrics) return null
 
-  // Preparar datos para gráficos
-  const tablesSizeData = metrics.tablesSizes.slice(0, 8).map(table => ({
-    name: table.tableName,
-    size: Math.round(table.size / (1024 * 1024)), // MB
-    percentage: table.percentage
-  }))
-
-  const storageBreakdownData = [
-    { name: 'Tablas', value: Math.round(metrics.storageBreakdown.tables / (1024 * 1024)), color: COLORS[0] },
-    { name: 'Índices', value: Math.round(metrics.storageBreakdown.indexes / (1024 * 1024)), color: COLORS[1] },
-    { name: 'Logs', value: Math.round(metrics.storageBreakdown.logs / (1024 * 1024)), color: COLORS[2] },
-    { name: 'Temporal', value: Math.round(metrics.storageBreakdown.temp / (1024 * 1024)), color: COLORS[3] },
-    { name: 'Otros', value: Math.round(metrics.storageBreakdown.other / (1024 * 1024)), color: COLORS[4] }
-  ]
-
-  const activeAlerts = metrics.alerts.filter(alert => !alert.resolved)
+  const activeAlerts = metrics.alerts.filter((alert) => !alert.resolved)
   const selectedRetentionLabel = RETENTION_LABELS[retentionDays] ?? `${retentionDays} dias`
   const maintenanceBusy = runningTask !== null || refreshing
+  const sourceWarnings = metrics.sources.filter((source) => source.status !== 'ok')
+  const storageBreakdownData = metrics.storageBreakdown
+    ? [
+        { name: 'Relations', value: Math.round(metrics.storageBreakdown.relations / (1024 * 1024)), color: COLORS[0] },
+        { name: 'Indexes', value: Math.round(metrics.storageBreakdown.indexes / (1024 * 1024)), color: COLORS[1] },
+        { name: 'Unclassified', value: Math.round(metrics.storageBreakdown.unclassified / (1024 * 1024)), color: COLORS[2] },
+      ]
+    : []
+  const tablesSizeData = metrics.tablesSizes.slice(0, 8).map((table) => ({
+    name: table.tableName,
+    size: Math.round(table.size / (1024 * 1024)),
+    percentage: table.percentage,
+  }))
 
   return (
     <div className="space-y-6 pb-10">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-primary rounded-xl shadow-sm">
+          <div className="rounded-xl bg-primary p-2.5 shadow-sm">
             <Database className="h-5 w-5 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
+            <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-50 sm:text-2xl">
               Monitoreo de Base de Datos
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Rendimiento, almacenamiento y salud del sistema
+              Rendimiento, cobertura de telemetria y salud operativa del backend
             </p>
           </div>
         </div>
-        
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-            <Switch 
-              id="auto-refresh" 
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+            <Switch
+              id="auto-refresh"
               checked={autoRefresh}
               onCheckedChange={setAutoRefresh}
               className="data-[state=checked]:bg-green-500"
             />
-            <Label htmlFor="auto-refresh" className="text-xs font-medium cursor-pointer select-none">
-              Auto (30s)
+            <Label htmlFor="auto-refresh" className="cursor-pointer select-none text-xs font-medium">
+              Auto (2m)
             </Label>
           </div>
           <Button variant="outline" size="sm" onClick={exportMetrics}>
-            <Download className="h-4 w-4 mr-1.5" />
+            <Download className="mr-1.5 h-4 w-4" />
             Exportar
           </Button>
-          <Button size="sm" onClick={refresh} disabled={refreshing}>
-            <RefreshCw className={cn("h-4 w-4 mr-1.5", refreshing && "animate-spin")} />
+          <Button size="sm" onClick={() => void refresh()} disabled={refreshing}>
+            <RefreshCw className={cn('mr-1.5 h-4 w-4', refreshing && 'animate-spin')} />
             Actualizar
           </Button>
         </div>
       </div>
 
-      {/* Warning de Datos Simulados */}
-      {metrics.isMockData && (
-        <Alert className="bg-amber-50 border-amber-200 text-amber-900">
+      {sourceWarnings.length > 0 && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-900">
           <Info className="h-4 w-4 text-amber-600" />
-          <AlertTitle className="text-amber-800 font-medium">Modo Simulación Activo</AlertTitle>
+          <AlertTitle className="text-amber-800">Cobertura parcial de telemetria</AlertTitle>
           <AlertDescription className="text-amber-700">
-            Algunas métricas no se pudieron obtener directamente de la base de datos y se están mostrando valores simulados o estimados. 
-            Esto puede deberse a falta de permisos o configuración de funciones RPC.
+            Este panel ya no rellena huecos con datos simulados. Algunas fuentes siguen sin estar disponibles y deben corregirse en el backend.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Alertas activas */}
+      <Card className="border-dashed">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Snapshot status</div>
+              <div className="mt-2">
+                <Badge variant={metrics.overallStatus === 'unavailable' ? 'destructive' : metrics.overallStatus === 'partial' ? 'secondary' : 'default'}>
+                  {metrics.overallStatus}
+                </Badge>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Collected at</div>
+              <div className="mt-2 text-sm font-medium">{new Date(metrics.collectedAt).toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Operational alerts</div>
+              <div className="mt-2 text-sm font-medium">{activeAlerts.length}</div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Dedicated actions</div>
+              <div className="mt-2 text-sm">
+                <Link href="/admin/storage-cleanup" className="text-primary underline underline-offset-4">
+                  Abrir workspace de storage cleanup
+                </Link>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base">Cobertura por fuente</CardTitle>
+            <CardDescription>
+              Cada bloque indica si la telemetria esta disponible, parcial o ausente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {metrics.sources.map((source) => (
+              <SourceCoverageCard key={source.id} source={source} />
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Prioridades rapidas</CardTitle>
+            <CardDescription>Lo primero que un admin tecnico deberia mirar.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="font-medium">1. Cobertura del dashboard</div>
+              <div className="mt-1 text-muted-foreground">
+                {metrics.missingMetrics.length > 0
+                  ? `Faltan ${metrics.missingMetrics.length} fuentes clave. No tomes decisiones estructurales hasta restaurarlas.`
+                  : 'Todas las fuentes configuradas reportaron datos.'}
+              </div>
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="font-medium">2. Alertas activas</div>
+              <div className="mt-1 text-muted-foreground">
+                {activeAlerts.length > 0
+                  ? `${activeAlerts.length} alertas activas requieren revision.`
+                  : 'No se detectaron alertas activas en esta toma.'}
+              </div>
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="font-medium">3. Acciones separadas</div>
+              <div className="mt-1 text-muted-foreground">
+                Las tareas destructivas quedaron fuera del dashboard principal para reducir errores operativos.
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {activeAlerts.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-            Alertas Activas ({activeAlerts.length})
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <div className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+            Alertas activas ({activeAlerts.length})
           </h2>
           <div className="grid gap-3">
-            {activeAlerts.map(alert => (
-              <AlertCard 
-                key={alert.id} 
-                alert={alert} 
-                onResolve={handleResolveAlert}
-              />
+            {activeAlerts.map((alert) => (
+              <AlertCard key={alert.id} alert={alert} />
             ))}
           </div>
         </div>
       )}
 
-      {/* Métricas principales */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Tamaño Total"
+          title="Tamano total"
           value={formatBytes(metrics.totalSize)}
+          description={metrics.totalSize === null ? 'Sin telemetria de tamano real' : 'Medido por RPC del backend'}
           icon={<HardDrive className="h-5 w-5" />}
-          status={metrics.totalSize > 1024 * 1024 * 1024 ? 'warning' : 'good'}
-          description="Espacio usado en disco"
-          isMock={metrics.isMockData}
+          status={metrics.totalSize === null ? 'warning' : metrics.totalSize > 1024 * 1024 * 1024 ? 'warning' : 'good'}
         />
         <MetricCard
-          title="Conexiones Activas"
-          value={metrics.connectionStats.activeConnections}
-          unit={`/${metrics.connectionStats.maxConnections}`}
+          title="Conexiones activas"
+          value={metrics.connectionStats?.activeConnections ?? null}
+          unit={metrics.connectionStats?.maxConnections ? `/${metrics.connectionStats.maxConnections}` : ''}
+          description={metrics.connectionStats?.connectionUsage !== null && metrics.connectionStats?.connectionUsage !== undefined
+            ? `${metrics.connectionStats.connectionUsage.toFixed(1)}% de las conexiones observadas`
+            : 'Sin limite confiable expuesto por backend'}
           icon={<Users className="h-5 w-5" />}
-          status={metrics.connectionStats.connectionUsage > 70 ? 'warning' : 'good'}
-          description={`${metrics.connectionStats.connectionUsage}% de capacidad`}
-          isMock={metrics.connectionStats.isMock}
+          status={(metrics.connectionStats?.connectionUsage ?? 0) > 80 ? 'warning' : metrics.connectionStats ? 'good' : 'warning'}
         />
         <MetricCard
-          title="Tiempo Promedio Query"
-          value={metrics.queryPerformance.avgQueryTime}
-          unit="ms"
+          title="Avg query time"
+          value={metrics.queryPerformance?.avgQueryTime ?? null}
+          unit={metrics.queryPerformance?.avgQueryTime !== null && metrics.queryPerformance?.avgQueryTime !== undefined ? 'ms' : ''}
+          description={metrics.queryPerformance?.avgQueryTime !== null && metrics.queryPerformance?.avgQueryTime !== undefined
+            ? 'Latencia promedio informada por backend'
+            : 'La capa actual no expone latencia util'}
           icon={<Clock className="h-5 w-5" />}
-          status={metrics.queryPerformance.avgQueryTime > 500 ? 'warning' : 'good'}
-          description="Latencia media"
-          isMock={metrics.queryPerformance.isMock}
+          status={(metrics.queryPerformance?.avgQueryTime ?? 0) > 500 ? 'warning' : metrics.queryPerformance?.avgQueryTime !== null && metrics.queryPerformance?.avgQueryTime !== undefined ? 'good' : 'warning'}
         />
         <MetricCard
-          title="Cache Hit Ratio"
-          value={metrics.queryPerformance.cacheHitRatio}
-          unit="%"
+          title="Cache hit ratio"
+          value={metrics.queryPerformance?.cacheHitRatio ?? null}
+          unit={metrics.queryPerformance?.cacheHitRatio !== null && metrics.queryPerformance?.cacheHitRatio !== undefined ? '%' : ''}
+          description={metrics.queryPerformance?.cacheHitRatio !== null && metrics.queryPerformance?.cacheHitRatio !== undefined
+            ? 'Eficiencia de cache reportada por backend'
+            : 'Sin telemetria de cache'}
           icon={<Zap className="h-5 w-5" />}
-          status={metrics.queryPerformance.cacheHitRatio < 80 ? 'warning' : 'good'}
-          description="Eficiencia de cache"
-          isMock={metrics.queryPerformance.isMock}
+          status={(metrics.queryPerformance?.cacheHitRatio ?? 100) < 80 ? 'warning' : metrics.queryPerformance?.cacheHitRatio !== null && metrics.queryPerformance?.cacheHitRatio !== undefined ? 'good' : 'warning'}
         />
       </div>
 
-      {/* Tabs con detalles */}
       <Tabs defaultValue="tables" className="space-y-6">
-        <div className="overflow-x-auto -mx-1 px-1">
-          <TabsList className="inline-flex w-auto min-w-full sm:w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 p-1 rounded-xl shadow-sm">
-            <TabsTrigger value="tables" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Tablas</TabsTrigger>
-            <TabsTrigger value="indexes" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Índices</TabsTrigger>
-            <TabsTrigger value="storage" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Storage</TabsTrigger>
-            <TabsTrigger value="performance" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Rendimiento</TabsTrigger>
-            <TabsTrigger value="growth" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Crecimiento</TabsTrigger>
-            <TabsTrigger value="recommendations" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Tips</TabsTrigger>
-            <TabsTrigger value="maintenance" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Mantenimiento</TabsTrigger>
-            <TabsTrigger value="storage-cleanup" className="rounded-lg text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm px-3 py-1.5">Limpieza</TabsTrigger>
+        <div className="overflow-x-auto px-1">
+          <TabsList className="inline-flex min-w-full w-auto rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:w-full">
+            <TabsTrigger value="tables">Tablas</TabsTrigger>
+            <TabsTrigger value="indexes">Indices</TabsTrigger>
+            <TabsTrigger value="storage">Storage</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
+            <TabsTrigger value="growth">Growth</TabsTrigger>
+            <TabsTrigger value="recommendations">Recomendaciones</TabsTrigger>
+            <TabsTrigger value="maintenance">Mantenimiento</TabsTrigger>
           </TabsList>
         </div>
 
-        <TabsContent value="tables" className="space-y-4 animate-in fade-in-50">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Gráfico de barras de tamaños */}
+        <TabsContent value="tables" className="space-y-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="h-5 w-5 text-primary" />
-                  Tamaño por Tabla
+                  Tamano por tabla
                 </CardTitle>
-                <CardDescription>
-                  Distribución del espacio usado por cada tabla
-                </CardDescription>
+                <CardDescription>Distribucion del espacio reportado por cada tabla.</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={tablesSizeData}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                    <XAxis 
-                      dataKey="name" 
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                      tick={{fontSize: 12}}
-                    />
-                    <YAxis tick={{fontSize: 12}} />
-                    <Tooltip 
-                      formatter={(value) => [`${value} MB`, 'Tamaño']}
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                    />
-                    <Bar dataKey="size" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {tablesSizeData.length === 0 ? (
+                  <div className="flex h-[300px] items-center justify-center text-center text-sm text-muted-foreground">
+                    No hay telemetria de tablas disponible en este snapshot.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={tablesSizeData}>
+                      <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={90} tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={(value) => [`${value} MB`, 'Tamano']} />
+                      <Bar dataKey="size" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </CardContent>
             </Card>
 
-            {/* Lista detallada de tablas */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TableIcon className="h-5 w-5 text-primary" />
-                  Detalles de Tablas
-                </CardTitle>
+                <CardTitle>Detalle de tablas</CardTitle>
+                <CardDescription>Ordenadas por peso relativo dentro del snapshot.</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-1 max-h-[400px] overflow-y-auto pr-2">
-                  {metrics.tablesSizes.map((table) => (
-                    <div 
-                      key={table.tableName} 
-                      className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors border border-transparent hover:border-border"
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm">{table.tableName}</span>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{table.rowCount.toLocaleString()} filas</span>
-                          {table.isMock && <Badge variant="secondary" className="text-[10px] h-4 px-1">Simulado</Badge>}
+                <div className="max-h-[420px] space-y-2 overflow-y-auto pr-2">
+                  {metrics.tablesSizes.length === 0 ? (
+                    <div className="py-10 text-center text-sm text-muted-foreground">
+                      No table telemetry is currently available.
+                    </div>
+                  ) : (
+                    metrics.tablesSizes.map((table) => (
+                      <div key={table.tableName} className="rounded-lg border p-3 transition-colors hover:bg-muted/30">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="font-medium">{table.tableName}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              {table.rowCount.toLocaleString()} filas registradas
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold">{formatBytes(table.size)}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">{table.percentage.toFixed(1)}%</div>
+                          </div>
+                        </div>
+                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(1, table.percentage)}%` }} />
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-bold text-sm">{formatBytes(table.size)}</div>
-                        <div className="w-24 h-1.5 bg-muted rounded-full mt-1 overflow-hidden">
-                          <div 
-                            className="h-full bg-primary rounded-full" 
-                            style={{ width: `${Math.max(1, table.percentage)}%` }}
-                          />
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="indexes" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-primary" />
+                Analisis de indices
+              </CardTitle>
+              <CardDescription>Indices observados por el backend y su nivel de uso.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {metrics.indexStats.length === 0 ? (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    No existe una fuente RPC funcional para indices en este entorno. Esta vista permanece vacia hasta implementarla.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="grid gap-2">
+                  {metrics.indexStats.map((index) => (
+                    <div key={`${index.tableName}-${index.indexName}`} className="flex items-center justify-between rounded-lg border bg-card p-4 transition-colors hover:bg-muted/30">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{index.indexName}</span>
+                          {isUnusedIndexReviewCandidate(index) ? (
+                            <Badge variant="destructive">Revisar</Badge>
+                          ) : index.isUnused ? (
+                            <Badge variant="outline">0 scans</Badge>
+                          ) : null}
+                          {index.isPrimary && <Badge variant="secondary">PK</Badge>}
+                          {!index.isPrimary && index.isUnique && <Badge variant="secondary">Unique</Badge>}
+                          {!index.isPrimary && !index.isUnique && index.isConstraintBacked && <Badge variant="secondary">Constraint</Badge>}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Tabla: {index.tableName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {index.statsResetAt
+                            ? `Ventana observada desde ${new Date(index.statsResetAt).toLocaleDateString()}`
+                            : 'Sin fecha confiable de reset de estadisticas'}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6 text-sm">
+                        <div className="text-right">
+                          <div className="text-xs text-muted-foreground">Escaneos</div>
+                          <div className="font-medium">{index.scans.toLocaleString()}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-muted-foreground">Lecturas</div>
+                          <div className="font-medium">{index.reads.toLocaleString()}</div>
+                        </div>
+                        <div className="min-w-[96px] text-right">
+                          <div className="text-xs text-muted-foreground">Tamano</div>
+                          <div className="font-bold">{formatBytes(index.sizeBytes)}</div>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-
-        </TabsContent>
-
-        <TabsContent value="indexes" className="space-y-4 animate-in fade-in-50">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileSearch className="h-5 w-5 text-primary" />
-                Análisis de Índices
-              </CardTitle>
-              <CardDescription>
-                Identifica índices poco utilizados o ineficientes que consumen espacio
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1 max-h-[500px] overflow-y-auto pr-2">
-                {indexStats.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">Cargando análisis de índices...</div>
-                ) : (
-                  <div className="grid gap-2">
-                    {indexStats.map((idx) => (
-                      <div 
-                        key={`${idx.tableName}-${idx.indexName}`} 
-                        className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-sm">{idx.indexName}</span>
-                            {idx.isUnused && (
-                              <Badge variant="destructive" className="text-[10px] h-5 px-1.5">Sin uso</Badge>
-                            )}
-                            {idx.isMock && (
-                              <Badge variant="outline" className="text-[10px] h-5 px-1.5 text-muted-foreground">Simulado</Badge>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Tabla: <span className="font-mono text-foreground">{idx.tableName}</span>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-6 text-sm">
-                          <div className="text-right">
-                            <div className="text-xs text-muted-foreground mb-0.5">Escaneos</div>
-                            <div className="font-medium">{idx.scans.toLocaleString()}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-xs text-muted-foreground mb-0.5">Lecturas</div>
-                            <div className="font-medium">{idx.reads.toLocaleString()}</div>
-                          </div>
-                          <div className="text-right min-w-[80px]">
-                            <div className="text-xs text-muted-foreground mb-0.5">Tamaño</div>
-                            <div className="font-bold">{formatBytes(idx.sizeBytes)}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="storage" className="space-y-4 animate-in fade-in-50">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Gráfico circular de distribución */}
+        <TabsContent value="storage" className="space-y-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <PieChart className="h-5 w-5 text-primary" />
-                  Distribución de Almacenamiento
+                  Clasificacion de storage
                 </CardTitle>
+                <CardDescription>
+                  Solo se muestran categorias soportadas por telemetria real. Ya no hay estimaciones artificiales de logs o temp.
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <RechartsPieChart>
-                    <Pie
-                      data={storageBreakdownData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => percent > 0.05 ? `${name} ${((percent || 0) * 100).toFixed(0)}%` : ''}
-                      outerRadius={100}
-                      innerRadius={60}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {storageBreakdownData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => `${value} MB`} />
-                  </RechartsPieChart>
-                </ResponsiveContainer>
+                {storageBreakdownData.length === 0 ? (
+                  <div className="flex h-[300px] items-center justify-center text-center text-sm text-muted-foreground">
+                    Exact storage classification is unavailable until backend index telemetry is implemented.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RechartsPieChart>
+                      <RechartsPie
+                        data={storageBreakdownData}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        innerRadius={60}
+                        paddingAngle={5}
+                        dataKey="value"
+                        label={({ name, percent }) => percent && percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
+                        labelLine={false}
+                      >
+                        {storageBreakdownData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </RechartsPie>
+                      <Tooltip formatter={(value) => `${value} MB`} />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                )}
               </CardContent>
             </Card>
 
-            {/* Detalles de almacenamiento */}
             <Card>
               <CardHeader>
-                <CardTitle>Desglose Detallado</CardTitle>
+                <CardTitle>Detalle de storage</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {storageBreakdownData.map((item) => (
-                  <div key={item.name} className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="font-medium">{item.name}</span>
+                {storageBreakdownData.length === 0 ? (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      El dashboard no muestra breakdown inventado. Implementa una fuente real antes de usar este bloque para capacity planning.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  storageBreakdownData.map((item) => (
+                    <div key={item.name} className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                          <span className="font-medium">{item.name}</span>
+                        </div>
+                        <span className="font-bold">{item.value} MB</span>
                       </div>
-                      <span className="font-bold">{item.value} MB</span>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${(item.value / storageBreakdownData.reduce((sum, row) => sum + row.value, 0)) * 100}%`,
+                            backgroundColor: item.color,
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full rounded-full transition-all"
-                        style={{ 
-                          width: `${(item.value / storageBreakdownData.reduce((sum, i) => sum + i.value, 0)) * 100}%`,
-                          backgroundColor: item.color 
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>
-
         </TabsContent>
 
-        <TabsContent value="performance" className="space-y-4 animate-in fade-in-50">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Estadísticas de conexiones */}
+        <TabsContent value="performance" className="space-y-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5 text-primary" />
-                  Salud de Conexiones
+                  Salud de conexiones
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-8">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-end">
-                    <span className="text-sm font-medium text-muted-foreground">Uso de Pool</span>
-                    <span className="text-2xl font-bold">{metrics.connectionStats.connectionUsage}%</span>
-                  </div>
-                  <Progress value={metrics.connectionStats.connectionUsage} className="h-3" />
-                  <p className="text-xs text-muted-foreground">
-                    {metrics.connectionStats.activeConnections} conexiones activas de {metrics.connectionStats.maxConnections} permitidas
-                  </p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-muted/30 rounded-lg">
-                    <div className="text-sm text-muted-foreground mb-1">Tiempo Conexión</div>
-                    <div className="text-xl font-bold">{metrics.connectionStats.avgConnectionTime}ms</div>
-                  </div>
-                  <div className="p-4 bg-muted/30 rounded-lg">
-                    <div className="text-sm text-muted-foreground mb-1">Estado</div>
-                    <Badge variant={metrics.connectionStats.connectionUsage > 80 ? "destructive" : "default"}>
-                      {metrics.connectionStats.connectionUsage > 80 ? "Saturado" : "Saludable"}
-                    </Badge>
-                  </div>
-                </div>
+                {metrics.connectionStats ? (
+                  <>
+                    <div className="space-y-4">
+                      <div className="flex items-end justify-between">
+                        <span className="text-sm font-medium text-muted-foreground">Uso observado</span>
+                        <span className="text-2xl font-bold">
+                          {metrics.connectionStats.connectionUsage !== null && metrics.connectionStats.connectionUsage !== undefined
+                            ? `${metrics.connectionStats.connectionUsage.toFixed(1)}%`
+                            : 'N/A'}
+                        </span>
+                      </div>
+                      <Progress value={metrics.connectionStats.connectionUsage ?? 0} className="h-3" />
+                      <p className="text-xs text-muted-foreground">
+                        {metrics.connectionStats.activeConnections} conexiones activas
+                        {metrics.connectionStats.maxConnections ? ` de ${metrics.connectionStats.maxConnections} observadas en la toma` : '. Sin limite confiable.'}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="rounded-lg bg-muted/30 p-4">
+                        <div className="mb-1 text-sm text-muted-foreground">Tiempo de conexion</div>
+                        <div className="text-xl font-bold">
+                          {metrics.connectionStats.avgConnectionTime !== null && metrics.connectionStats.avgConnectionTime !== undefined
+                            ? `${metrics.connectionStats.avgConnectionTime}ms`
+                            : 'N/A'}
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-muted/30 p-4">
+                        <div className="mb-1 text-sm text-muted-foreground">Estado</div>
+                        <Badge variant={getBadgeVariantForStatus((metrics.connectionStats.connectionUsage ?? 0) > 80 ? 'warning' : 'good')}>
+                          {(metrics.connectionStats.connectionUsage ?? 0) > 80 ? 'Presion alta' : 'Estable'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>No hay telemetria de conexiones disponible en este entorno.</AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
 
-            {/* Queries lentas */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Clock className="h-5 w-5 text-primary" />
-                  Queries Más Lentas
+                  Queries lentas
                 </CardTitle>
+                <CardDescription>Solo se muestran si la fuente del backend las expone de verdad.</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                  {metrics.queryPerformance.slowQueries.map((query, index) => (
-                    <div key={index} className="p-4 border rounded-lg bg-card hover:bg-muted/30 transition-colors">
-                      <div className="font-mono text-xs bg-muted p-2.5 rounded mb-3 break-all text-muted-foreground">
+                <div className="max-h-[320px] space-y-3 overflow-y-auto">
+                  {(metrics.queryPerformance?.slowQueries ?? []).map((query, index) => (
+                    <div key={`${query.query}-${index}`} className="rounded-lg border bg-card p-4 transition-colors hover:bg-muted/30">
+                      <div className="mb-3 break-all rounded bg-muted p-2.5 font-mono text-xs text-muted-foreground">
                         {query.query}
                       </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <Badge variant="outline" className="text-orange-600 border-orange-200 bg-orange-50">
-                          {query.duration}ms
-                        </Badge>
+                      <div className="flex items-center justify-between text-sm">
+                        <Badge variant="outline">{query.duration}ms</Badge>
                         <span className="text-xs text-muted-foreground">
-                          Ejecutado {query.frequency} veces
+                          {query.frequency} ejecuciones
                         </span>
                       </div>
                     </div>
                   ))}
-                  {metrics.queryPerformance.slowQueries.length === 0 && (
+
+                  {(metrics.queryPerformance?.slowQueries ?? []).length === 0 && (
                     <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                      <CheckCircle className="h-8 w-8 mb-2 text-green-500" />
-                      <p>No se detectaron queries lentas</p>
+                      <CheckCircle className="mb-2 h-8 w-8 text-green-500" />
+                      <p className="text-sm">
+                        {metrics.queryPerformance ? 'No se recibieron slow queries del backend.' : 'No existe telemetria util de performance en este entorno.'}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -806,65 +848,64 @@ export default function DatabaseMonitoring() {
           </div>
         </TabsContent>
 
-        <TabsContent value="growth" className="space-y-4 animate-in fade-in-50">
+        <TabsContent value="growth" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Crecimiento de la Base de Datos</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5 text-primary" />
+                Crecimiento historico
+              </CardTitle>
               <CardDescription>
-                Evolución del tamaño en los últimos 30 días
+                Requiere una fuente persistente de snapshots; si no existe, este bloque se mantiene vacio de forma honesta.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <AreaChart data={growthHistory}>
-                  <defs>
-                    <linearGradient id="colorSize" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS[0]} stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor={COLORS[0]} stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip 
-                    formatter={(value) => [`${value} MB`, 'Tamaño']}
-                    labelFormatter={(label) => `Fecha: ${label}`}
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="size" 
-                    stroke={COLORS[0]} 
-                    fillOpacity={1} 
-                    fill="url(#colorSize)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {metrics.growthHistory.length === 0 ? (
+                <div className="flex h-[400px] items-center justify-center text-center text-sm text-muted-foreground">
+                  No hay historial de crecimiento disponible. Implementa snapshots server-side antes de usar esta vista.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={400}>
+                  <AreaChart data={metrics.growthHistory}>
+                    <defs>
+                      <linearGradient id="colorSize" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={COLORS[0]} stopOpacity={0.8} />
+                        <stop offset="95%" stopColor={COLORS[0]} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip formatter={(value) => [`${value} MB`, 'Tamano']} />
+                    <Area type="monotone" dataKey="size" stroke={COLORS[0]} fillOpacity={1} fill="url(#colorSize)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="recommendations" className="space-y-4 animate-in fade-in-50">
+        <TabsContent value="recommendations" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5 text-primary" />
-                Recomendaciones de Optimización
+                Recomendaciones priorizadas
               </CardTitle>
               <CardDescription>
-                Sugerencias inteligentes basadas en el análisis actual
+                Estas sugerencias ya consideran cobertura parcial para evitar conclusiones falsas.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4">
                 {recommendations.map((recommendation, index) => (
-                  <div key={index} className="flex items-start gap-4 p-4 border rounded-xl bg-gradient-to-r from-background to-muted/30">
-                    <div className="mt-1 p-2 bg-green-100 rounded-full text-green-600">
+                  <div key={`${recommendation}-${index}`} className="flex items-start gap-4 rounded-xl border bg-gradient-to-r from-background to-muted/30 p-4">
+                    <div className="mt-1 rounded-full bg-green-100 p-2 text-green-600">
                       <CheckCircle className="h-4 w-4" />
                     </div>
                     <div>
-                      <h4 className="font-medium text-sm">Sugerencia #{index + 1}</h4>
-                      <p className="text-sm text-muted-foreground mt-1">{recommendation}</p>
+                      <h4 className="text-sm font-medium">Sugerencia #{index + 1}</h4>
+                      <p className="mt-1 text-sm text-muted-foreground">{recommendation}</p>
                     </div>
                   </div>
                 ))}
@@ -873,32 +914,32 @@ export default function DatabaseMonitoring() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="maintenance" className="space-y-4 animate-in fade-in-50">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TabsContent value="maintenance" className="space-y-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Wrench className="h-5 w-5 text-primary" />
-                  Tareas de Mantenimiento
+                  Tareas de mantenimiento
                 </CardTitle>
                 <CardDescription>
-                  Optimiza el rendimiento de la base de datos
+                  Las acciones destructivas viven aqui y no en el dashboard operacional primario.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <MaintenanceTaskItem 
-                  title="Resetear Estadísticas"
-                  description="Limpia registros de rendimiento acumulados para reiniciar el análisis"
+                <MaintenanceTaskItem
+                  title="Resetear estadisticas"
+                  description="Limpia acumulados de rendimiento usados por el panel y reinicia la base comparativa."
                   icon={<Activity className="h-4 w-4 text-blue-500" />}
                   onExecute={() => setConfirmResetOpen(true)}
                   loading={runningTask === 'reset_stats'}
                   disabled={maintenanceBusy}
                 />
-                <MaintenanceTaskItem 
-                  title="Refrescar Métricas"
-                  description="Fuerza una actualización inmediata de todos los datos de monitoreo"
+                <MaintenanceTaskItem
+                  title="Refrescar metricas"
+                  description="Fuerza una nueva toma del dashboard sin recargar toda la pagina."
                   icon={<RefreshCw className="h-4 w-4 text-green-500" />}
-                  onExecute={handleRefreshMetrics}
+                  onExecute={() => void handleRefreshMetrics()}
                   loading={runningTask === 'refresh_metrics'}
                   disabled={maintenanceBusy}
                 />
@@ -909,19 +950,19 @@ export default function DatabaseMonitoring() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <History className="h-5 w-5 text-primary" />
-                  Rotación de Logs
+                  Rotacion de logs
                 </CardTitle>
                 <CardDescription>
-                  Gestiona el crecimiento de la tabla audit_log
+                  Gestiona el crecimiento de <code>audit_log</code> fuera del flujo de observabilidad diaria.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-5 border rounded-xl bg-muted/20">
+                <div className="rounded-xl border bg-muted/20 p-5">
                   <div className="flex flex-col gap-4">
                     <div className="space-y-1">
-                      <div className="text-sm font-medium">Política de Retención</div>
+                      <div className="text-sm font-medium">Politica de retencion</div>
                       <div className="text-xs text-muted-foreground">
-                        Define cuántos días de historial deseas conservar. Los registros más antiguos se eliminarán permanentemente.
+                        Define cuantos dias de historial conservar antes de la eliminacion.
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -930,57 +971,56 @@ export default function DatabaseMonitoring() {
                           <SelectValue placeholder="Seleccionar" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="30">30 días (Más agresivo)</SelectItem>
-                          <SelectItem value="60">60 días (Balanceado)</SelectItem>
-                          <SelectItem value="90">90 días (Recomendado)</SelectItem>
-                          <SelectItem value="180">180 días (Largo plazo)</SelectItem>
+                          <SelectItem value="30">30 dias</SelectItem>
+                          <SelectItem value="60">60 dias</SelectItem>
+                          <SelectItem value="90">90 dias</SelectItem>
+                          <SelectItem value="180">180 dias</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button
-                        onClick={() => setConfirmRotateOpen(true)}
-                        disabled={maintenanceBusy}
-                      >
+                      <Button onClick={() => setConfirmRotateOpen(true)} disabled={maintenanceBusy}>
                         {runningTask === 'rotate_logs' ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Ejecutar'}
                       </Button>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <Badge variant="secondary">{selectedRetentionLabel}</Badge>
-                      <span>La politica recomendada para operacion diaria es 90 dias.</span>
+                      <span>90 dias sigue siendo la politica recomendada para operacion diaria.</span>
                     </div>
                   </div>
                 </div>
-                <Alert className="bg-yellow-50/50 border-yellow-200">
+
+                <Alert className="border-yellow-200 bg-yellow-50/50">
                   <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-xs text-yellow-800">
-                    La rotación de logs es una acción destructiva. Asegúrate de haber exportado datos críticos si los necesitas para auditorías futuras.
+                    Esta accion es destructiva. Exporta evidencia relevante antes de rotar si tu equipo la necesita para auditoria.
                   </AlertDescription>
                 </Alert>
               </CardContent>
             </Card>
           </div>
+
           <Card className="border-dashed">
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
                 <ShieldCheck className="h-4 w-4 text-primary" />
-                Estado del Mantenimiento
+                Estado del mantenimiento
               </CardTitle>
               <CardDescription>
-                Resumen de la politica activa y del ultimo mantenimiento ejecutado desde este panel
+                Resumen del ultimo mantenimiento ejecutado desde este panel.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="rounded-xl border bg-muted/20 p-4">
                   <div className="text-xs uppercase tracking-wide text-muted-foreground">Retencion activa</div>
                   <div className="mt-2 text-lg font-semibold">{selectedRetentionLabel}</div>
-                  <div className="text-xs text-muted-foreground mt-1">Se aplicara en la proxima rotacion manual.</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Se aplicara en la proxima rotacion manual.</div>
                 </div>
                 <div className="rounded-xl border bg-muted/20 p-4">
                   <div className="text-xs uppercase tracking-wide text-muted-foreground">Ultima accion</div>
                   <div className="mt-2 text-lg font-semibold">
                     {lastMaintenanceActivity ? lastMaintenanceActivity.title : 'Sin ejecuciones'}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="mt-1 text-xs text-muted-foreground">
                     {lastMaintenanceActivity ? new Date(lastMaintenanceActivity.executedAt).toLocaleString() : 'Aun no se ejecuto mantenimiento en esta sesion.'}
                   </div>
                 </div>
@@ -991,7 +1031,7 @@ export default function DatabaseMonitoring() {
                       {lastMaintenanceActivity ? (lastMaintenanceActivity.success ? 'Correcto' : 'Con error') : 'Pendiente'}
                     </Badge>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
+                  <div className="mt-1 text-xs text-muted-foreground">
                     {maintenanceBusy ? 'Hay una tarea en ejecucion ahora mismo.' : 'No hay tareas de mantenimiento corriendo.'}
                   </div>
                 </div>
@@ -999,20 +1039,12 @@ export default function DatabaseMonitoring() {
 
               {lastMaintenanceActivity && (
                 <Alert variant={lastMaintenanceActivity.success ? 'default' : 'destructive'}>
-                  {lastMaintenanceActivity.success ? (
-                    <CheckCircle className="h-4 w-4" />
-                  ) : (
-                    <AlertTriangle className="h-4 w-4" />
-                  )}
+                  {lastMaintenanceActivity.success ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                   <AlertTitle>{lastMaintenanceActivity.title}</AlertTitle>
                   <AlertDescription className="space-y-1">
                     <p>{lastMaintenanceActivity.message}</p>
-                    {lastMaintenanceActivity.retentionDays && (
-                      <p>Retencion aplicada: {lastMaintenanceActivity.retentionDays} dias.</p>
-                    )}
-                    {typeof lastMaintenanceActivity.deletedCount === 'number' && (
-                      <p>Registros eliminados: {lastMaintenanceActivity.deletedCount}.</p>
-                    )}
+                    {lastMaintenanceActivity.retentionDays && <p>Retencion aplicada: {lastMaintenanceActivity.retentionDays} dias.</p>}
+                    {typeof lastMaintenanceActivity.deletedCount === 'number' && <p>Registros eliminados: {lastMaintenanceActivity.deletedCount}.</p>}
                   </AlertDescription>
                 </Alert>
               )}
@@ -1047,291 +1079,7 @@ export default function DatabaseMonitoring() {
             }}
           />
         </TabsContent>
-
-        <TabsContent value="storage-cleanup" className="space-y-4 animate-in fade-in-50">
-          <StorageCleanupSection />
-        </TabsContent>
       </Tabs>
-    </div>
-  )
-}
-
-interface MaintenanceTaskItemProps {
-  title: string
-  description: string
-  icon: React.ReactNode
-  onExecute: () => void
-  loading: boolean
-  disabled: boolean
-}
-
-function MaintenanceTaskItem({ title, description, icon, onExecute, loading, disabled }: MaintenanceTaskItemProps) {
-  return (
-    <div className="flex items-center justify-between p-4 border rounded-xl bg-card hover:bg-muted/30 transition-colors">
-      <div className="space-y-1">
-        <div className="font-medium flex items-center gap-2">
-          {icon}
-          {title}
-        </div>
-        <div className="text-xs text-muted-foreground max-w-[250px]">
-          {description}
-        </div>
-      </div>
-      <Button 
-        variant="outline"
-        size="sm"
-        onClick={onExecute}
-        disabled={disabled}
-      >
-        {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : 'Ejecutar'}
-      </Button>
-    </div>
-  )
-}
-
-function StorageCleanupSection() {
-  const { 
-    orphanedFiles, 
-    summary, 
-    scanning, 
-    deleting, 
-    selectedPaths, 
-    scan, 
-    toggleSelect, 
-    selectAll, 
-    deleteSelected, 
-    deleteAll 
-  } = useStorageCleanup()
-
-  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
-  const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false)
-
-  const formatBytes = (bytes: number) => storageCleanupService.formatBytes(bytes)
-
-  return (
-    <div className="space-y-6">
-      {/* Resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Archivos Totales</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary?.totalFiles ?? 0}</div>
-            <p className="text-xs text-muted-foreground mt-1">{formatBytes(summary?.totalSize ?? 0)} en total</p>
-          </CardContent>
-        </Card>
-        <Card className={cn(orphanedFiles.length > 0 && "border-orange-200 bg-orange-50/30")}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Archivos Huérfanos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={cn("text-2xl font-bold", orphanedFiles.length > 0 && "text-orange-600")}>
-              {orphanedFiles.length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Imágenes no usadas en productos</p>
-          </CardContent>
-        </Card>
-        <Card className={cn(orphanedFiles.length > 0 && "border-green-200 bg-green-50/30")}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Espacio Recuperable</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={cn("text-2xl font-bold", orphanedFiles.length > 0 && "text-green-600")}>
-              {formatBytes(summary?.orphanedSize ?? 0)}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">Potencial ahorro de espacio</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex items-center justify-between bg-muted/20 p-4 rounded-lg">
-        <div className="flex items-center gap-2">
-          <Button onClick={scan} disabled={scanning} variant="default" className="shadow-sm">
-            {scanning ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
-            Escanear Archivos Huérfanos
-          </Button>
-          
-          {orphanedFiles.length > 0 && (
-            <>
-              <Button 
-                variant="outline" 
-                onClick={selectAll}
-                disabled={deleting}
-              >
-                {selectedPaths.size === orphanedFiles.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
-              </Button>
-              
-              <Dialog open={confirmDeleteSelected} onOpenChange={setConfirmDeleteSelected}>
-                <DialogTrigger asChild>
-                  <Button 
-                    variant="destructive" 
-                    disabled={selectedPaths.size === 0 || deleting}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Eliminar Seleccionados ({selectedPaths.size})
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>¿Confirmar eliminación?</DialogTitle>
-                    <DialogDescription>
-                      Estás a punto de eliminar {selectedPaths.size} archivos permanentemente. 
-                      Esta acción no se puede deshacer.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="flex justify-end gap-3 mt-4">
-                    <Button variant="outline" onClick={() => setConfirmDeleteSelected(false)}>Cancelar</Button>
-                    <Button 
-                      variant="destructive" 
-                      onClick={() => {
-                        deleteSelected()
-                        setConfirmDeleteSelected(false)
-                      }}
-                    >
-                      Sí, eliminar archivos
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </>
-          )}
-        </div>
-
-        {orphanedFiles.length > 0 && (
-          <Dialog open={confirmDeleteAll} onOpenChange={setConfirmDeleteAll}>
-            <DialogTrigger asChild>
-              <Button variant="ghost" disabled={deleting} className="text-red-600 hover:text-red-700 hover:bg-red-50">
-                Limpieza total
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>¿Limpieza total de Storage?</DialogTitle>
-                <DialogDescription>
-                  Se eliminarán los {orphanedFiles.length} archivos huérfanos detectados. 
-                  Esto liberará {formatBytes(summary?.orphanedSize ?? 0)}.
-                </DialogDescription>
-              </DialogHeader>
-              <Alert className="bg-red-50 border-red-200 mt-2">
-                <AlertTriangle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-800">
-                  ¡Atención! Solo las imágenes vinculadas actualmente en la base de datos se conservarán. 
-                  Si tienes imágenes guardadas para uso futuro que no están asignadas a un producto, se perderán.
-                </AlertDescription>
-              </Alert>
-              <div className="flex justify-end gap-3 mt-4">
-                <Button variant="outline" onClick={() => setConfirmDeleteAll(false)}>Descartar</Button>
-                <Button 
-                  variant="destructive" 
-                  onClick={() => {
-                    deleteAll()
-                    setConfirmDeleteAll(false)
-                  }}
-                >
-                  Confirmar Limpieza Total
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
-      </div>
-
-      {/* Tabla de archivos */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileSearch className="h-5 w-5 text-primary" />
-            Resultados del Escaneo
-          </CardTitle>
-          <CardDescription>
-            Archivos encontrados en el bucket <code>product-images</code> que no tienen referencias en la tabla de productos
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {orphanedFiles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center space-y-3">
-              <div className="bg-muted p-4 rounded-full">
-                <ShieldCheck className="h-8 w-8 text-green-500" />
-              </div>
-              <div>
-                <h3 className="font-medium text-lg">Storage Optimizado</h3>
-                <p className="text-muted-foreground max-w-xs mx-auto">
-                  {scanning ? 'Escaneando archivos...' : 'No se encontraron archivos sin uso. Todo parece estar en orden.'}
-                </p>
-              </div>
-              {!scanning && <Button variant="outline" size="sm" onClick={scan}>Volver a escanear</Button>}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="text-left text-sm font-medium border-b text-muted-foreground">
-                    <th className="pb-3 pl-2 w-10">
-                      <input 
-                        type="checkbox" 
-                        className="rounded border-gray-300 shadow-sm focus:ring-primary accent-primary"
-                        checked={selectedPaths.size === orphanedFiles.length}
-                        onChange={selectAll}
-                      />
-                    </th>
-                    <th className="pb-3">Vista Previa</th>
-                    <th className="pb-3">Ruta del Archivo</th>
-                    <th className="pb-3 text-right">Tamaño</th>
-                    <th className="pb-3 text-right pr-2">Modificado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orphanedFiles.map((file) => (
-                    <tr key={file.path} className="border-b hover:bg-muted/50 transition-colors last:border-0">
-                      <td className="py-4 pl-2">
-                        <input 
-                          type="checkbox" 
-                          className="rounded border-gray-300 shadow-sm focus:ring-primary accent-primary"
-                          checked={selectedPaths.has(file.path)}
-                          onChange={() => toggleSelect(file.path)}
-                        />
-                      </td>
-                      <td className="py-4">
-                        <div className="w-12 h-12 rounded-lg border bg-muted flex items-center justify-center overflow-hidden">
-                          <img 
-                            src={file.publicUrl} 
-                            alt={file.name} 
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.src = "https://placehold.co/100x100?text=Err"
-                            }}
-                          />
-                        </div>
-                      </td>
-                      <td className="py-4">
-                        <div className="flex flex-col">
-                          <span className="font-medium text-sm truncate max-w-[200px]">{file.name}</span>
-                          <span className="text-xs text-muted-foreground truncate max-w-[300px]">{file.path}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 text-right text-sm font-mono">
-                        {formatBytes(file.size)}
-                      </td>
-                      <td className="py-4 text-right text-xs text-muted-foreground pr-2">
-                        {new Date(file.lastModified).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      
-      <Alert className="bg-blue-50 border-blue-200">
-        <Package className="h-4 w-4 text-blue-600" />
-        <AlertDescription className="text-blue-800">
-          Este escaneo analiza los campos `images[]` y `image_url` de todos los productos.
-        </AlertDescription>
-      </Alert>
     </div>
   )
 }

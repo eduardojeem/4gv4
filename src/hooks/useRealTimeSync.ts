@@ -250,7 +250,7 @@ export function useProductRealTimeSync(
         onStockUpdate(event.record)
       }
     },
-    enableLogging: true
+    enableLogging: false
   }), [onProductUpdate, onStockUpdate])
 
   return useRealTimeSync(options)

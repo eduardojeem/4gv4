@@ -3,9 +3,10 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { toast } from 'sonner'
 import { showAddToCartToast } from '@/lib/pos-toasts'
-import { createClient } from '@/lib/supabase/client'
 import type { Product } from '@/types/product-unified'
 import { SALE_STATUS } from '@/lib/sales-status'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders } from '@/lib/branches/client'
 
 export interface CartItem {
     id: string
@@ -55,9 +56,8 @@ export function usePOS() {
     const [globalDiscount, setGlobalDiscount] = useState(0)
     const [notes, setNotes] = useState('')
     const [processing, setProcessing] = useState(false)
+    const { selectedBranchId } = useBranch()
     const [isWholesale, setIsWholesale] = useState(false)
-
-    const supabase = createClient()
 
     // Toggle wholesale mode
     const toggleWholesale = useCallback(() => {
@@ -289,32 +289,42 @@ export function usePOS() {
                 status: 'completed'
             }))
 
-            // Llamada atómica al RPC
-            const { data, error } = await supabase.rpc('process_pos_sale', {
-                p_sale_data: saleData,
-                p_items: saleItems,
-                p_payments: payments
+            const response = await fetch('/api/pos/process-sale', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...branchHeaders(selectedBranchId),
+                },
+                body: JSON.stringify({
+                    p_sale_data: saleData,
+                    p_items: saleItems,
+                    p_payments: payments
+                })
             })
 
-            if (error) {
-                // Si el RPC no existe o falla, intentar fallback o informar al usuario
-                if (error.code === 'P0001' || error.message.includes('function process_pos_sale')) {
-                    throw new Error('La función de base de datos process_pos_sale no existe. Por favor, ejecutá el SQL proporcionado en el plan de implementación.')
-                }
-                throw error
+            const result = await response.json().catch(() => null) as {
+                success?: boolean
+                error?: string
+                saleId?: string
+                data?: unknown
+            } | null
+
+            if (!response.ok || result?.success === false) {
+                throw new Error(result?.error || 'No se pudo procesar la venta POS')
             }
 
             toast.success('Venta procesada exitosamente')
             clearCart()
-            return data
-        } catch (error: any) {
+            return result?.data || { id: result?.saleId }
+        } catch (error) {
             console.error('Error processing sale:', error)
-            toast.error(error.message || 'Error al procesar la venta')
+            const message = error instanceof Error ? error.message : 'Error al procesar la venta'
+            toast.error(message)
             return null
         } finally {
             setProcessing(false)
         }
-    }, [cart, customer, subtotal, tax, totalDiscount, total, paymentSplits, notes, clearCart, supabase])
+    }, [cart, clearCart, customer, notes, paymentSplits, selectedBranchId, subtotal, tax, total, totalDiscount, totalPaid])
 
     return {
         // Estado
