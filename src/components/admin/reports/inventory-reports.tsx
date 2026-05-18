@@ -12,30 +12,24 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { 
   BarChart3, 
   TrendingUp, 
-  TrendingDown, 
-  Download, 
   FileText, 
   Calendar as CalendarIcon,
   Package,
   AlertTriangle,
-  Users,
   Target,
   PieChart,
-  LineChart,
   RefreshCw,
   CheckCircle,
   XCircle,
-  ArrowUp,
-  ArrowDown,
-  Minus,
-  Star,
-  Loader2
+  Star
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
-import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns'
+import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
-import { useSales } from '@/hooks/useSales'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 
 // Interfaces
 interface ReportData {
@@ -116,9 +110,48 @@ interface ProfitData {
   totalProfit: number
 }
 
+interface ReportSaleItemRow {
+  product_id: string
+  quantity: number
+  subtotal: number
+  products?: {
+    name?: string | null
+    purchase_price?: number | null
+    category?: { name?: string | null } | null
+  } | null
+}
+
+interface ReportSaleRow {
+  total_amount: number
+  sale_items: ReportSaleItemRow[]
+}
+
+interface ReportMovementRow {
+  id: string
+  created_at: string
+  type?: string | null
+  movement_type?: string | null
+  quantity?: number | null
+  reason?: string | null
+  notes?: string | null
+  product?: {
+    name?: string | null
+    purchase_price?: number | null
+  } | null
+}
+
+interface ReportSupplierRow {
+  id: string
+  name: string
+  deliveryTime?: number | null
+  rating?: number | null
+}
+
+const REPORT_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16']
+
 const InventoryReports: React.FC = () => {
   const supabase = createClient()
-  const { sales, fetchSales, loading: salesLoading } = useSales()
+  const { selectedBranchId } = useBranch()
 
   // Estados
   const [reportData, setReportData] = useState<ReportData | null>(null)
@@ -128,12 +161,10 @@ const InventoryReports: React.FC = () => {
   })
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedSupplier, setSelectedSupplier] = useState<string>('all')
-  const [reportType, setReportType] = useState<string>('general')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
 
   // Colores para gráficas
-  const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16']
 
   const generateReport = useCallback(async () => {
     setIsGenerating(true)
@@ -149,6 +180,18 @@ const InventoryReports: React.FC = () => {
       
       if (productsError) throw productsError
 
+      const branchAwareProducts = await loadBranchInventoryStockMap(
+        supabase,
+        selectedBranchId,
+        (products || []).map((product) => product.id)
+      ).then(({ stockMap, branchScoped }) =>
+        applyBranchInventoryToProducts(
+          (products || []) as Array<{ id: string; stock_quantity?: number | null } & Record<string, unknown>>,
+          stockMap,
+          branchScoped
+        )
+      )
+
       // 2. Fetch Suppliers
       const { data: suppliers, error: suppliersError } = await supabase
         .from('suppliers')
@@ -157,7 +200,8 @@ const InventoryReports: React.FC = () => {
       if (suppliersError) throw suppliersError
 
       // 3. Fetch Stock Movements
-      const { data: movements, error: movementsError } = await supabase
+      const { data: movements, error: movementsError } = await withBranchFilter(
+        supabase
         .from('product_movements')
         .select(`
           *,
@@ -166,13 +210,16 @@ const InventoryReports: React.FC = () => {
         .gte('created_at', selectedDateRange.from.toISOString())
         .lte('created_at', selectedDateRange.to.toISOString())
         .order('created_at', { ascending: false })
-        .limit(100) // Limit for UI table
+        .limit(100),
+        selectedBranchId
+      ) // Limit for UI table
 
       if (movementsError) throw movementsError
 
       // 4. Fetch Sales (Using hook or direct query if hook doesn't support custom range efficiently for reports)
       // Since useSales is hook based, we can try to use it or just query directly for reports to avoid state conflicts
-      const { data: salesData, error: salesError } = await supabase
+      const { data: salesData, error: salesError } = await withBranchFilter(
+        supabase
         .from('sales')
         .select(`
           *,
@@ -182,30 +229,34 @@ const InventoryReports: React.FC = () => {
           )
         `)
         .gte('created_at', selectedDateRange.from.toISOString())
-        .lte('created_at', selectedDateRange.to.toISOString())
+        .lte('created_at', selectedDateRange.to.toISOString()),
+        selectedBranchId
+      )
 
       if (salesError) throw salesError
 
       // --- CALCULATIONS ---
 
       // Inventory Stats
-      const totalProducts = products?.length || 0
-      const totalValue = products?.reduce((sum, p) => sum + (p.stock_quantity * p.purchase_price), 0) || 0
-      const lowStockItems = products?.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0).length || 0
-      const outOfStockItems = products?.filter(p => p.stock_quantity === 0).length || 0
+      const totalProducts = branchAwareProducts?.length || 0
+      const totalValue = branchAwareProducts?.reduce((sum, p) => sum + (Number(p.stock_quantity || 0) * Number(p.purchase_price || 0)), 0) || 0
+      const lowStockItems = branchAwareProducts?.filter(p => Number(p.stock_quantity || 0) <= Number(p.min_stock || 0) && Number(p.stock_quantity || 0) > 0).length || 0
+      const outOfStockItems = branchAwareProducts?.filter(p => Number(p.stock_quantity || 0) === 0).length || 0
       const totalSuppliers = suppliers?.length || 0
       
       // Category Distribution
       const categoryMap = new Map<string, { count: number; value: number; marginSum: number }>()
-      products?.forEach(p => {
+      branchAwareProducts?.forEach(p => {
         const catName = p.category?.name || 'Sin Categoría'
         const current = categoryMap.get(catName) || { count: 0, value: 0, marginSum: 0 }
         
-        const margin = p.sale_price > 0 ? ((p.sale_price - p.purchase_price) / p.sale_price) * 100 : 0
+        const salePrice = Number(p.sale_price || 0)
+        const purchasePrice = Number(p.purchase_price || 0)
+        const margin = salePrice > 0 ? ((salePrice - purchasePrice) / salePrice) * 100 : 0
         
         categoryMap.set(catName, {
           count: current.count + 1,
-          value: current.value + (p.stock_quantity * p.purchase_price),
+          value: current.value + (Number(p.stock_quantity || 0) * purchasePrice),
           marginSum: current.marginSum + margin
         })
       })
@@ -216,15 +267,17 @@ const InventoryReports: React.FC = () => {
         totalValue: data.value,
         percentage: totalValue > 0 ? Number(((data.value / totalValue) * 100).toFixed(1)) : 0,
         averageMargin: data.count > 0 ? Number((data.marginSum / data.count).toFixed(1)) : 0,
-        color: COLORS[index % COLORS.length]
+        color: REPORT_COLORS[index % REPORT_COLORS.length]
       })).sort((a, b) => b.totalValue - a.totalValue)
 
       const totalCategories = categoryDistribution.length
-      const averageMargin = products && products.length > 0 
-        ? products.reduce((sum, p) => {
-            const m = p.sale_price > 0 ? ((p.sale_price - p.purchase_price) / p.sale_price) * 100 : 0
+      const averageMargin = branchAwareProducts && branchAwareProducts.length > 0 
+        ? branchAwareProducts.reduce((sum, p) => {
+            const salePrice = Number(p.sale_price || 0)
+            const purchasePrice = Number(p.purchase_price || 0)
+            const m = salePrice > 0 ? ((salePrice - purchasePrice) / salePrice) * 100 : 0
             return sum + m
-          }, 0) / products.length
+          }, 0) / branchAwareProducts.length
         : 0
 
       // Sales Analysis
@@ -237,9 +290,9 @@ const InventoryReports: React.FC = () => {
         cost: number 
       }>()
 
-      salesData?.forEach(sale => {
-        totalRevenue += sale.total_amount
-        sale.sale_items.forEach((item: any) => {
+      ;((salesData || []) as ReportSaleRow[]).forEach((sale) => {
+        totalRevenue += Number(sale.total_amount || 0)
+        sale.sale_items.forEach((item) => {
           const pid = item.product_id
           const current = productSalesMap.get(pid) || { 
             name: item.products?.name || 'Desconocido', 
@@ -255,9 +308,9 @@ const InventoryReports: React.FC = () => {
           productSalesMap.set(pid, {
             name: current.name,
             category: current.category,
-            units: current.units + item.quantity,
-            revenue: current.revenue + item.subtotal,
-            cost: current.cost + (item.quantity * unitCost)
+            units: current.units + Number(item.quantity || 0),
+            revenue: current.revenue + Number(item.subtotal || 0),
+            cost: current.cost + (Number(item.quantity || 0) * Number(unitCost || 0))
           })
         })
       })
@@ -303,27 +356,27 @@ const InventoryReports: React.FC = () => {
         .slice(0, 20)
 
       // Stock Movements
-      const stockMovements: StockMovement[] = (movements || []).map((m: any) => ({
+      const stockMovements: StockMovement[] = ((movements || []) as ReportMovementRow[]).map((m) => ({
         id: m.id,
         date: new Date(m.created_at),
-        type: m.type,
+        type: (m.type || m.movement_type || 'ajuste') as StockMovement['type'],
         product: m.product?.name || 'Desconocido',
-        quantity: m.quantity,
-        value: Math.abs(m.quantity * (m.product?.purchase_price || 0)), // Estimado
-        reason: m.reason || '',
+        quantity: Number(m.quantity || 0),
+        value: Math.abs(Number(m.quantity || 0) * Number(m.product?.purchase_price || 0)), // Estimado
+        reason: m.reason || m.notes || '',
         user: 'Admin' // Should fetch user name if user_id exists
       }))
 
       // Supplier Performance (Mock logic based on product availability/pricing as we don't have orders table yet)
-      const supplierPerformance: SupplierData[] = (suppliers || []).map((s: any) => ({
+      const supplierPerformance: SupplierData[] = ((suppliers || []) as ReportSupplierRow[]).map((s) => ({
         id: s.id,
         name: s.name,
         totalOrders: 0, // Placeholder
         totalValue: 0, // Placeholder
-        averageDeliveryTime: s.deliveryTime || 0,
-        qualityRating: s.rating || 0,
+        averageDeliveryTime: Number(s.deliveryTime || 0),
+        qualityRating: Number(s.rating || 0),
         onTimeDelivery: 100,
-        status: (s.rating >= 4 ? 'excellent' : s.rating >= 3 ? 'good' : 'average') as any
+        status: Number(s.rating || 0) >= 4 ? 'excellent' : Number(s.rating || 0) >= 3 ? 'good' : 'average'
       }))
 
       // Sales Trends (Mock for now, requires complex aggregation over time)
@@ -351,7 +404,7 @@ const InventoryReports: React.FC = () => {
     } finally {
       setIsGenerating(false)
     }
-  }, [supabase, selectedDateRange])
+  }, [selectedBranchId, supabase, selectedDateRange])
 
   useEffect(() => {
     generateReport()
@@ -372,15 +425,6 @@ const InventoryReports: React.FC = () => {
       case 'average': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
       case 'poor': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
       default: return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
-    }
-  }
-
-  const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case 'up': return <ArrowUp className="h-4 w-4 text-green-600 dark:text-green-400" />
-      case 'down': return <ArrowDown className="h-4 w-4 text-red-600 dark:text-red-400" />
-      case 'stable': return <Minus className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-      default: return <Minus className="h-4 w-4 text-gray-600 dark:text-gray-400" />
     }
   }
 
@@ -608,7 +652,7 @@ const InventoryReports: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {reportData.categoryDistribution.slice(0, 5).map((category, index) => (
+                  {reportData.categoryDistribution.slice(0, 5).map((category) => (
                     <div key={category.name} className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div 

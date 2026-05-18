@@ -18,6 +18,10 @@ type Product = DbProductRow & {
   category?: DbCategoryRow
   supplier?: Database['public']['Tables']['suppliers']['Row']
   stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock'
+  image_url?: string | null
+  images?: string[] | null
+  cost_price?: number | null
+  categories?: { name: string } | null
 }
 
 interface CartItem {
@@ -44,12 +48,16 @@ interface SaleData {
   notes?: string
 }
 
+type PosProductRow = Product & {
+  categories?: { name: string } | null
+}
+
 // ============================================================================
 // Products Cache (stale-while-revalidate)
 // ============================================================================
-let productsCacheByBranch: Record<string, UnifiedProduct[] | undefined> = {}
-let productsCacheTimestampsByBranch: Record<string, number | undefined> = {}
-let productsFetchPromisesByBranch: Record<string, Promise<UnifiedProduct[]> | undefined> = {}
+const productsCacheByBranch: Record<string, UnifiedProduct[] | undefined> = {}
+const productsCacheTimestampsByBranch: Record<string, number | undefined> = {}
+const productsFetchPromisesByBranch: Record<string, Promise<UnifiedProduct[]> | undefined> = {}
 const PRODUCTS_CACHE_TTL = 3 * 60 * 1000 // 3 minutes - realtime handles freshness
 
 function getBranchCacheKey(branchId?: string | null) {
@@ -74,16 +82,16 @@ function isProductsCacheFresh(branchId?: string | null): boolean {
 
 
 export function usePOSProducts() {
-  const [products, setProducts] = useState<UnifiedProduct[]>(getProductsCache(null) || [])
+  const { selectedBranchId } = useBranch()
+  const [products, setProducts] = useState<UnifiedProduct[]>(() => getProductsCache(selectedBranchId) || [])
   const [cart, setCart] = useState<CartItem[]>([])
-  const [loading, setLoading] = useState(!isProductsCacheFresh())
+  const [loading, setLoading] = useState(() => !isProductsCacheFresh(selectedBranchId))
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [realTimeEnabled, setRealTimeEnabled] = useState(true)
 
   const supabase = useMemo(() => createClient(), [])
-  const { selectedBranchId } = useBranch()
 
   // Función para actualizar un producto específico en tiempo real
   const updateProductInState = useCallback((updatedProduct: Product) => {
@@ -110,9 +118,9 @@ export function usePOSProducts() {
           category_id: newCategoryId,
           category: newCategory,
           description: updatedProduct.description || undefined,
-          image: (updatedProduct as any).images?.[0] || (updatedProduct as any).image_url || undefined,
+          image: updatedProduct.images?.[0] || updatedProduct.image_url || undefined,
           is_active: updatedProduct.is_active,
-          purchase_price: (updatedProduct as any).cost_price || (newProducts[productIndex] as any).purchase_price || 0
+          purchase_price: updatedProduct.cost_price || newProducts[productIndex].purchase_price || 0
         }
 
         // Keep cache in sync
@@ -126,13 +134,13 @@ export function usePOSProducts() {
           barcode: updatedProduct.barcode || undefined,
           sale_price: updatedProduct.sale_price,
           stock_quantity: updatedProduct.stock_quantity,
-          category_id: updatedProduct.category_id || null as any,
+          category_id: updatedProduct.category_id ?? null,
           category: prevProducts.find(p => p.category_id === updatedProduct.category_id)?.category,
           description: updatedProduct.description || undefined,
-          image: (updatedProduct as any).images?.[0] || (updatedProduct as any).image_url || undefined,
+          image: updatedProduct.images?.[0] || updatedProduct.image_url || undefined,
           unit_measure: updatedProduct.unit_measure || 'unidad',
           is_active: updatedProduct.is_active,
-          purchase_price: (updatedProduct as any).cost_price || 0
+          purchase_price: updatedProduct.cost_price || 0
         } as unknown as UnifiedProduct
         const updated = [...prevProducts, newProduct]
         setProductsCache(selectedBranchId, updated)
@@ -146,15 +154,17 @@ export function usePOSProducts() {
   // Función para actualizar stock en tiempo real
   const updateStockInState = useCallback((stockMovement: StockMovement) => {
     if (stockMovement.product_id) {
-      setProducts(prevProducts => 
-        prevProducts.map(product => 
+      setProducts(prevProducts => {
+        const updatedProducts = prevProducts.map(product => 
           product.id === stockMovement.product_id
             ? { ...product, stock_quantity: stockMovement.new_stock ?? product.stock_quantity }
             : product
         )
-      )
+        setProductsCache(selectedBranchId, updatedProducts)
+        return updatedProducts
+      })
     }
-  }, [])
+  }, [selectedBranchId])
 
   // Configurar sincronización en tiempo real
   const realTimeSync = useProductRealTimeSync(
@@ -188,7 +198,7 @@ export function usePOSProducts() {
             throw error
           }
 
-          const baseProducts = (dbProducts || []).map((p: any) => ({
+          const baseProducts = (dbProducts || []).map((p: PosProductRow) => ({
             id: p.id,
             name: p.name,
             sku: p.sku || '',
@@ -272,10 +282,10 @@ export function usePOSProducts() {
         category_id: data.category_id,
         category: data.categories ? { id: data.category_id, name: data.categories.name } as UnifiedCategory : undefined,
         description: data.description || undefined,
-        image: (data.images?.[0]) || (data as any).image_url || undefined,
+        image: data.images?.[0] || data.image_url || undefined,
         unit_measure: data.unit_measure || 'unidad',
         is_active: data.is_active,
-        purchase_price: (data as any).cost_price || 0
+        purchase_price: data.cost_price || 0
       } as unknown as UnifiedProduct
 
       const [branchAwareProduct] = await loadBranchInventoryStockMap(supabase, selectedBranchId, [baseProduct.id])
@@ -501,7 +511,7 @@ export function usePOSProducts() {
 
     realTimeSync.subscribe()
     return () => realTimeSync.unsubscribe()
-  }, [realTimeEnabled])
+  }, [realTimeEnabled, realTimeSync])
 
   // Función para alternar tiempo real
   const toggleRealTime = useCallback(() => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { endOfDay, format, isAfter, isBefore, startOfDay, subDays } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 
 export type AnalyticsPreset = 'today' | '7d' | '30d' | '90d' | 'custom'
 
@@ -233,6 +234,7 @@ interface SaleRecord {
   cashier_id?: string | null
   user_id?: string | null
   created_by?: string | null
+  branch_id?: string | null
 }
 
 interface SaleItemRecord {
@@ -259,6 +261,7 @@ interface RepairRecord {
   parts_cost?: number | string | null
   technician_id?: string | null
   technician?: ProfileRecord | null
+  branch_id?: string | null
 }
 
 interface CashClosureRecord {
@@ -511,23 +514,23 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         // Sales: only select needed fields (not full row)
         supabase
           .from('sales')
-          .select('id, created_at, total_amount, status, customer_id, created_by')
+          .select('id, created_at, total_amount, status, customer_id, created_by, branch_id')
           .gte('created_at', windowStart.toISOString())
           .lte('created_at', windowEnd.toISOString()),
         supabase
           .from('sales')
-          .select('id, created_at, total_amount, status')
+          .select('id, created_at, total_amount, status, branch_id')
           .gte('created_at', previousFrom.toISOString())
           .lte('created_at', previousTo.toISOString()),
         supabase
           .from('repairs')
-          .select('id, created_at, received_at, completed_at, delivered_at, status, final_cost, estimated_cost, parts_cost, technician_id, technician:profiles(id, full_name, email)')
+          .select('id, created_at, received_at, completed_at, delivered_at, status, final_cost, estimated_cost, parts_cost, technician_id, branch_id, technician:profiles(id, full_name, email)')
           .gte('created_at', selectedFrom.toISOString())
           .lte('created_at', selectedTo.toISOString()),
         // Previous repairs: only need counts and revenue, minimal fields
         supabase
           .from('repairs')
-          .select('id, status, final_cost, estimated_cost')
+          .select('id, status, final_cost, estimated_cost, branch_id')
           .gte('created_at', previousFrom.toISOString())
           .lte('created_at', previousTo.toISOString()),
         supabase
@@ -553,7 +556,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         // Product movements: only need product_id for the "moved" set
         supabase
           .from('product_movements')
-          .select('product_id')
+          .select('product_id, branch_id')
           .gte('created_at', selectedFrom.toISOString())
           .lte('created_at', selectedTo.toISOString()),
         supabase
@@ -594,18 +597,35 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
         console.warn('[analytics] product_movements query failed:', productMovementsResponse.error.message)
       }
 
-      const salesWindow = ((salesWindowResponse.data || []) as SaleRecord[]).filter((sale) => isCompletedSaleStatus(sale.status))
-      const previousSales = ((previousSalesResponse.data || []) as SaleRecord[]).filter((sale) => isCompletedSaleStatus(sale.status))
-      const selectedSales = salesWindow.filter((sale) => isBetween(toDate(sale.created_at), selectedFrom, selectedTo))
-      const quickSales = salesWindow.filter((sale) => isBetween(toDate(sale.created_at), summaryFloor, windowEnd))
-      const selectedRepairs = (repairsResponse.data || []) as RepairRecord[]
-      const previousRepairs = (previousRepairsResponse.data || []) as RepairRecord[]
+      const branchScopedSalesWindow = ((salesWindowResponse.data || []) as SaleRecord[])
+        .filter((sale) => isCompletedSaleStatus(sale.status))
+        .filter((sale) => filters.branch === 'all' || String(sale.branch_id || 'principal') === filters.branch)
+      const previousSales = ((previousSalesResponse.data || []) as SaleRecord[])
+        .filter((sale) => isCompletedSaleStatus(sale.status))
+        .filter((sale) => filters.branch === 'all' || String(sale.branch_id || 'principal') === filters.branch)
+      const selectedSales = branchScopedSalesWindow.filter((sale) => isBetween(toDate(sale.created_at), selectedFrom, selectedTo))
+      const quickSales = branchScopedSalesWindow.filter((sale) => isBetween(toDate(sale.created_at), summaryFloor, windowEnd))
+      const selectedRepairs = ((repairsResponse.data || []) as RepairRecord[])
+        .filter((repair) => filters.branch === 'all' || String(repair.branch_id || 'principal') === filters.branch)
+      const previousRepairs = ((previousRepairsResponse.data || []) as RepairRecord[])
+        .filter((repair) => filters.branch === 'all' || String(repair.branch_id || 'principal') === filters.branch)
       const allClosures = (cashClosuresResponse.data || []) as CashClosureRecord[]
       const allMovements = (cashMovementsResponse.data || []) as CashMovementRecord[]
       const allAlerts = (cashAlertsResponse.data || []) as CashAlertRecord[]
-      const allProducts = (productsResponse.data || []) as ProductRecord[]
+      const baseProducts = (productsResponse.data || []) as Array<ProductRecord & { id: string; stock_quantity?: number | string | null }>
+      const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+        supabase,
+        filters.branch === 'all' ? null : filters.branch,
+        baseProducts.map((product) => String(product.id))
+      )
+      const allProducts = applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped) as ProductRecord[]
+      const productStockMap = new Map(
+        allProducts.map((product) => [String(product.id), toNumber(product.stock_quantity ?? product.stock)])
+      )
       const movedProducts = new Set(
-        ((productMovementsResponse.data || []) as Array<{ product_id: string }>).map((item) => item.product_id)
+        ((productMovementsResponse.data || []) as Array<{ product_id: string; branch_id?: string | null }>)
+          .filter((item) => filters.branch === 'all' || String(item.branch_id || 'principal') === filters.branch)
+          .map((item) => item.product_id)
       )
 
       // Resolve branch names for the filter selector
@@ -663,7 +683,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       })
 
       const selectedSaleIds = selectedSales.map((sale) => String(sale.id)).filter(Boolean)
-      let saleItemsResponse: { data: any[] | null; error: any } = { data: [], error: null }
+      let saleItemsResponse: { data: SaleItemRecord[] | null; error: unknown } = { data: [], error: null }
       if (selectedSaleIds.length > 0) {
         try {
           saleItemsResponse = await supabase
@@ -676,7 +696,10 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       }
 
       if (saleItemsResponse.error) {
-        console.warn('[analytics] sale_items error:', saleItemsResponse.error.message || saleItemsResponse.error)
+        const saleItemsErrorMessage = saleItemsResponse.error instanceof Error
+          ? saleItemsResponse.error.message
+          : String(saleItemsResponse.error)
+        console.warn('[analytics] sale_items error:', saleItemsErrorMessage)
       }
 
       const selectedSaleItems = (saleItemsResponse.data || []) as SaleItemRecord[]
@@ -813,7 +836,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
           revenue: 0,
           quantity: 0,
           profit: 0,
-          stock: toNumber(item.product?.stock_quantity ?? item.product?.stock),
+          stock: productStockMap.get(productId) ?? toNumber(item.product?.stock_quantity ?? item.product?.stock),
         }
         productCurrent.revenue += revenue
         productCurrent.quantity += quantity

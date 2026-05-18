@@ -20,14 +20,15 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
   const { user, loading } = useAuth()
   const router = useRouter()
 
-  const role = user?.role
   const isInactiveUser = user?.status === 'inactive' || user?.status === 'suspended'
-  const isAccessDenied = Boolean(user && (role === 'cliente' || isInactiveUser))
+  const isAccessDenied = Boolean(user && isInactiveUser)
 
   useEffect(() => {
     if (loading) return
     if (!user) {
       router.replace('/login')
+    } else if (user.role === 'cliente') {
+      router.replace('/inicio')
     }
   }, [user, loading, router])
 

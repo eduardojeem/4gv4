@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
+import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 
 type RepairStage = 'recibido' | 'diagnostico' | 'reparacion' | 'pausado' | 'listo' | 'entregado' | 'cancelado'
 
@@ -61,10 +62,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const auth = await requireStaff()
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse
+    const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
 
     const { id } = await context.params
-    const body = await req.json().catch(() => ({}))
-    const stage = normalizeStage((body as any)?.stage ?? (body as any)?.status)
+    const body = await req.json().catch(() => ({} as Record<string, unknown>))
+    const stage = normalizeStage(body?.stage ?? body?.status)
 
     if (!id || !stage) {
       return NextResponse.json({ ok: false, error: 'invalid_or_missing_stage' }, { status: 400 })
@@ -76,11 +78,26 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     }
 
     const supabase = createAdminSupabase()
+    const requestedBranchId = getRequestedBranchId(req)
+    const branchScope = await resolveBranchScopeForUser({
+      userId: staffAuth.user.id,
+      role: staffAuth.role,
+      requestedBranchId,
+      strict: Boolean(requestedBranchId),
+    })
+
+    if (!branchScope.branchId) {
+      return NextResponse.json(
+        { ok: false, error: 'No hay una sucursal operativa disponible para actualizar la reparacion.' },
+        { status: 400 }
+      )
+    }
 
     const { data: updatedRepair, error: updateError } = await supabase
       .from('repairs')
       .update(buildStatusUpdate(stage))
       .eq('id', id)
+      .eq('branch_id', branchScope.branchId)
       .select('id')
       .maybeSingle()
 
@@ -94,8 +111,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       id,
       stage,
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('PATCH /api/repairs/[id]/status error:', e)
-    return NextResponse.json({ ok: false, error: e?.message || 'Unknown error' }, { status: 500 })
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : 'Unknown error' },
+      { status: 500 }
+    )
   }
 }

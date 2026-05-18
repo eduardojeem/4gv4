@@ -68,11 +68,15 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('')
   
   const companyInfo = {
-    name: settings.companyName || config.company.name,
+    name: settings.companyName && settings.companyName !== 'Mi Empresa' 
+      ? settings.companyName 
+      : config.company.name,
     address: settings.companyAddress || config.company.address,
     phone: settings.companyPhone || config.company.phone,
-    email: settings.companyEmail || config.company.email,
-    ruc: settings.companyRuc,
+    email: settings.companyEmail && settings.companyEmail !== 'info@empresa.com'
+      ? settings.companyEmail
+      : config.company.email,
+    ruc: settings.companyRuc || config.company.ruc,
     website: 'www.4gcelulares.com'
   }
 
@@ -130,7 +134,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
         <h1 className="text-2xl font-bold uppercase tracking-tight">{companyInfo.name}</h1>
         <p className="text-sm font-medium text-primary">Reparación y Service</p>
         {companyInfo.ruc && (
-          <p className="text-xs text-muted-foreground mt-1">RUC: {companyInfo.ruc}</p>
+          <p className="text-xs font-semibold text-muted-foreground mt-1">RUC: {companyInfo.ruc}</p>
         )}
         <p className="text-xs text-muted-foreground">{companyInfo.address}</p>
         <p className="text-xs text-muted-foreground">☎ {companyInfo.phone}</p>
@@ -222,27 +226,46 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
 
       <Separator className="my-4" />
 
-      {/* Resumen de totales mejorado */}
+      {/* Resumen de totales con desglose IVA */}
       <div className="mb-4 text-sm px-4 space-y-1">
         <div className="flex justify-between">
-          <span>Subtotal:</span>
+          <span className="text-muted-foreground">Subtotal ({receiptData.items.length} {receiptData.items.length === 1 ? 'item' : 'items'}):</span>
           <span className="font-medium">{formatCurrency(receiptData.subtotal)}</span>
         </div>
         {receiptData.totalDiscount > 0 && (
           <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
-            <span>✨ Descuento Total:</span>
+            <span>✨ Descuento:</span>
             <span>-{formatCurrency(receiptData.totalDiscount)}</span>
           </div>
         )}
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">{getTaxConfig().label} ({getTaxConfig().percentage}%):</span>
-          <span className="font-medium">{formatCurrency(receiptData.tax)}</span>
+
+        {/* Desglose IVA */}
+        <div className="border-t border-dashed border-border/50 pt-2 mt-2 space-y-1">
+          {(() => {
+            const taxCfg = getTaxConfig()
+            const rate = taxCfg.rate
+            const inclTax = config.pricesIncludeTax
+            const total = receiptData.total
+            const base = inclTax ? Math.round(total / (1 + rate)) : receiptData.subtotal - receiptData.totalDiscount
+            const iva = inclTax ? total - base : Math.round(base * rate)
+
+            return (
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{taxCfg.label} {taxCfg.percentage}% incluido:</span>
+                <span>{formatCurrency(iva)}</span>
+              </div>
+            )
+          })()}
         </div>
+
         <Separator className="my-3" />
-        <div className="flex justify-between items-center bg-primary/10 dark:bg-primary/20 px-3 py-2 rounded-lg">
+        <div className="flex justify-between items-center bg-primary/10 dark:bg-primary/20 px-3 py-2.5 rounded-lg">
           <span className="font-bold text-lg">TOTAL:</span>
           <span className="font-bold text-2xl text-primary">{formatCurrency(receiptData.total)}</span>
         </div>
+        <p className="text-center text-[10px] text-muted-foreground mt-1">
+          {config.pricesIncludeTax ? 'Precios con IVA incluido' : 'IVA calculado sobre el subtotal'}
+        </p>
       </div>
 
       <Separator className="my-4" />
@@ -333,9 +356,15 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
         <p className="font-bold text-sm text-foreground">¡Gracias por su compra!</p>
         <p>Conserve este ticket como comprobante</p>
         <p>📱 Consultas: {companyInfo.phone}</p>
-        <p>📧 {companyInfo.email}</p>
+        {companyInfo.email && <p>📧 {companyInfo.email}</p>}
         <Separator className="my-2" />
-        <p className="font-mono text-[10px]">
+        <div className="border border-border/50 rounded p-2 text-[10px] text-muted-foreground/80">
+          <span className="font-semibold block mb-0.5">DOCUMENTO NO FISCAL</span>
+          Este ticket es un comprobante interno de venta y NO tiene validez<br />
+          tributaria ante la DNIT. No sustituye factura legal.<br />
+          Solicite su factura con timbrado vigente si la necesita.
+        </div>
+        <p className="font-mono text-[10px] mt-2">
           ID: {receiptData.receiptNumber}
         </p>
         <p className="font-mono text-[10px]">

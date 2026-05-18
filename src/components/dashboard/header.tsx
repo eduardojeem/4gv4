@@ -80,7 +80,7 @@ export const Header = memo(function Header() {
   // Prefetch critical routes
   useEffect(() => {
     router.prefetch('/dashboard/profile')
-    router.prefetch('/dashboard/settings')
+    router.prefetch('/admin/settings')
   }, [router])
 
   // Keyboard shortcut Ctrl+K for search
@@ -304,7 +304,7 @@ export const Header = memo(function Header() {
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link
-                  href="/dashboard/settings"
+                  href="/admin/settings"
                   className="cursor-pointer py-2.5 px-3 focus:bg-accent focus:text-accent-foreground rounded-md transition-colors mt-1 flex items-center w-full"
                 >
                   <div className="flex items-center justify-center h-8 w-8 rounded-md bg-primary/10 text-primary mr-3">
@@ -312,7 +312,7 @@ export const Header = memo(function Header() {
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="text-sm font-medium">Configuración</span>
-                    <span className="text-xs text-muted-foreground">Preferencias de cuenta</span>
+                    <span className="text-xs text-muted-foreground">Ajustes del sistema</span>
                   </div>
                 </Link>
               </DropdownMenuItem>

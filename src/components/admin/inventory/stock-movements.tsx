@@ -19,18 +19,16 @@ import {
   Eye,
   Calendar,
   Clock,
-  User,
   FileText,
   BarChart3,
   Search,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  CheckCircle,
-  XCircle,
-  AlertCircle
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -57,6 +55,23 @@ interface MovementSummary {
   totalAjustes: number
 }
 
+type ProductMovementRow = {
+  id: string
+  product_id: string
+  product?: { name?: string; sku?: string } | null
+  type?: string | null
+  movement_type?: string | null
+  quantity?: number | null
+  previous_stock?: number | null
+  new_stock?: number | null
+  reason?: string | null
+  notes?: string | null
+  reference?: string | null
+  reference_id?: string | null
+  user_id?: string | null
+  created_at: string
+}
+
 const normalizeMovementType = (rawType: unknown): StockMovement['type'] => {
   const value = String(rawType || '').toLowerCase()
   if (value === 'entrada' || value === 'entry') return 'entrada'
@@ -64,6 +79,14 @@ const normalizeMovementType = (rawType: unknown): StockMovement['type'] => {
   if (value === 'transferencia' || value === 'transfer') return 'transferencia'
   if (value === 'devolucion' || value === 'devolución' || value === 'return') return 'devolucion'
   return 'ajuste'
+}
+
+const movementTypeFilters: Record<StockMovement['type'], string[]> = {
+  entrada: ['entrada', 'entry', 'in'],
+  salida: ['salida', 'exit', 'sale', 'out'],
+  ajuste: ['ajuste', 'adjustment'],
+  transferencia: ['transferencia', 'transfer'],
+  devolucion: ['devolucion', 'devolución', 'return']
 }
 
 const StockMovements: React.FC = () => {
@@ -86,20 +109,29 @@ const StockMovements: React.FC = () => {
   const [summary, setSummary] = useState<MovementSummary | null>(null)
 
   const supabase = createClient()
+  const { selectedBranchId } = useBranch()
 
   const fetchMovements = useCallback(async () => {
     setLoading(true)
     try {
-      let query = supabase
+      let query = withBranchFilter(
+        supabase
         .from('product_movements')
         .select(`
           *,
           product:products(name, sku)
-        `, { count: 'exact' })
+        `, { count: 'exact' }),
+        selectedBranchId
+      )
 
       // Aplicar filtros
       if (filterType !== 'all') {
-        query = query.eq('type', filterType)
+        const rawValues = movementTypeFilters[filterType as StockMovement['type']] || [filterType]
+        query = query.or(
+          rawValues
+            .flatMap((value) => [`type.eq.${value}`, `movement_type.eq.${value}`])
+            .join(',')
+        )
       }
 
       if (filterDateFrom) {
@@ -127,7 +159,7 @@ const StockMovements: React.FC = () => {
 
       if (error) throw error
 
-      const normalizedMovements: StockMovement[] = (data || []).map((movement: any) => ({
+      const normalizedMovements: StockMovement[] = ((data || []) as ProductMovementRow[]).map((movement) => ({
         id: movement.id,
         product_id: movement.product_id,
         product: movement.product || { name: 'Producto Desconocido', sku: 'N/A' },
@@ -145,38 +177,43 @@ const StockMovements: React.FC = () => {
       setMovements(normalizedMovements)
       setTotalCount(count || 0)
 
-      // Calcular resumen (esto debería ser un count en el servidor idealmente, pero haremos un simple conteo de la página actual o query separada)
-      // Para un resumen real de TODO el periodo, necesitaríamos queries agregadas.
-      // Haremos queries separadas para el resumen
-      fetchSummary()
+      // Calcular resumen branch-aware con una consulta mínima separada
+      let summaryQuery = withBranchFilter(
+        supabase
+          .from('product_movements')
+          .select('type, movement_type, created_at'),
+        selectedBranchId
+      )
+
+      if (filterDateFrom) {
+        summaryQuery = summaryQuery.gte('created_at', `${filterDateFrom}T00:00:00`)
+      }
+
+      if (filterDateTo) {
+        summaryQuery = summaryQuery.lte('created_at', `${filterDateTo}T23:59:59`)
+      }
+
+      const { data: summaryData, error: summaryError } = await summaryQuery
+
+      if (summaryError) throw summaryError
+
+      const normalizedSummary = (summaryData || []).map((movement) =>
+        normalizeMovementType((movement as { type?: string; movement_type?: string }).type ?? (movement as { movement_type?: string }).movement_type)
+      )
+
+      setSummary({
+        totalMovements: normalizedSummary.length,
+        totalEntradas: normalizedSummary.filter((type) => type === 'entrada').length,
+        totalSalidas: normalizedSummary.filter((type) => type === 'salida').length,
+        totalAjustes: normalizedSummary.filter((type) => type === 'ajuste').length
+      })
 
     } catch (error) {
       console.error('Error fetching movements:', error)
     } finally {
       setLoading(false)
     }
-  }, [supabase, page, pageSize, filterType, filterDateFrom, filterDateTo, searchTerm])
-
-  const fetchSummary = async () => {
-    // Esta función podría ser costosa si hay muchos datos. 
-    // Idealmente usar un RPC o vistas materializadas.
-    // Por ahora haremos queries count simples.
-    try {
-      const { count: total } = await supabase.from('product_movements').select('*', { count: 'exact', head: true })
-      const { count: entradas } = await supabase.from('product_movements').select('*', { count: 'exact', head: true }).eq('type', 'entrada')
-      const { count: salidas } = await supabase.from('product_movements').select('*', { count: 'exact', head: true }).eq('type', 'salida')
-      const { count: ajustes } = await supabase.from('product_movements').select('*', { count: 'exact', head: true }).eq('type', 'ajuste')
-
-      setSummary({
-        totalMovements: total || 0,
-        totalEntradas: entradas || 0,
-        totalSalidas: salidas || 0,
-        totalAjustes: ajustes || 0
-      })
-    } catch (error) {
-      console.error('Error fetching summary:', error)
-    }
-  }
+  }, [selectedBranchId, supabase, page, pageSize, filterType, filterDateFrom, filterDateTo, searchTerm])
 
   useEffect(() => {
     fetchMovements()

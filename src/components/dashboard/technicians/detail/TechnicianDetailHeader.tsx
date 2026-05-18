@@ -1,18 +1,19 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { WorkStatusBadge } from '../WorkStatusBadge'
 import { ArrowLeft, Edit, UserPlus, Star, Clock, CheckCircle2, Wrench } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import type { TechnicianLoadState } from '@/hooks/use-technician-stats'
 
 interface TechnicianDetailHeaderProps {
     id: string
     name: string
     avatar?: string
     specialty?: string
-    status: 'available' | 'busy' | 'offline' | 'unavailable'
+    status: TechnicianLoadState
     totalJobs: number
     activeJobs: number
     completedJobs: number
@@ -35,6 +36,14 @@ export function TechnicianDetailHeader({
     onAssignRepair
 }: TechnicianDetailHeaderProps) {
     const router = useRouter()
+    const dotColor =
+        status === 'no_load'
+            ? 'bg-emerald-500'
+            : status === 'light_load'
+                ? 'bg-blue-500'
+                : status === 'medium_load'
+                    ? 'bg-amber-500'
+                    : 'bg-red-500'
 
     return (
         <div className="space-y-4">
@@ -60,11 +69,7 @@ export function TechnicianDetailHeader({
                                 ) : (
                                     name.charAt(0).toUpperCase()
                                 )}
-                                <div className={`absolute -bottom-2 -right-2 h-6 w-6 rounded-full border-4 border-white dark:border-gray-900 ${status === 'available' ? 'bg-green-500' :
-                                        status === 'busy' ? 'bg-orange-500' :
-                                            status === 'offline' ? 'bg-gray-400' :
-                                                'bg-red-500'
-                                    }`} />
+                                <div className={`absolute -bottom-2 -right-2 h-6 w-6 rounded-full border-4 border-white dark:border-gray-900 ${dotColor}`} />
                             </div>
 
                             <div className="flex-1">

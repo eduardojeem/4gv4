@@ -6,12 +6,13 @@ import { ArrowRight, CheckCircle2, Clock3, User, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { WorkStatusBadge } from './WorkStatusBadge'
+import type { TechnicianLoadState } from '@/hooks/use-technician-stats'
 
 interface TechnicianListItemProps {
     id: string
     name: string
     specialty?: string
-    status: 'available' | 'busy' | 'offline' | 'unavailable'
+    loadState: TechnicianLoadState
     activeJobs: number
     completedThisMonth: number
     totalCompleted: number
@@ -23,7 +24,7 @@ export const TechnicianListItem = memo(function TechnicianListItem({
     id,
     name,
     specialty,
-    status,
+    loadState,
     activeJobs,
     completedThisMonth,
     totalCompleted,
@@ -53,7 +54,7 @@ export const TechnicianListItem = memo(function TechnicianListItem({
                             {specialty || 'Tecnico general'}
                         </p>
                     </div>
-                    <WorkStatusBadge status={status} variant="sm" />
+                    <WorkStatusBadge status={loadState} variant="sm" />
                 </div>
             </div>
 

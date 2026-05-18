@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/withAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'

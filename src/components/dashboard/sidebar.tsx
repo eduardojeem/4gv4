@@ -1,3 +1,4 @@
+// Force HMR rebuild
 'use client'
 
 import { memo, useMemo, useState, useEffect } from 'react'
@@ -22,7 +23,6 @@ import {
   Wrench,
   BarChart3,
   Settings,
-  Palette,
   ChevronLeft,
   ChevronRight,
   Activity,
@@ -65,12 +65,6 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, roles: ['admin', 'vendedor'] },
       { name: 'Administración', href: '/admin', icon: Settings, roles: ['admin'] },
-    ],
-  },
-  {
-    label: 'Sistema',
-    items: [
-      { name: 'Configuracion', href: '/dashboard/settings', icon: Palette, roles: ['admin'] },
     ],
   },
 ]
@@ -122,7 +116,7 @@ export const Sidebar = memo(function Sidebar() {
 
   const filteredGroups = useMemo(() => {
     const filterFn = (item: NavItem) => {
-      if (isDev) return true
+      // Always enforce role restrictions — never bypass in dev
       if (userRole === 'super_admin') return item.roles.includes('admin') || item.roles.includes('super_admin')
       return item.roles.includes(userRole)
     }
@@ -130,7 +124,7 @@ export const Sidebar = memo(function Sidebar() {
       label: group.label,
       items: group.items.filter(filterFn)
     })).filter(group => group.items.length > 0)
-  }, [userRole, isDev])
+  }, [userRole])
 
   return (
     <>

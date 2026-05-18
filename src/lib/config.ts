@@ -22,6 +22,7 @@ export const config = {
     phone: process.env.NEXT_PUBLIC_COMPANY_PHONE || '+595-21-123456',
     address: process.env.NEXT_PUBLIC_COMPANY_ADDRESS || 'Asunción, Paraguay',
     email: process.env.NEXT_PUBLIC_COMPANY_EMAIL || '',
+    ruc: process.env.NEXT_PUBLIC_COMPANY_RUC || '',
     logo: process.env.NEXT_PUBLIC_COMPANY_LOGO || undefined
   },
   

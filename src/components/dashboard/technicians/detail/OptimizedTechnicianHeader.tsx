@@ -48,6 +48,14 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
 }: OptimizedTechnicianHeaderProps) {
   const router = useRouter()
   const workloadInfo = workloadConfig[metrics.workload]
+  const loadIndicatorColor =
+    metrics.loadState === 'no_load'
+      ? 'bg-emerald-500'
+      : metrics.loadState === 'light_load'
+        ? 'bg-blue-500'
+        : metrics.loadState === 'medium_load'
+          ? 'bg-amber-500'
+          : 'bg-red-500'
 
   return (
     <div className="space-y-4">
@@ -73,12 +81,7 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
                 ) : (
                   name.charAt(0).toUpperCase()
                 )}
-                <div className={`absolute -bottom-2 -right-2 h-6 w-6 rounded-full border-4 border-white dark:border-gray-900 ${
-                  metrics.status === 'available' ? 'bg-green-500' :
-                  metrics.status === 'busy' ? 'bg-orange-500' :
-                  metrics.status === 'offline' ? 'bg-gray-400' :
-                  'bg-red-500'
-                }`} />
+                <div className={`absolute -bottom-2 -right-2 h-6 w-6 rounded-full border-4 border-white dark:border-gray-900 ${loadIndicatorColor}`} />
               </div>
 
               <div className="flex-1">
@@ -87,7 +90,7 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
                   <p className="text-lg text-muted-foreground">{specialty}</p>
                 )}
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <WorkStatusBadge status={metrics.status} />
+                  <WorkStatusBadge status={metrics.loadState} />
                   <Badge variant="outline" className={workloadInfo.color}>
                     {workloadInfo.label}
                   </Badge>
@@ -189,7 +192,6 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
               <Button 
                 onClick={onAssignRepair} 
                 className="gap-2 flex-1 lg:flex-none"
-                disabled={metrics.status === 'unavailable'}
               >
                 <UserPlus className="h-4 w-4" />
                 Asignar Trabajo

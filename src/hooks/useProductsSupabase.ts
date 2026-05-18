@@ -8,8 +8,7 @@ import type { Product, ProductAlert, Category, Supplier, Brand } from '@/types/p
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
-
-type ProductMovement = Database['public']['Tables']['product_movements']['Row']
+import { isServiceLikeProduct } from '@/lib/products/is-service-like'
 
 interface ProductFilters {
   search?: string
@@ -280,7 +279,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     } finally {
       setLoading(false)
     }
-  }, [applySelectedBranchStock, supabase, filters, sort, pagination, enabled])
+  }, [applySelectedBranchStock, selectedBranchId, supabase, filters, sort, pagination, enabled])
 
   // Función para obtener categorías
   const fetchCategories = useCallback(async () => {
@@ -344,7 +343,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       // Generar alertas basadas en el estado actual de los productos
       const { data: productsData, error: productsError } = await supabase
         .from('products')
-        .select('id, name, sku, stock_quantity, min_stock, supplier_id, category_id, images')
+        .select('id, name, sku, stock_quantity, min_stock, supplier_id, category_id, unit_measure, images')
 
       if (productsError) throw productsError
 
@@ -355,6 +354,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       const productsToCheck = await applySelectedBranchStock((productsData || []) as unknown as Product[])
 
       for (const product of productsToCheck || []) {
+        const skipMetadataAlerts = isServiceLikeProduct(product)
+
         // Alerta de stock bajo
         if (product.stock_quantity <= (product.min_stock || 5) && product.stock_quantity > 0) {
           generatedAlerts.push({
@@ -393,7 +394,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         }
 
         // Alerta de sin proveedor
-        if (!product.supplier_id) {
+        if (!skipMetadataAlerts && !product.supplier_id) {
           generatedAlerts.push({
             id: `alert-${alertId++}`,
             product_id: product.id,
@@ -408,7 +409,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         }
 
         // Alerta de sin categoría
-        if (!product.category_id) {
+        if (!skipMetadataAlerts && !product.category_id) {
           generatedAlerts.push({
             id: `alert-${alertId++}`,
             product_id: product.id,
@@ -423,7 +424,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         }
 
         // Alerta de sin imagen
-        if (!product.images || (Array.isArray(product.images) && product.images.length === 0)) {
+        if (!skipMetadataAlerts && (!product.images || (Array.isArray(product.images) && product.images.length === 0))) {
           generatedAlerts.push({
             id: `alert-${alertId++}`,
             product_id: product.id,
@@ -653,10 +654,19 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   // Función para obtener movimientos de un producto
   const getProductMovements = useCallback(async (productId: string, limit = 50) => {
     try {
-      const { data, error } = await supabase.rpc('get_recent_movements', {
-        product_id: productId,
-        limit_count: limit
-      })
+      const query = supabase
+        .from('product_movements')
+        .select(`
+          *,
+          product:products(name, sku)
+        `)
+        .eq('product_id', productId)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+      const { data, error } = selectedBranchId
+        ? await query.eq('branch_id', selectedBranchId)
+        : await query
 
       if (error) throw error
       return { success: true, data: data || [] }
@@ -668,12 +678,12 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         data: []
       }
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Función para obtener todos los movimientos (historial global)
   const getAllMovements = useCallback(async (limit = 100) => {
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from('product_movements')
         .select(`
           *,
@@ -681,6 +691,10 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         `)
         .order('created_at', { ascending: false })
         .limit(limit)
+
+      const { data, error } = selectedBranchId
+        ? await query.eq('branch_id', selectedBranchId)
+        : await query
 
       if (error) throw error
       return { success: true, data: data || [] }
@@ -692,7 +706,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         data: []
       }
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Función para crear categoría
   const createCategory = useCallback(async (name: string, description?: string) => {
@@ -721,12 +735,98 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   // Función para obtener productos más vendidos
   const getTopSellingProducts = useCallback(async (limit = 10) => {
     try {
-      const { data, error } = await supabase.rpc('get_top_selling_products', {
-        limit_count: limit
+      const salesQuery = selectedBranchId
+        ? supabase.from('sales').select('id').eq('branch_id', selectedBranchId)
+        : supabase.from('sales').select('id')
+
+      const { data: salesData, error: salesError } = await salesQuery.limit(5000)
+      if (salesError) throw salesError
+
+      const saleIds = (salesData || []).map((sale) => sale.id).filter(Boolean)
+      if (saleIds.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      type TopSellingSaleItem = {
+        product_id: string | null
+        quantity: number | null
+        subtotal: number | null
+        product: {
+          id: string
+          name: string | null
+          sku: string | null
+          stock_quantity: number | null
+          category?: { name?: string | null } | null
+        } | null
+      }
+
+      const { data: saleItems, error: saleItemsError } = await supabase
+        .from('sale_items')
+        .select(`
+          product_id,
+          quantity,
+          subtotal,
+          product:products(
+            id,
+            name,
+            sku,
+            stock_quantity,
+            category:categories(name)
+          )
+        `)
+        .in('sale_id', saleIds.slice(0, 5000))
+
+      if (saleItemsError) throw saleItemsError
+
+      const grouped = new Map<string, {
+        product_id: string
+        product_name: string
+        product_sku: string
+        category_name: string
+        total_sold: number
+        total_revenue: number
+        current_stock: number
+      }>()
+
+      ;((saleItems || []) as TopSellingSaleItem[]).forEach((item) => {
+        const productId = String(item.product_id || item.product?.id || '')
+        if (!productId) return
+
+        const current = grouped.get(productId) || {
+          product_id: productId,
+          product_name: String(item.product?.name || 'Producto sin nombre'),
+          product_sku: String(item.product?.sku || ''),
+          category_name: String(item.product?.category?.name || 'Sin categoria'),
+          total_sold: 0,
+          total_revenue: 0,
+          current_stock: Number(item.product?.stock_quantity || 0),
+        }
+
+        current.total_sold += Number(item.quantity || 0)
+        current.total_revenue += Number(item.subtotal || 0)
+        grouped.set(productId, current)
       })
 
-      if (error) throw error
-      return { success: true, data: data || [] }
+      if (selectedBranchId && grouped.size > 0) {
+        const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+          supabase,
+          selectedBranchId,
+          Array.from(grouped.keys())
+        )
+
+        if (branchScoped) {
+          grouped.forEach((product, productId) => {
+            product.current_stock = stockMap.has(productId) ? Number(stockMap.get(productId) || 0) : 0
+          })
+        }
+      }
+
+      return {
+        success: true,
+        data: Array.from(grouped.values())
+          .sort((left, right) => right.total_sold - left.total_sold || right.total_revenue - left.total_revenue)
+          .slice(0, limit)
+      }
     } catch (err) {
       console.error('Error fetching top selling products:', err)
       return { 
@@ -735,7 +835,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         data: []
       }
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Función para resolver alerta (simulada para alertas dinámicas)
   const resolveAlert = useCallback(async (alertId: string) => {
@@ -794,11 +894,11 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       }
 
       if (filters.stockStatus && filters.stockStatus !== 'all') {
-        if (filters.stockStatus === 'in_stock') {
+        if (filters.stockStatus === 'in_stock' && !selectedBranchId) {
           query = query.filter('stock_quantity', 'gt', 0)
-        } else if (filters.stockStatus === 'low_stock') {
+        } else if (filters.stockStatus === 'low_stock' && !selectedBranchId) {
           query = query.filter('stock_quantity', 'gt', 0)
-        } else if (filters.stockStatus === 'out_of_stock') {
+        } else if (filters.stockStatus === 'out_of_stock' && !selectedBranchId) {
           query = query.filter('stock_quantity', 'eq', 0)
         }
       }
@@ -819,6 +919,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       ]
 
       type CSVProduct = {
+        id: string
         sku: string
         name: string
         description?: string | null
@@ -834,10 +935,16 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         supplier?: { name?: string } | null
       }
 
-      const baseItems = (data as unknown as CSVProduct[])
-      const items = filters.stockStatus === 'low_stock'
-        ? baseItems.filter(p => (Number(p.stock_quantity || 0) <= Number(p.min_stock || 0)) && Number(p.stock_quantity || 0) > 0)
-        : baseItems
+      const baseItems = await applySelectedBranchStock(data as unknown as CSVProduct[])
+      let items = baseItems
+
+      if (filters.stockStatus === 'low_stock') {
+        items = baseItems.filter(p => (Number(p.stock_quantity || 0) <= Number(p.min_stock || 0)) && Number(p.stock_quantity || 0) > 0)
+      } else if (filters.stockStatus === 'in_stock') {
+        items = baseItems.filter(p => Number(p.stock_quantity || 0) > 0)
+      } else if (filters.stockStatus === 'out_of_stock') {
+        items = baseItems.filter(p => Number(p.stock_quantity || 0) === 0)
+      }
 
       const csvContent = [
         headers.join(','),
@@ -886,7 +993,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         error: err instanceof Error ? err.message : 'Error desconocido' 
       }
     }
-  }, [supabase])
+  }, [applySelectedBranchStock, selectedBranchId, supabase])
 
   // Cargar datos iniciales
   useEffect(() => {

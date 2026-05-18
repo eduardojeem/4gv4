@@ -4,6 +4,8 @@ import { createContext, useContext, useState, useEffect, ReactNode, useCallback,
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders, withBranchFilter } from '@/lib/branches/client'
 
 // ============================================================================
 // Types
@@ -84,6 +86,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     const [repairs, setRepairs] = useState<Repair[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<Error | null>(null)
+    const { selectedBranchId } = useBranch()
 
     const supabase = createClient()
 
@@ -112,10 +115,13 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         let lastError: any = null
 
         for (const selectExpr of selectVariants) {
-            const { data, error: fetchError } = await supabase
+            let query = supabase
                 .from('repairs')
                 .select(selectExpr)
                 .order('created_at', { ascending: false })
+
+            query = withBranchFilter(query, selectedBranchId)
+            const { data, error: fetchError } = await query
 
             if (!fetchError) {
                 return { data: data || [], error: null }
@@ -130,7 +136,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         }
 
         return { data: [], error: lastError }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Fetch all repairs
     const fetchRepairs = useCallback(async () => {
@@ -196,6 +202,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     warranty_type: repairData.warrantyType || 'full',
                     warranty_notes: repairData.warrantyNotes || null,
                     warranty_expires_at: warrantyExpiresAt,
+                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
                     received_at: new Date().toISOString()
                 }])
                 .select()
@@ -231,7 +238,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             }
 
             // 4. Fetch Complete Repair
-            const { data: finalRepair, error: fetchError } = await supabase
+            let finalRepairQuery = supabase
                 .from('repairs')
                 .select(`
                   *,
@@ -242,7 +249,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                   notes:repair_notes(*)
                 `)
                 .eq('id', newRepairId)
-                .single()
+            finalRepairQuery = withBranchFilter(finalRepairQuery, selectedBranchId)
+            const { data: finalRepair, error: fetchError } = await finalRepairQuery.single()
 
             if (fetchError) throw fetchError
 
@@ -258,7 +266,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al crear reparación: ' + error.message)
             return null
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Update repair
     const updateRepair = useCallback(async (
@@ -308,10 +316,12 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
 
             // Only update repair if there are fields to update
             if (Object.keys(dbUpdateData).length > 0) {
-                const { error: updateError } = await supabase
+                let updateQuery = supabase
                     .from('repairs')
                     .update(dbUpdateData)
                     .eq('id', id)
+                updateQuery = withBranchFilter(updateQuery, selectedBranchId)
+                const { error: updateError } = await updateQuery
 
                 if (updateError) throw updateError
             }
@@ -419,7 +429,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             }
 
             // Fetch final state with all relations
-            const { data: finalRepair, error: fetchError } = await supabase
+            let finalRepairQuery = supabase
                 .from('repairs')
                 .select(`
           *,
@@ -430,7 +440,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
           notes:repair_notes(*)
         `)
                 .eq('id', id)
-                .single() // We query by ID in the context of previous operations, but need to be sure we get the right one
+            finalRepairQuery = withBranchFilter(finalRepairQuery, selectedBranchId)
+            const { data: finalRepair, error: fetchError } = await finalRepairQuery.single() // We query by ID in the context of previous operations, but need to be sure we get the right one
 
             if (fetchError) throw fetchError
 
@@ -448,17 +459,19 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al actualizar reparación: ' + error.message)
             return null
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Delete repair
     const deleteRepair = useCallback(async (id: string): Promise<boolean> => {
         try {
             setError(null)
 
-            const { error: deleteError } = await supabase
+            let deleteQuery = supabase
                 .from('repairs')
                 .delete()
                 .eq('id', id)
+            deleteQuery = withBranchFilter(deleteQuery, selectedBranchId)
+            const { error: deleteError } = await deleteQuery
 
             if (deleteError) throw deleteError
 
@@ -471,7 +484,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al eliminar reparación: ' + error.message)
             return false
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Update status
     const updateStatus = useCallback(async (
@@ -483,7 +496,10 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
 
             const response = await fetch(`/api/repairs/${id}/status`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...branchHeaders(selectedBranchId),
+                },
                 body: JSON.stringify({ stage: status }),
             })
             const payload = await response.json().catch(() => null)
@@ -492,7 +508,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 throw new Error(payload?.error || 'No se pudo actualizar estado')
             }
 
-            const { data: updatedRepair, error: updateError } = await supabase
+            let updatedRepairQuery = supabase
                 .from('repairs')
                 .select(`
           *,
@@ -501,7 +517,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
           images:repair_images(id, image_url, description)
         `)
                 .eq('id', id)
-                .single()
+            updatedRepairQuery = withBranchFilter(updatedRepairQuery, selectedBranchId)
+            const { data: updatedRepair, error: updateError } = await updatedRepairQuery.single()
 
             if (updateError || !updatedRepair) throw updateError || new Error('No se pudo recargar la reparacion')
 
@@ -531,7 +548,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al actualizar estado: ' + error.message)
             return false
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Deliver repair with outcome
     const deliverRepair = useCallback(async (
@@ -561,10 +578,12 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 )
             )
 
-            const { error: updateError } = await supabase
+            let updateQuery = supabase
                 .from('repairs')
                 .update(updateData)
                 .eq('id', id)
+            updateQuery = withBranchFilter(updateQuery, selectedBranchId)
+            const { error: updateError } = await updateQuery
 
             if (updateError) throw updateError
 
@@ -578,7 +597,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             await fetchRepairs()
             return false
         }
-    }, [supabase, fetchRepairs])
+    }, [fetchRepairs, selectedBranchId, supabase])
 
     // Assign technician
     const assignTechnician = useCallback(async (
@@ -588,7 +607,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         try {
             setError(null)
 
-            const { data: updatedRepair, error: updateError } = await supabase
+            let updatedRepairQuery = supabase
                 .from('repairs')
                 .update({ technician_id: technicianId })
                 .eq('id', repairId)
@@ -598,7 +617,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
           technician:profiles(id, full_name),
           images:repair_images(id, image_url, description)
         `)
-                .single()
+            updatedRepairQuery = withBranchFilter(updatedRepairQuery, selectedBranchId)
+            const { data: updatedRepair, error: updateError } = await updatedRepairQuery.single()
 
             if (updateError) throw updateError
 
@@ -617,7 +637,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al asignar técnico: ' + error.message)
             return false
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Add images to repair
     const addImages = useCallback(async (
@@ -709,14 +729,19 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     // Supabase realtime subscription
     useEffect(() => {
         const channel = supabase
-            .channel('repairs_changes')
+            .channel(`repairs_changes_${selectedBranchId || 'all'}`)
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'repairs' },
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'repairs',
+                    ...(selectedBranchId ? { filter: `branch_id=eq.${selectedBranchId}` } : {}),
+                },
                 async (payload) => {
                     // Fetch full repair with relations
                     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                        const { data } = await supabase
+                        let query = supabase
                             .from('repairs')
                             .select(`
                 *,
@@ -725,7 +750,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 images:repair_images(id, image_url, description)
               `)
                             .eq('id', payload.new.id)
-                            .single()
+                        query = withBranchFilter(query, selectedBranchId)
+                        const { data } = await query.single()
 
                         if (data) {
                             const mapped = mapSupabaseRepairToUi(data)
@@ -749,7 +775,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [supabase])
+    }, [selectedBranchId, supabase])
 
     // Create context value object
     const contextValue = useMemo<RepairsContextValue>(() => ({
@@ -779,6 +805,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         updateRepair,
         deleteRepair,
         updateStatus,
+        deliverRepair,
         assignTechnician,
         getRepairsByStatus,
         getRepairsByTechnician,

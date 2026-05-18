@@ -9,6 +9,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { createClient } from '@/lib/supabase/client'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 import type { Repair, RepairPriority } from '@/types/repairs'
 import { DndContext, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
@@ -283,6 +285,7 @@ function DayLoadBar({ count, total }: { count: number; total: number }) {
 export default function TechnicianSchedulePage() {
   const { repairs, refreshRepairs } = useRepairs()
   const { user } = useAuth()
+  const { selectedBranchId } = useBranch()
 
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()))
   const [hourStart, setHourStart] = useState(8)
@@ -382,10 +385,12 @@ export default function TechnicianSchedulePage() {
     setIsSaving(true)
     try {
       const supabase = createClient()
-      const { error } = await supabase
+      let updateQuery = supabase
         .from('repairs')
         .update({ estimated_completion: iso })
         .eq('id', repairId)
+      updateQuery = withBranchFilter(updateQuery, selectedBranchId)
+      const { error } = await updateQuery
 
       if (error) throw error
 

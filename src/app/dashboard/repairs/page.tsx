@@ -8,12 +8,13 @@ import { logger } from '@/lib/logger'
 
 // Icons
 import {
-  Users, BarChart3, MessageSquare, Package, RefreshCw
+  Users, BarChart3, MessageSquare, Package, RefreshCw, ChevronLeft, ChevronRight
 } from 'lucide-react'
 
 // UI Components
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Badge } from '@/components/ui/badge'
 import { GlobalSearch } from '@/components/ui/global-search'
 import { KanbanSkeleton, CalendarSkeleton } from '@/components/ui/skeleton-loader'
 
@@ -23,6 +24,8 @@ import { useTechnicians } from '@/hooks/use-technicians'
 import { useComponentPreload, useAutoPreload } from '@/hooks/use-component-preload'
 import { useRepairFilters } from '@/hooks/use-repair-filters'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 
 // Repair Components
 import { RepairStats } from '@/components/dashboard/repairs/RepairStats'
@@ -31,6 +34,7 @@ import { RepairList } from '@/components/dashboard/repairs/RepairList'
 import { RepairHeader } from '@/components/dashboard/repairs/RepairHeader'
 import { QuickAccessNav } from '@/components/dashboard/repairs/QuickAccessNav'
 import { RepairViewSelector } from '@/components/dashboard/repairs/RepairViewSelector'
+import { RepairOperationsOverview } from '@/components/dashboard/repairs/RepairOperationsOverview'
 import { RepairEmptyState } from '@/components/dashboard/repairs/RepairEmptyState'
 import { RepairDeleteDialog } from '@/components/dashboard/repairs/RepairDeleteDialog'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
@@ -84,6 +88,7 @@ function RepairsPageContent() {
 
   const { technicians } = useTechnicians()
   const { settings: sharedSettings } = useSharedSettings()
+  const { selectedBranchId, selectedBranch } = useBranch()
 
   // New unified filter hook
   const {
@@ -210,6 +215,21 @@ function RepairsPageContent() {
     const start = (currentPage - 1) * pageSize
     return uiFiltered.slice(start, start + pageSize)
   }, [uiFiltered, currentPage, pageSize])
+  const visibleRangeStart = uiFiltered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const visibleRangeEnd = uiFiltered.length === 0
+    ? 0
+    : Math.min(currentPage * pageSize, uiFiltered.length)
+
+  const repairPulse = useMemo(() => {
+    const activeRepairs = repairs.filter((repair) => repair.status !== 'entregado' && repair.status !== 'cancelado')
+    const urgentRepairs = activeRepairs.filter((repair) => repair.urgency === 'urgent')
+    const readyRepairs = repairs.filter((repair) => repair.status === 'listo')
+    return {
+      activeRepairs: activeRepairs.length,
+      urgentRepairs: urgentRepairs.length,
+      readyRepairs: readyRepairs.length,
+    }
+  }, [repairs])
 
   // Reset page when filters change
   useEffect(() => {
@@ -277,7 +297,9 @@ function RepairsPageContent() {
         updateData.solution = result.note
       }
 
-      const { error } = await supabase.from('repairs').update(updateData).eq('id', repairId)
+      let updateQuery = supabase.from('repairs').update(updateData).eq('id', repairId)
+      updateQuery = withBranchFilter(updateQuery, selectedBranchId)
+      const { error } = await updateQuery
       if (error) throw error
 
       await refreshRepairs()
@@ -287,7 +309,7 @@ function RepairsPageContent() {
       toast.error('Error al registrar el pago')
       throw err
     }
-  }, [refreshRepairs])
+  }, [refreshRepairs, selectedBranchId])
 
   const handleFormSubmit = useCallback(async (data: RepairFormData) => {
     try {
@@ -594,16 +616,39 @@ function RepairsPageContent() {
     sharedSettings.companyName,
     sharedSettings.companyPhone
   ])
+  const hasActiveFilters = !!(
+    searchTerm ||
+    statusFilter !== 'all' ||
+    priorityFilter !== 'all' ||
+    (technicianFilter && technicianFilter !== 'all') ||
+    dateRange?.from ||
+    dateRange?.to
+  )
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:gap-5 sm:p-5">
+    <div className="flex flex-col gap-5 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.06),_transparent_30%),linear-gradient(to_bottom,_rgba(248,250,252,0.9),_transparent_26%)] p-4 sm:gap-6 sm:p-5 lg:p-6 dark:bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.09),_transparent_28%),linear-gradient(to_bottom,_rgba(2,6,23,0.82),_transparent_30%)]">
       <RepairHeader
         onRefresh={refreshRepairs}
         onNewRepair={handleNewRepair}
         isLoading={isLoading}
+        totalRepairs={repairs.length}
+        activeRepairs={repairPulse.activeRepairs}
+        urgentRepairs={repairPulse.urgentRepairs}
+        readyRepairs={repairPulse.readyRepairs}
+        selectedBranchName={selectedBranch?.name}
       />
 
-      <div className="md:hidden space-y-2">
+      <RepairStats repairs={repairs} visibleCount={uiFiltered.length} />
+
+      <RepairOperationsOverview
+        repairs={repairs}
+        filteredCount={uiFiltered.length}
+        selectedBranchName={selectedBranch?.name}
+        statusFilter={statusFilter}
+        onStatusFilterSelect={setStatusFilter}
+      />
+
+      <div className="hidden">
         <Collapsible open={quickAccessOpen} onOpenChange={setQuickAccessOpen}>
           <CollapsibleTrigger asChild>
             <Button variant="outline" className="w-full justify-between">
@@ -629,40 +674,95 @@ function RepairsPageContent() {
         </Collapsible>
       </div>
 
-      <div className="hidden md:block">
+      <div className="hidden">
         <QuickAccessNav sections={quickAccessSections} />
       </div>
 
-      <div className="hidden md:block">
+      <div className="hidden">
         <RepairStats repairs={repairs} />
       </div>
 
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <RepairFilters
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            statusFilter={statusFilter}
-            setStatusFilter={setStatusFilter}
-            priorityFilter={priorityFilter}
-            setPriorityFilter={(p) => setPriorityFilter(p as 'low' | 'medium' | 'high' | 'all')}
-            technicians={technicians}
-            technicianFilter={technicianFilter}
-            setTechnicianFilter={setTechnicianFilter}
-            dateRange={dateRange}
-            setDateRange={setDateRange}
-          />
-          <div className="flex md:items-center">
-            <RepairViewSelector
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              onPreload={(view) => preload(view)}
-            />
+        <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-4 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div className="min-w-0 flex-1">
+              <RepairFilters
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
+                priorityFilter={priorityFilter}
+                setPriorityFilter={(p) => setPriorityFilter(p as 'low' | 'medium' | 'high' | 'all')}
+                technicians={technicians}
+                technicianFilter={technicianFilter}
+                setTechnicianFilter={setTechnicianFilter}
+                dateRange={dateRange}
+                setDateRange={setDateRange}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 xl:min-w-[280px] xl:flex-col xl:items-end">
+              <RepairViewSelector
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                onPreload={(view) => preload(view)}
+              />
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <Badge variant="outline" className="rounded-full px-3 py-1">
+                  {uiFiltered.length} reparaciones
+                </Badge>
+                {hasActiveFilters && (
+                  <Badge variant="outline" className="rounded-full border-cyan-200 bg-cyan-50 px-3 py-1 text-cyan-700 dark:border-cyan-900/70 dark:bg-cyan-950/30 dark:text-cyan-200">
+                    con filtros
+                  </Badge>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
+        {!isLoading && uiFiltered.length > 0 && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-slate-800/70 dark:bg-slate-950/60">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Mostrando {viewMode === 'kanban' || viewMode === 'calendar' ? uiFiltered.length : `${visibleRangeStart}–${visibleRangeEnd}`} de {uiFiltered.length} reparaciones
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Vista {viewMode === 'table' ? 'lista' : viewMode === 'cards' ? 'tarjetas' : viewMode === 'kanban' ? 'kanban' : 'calendario'}
+                {selectedBranch?.name ? ` en ${selectedBranch.name}` : ''}.
+              </p>
+            </div>
+            {(viewMode === 'table' || viewMode === 'cards') && totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((page) => page - 1)}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  Anterior
+                </Button>
+                <Badge variant="outline" className="rounded-full px-3 py-1 text-[11px]">
+                  Página {currentPage} / {totalPages}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((page) => page + 1)}
+                >
+                  Siguiente
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center rounded-[28px] border border-slate-200/80 bg-white/80 py-14 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/60">
             <div className="text-center">
               <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-2" />
               <p className="text-sm text-muted-foreground">Cargando reparaciones...</p>
@@ -670,7 +770,7 @@ function RepairsPageContent() {
           </div>
         ) : uiFiltered.length === 0 ? (
           <RepairEmptyState
-            hasFilters={!!(searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || (technicianFilter && technicianFilter !== 'all') || dateRange?.from || dateRange?.to)}
+            hasFilters={hasActiveFilters}
             onNewRepair={handleNewRepair}
           />
         ) : viewMode === 'table' ? (
@@ -702,13 +802,13 @@ function RepairsPageContent() {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-1 rounded-lg border p-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-1 rounded-[24px] border border-slate-200/80 bg-white/90 p-3 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70">
               <Calendar mode="single" selected={calendarDate} onSelect={handleCalendarSelect} />
             </div>
-            <div className="lg:col-span-2 rounded-lg border p-3 space-y-2">
+            <div className="lg:col-span-2 rounded-[24px] border border-slate-200/80 bg-white/90 p-3 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70 space-y-2">
               {calendarRepairs.map(r => (
-                <div key={r.id} className="flex items-center justify-between rounded-lg border p-2.5 hover:bg-muted/30 transition-colors">
+                <div key={r.id} className="flex items-center justify-between rounded-2xl border border-slate-200/80 p-3 transition-colors hover:bg-slate-50 dark:border-slate-800/80 dark:hover:bg-slate-900/70">
                   <div className="min-w-0">
                     <div className="font-medium truncate">{r.customer.name} • {r.device}</div>
                     <div className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</div>
@@ -717,13 +817,15 @@ function RepairsPageContent() {
                 </div>
               ))}
               {calendarRepairs.length === 0 && (
-                <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
                   No hay reparaciones para la fecha seleccionada.
                 </div>
               )}
             </div>
           </div>
         )}
+
+        <QuickAccessNav sections={quickAccessSections} />
       </div>
 
       <RepairFormDialog
@@ -745,7 +847,7 @@ function RepairsPageContent() {
         data={successDialogData}
       />
 
-      {uiFiltered.length > pageSize && (viewMode === 'table' || viewMode === 'cards') && (
+      {false && uiFiltered.length > pageSize && (viewMode === 'table' || viewMode === 'cards') && (
         <div className="flex items-center justify-between px-1">
           <span className="text-xs text-gray-500 dark:text-gray-400">
             {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, uiFiltered.length)} de {uiFiltered.length}

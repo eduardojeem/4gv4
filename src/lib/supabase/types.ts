@@ -268,6 +268,7 @@ export interface Database {
           reference_id: string | null
           reference_type: string | null
           user_id: string | null
+          branch_id: string | null
           created_at: string
         }
         Insert: {
@@ -282,6 +283,7 @@ export interface Database {
           reference_id?: string | null
           reference_type?: string | null
           user_id?: string | null
+          branch_id?: string | null
           created_at?: string
         }
         Update: {
@@ -296,6 +298,7 @@ export interface Database {
           reference_id?: string | null
           reference_type?: string | null
           user_id?: string | null
+          branch_id?: string | null
           created_at?: string
         }
         Relationships: [
@@ -362,7 +365,8 @@ export interface Database {
         Row: {
           id: string
           product_id: string
-          alert_type: 'low_stock' | 'out_of_stock' | 'missing_supplier' | 'missing_category' | 'missing_image' | 'price_change'
+          branch_id: string | null
+          alert_type: 'low_stock' | 'out_of_stock' | 'no_supplier' | 'no_category' | 'no_image' | 'inactive_with_sales' | 'missing_supplier' | 'missing_category' | 'missing_image' | 'price_change'
           message: string
           is_resolved: boolean
           resolved_at: string | null
@@ -371,7 +375,8 @@ export interface Database {
         Insert: {
           id?: string
           product_id: string
-          alert_type: 'low_stock' | 'out_of_stock' | 'missing_supplier' | 'missing_category' | 'missing_image' | 'price_change'
+          branch_id?: string | null
+          alert_type: 'low_stock' | 'out_of_stock' | 'no_supplier' | 'no_category' | 'no_image' | 'inactive_with_sales' | 'missing_supplier' | 'missing_category' | 'missing_image' | 'price_change'
           message: string
           is_resolved?: boolean
           resolved_at?: string | null
@@ -380,7 +385,8 @@ export interface Database {
         Update: {
           id?: string
           product_id?: string
-          alert_type?: 'low_stock' | 'out_of_stock' | 'missing_supplier' | 'missing_category' | 'missing_image' | 'price_change'
+          branch_id?: string | null
+          alert_type?: 'low_stock' | 'out_of_stock' | 'no_supplier' | 'no_category' | 'no_image' | 'inactive_with_sales' | 'missing_supplier' | 'missing_category' | 'missing_image' | 'price_change'
           message?: string
           is_resolved?: boolean
           resolved_at?: string | null

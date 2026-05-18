@@ -2,19 +2,20 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { alertService, type ProductAlert } from '@/lib/services/alert-service'
+import { useBranch } from '@/contexts/branch-context'
 
 export function useProductAlerts() {
   const [alerts, setAlerts] = useState<ProductAlert[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { selectedBranchId } = useBranch()
 
-  // Función para cargar alertas
   const loadAlerts = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      const data = await alertService.getActiveAlerts()
+      const data = await alertService.getActiveAlerts(selectedBranchId)
       setAlerts(data)
     } catch (err) {
       console.error('Error loading alerts:', err)
@@ -22,19 +23,17 @@ export function useProductAlerts() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [selectedBranchId])
 
-  // Función para resolver una alerta
   const resolveAlert = useCallback(async (alertId: string) => {
     try {
       const success = await alertService.resolveAlert(alertId)
-      
+
       if (success) {
-        // Actualizar estado local
-        setAlerts(prev => prev.filter(alert => alert.id !== alertId))
+        setAlerts((prev) => prev.filter((alert) => alert.id !== alertId))
         return true
       }
-      
+
       return false
     } catch (err) {
       console.error('Error resolving alert:', err)
@@ -43,11 +42,9 @@ export function useProductAlerts() {
     }
   }, [])
 
-  // Función para resolver todas las alertas
   const resolveAllAlerts = useCallback(async () => {
     try {
-      await alertService.resolveAllAlerts()
-      // Recargar alertas después de resolver todas
+      await alertService.resolveAllAlerts(selectedBranchId)
       await loadAlerts()
       return true
     } catch (err) {
@@ -55,28 +52,24 @@ export function useProductAlerts() {
       setError(err instanceof Error ? err.message : 'Error al resolver todas las alertas')
       return false
     }
-  }, [loadAlerts])
+  }, [loadAlerts, selectedBranchId])
 
-  // Función para generar alertas automáticamente
   const generateAlerts = useCallback(async () => {
     try {
-      await alertService.generateAutomaticAlerts()
-      // Recargar alertas después de generar nuevas
+      await alertService.generateAutomaticAlerts(selectedBranchId)
       await loadAlerts()
     } catch (err) {
       console.error('Error generating alerts:', err)
       setError(err instanceof Error ? err.message : 'Error al generar alertas')
     }
-  }, [loadAlerts])
+  }, [loadAlerts, selectedBranchId])
 
-  // Cargar alertas al montar el componente
   useEffect(() => {
     loadAlerts()
   }, [loadAlerts])
 
-  // Generar alertas automáticamente cada 5 minutos
   useEffect(() => {
-    const interval = setInterval(generateAlerts, 5 * 60 * 1000) // 5 minutos
+    const interval = setInterval(generateAlerts, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [generateAlerts])
 
@@ -87,6 +80,6 @@ export function useProductAlerts() {
     refreshAlerts: loadAlerts,
     resolveAlert,
     resolveAllAlerts,
-    generateAlerts
+    generateAlerts,
   }
 }

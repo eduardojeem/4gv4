@@ -59,8 +59,8 @@ const items: QuickNavItem[] = [
   },
   { 
     title: 'Configuración', 
-    href: '/dashboard/settings', 
-    description: 'Preferencias del sistema', 
+    href: '/admin/settings', 
+    description: 'Ajustes del sistema', 
     icon: Settings,
     color: 'from-slate-500 to-slate-600'
   },

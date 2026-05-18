@@ -51,6 +51,13 @@ const priorityLabels: Record<string, string> = {
   high: 'Alta'
 }
 
+const loadStateLabels = {
+  no_load: 'Sin carga',
+  light_load: 'Carga baja',
+  medium_load: 'Carga media',
+  high_load: 'Carga alta',
+} as const
+
 interface TooltipEntry {
   color?: string
   name?: string
@@ -314,14 +321,13 @@ export const TechnicianMetricsTab = memo(function TechnicianMetricsTab({
               </div>
 
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                <span className="font-medium">Estado Actual</span>
+                <span className="font-medium">Nivel de carga</span>
                 <Badge variant={
-                  metrics.status === 'available' ? 'default' :
-                  metrics.status === 'busy' ? 'secondary' : 'destructive'
+                  metrics.loadState === 'no_load' ? 'default' :
+                  metrics.loadState === 'light_load' ? 'secondary' :
+                  metrics.loadState === 'medium_load' ? 'secondary' : 'destructive'
                 }>
-                  {metrics.status === 'available' ? 'Disponible' :
-                   metrics.status === 'busy' ? 'Ocupado' :
-                   metrics.status === 'offline' ? 'Desconectado' : 'No Disponible'}
+                  {loadStateLabels[metrics.loadState]}
                 </Badge>
               </div>
 

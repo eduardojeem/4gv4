@@ -594,10 +594,10 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
         <div class="logo">4G</div>
         <h1>${company.name}</h1>
         <div class="subtitle">Reparación y Service</div>
-        ${'ruc' in company && company.ruc ? `<p>RUC: ${company.ruc}</p>` : ''}
+        ${'ruc' in company && company.ruc ? `<p style="font-weight: bold; font-size: 10px;">RUC: ${company.ruc}</p>` : ''}
         <p>${company.address}</p>
         <p>☎ ${company.phone}</p>
-        <p>📧 ${company.email}</p>
+        ${company.email ? `<p>📧 ${company.email}</p>` : ''}
       </div>
       
       <!-- Número de ticket -->
@@ -676,24 +676,48 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
       
       <!-- Totales -->
       <div class="totals">
-        <div class="total-row">
-          <span>Subtotal:</span>
-          <span>${formatCurrency(receiptData.subtotal)}</span>
-        </div>
-        ${receiptData.totalDiscount > 0 ? `
-          <div class="total-row discount">
-            <span>✨ Descuento Total:</span>
-            <span>-${formatCurrency(receiptData.totalDiscount)}</span>
-          </div>
-        ` : ''}
-        <div class="total-row">
-          <span>${getTaxConfig().label} (${getTaxConfig().percentage}%):</span>
-          <span>${formatCurrency(receiptData.tax)}</span>
-        </div>
-        <div class="total-row final">
-          <span>TOTAL:</span>
-          <span>${formatCurrency(receiptData.total)}</span>
-        </div>
+        ${(() => {
+          const taxConfig = getTaxConfig()
+          const taxRate = taxConfig.rate
+          const pricesIncludeTax = config.pricesIncludeTax
+          
+          // Calculate tax breakdown
+          // If prices include tax: base = total / (1 + rate), tax = total - base
+          // If prices exclude tax: base = subtotal, tax = subtotal * rate
+          const totalAmount = receiptData.total
+          const baseImponible = pricesIncludeTax
+            ? Math.round(totalAmount / (1 + taxRate))
+            : receiptData.subtotal
+          const ivaAmount = pricesIncludeTax
+            ? totalAmount - baseImponible
+            : Math.round(receiptData.subtotal * taxRate)
+          
+          return `
+            <div class="total-row">
+              <span>Subtotal (${receiptData.items.length} ${receiptData.items.length === 1 ? 'item' : 'items'}):</span>
+              <span>${formatCurrency(receiptData.subtotal)}</span>
+            </div>
+            ${receiptData.totalDiscount > 0 ? `
+              <div class="total-row discount">
+                <span>✨ Descuento:</span>
+                <span>-${formatCurrency(receiptData.totalDiscount)}</span>
+              </div>
+            ` : ''}
+            <div style="border-top: 1px dashed #ccc; margin: 8px 0; padding-top: 8px;">
+              <div class="total-row" style="font-size: 10px; color: #555;">
+                <span>${taxConfig.label} ${taxConfig.percentage}% incluido:</span>
+                <span>${formatCurrency(ivaAmount)}</span>
+              </div>
+            </div>
+            <div class="total-row final">
+              <span>TOTAL:</span>
+              <span>${formatCurrency(totalAmount)}</span>
+            </div>
+            <div style="text-align: center; font-size: 8px; color: #888; margin-top: 4px;">
+              ${pricesIncludeTax ? 'Precios con IVA incluido' : 'IVA calculado sobre el subtotal'}
+            </div>
+          `
+        })()}
       </div>
       
       <div class="separator"></div>
@@ -742,6 +766,12 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
         <div class="contact">📱 Consultas: ${company.phone}</div>
         <div class="contact">📧 ${company.email}</div>
         <div class="separator"></div>
+        <div style="font-size: 8px; color: #999; margin: 6px 0; padding: 6px; border: 1px solid #eee; border-radius: 3px;">
+          <strong style="display: block; margin-bottom: 2px; color: #666;">DOCUMENTO NO FISCAL</strong>
+          Este ticket es un comprobante interno de venta y NO tiene validez
+          tributaria ante la DNIT. No sustituye factura legal.<br>
+          Solicite su factura con timbrado vigente si la necesita.
+        </div>
         <div class="id">ID: ${receiptData.receiptNumber}</div>
         <div class="id">Generado: ${new Date().toLocaleString('es-PY')}</div>
       </div>

@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase/types'
 import { useProductErrorHandler, createProductError, ProductError } from '@/lib/product-errors'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
 import { 
   usePerformanceMetrics, 
   useAdvancedMemoization, 
@@ -47,6 +49,8 @@ interface SupplierAnalytics {
   totalStock: number
   reliability: number
 }
+
+type AnalyticsMovementRow = Database['public']['Tables']['product_movements']['Row']
 
 interface InventoryAnalytics {
   totalProducts: number
@@ -92,6 +96,7 @@ export function useProductAnalytics(
 
   const supabase = createClient() as SupabaseClient<Database>
   const { handleProductError } = useProductErrorHandler()
+  const { selectedBranchId } = useBranch()
 
   // Stabilize config to prevent infinite loops
   const stableConfig = useMemo(() => config, [
@@ -163,13 +168,16 @@ export function useProductAnalytics(
       // Cargar movimientos si está habilitado
       if (stableConfig.includeMovements) {
         promises.push(
-          supabase
+          withBranchFilter(
+            supabase
             .from('product_movements')
             .select('*')
             .in('product_id', productIds)
             .gte('created_at', dateRange.start.toISOString())
             .lte('created_at', dateRange.end.toISOString())
-            .order('created_at', { ascending: false })
+            .order('created_at', { ascending: false }),
+            selectedBranchId
+          )
             .then(({ data, error }) => {
             if (error) {
               throw createProductError.analyticsCalculationError('load_movements', {
@@ -179,7 +187,7 @@ export function useProductAnalytics(
                 code: error.code
               })
             }
-            const normalizedMovements: ProductMovement[] = (data || []).map((m: any) => ({
+            const normalizedMovements: ProductMovement[] = ((data || []) as AnalyticsMovementRow[]).map((m) => ({
               id: m.id,
               product_id: m.product_id,
               movement_type:
@@ -207,38 +215,58 @@ export function useProductAnalytics(
 
       // Cargar alertas si está habilitado
       if (stableConfig.includeAlerts) {
-        promises.push(
-          supabase
-            .from('product_alerts')
-            .select('*')
-            .in('product_id', productIds)
-            .gte('created_at', dateRange.start.toISOString())
-            .lte('created_at', dateRange.end.toISOString())
-            .order('created_at', { ascending: false })
-            .then(({ data, error }) => {
-            if (error) {
-              throw createProductError.analyticsCalculationError('load_alerts', {
-                message: error.message,
-                details: error.details,
-                hint: error.hint,
-                code: error.code
-              })
-            }
-            const normalizedAlerts: ProductAlert[] = (data || []).map((a: any) => ({
-              id: a.id,
-              product_id: a.product_id,
-              type: a.alert_type || 'low_stock',
-              alert_type: a.alert_type || 'low_stock',
-              message: a.message || '',
-              severity: a.alert_type === 'out_of_stock' ? 'high' : 'medium',
+        const generatedAlerts: ProductAlert[] = products.flatMap((product) => {
+          const currentStock = Number(product.stock_quantity || 0)
+          const minStock = Number(product.min_stock || 0)
+          const createdAt = new Date().toISOString()
+
+          if (currentStock === 0) {
+            return [{
+              id: `branch-alert-out-${product.id}`,
+              product_id: product.id,
+              type: 'out_of_stock',
+              alert_type: 'out_of_stock',
+              message: `Producto agotado: ${product.name}`,
+              severity: 'high',
               is_read: false,
               read: false,
-              is_resolved: Boolean(a.is_resolved),
-              created_at: a.created_at,
-              resolved_at: a.resolved_at ?? null
-            }))
-            return { type: 'alerts' as const, data: normalizedAlerts }
-          })
+              is_resolved: false,
+              created_at: createdAt,
+              resolved_at: null,
+              product_name: product.name,
+              details: {
+                current_stock: 0,
+                min_stock: minStock
+              }
+            }]
+          }
+
+          if (currentStock > 0 && currentStock <= minStock) {
+            return [{
+              id: `branch-alert-low-${product.id}`,
+              product_id: product.id,
+              type: 'low_stock',
+              alert_type: 'low_stock',
+              message: `Stock bajo: ${product.name} (${currentStock} unidades restantes)`,
+              severity: 'medium',
+              is_read: false,
+              read: false,
+              is_resolved: false,
+              created_at: createdAt,
+              resolved_at: null,
+              product_name: product.name,
+              details: {
+                current_stock: currentStock,
+                min_stock: minStock
+              }
+            }]
+          }
+
+          return []
+        })
+
+        promises.push(
+          Promise.resolve({ type: 'alerts' as const, data: generatedAlerts })
         )
       }
 
@@ -278,7 +306,7 @@ export function useProductAnalytics(
     } finally {
       setLoading(false)
     }
-  }, [products, stableConfig, supabase, handleProductError, recordMetric, validateAnalyticsConfig])
+  }, [products, stableConfig, supabase, selectedBranchId, handleProductError, recordMetric, validateAnalyticsConfig])
 
   // Cargar movimientos y alertas si están configurados
   useEffect(() => {

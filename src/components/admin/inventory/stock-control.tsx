@@ -116,7 +116,19 @@ const StockControl: React.FC = () => {
       
       if (productsError) throw productsError
 
-      const formattedProducts: Product[] = (productsData || []).map(p => ({
+      const branchAwareProducts = await loadBranchInventoryStockMap(
+        supabase,
+        selectedBranchId,
+        (productsData || []).map((product) => product.id)
+      ).then(({ stockMap, branchScoped }) =>
+        applyBranchInventoryToProducts(
+          (productsData || []) as Array<{ id: string; stock_quantity?: number | null } & Record<string, unknown>>,
+          stockMap,
+          branchScoped
+        )
+      )
+
+      const formattedProducts: Product[] = branchAwareProducts.map(p => ({
         id: p.id,
         name: p.name,
         sku: p.sku || '',
@@ -132,7 +144,7 @@ const StockControl: React.FC = () => {
       setProducts(formattedProducts)
 
       // 2. Cargar Movimientos
-      const { data: movementsData, error: movementsError } = await supabase
+      let movementsQuery = supabase
         .from('product_movements')
         .select(`
           *,
@@ -140,6 +152,12 @@ const StockControl: React.FC = () => {
         `)
         .order('created_at', { ascending: false })
         .limit(50)
+
+      if (selectedBranchId) {
+        movementsQuery = movementsQuery.eq('branch_id', selectedBranchId)
+      }
+
+      const { data: movementsData, error: movementsError } = await movementsQuery
 
       if (movementsError && movementsError.code !== '42P01') { // Ignorar si la tabla no existe aún
         console.error('Error loading movements:', movementsError)
@@ -169,22 +187,36 @@ const StockControl: React.FC = () => {
 
       // 3. Cargar Alertas (o generarlas basadas en stock bajo)
       // Primero intentamos cargar de tabla de alertas
-      const { data: alertsData, error: alertsError } = await supabase
+      let alertsQuery = supabase
         .from('product_alerts')
         .select(`
           *,
           product:products(name, sku, stock_quantity)
         `)
         .eq('is_resolved', false)
+        .in('alert_type', ['low_stock', 'out_of_stock'])
+
+      if (selectedBranchId) {
+        alertsQuery = alertsQuery.eq('branch_id', selectedBranchId)
+      }
+
+      const { data: alertsData, error: alertsError } = await alertsQuery
       
       if (!alertsError && alertsData) {
+        const branchStockByProductId = new Map(formattedProducts.map((product) => [product.id, product.stock]))
         const formattedAlerts: StockAlert[] = alertsData.map(a => ({
           id: a.id,
           productId: a.product_id,
           productName: a.product?.name || 'Desconocido',
           productSku: a.product?.sku || '',
-          type: a.alert_type as any,
-          currentStock: a.product?.stock_quantity || 0,
+          type: a.alert_type === 'out_of_stock'
+            ? 'out_of_stock'
+            : a.alert_type === 'overstock'
+              ? 'overstock'
+              : a.alert_type === 'expiring'
+                ? 'expiring'
+                : 'low_stock',
+          currentStock: (branchStockByProductId.get(a.product_id) ?? a.product?.stock_quantity) || 0,
           threshold: 5, // Valor por defecto o del producto si estuviera disponible en join
           severity: a.alert_type === 'out_of_stock' ? 'critical' : 'medium',
           message: a.message,
@@ -217,7 +249,7 @@ const StockControl: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // Efectos
   useEffect(() => {
@@ -271,6 +303,18 @@ const StockControl: React.FC = () => {
         setIsLoading(false)
         return
       }
+      if (selectedBranchId) {
+        const { error: branchError } = await supabase.rpc('set_branch_inventory_stock', {
+          p_product_id: selectedProduct.id,
+          p_branch_id: selectedBranchId,
+          p_new_stock: newStock,
+          p_movement_type: movementType === 'entrada' ? 'in' : movementType === 'salida' ? 'out' : 'adjustment',
+          p_reason: movementReason || null,
+          p_reference_id: movementReference || null
+        })
+
+        if (branchError) throw branchError
+      } else {
       // Intentar usar RPC primero
       const { error: rpcError } = await supabase.rpc('update_product_stock', {
         product_id: selectedProduct.id,
@@ -298,6 +342,8 @@ const StockControl: React.FC = () => {
              
            if (updateError2) throw updateError2
         }
+      }
+
       }
 
       await fetchData() // Recargar datos
@@ -766,7 +812,7 @@ const StockControl: React.FC = () => {
 
               <div className="space-y-2">
                 <Label className="dark:text-gray-300">Tipo de Movimiento</Label>
-                <Select value={movementType} onValueChange={(value: any) => setMovementType(value)}>
+                <Select value={movementType} onValueChange={(value: 'entrada' | 'salida' | 'ajuste') => setMovementType(value)}>
                   <SelectTrigger className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100">
                     <SelectValue />
                   </SelectTrigger>

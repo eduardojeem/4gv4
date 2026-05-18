@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import type { 
@@ -337,7 +337,7 @@ export function useProducts() {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId, supabase])
+  }, [selectedBranchId])
 
   // Función para actualizar stock
   const updateStock = useCallback(async (
@@ -461,26 +461,29 @@ export function useProducts() {
         { data: products },
         { data: categories },
         { data: suppliers },
-        { data: movements },
-        { data: alerts }
+        { data: movements }
       ] = await Promise.all([
         supabase.from('products').select('*'),
         supabase.from('categories').select('id').eq('is_active', true),
         supabase.from('suppliers').select('id').eq('status', 'active'),
-        supabase.from('product_movements').select('id').gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-        supabase.from('product_alerts').select('id').eq('is_resolved', false)
+        (selectedBranchId
+          ? supabase.from('product_movements').select('id').eq('branch_id', selectedBranchId)
+          : supabase.from('product_movements').select('id')
+        ).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       ])
 
-      const activeProducts = products?.filter(p => p.is_active) || []
+      const branchAwareProducts = await applySelectedBranchStock((products || []) as Array<Product & { id: string }>)
+      const activeProducts = branchAwareProducts.filter(p => p.is_active) || []
       const totalStockValue = activeProducts.reduce((sum, p) => sum + (p.stock_quantity * p.sale_price), 0)
       const totalCostValue = activeProducts.reduce((sum, p) => sum + (p.stock_quantity * (p.purchase_price || 0)), 0)
       const totalMargin = totalStockValue - totalCostValue
       const avgMarginPercentage = totalCostValue > 0 ? (totalMargin / totalCostValue) * 100 : 0
       const lowStockCount = activeProducts.filter(p => p.stock_quantity > 0 && p.stock_quantity <= p.min_stock).length
       const outOfStockCount = activeProducts.filter(p => p.stock_quantity === 0).length
+      const alertsCount = lowStockCount + outOfStockCount
 
       return {
-        total_products: products?.length || 0,
+        total_products: branchAwareProducts.length || 0,
         active_products: activeProducts.length,
         total_stock_value: totalStockValue,
         total_cost_value: totalCostValue,
@@ -491,7 +494,7 @@ export function useProducts() {
         categories_count: categories?.length || 0,
         suppliers_count: suppliers?.length || 0,
         recent_movements_count: movements?.length || 0,
-        alerts_count: alerts?.length || 0
+        alerts_count: alertsCount
       }
 
     } catch (err: unknown) {
@@ -512,7 +515,7 @@ export function useProducts() {
         alerts_count: 0
       }
     }
-  }, [supabase])
+  }, [applySelectedBranchStock, selectedBranchId, supabase])
 
   // Cargar datos iniciales
   useEffect(() => {

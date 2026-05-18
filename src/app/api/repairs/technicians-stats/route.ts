@@ -1,16 +1,49 @@
 import { NextRequest } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
+import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 
 export const dynamic = 'force-dynamic'
 
+type TechnicianProfile = {
+  id: string
+  full_name: string
+  role?: string | null
+  specialty?: string | null
+}
+
+type BranchAssignment = {
+  user_id: string
+}
+
+type RepairStatsRow = {
+  technician_id: string
+  status?: string | null
+  created_at?: string | null
+  completed_at?: string | null
+}
+
+type TechnicianAggregate = {
+  activeJobs: number
+  completedThisMonth: number
+  totalCompleted: number
+  completionDaysTotal: number
+  completionDaysCount: number
+}
+
 /**
  * GET /api/repairs/technicians-stats
- * 
+ *
  * Returns pre-calculated technician statistics using server-side aggregation.
  * This avoids loading all repairs on the client just to compute stats.
  */
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
+    const auth = await requireStaff()
+    const authResponse = getAuthResponse(auth)
+    if (authResponse) return authResponse
+    const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
+
     const isConfigured = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
     if (!isConfigured) {
       return Response.json({
@@ -38,41 +71,78 @@ export async function GET(_req: NextRequest) {
     }
 
     const supabase = createAdminSupabase()
+    const requestedBranchId = getRequestedBranchId(req)
+    const branchScope = await resolveBranchScopeForUser({
+      userId: staffAuth.user.id,
+      role: staffAuth.role,
+      requestedBranchId,
+      strict: Boolean(requestedBranchId),
+    })
 
-    // 1. Get technicians (profiles with technician role)
-    const { data: profiles, error: profilesError } = await supabase
+    let technicianIdsForBranch: string[] | null = null
+    if (branchScope.branchId) {
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from('user_branch_assignments')
+        .select('user_id')
+        .eq('branch_id', branchScope.branchId)
+        .eq('is_active', true)
+
+      if (assignmentsError) {
+        throw assignmentsError
+      }
+
+      technicianIdsForBranch = ((assignments ?? []) as BranchAssignment[])
+        .map((assignment) => assignment.user_id)
+        .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0)
+
+      if (technicianIdsForBranch.length === 0) {
+        return Response.json({ technicians: [] })
+      }
+    }
+
+    let profilesQuery = supabase
       .from('profiles')
       .select('id, full_name, email, role, specialty')
       .order('full_name')
 
+    if (technicianIdsForBranch) {
+      profilesQuery = profilesQuery.in('id', technicianIdsForBranch)
+    }
+
+    const { data: profiles, error: profilesError } = await profilesQuery
+
     if (profilesError) {
-      // Fallback without specialty column
       const msg = (profilesError.message || '').toLowerCase()
       if (msg.includes('specialty') || msg.includes('column')) {
-        const { data: fallbackProfiles, error: fallbackError } = await supabase
+        let fallbackProfilesQuery = supabase
           .from('profiles')
           .select('id, full_name, email, role')
           .order('full_name')
 
+        if (technicianIdsForBranch) {
+          fallbackProfilesQuery = fallbackProfilesQuery.in('id', technicianIdsForBranch)
+        }
+
+        const { data: fallbackProfiles, error: fallbackError } = await fallbackProfilesQuery
+
         if (fallbackError) throw fallbackError
 
-        const techProfiles = filterTechnicians(fallbackProfiles || [])
-        const stats = await calculateStats(supabase, techProfiles)
+        const techProfiles = filterTechnicians((fallbackProfiles ?? []) as TechnicianProfile[])
+        const stats = await calculateStats(supabase, techProfiles, branchScope.branchId)
         return Response.json({ technicians: stats })
       }
+
       throw profilesError
     }
 
-    const techProfiles = filterTechnicians(profiles || [])
-    const stats = await calculateStats(supabase, techProfiles)
+    const techProfiles = filterTechnicians((profiles ?? []) as TechnicianProfile[])
+    const stats = await calculateStats(supabase, techProfiles, branchScope.branchId)
 
     return Response.json({ technicians: stats })
-  } catch (e: any) {
-    console.error('[technicians-stats] Error:', e?.message)
-    return Response.json(
-      { error: e?.message || 'Error al obtener estadísticas de técnicos' },
-      { status: 500 }
-    )
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al obtener estadísticas de técnicos'
+    console.error('[technicians-stats] Error:', message)
+    return Response.json({ error: message }, { status: 500 })
   }
 }
 
@@ -86,45 +156,42 @@ function normalizeRole(role: string): string {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-function filterTechnicians(profiles: any[]): any[] {
+function filterTechnicians(profiles: TechnicianProfile[]): TechnicianProfile[] {
   return profiles.filter(
-    (p) => p.role && TECHNICIAN_ROLES.has(normalizeRole(String(p.role)))
+    (profile) => profile.role && TECHNICIAN_ROLES.has(normalizeRole(String(profile.role)))
   )
 }
 
-async function calculateStats(supabase: any, technicians: any[]) {
+async function calculateStats(
+  supabase: ReturnType<typeof createAdminSupabase>,
+  technicians: TechnicianProfile[],
+  branchId?: string | null
+) {
   if (technicians.length === 0) return []
 
-  const techIds = technicians.map((t) => t.id)
-
-  // Active statuses: recibido, diagnostico, reparacion, pausado
+  const techIds = technicians.map((technician) => technician.id)
   const activeStatuses = ['recibido', 'diagnostico', 'reparacion', 'pausado']
-  // Completed statuses: listo, entregado
   const completedStatuses = ['listo', 'entregado']
 
-  // Fetch only repairs assigned to these technicians with minimal columns
-  const { data: repairs, error: repairsError } = await supabase
+  let repairsQuery = supabase
     .from('repairs')
     .select('technician_id, status, created_at, completed_at')
     .in('technician_id', techIds)
 
+  if (branchId) {
+    repairsQuery = repairsQuery.eq('branch_id', branchId)
+  }
+
+  const { data: repairs, error: repairsError } = await repairsQuery
+
   if (repairsError) throw repairsError
 
-  // Calculate stats per technician
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const statsMap = new Map<string, TechnicianAggregate>()
 
-  const statsMap = new Map<string, {
-    activeJobs: number
-    completedThisMonth: number
-    totalCompleted: number
-    completionDaysTotal: number
-    completionDaysCount: number
-  }>()
-
-  // Initialize all technicians
-  for (const tech of technicians) {
-    statsMap.set(tech.id, {
+  for (const technician of technicians) {
+    statsMap.set(technician.id, {
       activeJobs: 0,
       completedThisMonth: 0,
       totalCompleted: 0,
@@ -133,12 +200,11 @@ async function calculateStats(supabase: any, technicians: any[]) {
     })
   }
 
-  // Process repairs
-  for (const repair of repairs || []) {
+  for (const repair of ((repairs as RepairStatsRow[] | null) ?? [])) {
     const stats = statsMap.get(repair.technician_id)
     if (!stats) continue
 
-    const status = (repair.status || '').toLowerCase()
+    const status = String(repair.status || '').toLowerCase()
 
     if (activeStatuses.includes(status)) {
       stats.activeJobs += 1
@@ -163,19 +229,18 @@ async function calculateStats(supabase: any, technicians: any[]) {
     }
   }
 
-  // Build response
-  return technicians.map((tech) => {
-    const s = statsMap.get(tech.id)!
+  return technicians.map((technician) => {
+    const stats = statsMap.get(technician.id)!
     return {
-      id: tech.id,
-      name: tech.full_name,
-      specialty: tech.specialty || null,
-      activeJobs: s.activeJobs,
-      completedThisMonth: s.completedThisMonth,
-      totalCompleted: s.totalCompleted,
+      id: technician.id,
+      name: technician.full_name,
+      specialty: technician.specialty || null,
+      activeJobs: stats.activeJobs,
+      completedThisMonth: stats.completedThisMonth,
+      totalCompleted: stats.totalCompleted,
       avgCompletionDays:
-        s.completionDaysCount > 0
-          ? Math.round((s.completionDaysTotal / s.completionDaysCount) * 10) / 10
+        stats.completionDaysCount > 0
+          ? Math.round((stats.completionDaysTotal / stats.completionDaysCount) * 10) / 10
           : 0,
     }
   })

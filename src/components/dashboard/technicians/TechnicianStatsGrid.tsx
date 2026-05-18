@@ -1,82 +1,88 @@
 'use client'
 
+import { Award, Clock, Gauge, TrendingUp, Users, Wrench } from 'lucide-react'
 import { StatsCard } from '@/components/shared'
-import { Users, UserCheck, Wrench, Clock, TrendingUp, Award } from 'lucide-react'
 
 interface TechnicianStatsGridProps {
-    totalTechnicians: number
-    availableTechnicians: number
-    totalActiveJobs: number
-    avgJobsPerTech: number
-    avgCompletionTime?: string
-    bestPerformer?: string
+  totalTechnicians: number
+  techniciansWithoutLoad: number
+  highLoadTechnicians: number
+  totalActiveJobs: number
+  avgJobsPerTech: number
+  avgCompletionTime?: string
+  topCloserName?: string
 }
 
 export function TechnicianStatsGrid({
-    totalTechnicians,
-    availableTechnicians,
-    totalActiveJobs,
-    avgJobsPerTech,
-    avgCompletionTime,
-    bestPerformer
+  totalTechnicians,
+  techniciansWithoutLoad,
+  highLoadTechnicians,
+  totalActiveJobs,
+  avgJobsPerTech,
+  avgCompletionTime,
+  topCloserName,
 }: TechnicianStatsGridProps) {
-    const activePct = totalTechnicians > 0
-        ? Math.round((availableTechnicians / totalTechnicians) * 100)
-        : 0
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <StatsCard
+        title="Total Tecnicos"
+        value={totalTechnicians}
+        subtitle="Visibles en esta sucursal"
+        icon={Users}
+        color="blue"
+      />
 
-    return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <StatsCard
-                title="Total Técnicos"
-                value={totalTechnicians}
-                subtitle="En el equipo"
-                icon={Users}
-                color="blue"
-            />
+      <StatsCard
+        title="Sin Carga"
+        value={techniciansWithoutLoad}
+        subtitle="Ahora mismo"
+        icon={Gauge}
+        color="green"
+      />
 
-            <StatsCard
-                title="Disponibles"
-                value={availableTechnicians}
-                subtitle={`${activePct}% del equipo`}
-                icon={UserCheck}
-                color="green"
-            />
+      <StatsCard
+        title="Carga Alta"
+        value={highLoadTechnicians}
+        subtitle="Conviene repartir mejor"
+        icon={TrendingUp}
+        color="orange"
+      />
 
-            <StatsCard
-                title="Trabajos Activos"
-                value={totalActiveJobs}
-                subtitle="En proceso ahora"
-                icon={Wrench}
-                color="orange"
-            />
+      <StatsCard
+        title="Trabajos Activos"
+        value={totalActiveJobs}
+        subtitle="En curso ahora"
+        icon={Wrench}
+        color="purple"
+      />
 
-            <StatsCard
-                title="Promedio por Técnico"
-                value={avgJobsPerTech.toFixed(1)}
-                subtitle="Trabajos activos"
-                icon={TrendingUp}
-                color="purple"
-            />
+      <StatsCard
+        title="Promedio por Tecnico"
+        value={avgJobsPerTech.toFixed(1)}
+        subtitle="Trabajos activos"
+        icon={TrendingUp}
+        color="purple"
+      />
 
-            {avgCompletionTime && (
-                <StatsCard
-                    title="Tiempo Promedio"
-                    value={avgCompletionTime}
-                    subtitle="De resolución"
-                    icon={Clock}
-                    color="cyan"
-                />
-            )}
+      {avgCompletionTime && (
+        <StatsCard
+          title="Tiempo Promedio"
+          value={avgCompletionTime}
+          subtitle="Para cerrar un trabajo"
+          icon={Clock}
+          color="cyan"
+        />
+      )}
 
-            {bestPerformer && (
-                <StatsCard
-                    title="Mejor Técnico"
-                    value={bestPerformer}
-                    subtitle="Este mes"
-                    icon={Award}
-                    color="orange"
-                />
-            )}
-        </div>
-    )
+      {topCloserName && (
+        <StatsCard
+          title="Mas Cierres"
+          value={topCloserName}
+          subtitle="Este mes"
+          icon={Award}
+          color="orange"
+        />
+      )}
+    </div>
+  )
 }

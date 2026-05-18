@@ -3,18 +3,18 @@
 import { memo } from 'react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { WorkStatusBadge } from './WorkStatusBadge'
-import { User, Wrench, CheckCircle2, Clock, ArrowRight, Star } from 'lucide-react'
+import { User, Wrench, CheckCircle2, ArrowRight, Star } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import type { TechnicianLoadState } from '@/hooks/use-technician-stats'
 
 interface TechnicianCardProps {
     id: string
     name: string
     avatar?: string
     specialty?: string
-    status: 'available' | 'busy' | 'offline' | 'unavailable'
+    loadState: TechnicianLoadState
     activeJobs: number
     completedThisMonth: number
     totalCompleted: number
@@ -27,7 +27,7 @@ export const TechnicianCard = memo(function TechnicianCard({
     name,
     avatar,
     specialty,
-    status,
+    loadState,
     activeJobs,
     completedThisMonth,
     totalCompleted,
@@ -35,6 +35,15 @@ export const TechnicianCard = memo(function TechnicianCard({
     workloadPercentage
 }: TechnicianCardProps) {
     const router = useRouter()
+
+    const dotColor =
+        loadState === 'no_load'
+            ? 'bg-emerald-500'
+            : loadState === 'light_load'
+                ? 'bg-blue-500'
+                : loadState === 'medium_load'
+                    ? 'bg-amber-500'
+                    : 'bg-red-500'
 
     const handleViewDetails = () => {
         router.push(`/dashboard/repairs/technicians/${id}`)
@@ -51,11 +60,7 @@ export const TechnicianCard = memo(function TechnicianCard({
                             ) : (
                                 <User className="h-6 w-6" />
                             )}
-                            <div className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-gray-900 ${status === 'available' ? 'bg-green-500' :
-                                    status === 'busy' ? 'bg-orange-500' :
-                                        status === 'offline' ? 'bg-gray-400' :
-                                            'bg-red-500'
-                                }`} />
+                            <div className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-gray-900 ${dotColor}`} />
                         </div>
                         <div>
                             <h3 className="font-semibold text-base">{name}</h3>
@@ -64,7 +69,7 @@ export const TechnicianCard = memo(function TechnicianCard({
                             )}
                         </div>
                     </div>
-                    <WorkStatusBadge status={status} variant="sm" />
+                    <WorkStatusBadge status={loadState} variant="sm" />
                 </div>
             </CardHeader>
 

@@ -16,7 +16,7 @@ export interface TechnicianMetrics {
   avgJobValue: number
   efficiency: number
   workload: 'light' | 'normal' | 'heavy' | 'overloaded'
-  status: 'available' | 'busy' | 'offline' | 'unavailable'
+  loadState: 'no_load' | 'light_load' | 'medium_load' | 'high_load'
 }
 
 export interface WeeklyData {
@@ -62,7 +62,7 @@ export function useTechnicianAnalytics(repairs: Repair[]): TechnicianAnalytics {
           avgJobValue: 0,
           efficiency: 0,
           workload: 'light',
-          status: 'available'
+          loadState: 'no_load'
         },
         weeklyTrend: [],
         statusDistribution: [],
@@ -105,20 +105,20 @@ export function useTechnicianAnalytics(repairs: Repair[]): TechnicianAnalytics {
 
     // Determinar carga de trabajo y estado
     let workload: TechnicianMetrics['workload'] = 'light'
-    let status: TechnicianMetrics['status'] = 'available'
+    let loadState: TechnicianMetrics['loadState'] = 'no_load'
 
     if (activeJobs === 0) {
       workload = 'light'
-      status = 'available'
+      loadState = 'no_load'
     } else if (activeJobs <= 2) {
       workload = 'normal'
-      status = 'busy'
+      loadState = 'light_load'
     } else if (activeJobs <= 4) {
       workload = 'heavy'
-      status = 'busy'
+      loadState = 'medium_load'
     } else {
       workload = 'overloaded'
-      status = 'unavailable'
+      loadState = 'high_load'
     }
 
     // Calcular eficiencia (basada en tasa de completado y tiempo promedio)
@@ -212,7 +212,7 @@ export function useTechnicianAnalytics(repairs: Repair[]): TechnicianAnalytics {
       avgJobValue: deliveredRepairs.length > 0 ? totalRevenue / deliveredRepairs.length : 0,
       efficiency,
       workload,
-      status
+      loadState
     }
 
     return {

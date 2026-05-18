@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { OptimizedTechnicianHeader } from '@/components/dashboard/technicians/detail/OptimizedTechnicianHeader'
 import { OptimizedTechnicianActiveJobs } from '@/components/dashboard/technicians/detail/OptimizedTechnicianActiveJobs'
 import { TechnicianWorkHistory } from '@/components/dashboard/technicians/detail/TechnicianWorkHistory'
-import { useTechnicians } from '@/hooks/use-technicians'
+import { useTechnicianStats } from '@/hooks/use-technician-stats'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useTechnicianAnalytics } from '@/hooks/use-technician-analytics'
 import { Activity, BarChart3, History, User } from 'lucide-react'
@@ -69,7 +69,7 @@ const TechnicianMetricsTab = dynamic(
 export default function OptimizedTechnicianDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
-  const { technicians, isLoading: isLoadingTechs } = useTechnicians()
+  const { technicians, isLoading: isLoadingTechs } = useTechnicianStats()
   const { repairs, isLoading: isLoadingRepairs } = useRepairs()
   const [activeTab, setActiveTab] = useState('active')
 
