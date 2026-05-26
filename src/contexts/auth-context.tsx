@@ -172,65 +172,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return defaultProfile
       }
 
-      // Ejecutar las 3 queries en paralelo para evitar bloqueos secuenciales
-      const [roleResult, profileResult, permissionsResult] = await Promise.allSettled([
-        withTimeout(
-          supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle(),
-          AUTH_PROFILE_TIMEOUT_MS,
-          { data: null, error: null }
-        ),
-        withTimeout(
-          supabase.from('profiles').select('full_name, avatar_url, phone, status').eq('id', userId).maybeSingle(),
-          AUTH_PROFILE_TIMEOUT_MS,
-          { data: null, error: null }
-        ),
-        withTimeout(
-          supabase.from('user_permissions').select('permission,is_active').eq('user_id', userId),
-          AUTH_PROFILE_TIMEOUT_MS,
-          { data: null, error: null }
-        ),
-      ])
+      const response = await withTimeout(
+        fetch('/api/auth/profile', { cache: 'no-store' }),
+        AUTH_PROFILE_TIMEOUT_MS,
+        null
+      )
 
-      // Extraer resultados de forma segura
-      const roleRow = roleResult.status === 'fulfilled' ? roleResult.value.data : null
-      const profileData = profileResult.status === 'fulfilled' ? profileResult.value.data : null
-
-      let directPermissions: string[] = []
-      if (permissionsResult.status === 'fulfilled') {
-        type PermissionRow = { permission?: unknown; is_active?: boolean | null }
-        const { data: permData, error: permError } = permissionsResult.value
-        if (!permError && permData) {
-          directPermissions = permData
-            .filter((row: PermissionRow) => row?.is_active !== false)
-            .map((row: PermissionRow) => row?.permission)
-            .filter((permission: unknown): permission is string => typeof permission === 'string' && permission.length > 0)
-        } else if (permError?.message?.includes('is_active')) {
-          // Compatibilidad con esquemas antiguos sin user_permissions.is_active
-          const { data: directPermissionsOnly } = await withTimeout(
-            supabase
-              .from('user_permissions')
-              .select('permission')
-              .eq('user_id', userId),
-            AUTH_PROFILE_TIMEOUT_MS,
-            { data: null, error: null }
-          )
-
-          directPermissions = (directPermissionsOnly || [])
-            .map((row: PermissionRow) => row?.permission)
-            .filter((permission: unknown): permission is string => typeof permission === 'string' && permission.length > 0)
-        }
+      if (!response?.ok) {
+        return defaultProfile
       }
 
-      const resolvedRole = toUserRole(roleRow?.role ?? undefined)
-      const resolvedStatus = toProfileStatus(profileData?.status)
+      const profilePayload = await response.json() as {
+        role?: unknown
+        status?: unknown
+        profile?: {
+          name?: unknown
+          avatar_url?: unknown
+          phone?: unknown
+        }
+        permissions?: unknown
+      }
+
+      const resolvedRole = toUserRole(profilePayload.role)
+      const resolvedStatus = toProfileStatus(profilePayload.status)
+      const profileData = profilePayload.profile ?? {}
+      const directPermissions = Array.isArray(profilePayload.permissions)
+        ? profilePayload.permissions.filter((permission): permission is string => typeof permission === 'string' && permission.length > 0)
+        : []
 
       return {
         role: resolvedRole,
         status: resolvedStatus,
         profile: {
-          name: profileData?.full_name || '',
-          avatar_url: profileData?.avatar_url || '',
-          phone: profileData?.phone || ''
+          name: typeof profileData.name === 'string' ? profileData.name : '',
+          avatar_url: typeof profileData.avatar_url === 'string' ? profileData.avatar_url : '',
+          phone: typeof profileData.phone === 'string' ? profileData.phone : ''
         },
         permissions: Array.from(new Set(directPermissions))
       }

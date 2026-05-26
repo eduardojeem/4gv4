@@ -1,7 +1,6 @@
 'use client'
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/contexts/auth-context'
 import { useAppState } from '@/contexts/app-state-context'
 import type { BranchRecord } from '@/lib/branches/types'
@@ -55,26 +54,14 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     setLoading(true)
 
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('branches')
-        .select('id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
-        .eq('is_active', true)
-        .order('is_default', { ascending: false })
-        .order('name', { ascending: true })
+      const response = await fetch('/api/branches', { cache: 'no-store' })
+      const payload = await response.json().catch(() => null) as { branches?: BranchRecord[]; error?: string } | null
 
-      if (error) {
-        const message = error.message?.toLowerCase() || ''
-        if (message.includes('branches') && (message.includes('does not exist') || message.includes('could not find'))) {
-          setBranches([])
-          setSelectedBranchIdState(null)
-          return
-        }
-
-        throw error
+      if (!response.ok) {
+        throw new Error(payload?.error || 'No se pudieron cargar las sucursales')
       }
 
-      const branchRows = (data ?? []) as BranchRecord[]
+      const branchRows = (payload?.branches ?? []).filter((branch) => branch.is_active) as BranchRecord[]
       setBranches(branchRows)
 
       const currentBranchId = selectedBranchId ?? cachedBranchId

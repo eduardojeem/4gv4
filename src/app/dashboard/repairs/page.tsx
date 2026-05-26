@@ -346,15 +346,21 @@ function RepairsPageContent() {
           return created
         })
 
-        const createdRepairs = await Promise.all(promises)
+        const creationResults = await Promise.allSettled(promises)
+        const createdRepairs = creationResults.map((result) =>
+          result.status === 'fulfilled' ? result.value : null
+        )
+        const failedCount = creationResults.filter((result) => result.status === 'rejected').length +
+          createdRepairs.filter((repair) => !repair).length
 
         // Show success dialog with print options
         const validRepairs = createdRepairs.filter(Boolean) as Repair[]
         if (validRepairs.length === 0) {
+          toast.error('No se pudo crear ninguna reparacion. Revisa los datos e intenta de nuevo.')
           return false
         }
 
-        if (validRepairs.length !== createdRepairs.length) {
+        if (failedCount > 0) {
           toast.warning(`Se crearon ${validRepairs.length} de ${createdRepairs.length} reparaciones. Revisá el listado antes de reintentar.`)
           return true
         }
@@ -521,47 +527,57 @@ function RepairsPageContent() {
   }, [isDialogOpen, handleNewRepair])
 
   // Helper to map Repair to RepairFormData for editing
-  const initialFormData: Partial<RepairFormData> | undefined = selectedRepair ? {
-    existingCustomerId: selectedRepair.customer.id,
-    customerName: selectedRepair.customer.name,
-    customerPhone: selectedRepair.customer.phone,
-    customerEmail: selectedRepair.customer.email,
-    priority: selectedRepair.priority,
-    urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
-    laborCost: selectedRepair.laborCost || 0,
-    finalCost: selectedRepair.finalCost,
-    warrantyMonths: selectedRepair.warrantyMonths ?? 3,
-    warrantyType: selectedRepair.warrantyType || 'full',
-    warrantyNotes: selectedRepair.warrantyNotes || '',
-    devices: [{
-      deviceType: selectedRepair.deviceType,
-      brand: selectedRepair.brand,
-      model: selectedRepair.model,
-      issue: selectedRepair.issue,
-      description: selectedRepair.description,
-      accessType: selectedRepair.accessType || 'none',
-      accessPassword: selectedRepair.accessPassword || '',
-      technician: selectedRepair.technician?.id || '',
-      estimatedCost: selectedRepair.estimatedCost,
-      images: Array.isArray(selectedRepair.images) ? selectedRepair.images.map(img => img.url) : []
-    }],
-    parts: selectedRepair.parts || [],
-    notes: (selectedRepair.notes || []).map(n => ({ text: n.text, isInternal: n.isInternal ?? false, id: n.id }))
-  } : shouldOpenNewRepair && requestedTechnicianId ? {
-    priority: 'medium',
-    urgency: 'medium',
-    devices: [{
-      deviceType: 'smartphone',
-      brand: '',
-      model: '',
-      issue: '',
-      description: '',
-      accessType: 'none',
-      images: [],
-      technician: requestedTechnicianId,
-      estimatedCost: 0
-    }]
-  } : undefined
+  const initialFormData: Partial<RepairFormData> | undefined = useMemo(() => {
+    if (selectedRepair) {
+      return {
+        existingCustomerId: selectedRepair.customer.id,
+        customerName: selectedRepair.customer.name,
+        customerPhone: selectedRepair.customer.phone,
+        customerEmail: selectedRepair.customer.email,
+        priority: selectedRepair.priority,
+        urgency: selectedRepair.urgency === 'urgent' ? 'high' : 'medium',
+        laborCost: selectedRepair.laborCost || 0,
+        finalCost: selectedRepair.finalCost,
+        warrantyMonths: selectedRepair.warrantyMonths ?? 3,
+        warrantyType: selectedRepair.warrantyType || 'full',
+        warrantyNotes: selectedRepair.warrantyNotes || '',
+        devices: [{
+          deviceType: selectedRepair.deviceType,
+          brand: selectedRepair.brand,
+          model: selectedRepair.model,
+          issue: selectedRepair.issue,
+          description: selectedRepair.description,
+          accessType: selectedRepair.accessType || 'none',
+          accessPassword: selectedRepair.accessPassword || '',
+          technician: selectedRepair.technician?.id || '',
+          estimatedCost: selectedRepair.estimatedCost,
+          images: Array.isArray(selectedRepair.images) ? selectedRepair.images.map(img => img.url) : []
+        }],
+        parts: selectedRepair.parts || [],
+        notes: (selectedRepair.notes || []).map(n => ({ text: n.text, isInternal: n.isInternal ?? false, id: n.id }))
+      }
+    }
+
+    if (shouldOpenNewRepair && requestedTechnicianId) {
+      return {
+        priority: 'medium',
+        urgency: 'medium',
+        devices: [{
+          deviceType: 'smartphone',
+          brand: '',
+          model: '',
+          issue: '',
+          description: '',
+          accessType: 'none',
+          images: [],
+          technician: requestedTechnicianId,
+          estimatedCost: 0
+        }]
+      }
+    }
+
+    return undefined
+  }, [requestedTechnicianId, selectedRepair, shouldOpenNewRepair])
 
   // Quick access navigation items
   const quickAccessSections = [

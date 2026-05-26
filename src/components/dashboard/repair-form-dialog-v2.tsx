@@ -16,7 +16,7 @@ import React, { useEffect, useState } from 'react'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
-  Save, X, User, Phone, Mail, MapPin, Smartphone, Laptop, Tablet,
+  Save, X, User, Phone, Mail, Smartphone, Laptop, Tablet,
   AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator, FileText
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -45,14 +45,12 @@ import { toast } from 'sonner'
 import {
   RepairFormSchema,
   RepairFormQuickSchema,
-  type RepairFormData,
-  type RepairFormDataQuick
+  type RepairFormData
 } from '@/schemas'
 import { CustomerSelectorV3 } from './repairs/CustomerSelectorV3'
 import { QuickCustomerModal } from './repairs/QuickCustomerModal'
 import { PatternDrawer } from './repairs/PatternDrawer'
 import { AppError } from '@/lib/errors'
-import { createClient } from '@/lib/supabase/client'
 // import { uploadFile } from '@/lib/supabase-storage'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { RepairCostCalculator } from './repairs/RepairCostCalculator'
@@ -105,6 +103,7 @@ export function RepairFormDialogV2({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<{ id: string; name: string; phone: string; email: string } | null>(null)
+  const [selectedQuickCustomer, setSelectedQuickCustomer] = useState<{ id: string; name: string; phone: string; email: string } | null>(null)
 
   // Select schema based on quick mode
   const schema = quickMode ? RepairFormQuickSchema : RepairFormSchema
@@ -115,7 +114,7 @@ export function RepairFormDialogV2({
     register,
     handleSubmit,
     control,
-    formState: { errors, isValid, isDirty },
+    formState: { errors, isValid, submitCount },
     watch,
     setValue,
     reset,
@@ -208,6 +207,7 @@ export function RepairFormDialogV2({
         warrantyType: initialData?.warrantyType || 'full',
         warrantyNotes: initialData?.warrantyNotes || ''
       })
+      setSelectedQuickCustomer(null)
     }
   }, [open, initialData, reset])
 
@@ -235,12 +235,14 @@ export function RepairFormDialogV2({
     setValue('customerName', customer.name, { shouldDirty: true, shouldValidate: true })
     setValue('customerPhone', customer.phone, { shouldDirty: true, shouldValidate: true })
     setValue('customerEmail', customer.email, { shouldDirty: true, shouldValidate: true })
+    setSelectedQuickCustomer(customer)
   }
 
   const handleQuickCustomerUpdated = (customer: { id: string; name: string; phone: string; email: string }) => {
     setValue('customerName', customer.name, { shouldDirty: true, shouldValidate: true })
     setValue('customerPhone', customer.phone, { shouldDirty: true, shouldValidate: true })
     setValue('customerEmail', customer.email, { shouldDirty: true, shouldValidate: true })
+    setSelectedQuickCustomer(customer)
     setEditingCustomer(null)
   }
 
@@ -258,13 +260,13 @@ export function RepairFormDialogV2({
 
   // Focus first error field on submit
   useEffect(() => {
-    if (Object.keys(errors).length > 0) {
+    if (submitCount > 0 && Object.keys(errors).length > 0) {
       const firstErrorField = Object.keys(errors)[0]
       if (firstErrorField && firstErrorField !== 'root') {
         setFocus(firstErrorField as keyof RepairFormData)
       }
     }
-  }, [errors, setFocus])
+  }, [errors, setFocus, submitCount])
 
   // Estado para pantalla completa
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -392,12 +394,12 @@ export function RepairFormDialogV2({
               <CardContent className="pt-4 space-y-3">
                 <CustomerSelectorV3
                   value={watch('existingCustomerId')}
-                  initialCustomer={initialData?.existingCustomerId ? {
+                  initialCustomer={selectedQuickCustomer || (initialData?.existingCustomerId ? {
                     id: initialData.existingCustomerId,
                     name: initialData.customerName || '',
                     phone: initialData.customerPhone || '',
                     email: initialData.customerEmail || ''
-                  } : undefined}
+                  } : undefined)}
                   onChange={(customerId, customerData) => {
                     setValue('existingCustomerId', customerId, { shouldDirty: true, shouldValidate: true })
 
@@ -405,6 +407,7 @@ export function RepairFormDialogV2({
                       setValue('customerName', '', { shouldDirty: true, shouldValidate: true })
                       setValue('customerPhone', '', { shouldDirty: true, shouldValidate: true })
                       setValue('customerEmail', '', { shouldDirty: true, shouldValidate: true })
+                      setSelectedQuickCustomer(null)
                       return
                     }
 
@@ -413,6 +416,12 @@ export function RepairFormDialogV2({
                       setValue('customerName', customerData.name, { shouldDirty: true, shouldValidate: true })
                       setValue('customerPhone', customerData.phone || '', { shouldDirty: true, shouldValidate: true })
                       setValue('customerEmail', customerData.email || '', { shouldDirty: true, shouldValidate: true })
+                      setSelectedQuickCustomer({
+                        id: customerId,
+                        name: customerData.name || '',
+                        phone: customerData.phone || '',
+                        email: customerData.email || ''
+                      })
                     }
                   }}
                   error={errors.existingCustomerId?.message}
@@ -1296,7 +1305,7 @@ export function RepairFormDialogV2({
                       defaultValue={3}
                       render={({ field }) => (
                         <Select
-                          value={String(field.value || 3)}
+                          value={String(field.value ?? 3)}
                           onValueChange={(value) => field.onChange(Number(value))}
                           disabled={isSubmitting}
                         >
@@ -1331,10 +1340,10 @@ export function RepairFormDialogV2({
                     <Controller
                       name="warrantyType"
                       control={control}
-                      defaultValue="labor"
+                      defaultValue="full"
                       render={({ field }) => (
                         <Select
-                          value={field.value || 'labor'}
+                          value={field.value || 'full'}
                           onValueChange={field.onChange}
                           disabled={isSubmitting || watch('warrantyMonths') === 0}
                         >

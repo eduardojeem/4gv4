@@ -55,6 +55,10 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Auth event API failed:', error)
+      const message = String(error.message || '').toLowerCase()
+      if (message.includes('function') || message.includes('log_auth_event') || message.includes('does not exist')) {
+        return NextResponse.json({ ok: true, skipped: true })
+      }
       return NextResponse.json({ ok: false, error: 'Failed to log auth event' }, { status: 500 })
     }
 

@@ -30,6 +30,7 @@ interface CustomerSelectorV3Props {
 
 export function CustomerSelectorV3({
   value,
+  initialCustomer,
   onChange,
   error,
   disabled,
@@ -49,6 +50,7 @@ export function CustomerSelectorV3({
   return (
     <CustomerSelector
       value={value}
+      initialCustomer={initialCustomer}
       onChange={handleChange}
       error={error}
       disabled={disabled}

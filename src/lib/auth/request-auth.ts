@@ -1,4 +1,5 @@
 import { createClient as createServerSupabase } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { normalizeRole, type AppRole } from '@/lib/auth/role-utils'
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended' | null
@@ -33,9 +34,9 @@ function normalizeProfileStatus(value: unknown): ProfileStatus {
 }
 
 async function loadRoleRow(
-  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
   userId: string
 ): Promise<RoleRow | null> {
+  const supabase = createAdminSupabase()
   const { data: roleWithStatus, error: roleWithStatusError } = await supabase
     .from('user_roles')
     .select('role,is_active')
@@ -62,9 +63,9 @@ async function loadRoleRow(
 }
 
 async function loadProfileRow(
-  supabase: Awaited<ReturnType<typeof createServerSupabase>>,
   userId: string
 ): Promise<ProfileRow | null> {
+  const supabase = createAdminSupabase()
   const { data: profileWithStatus, error: profileWithStatusError } = await supabase
     .from('profiles')
     .select('role,status')
@@ -105,8 +106,8 @@ export async function resolveRequestAuthUser(): Promise<RequestAuthResolution> {
   }
 
   const [roleRow, profileRow] = await Promise.all([
-    loadRoleRow(supabase, user.id),
-    loadProfileRow(supabase, user.id),
+    loadRoleRow(user.id),
+    loadProfileRow(user.id),
   ])
 
   const role = normalizeRole(roleRow?.role ?? profileRow?.role ?? undefined) ?? 'cliente'

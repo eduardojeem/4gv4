@@ -1,18 +1,11 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, type PointerEvent } from 'react'
 import { useCustomers, type Customer } from '@/hooks/use-customers'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useDebounce } from '@/hooks/use-debounce'
-import {
-    Command,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-} from '@/components/ui/command'
 import {
     Popover,
     PopoverContent,
@@ -22,24 +15,71 @@ import { Check, ChevronsUpDown, Plus, User, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CustomerQuickCreateDialog } from './CustomerQuickCreateDialog'
 
+function stopFocusSteal(event: PointerEvent<HTMLButtonElement>) {
+    event.preventDefault()
+}
+
 interface CustomerSelectorProps {
     value?: string
+    initialCustomer?: Pick<Customer, 'id' | 'name' | 'phone' | 'email'>
     onChange: (customerId: string, customerData?: Customer) => void
     error?: string
     disabled?: boolean
 }
 
-export function CustomerSelector({ value, onChange, error, disabled }: CustomerSelectorProps) {
+export function CustomerSelector({ value, initialCustomer, onChange, error, disabled }: CustomerSelectorProps) {
     const { customers, isLoading, actions } = useCustomers()
     const [open, setOpen] = useState(false)
     const [showQuickCreate, setShowQuickCreate] = useState(false)
     const [searchValue, setSearchValue] = useState('')
+    const [optimisticCustomer, setOptimisticCustomer] = useState<Customer | null>(null)
     const debouncedSearch = useDebounce(searchValue, 300)
 
     // Find selected customer
     const selectedCustomer = useMemo(() => {
-        return customers.find(c => c.id === value)
-    }, [customers, value])
+        const fromList = customers.find(c => c.id === value)
+        if (fromList) return fromList
+        if (optimisticCustomer?.id === value) return optimisticCustomer
+        if (initialCustomer?.id === value) {
+            return {
+                id: initialCustomer.id,
+                customerCode: `CLI-${initialCustomer.id.slice(0, 6)}`,
+                name: initialCustomer.name || '',
+                email: initialCustomer.email || '',
+                phone: initialCustomer.phone || '',
+                customer_type: 'regular',
+                status: 'active',
+                total_purchases: 0,
+                total_repairs: 0,
+                registration_date: '',
+                created_at: '',
+                last_visit: '',
+                last_activity: '',
+                address: '',
+                city: '',
+                credit_score: 0,
+                segment: 'regular',
+                satisfaction_score: 0,
+                lifetime_value: 0,
+                avg_order_value: 0,
+                purchase_frequency: 'low',
+                preferred_contact: 'email',
+                birthday: '',
+                loyalty_points: 0,
+                credit_limit: 0,
+                current_balance: 0,
+                pending_amount: 0,
+                notes: '',
+                tags: [],
+                referral_source: '',
+                discount_percentage: 0,
+                payment_terms: 'Contado',
+                assigned_salesperson: 'Sin asignar',
+                last_purchase_amount: 0,
+                total_spent_this_year: 0
+            } satisfies Customer
+        }
+    }, [customers, initialCustomer, optimisticCustomer, value])
 
     // Filter customers based on search
     const filteredCustomers = useMemo(() => {
@@ -67,6 +107,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
 
     const handleSelect = (customerId: string) => {
         const customer = customers.find(c => c.id === customerId)
+        if (customer) setOptimisticCustomer(customer)
         onChange(customerId, customer)
         setOpen(false)
         try {
@@ -86,6 +127,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
     }
 
     const handleCustomerCreated = (customerId: string, customerData: Customer) => {
+        setOptimisticCustomer(customerData)
         onChange(customerId, customerData)
         setShowQuickCreate(false)
     }
@@ -96,7 +138,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                 <Label htmlFor="customer">
                     Cliente <span className="text-red-500">*</span>
                 </Label>
-                <Popover open={open} onOpenChange={setOpen}>
+                <Popover open={open} onOpenChange={setOpen} modal>
                     <PopoverTrigger asChild>
                         <Button
                             id="customer"
@@ -108,7 +150,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                                 error && "border-red-500",
                                 !value && "text-muted-foreground"
                             )}
-                            disabled={disabled || isLoading}
+                            disabled={disabled}
                         >
                             {selectedCustomer ? (
                                 <div className="flex items-center gap-2">
@@ -131,7 +173,7 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
+                    <PopoverContent className="z-[70] w-[400px] p-0" align="start">
                         <div className="flex items-center justify-between px-3 py-2">
                             <div className="text-xs text-muted-foreground">
                                 {isLoading ? 'Cargando clientes...' : `${customers.length} clientes`}
@@ -159,45 +201,63 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                                 </Button>
                             </div>
                         </div>
-                        <Command shouldFilter={false}>
-                            <CommandInput
+                        <div>
+                            <div className="border-b px-3 py-2">
+                                <Input
                                 placeholder="Buscar por nombre, teléfono o email..."
                                 value={searchValue}
-                                onValueChange={setSearchValue}
-                            />
-                            <CommandList>
-                                <CommandEmpty>
+                                onChange={(event) => setSearchValue(event.target.value)}
+                                autoComplete="off"
+                                className="h-9 border-0 px-0 shadow-none focus-visible:ring-0"
+                                />
+                            </div>
+                            <div className="max-h-[300px] overflow-y-auto overflow-x-hidden p-1">
+                                {!isLoading && filteredCustomers.length === 0 && recentCustomers.length === 0 && (
                                     <div className="text-center py-6">
                                         <p className="text-sm text-muted-foreground mb-3">
                                             No se encontró ningún cliente
                                         </p>
                                         <Button
+                                            type="button"
                                             size="sm"
                                             variant="outline"
-                                            onClick={handleCreateNew}
+                                            onPointerDown={(event) => {
+                                                event.preventDefault()
+                                                handleCreateNew()
+                                            }}
                                             className="gap-2"
                                         >
                                             <Plus className="h-4 w-4" />
                                             Crear nuevo cliente
                                         </Button>
                                     </div>
-                                </CommandEmpty>
-                                <CommandGroup>
-                                    <CommandItem
-                                        onSelect={handleCreateNew}
-                                        className="bg-muted/50 font-medium"
+                                )}
+                                <div>
+                                    <button
+                                        type="button"
+                                        onPointerDown={(event) => {
+                                            event.preventDefault()
+                                            handleCreateNew()
+                                        }}
+                                        className="relative flex w-full cursor-pointer select-none items-center rounded-sm bg-muted/50 px-2 py-1.5 text-left text-sm font-medium outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
                                     >
                                         <Plus className="mr-2 h-4 w-4" />
                                         Crear nuevo cliente
-                                    </CommandItem>
-                                </CommandGroup>
+                                    </button>
+                                </div>
                                 {!debouncedSearch && recentCustomers.length > 0 && (
-                                    <CommandGroup heading="Recientes">
+                                    <div>
+                                        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Recientes</div>
                                         {recentCustomers.map((customer) => (
-                                            <CommandItem
+                                            <button
+                                                type="button"
                                                 key={customer.id}
                                                 value={customer.id}
-                                                onSelect={handleSelect}
+                                                onPointerDown={(event) => {
+                                                    stopFocusSteal(event)
+                                                    handleSelect(customer.id)
+                                                }}
+                                                className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
                                             >
                                                 <Check
                                                     className={cn(
@@ -214,16 +274,22 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                                                         {customer.email && <span>• {customer.email}</span>}
                                                     </div>
                                                 </div>
-                                            </CommandItem>
+                                            </button>
                                         ))}
-                                    </CommandGroup>
+                                    </div>
                                 )}
-                                <CommandGroup heading="Clientes">
+                                <div>
+                                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Clientes</div>
                                     {filteredCustomers.map((customer) => (
-                                        <CommandItem
+                                        <button
+                                            type="button"
                                             key={customer.id}
                                             value={customer.id}
-                                            onSelect={handleSelect}
+                                            onPointerDown={(event) => {
+                                                stopFocusSteal(event)
+                                                handleSelect(customer.id)
+                                            }}
+                                            className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
                                         >
                                             <Check
                                                 className={cn(
@@ -240,11 +306,11 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                                                     {customer.email && <span>• {customer.email}</span>}
                                                 </div>
                                             </div>
-                                        </CommandItem>
+                                        </button>
                                     ))}
-                                </CommandGroup>
-                            </CommandList>
-                        </Command>
+                                </div>
+                            </div>
+                        </div>
                     </PopoverContent>
                 </Popover>
                 {error && (
@@ -255,8 +321,11 @@ export function CustomerSelector({ value, onChange, error, disabled }: CustomerS
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => onChange('', undefined)}
-                        disabled={disabled || isLoading}
+                        onClick={() => {
+                            setOptimisticCustomer(null)
+                            onChange('', undefined)
+                        }}
+                        disabled={disabled}
                     >
                         Limpiar selección
                     </Button>

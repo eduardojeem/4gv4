@@ -91,52 +91,22 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     const supabase = createClient()
 
     const fetchRepairsWithCustomerFallback = useCallback(async () => {
-        const selectVariants = [
-            `
-          *,
-          customer:customers(id, customer_code, name, first_name, last_name, phone, email),
-          technician:profiles(id, full_name),
-          images:repair_images(id, image_url, description)
-        `,
-            `
-          *,
-          customer:customers(id, name, phone, email),
-          technician:profiles(id, full_name),
-          images:repair_images(id, image_url, description)
-        `,
-            `
-          *,
-          customer:customers(id, first_name, last_name, phone, email),
-          technician:profiles(id, full_name),
-          images:repair_images(id, image_url, description)
-        `,
-        ]
+        const response = await fetch('/api/repairs', {
+            headers: branchHeaders(selectedBranchId),
+            cache: 'no-store',
+        })
 
-        let lastError: any = null
+        const payload = await response.json().catch(() => null) as { repairs?: unknown[]; error?: string } | null
 
-        for (const selectExpr of selectVariants) {
-            let query = supabase
-                .from('repairs')
-                .select(selectExpr)
-                .order('created_at', { ascending: false })
-
-            query = withBranchFilter(query, selectedBranchId)
-            const { data, error: fetchError } = await query
-
-            if (!fetchError) {
-                return { data: data || [], error: null }
-            }
-
-            lastError = fetchError
-            const message = String(fetchError.message || '').toLowerCase()
-            const isSchemaError = message.includes('column') || message.includes('does not exist')
-            if (!isSchemaError) {
-                break
+        if (!response.ok) {
+            return {
+                data: [],
+                error: new Error(payload?.error || 'No se pudieron cargar las reparaciones'),
             }
         }
 
-        return { data: [], error: lastError }
-    }, [selectedBranchId, supabase])
+        return { data: payload?.repairs || [], error: null }
+    }, [selectedBranchId])
 
     // Fetch all repairs
     const fetchRepairs = useCallback(async () => {

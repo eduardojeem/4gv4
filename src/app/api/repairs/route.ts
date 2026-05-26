@@ -1,42 +1,62 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { getAuthResponse, requireStaff } from '@/lib/auth/require-auth'
+import { withBranchFilter } from '@/lib/branches/client'
 
-// GET /api/repairs -> Lista reparaciones desde Supabase si está configurado, si no, datos demo
-export async function GET(_req: NextRequest) {
+const REPAIR_SELECT_VARIANTS = [
+  `
+    *,
+    customer:customers(id, customer_code, name, first_name, last_name, phone, email),
+    technician:profiles(id, full_name),
+    images:repair_images(id, image_url, description)
+  `,
+  `
+    *,
+    customer:customers(id, name, phone, email),
+    technician:profiles(id, full_name),
+    images:repair_images(id, image_url, description)
+  `,
+  `
+    *,
+    customer:customers(id, first_name, last_name, phone, email),
+    technician:profiles(id, full_name),
+    images:repair_images(id, image_url, description)
+  `,
+]
+
+export async function GET(request: NextRequest) {
+  const auth = await requireStaff()
+  const authResponse = getAuthResponse(auth)
+  if (authResponse) return authResponse
+
   try {
-    const isConfigured = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!isConfigured) {
-      const demo = [
-        { id: 'K-001', customerName: 'Juan', deviceModel: 'iPhone 14 Pro', issueDescription: 'Pantalla rota', createdAt: new Date().toISOString(), urgency: 5, technicalComplexity: 3, stage: 'received', historicalValue: 1200 },
-        { id: 'K-002', customerName: 'Ana', deviceModel: 'Galaxy S22', issueDescription: 'Batería no carga', createdAt: new Date().toISOString(), urgency: 3, technicalComplexity: 2, stage: 'in_repair', historicalValue: 800 },
-        { id: 'K-003', customerName: 'Luis', deviceModel: 'MacBook Pro 13"', issueDescription: 'Teclado no responde', createdAt: new Date().toISOString(), urgency: 4, technicalComplexity: 4, stage: 'awaiting_parts', historicalValue: 2000 },
-      ]
-      return new Response(JSON.stringify({ repairs: demo }), { status: 200, headers: { 'content-type': 'application/json' } })
+    const branchId = request.headers.get('x-branch-id')
+    const supabase = createAdminSupabase()
+    let lastError: unknown = null
+
+    for (const selectExpr of REPAIR_SELECT_VARIANTS) {
+      let query = supabase
+        .from('repairs')
+        .select(selectExpr)
+        .order('created_at', { ascending: false })
+
+      query = withBranchFilter(query, branchId)
+      const { data, error } = await query
+
+      if (!error) {
+        return NextResponse.json({ repairs: data ?? [] })
+      }
+
+      lastError = error
+      const message = String(error.message || '').toLowerCase()
+      const isSchemaError = message.includes('column') || message.includes('does not exist')
+      if (!isSchemaError) break
     }
 
-    const supabase = createAdminSupabase()
-    const { data, error } = await supabase
-      .from('repairs')
-      .select('id,customer_name,device_model,issue_description,urgency,technical_complexity,historical_value,stage,created_at,updated_at')
-      .limit(200)
-
-    if (error) throw error
-
-    const repairs = (data || []).map((r: any) => ({
-      id: String(r.id),
-      customerName: r.customer_name,
-      deviceModel: r.device_model,
-      issueDescription: r.issue_description,
-      urgency: r.urgency ?? 3,
-      technicalComplexity: r.technical_complexity ?? 3,
-      historicalValue: r.historical_value ?? 0,
-      stage: r.stage || 'received',
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    }))
-
-    return new Response(JSON.stringify({ repairs }), { status: 200, headers: { 'content-type': 'application/json' } })
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || 'Unknown error' }), { status: 500 })
+    const message = lastError instanceof Error ? lastError.message : 'No se pudieron cargar las reparaciones'
+    return NextResponse.json({ error: message }, { status: 500 })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error interno del servidor'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
