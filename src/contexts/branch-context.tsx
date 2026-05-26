@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { useAuth } from '@/contexts/auth-context'
 import { useAppState } from '@/contexts/app-state-context'
 import type { BranchRecord } from '@/lib/branches/types'
+import { normalizeSupabaseError } from '@/utils/supabase-error'
 
 const ACTIVE_BRANCH_CACHE_KEY = 'active_branch_id'
 
@@ -78,7 +79,8 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
 
       const preferredBranch = branchRows.find((branch) => branch.is_default) ?? branchRows[0] ?? null
       setSelectedBranchId(preferredBranch?.id ?? null)
-    } catch (error) {
+    } catch (err: unknown) {
+      const error = normalizeSupabaseError(err)
       console.error('[branch-context] Error loading branches:', error)
       setBranches([])
       setSelectedBranchIdState(null)

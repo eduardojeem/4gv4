@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config, isDemoNoDb } from '@/lib/config'
+import { normalizeSupabaseError } from '@/utils/supabase-error'
 
 export interface Technician {
     id: string
@@ -124,9 +125,9 @@ export function useTechnicians() {
             setTechnicians(nextTechnicians)
             return nextTechnicians
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : String(err)
-            console.error('Error fetching technicians:', { message })
-            setError(message)
+            const error = normalizeSupabaseError(err)
+            console.error('Error fetching technicians:', error)
+            setError(error.message)
             return techniciansCache || []
         } finally {
             techniciansRequest = null

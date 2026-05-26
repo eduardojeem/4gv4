@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { saveSystemSettingsViaSupabase } from '@/lib/system-settings-client'
 import { DEFAULT_SYSTEM_COLOR_SCHEME } from '@/lib/theme/color-schemes'
+import type { SystemSettingsPartial } from '@/lib/validations/system-settings'
+import { normalizeSupabaseError } from '@/utils/supabase-error'
 
 // Interface matching the database table 'system_settings'
 export interface SystemSettingsRow {
@@ -245,9 +247,10 @@ export function useSharedSettings() {
       setOriginalSettings(DEFAULT_SHARED_SETTINGS)
       originalRef.current = JSON.stringify(DEFAULT_SHARED_SETTINGS)
       setSettingsSource('default')
-    } catch (err) {
-      console.error('Error loading settings:', err)
-      setError('Error al cargar configuraciones')
+    } catch (err: unknown) {
+      const error = normalizeSupabaseError(err)
+      console.error('Error loading settings:', error)
+      setError(`Error al cargar configuraciones: ${error.message}`)
 
       // Fallback to localStorage
       const saved = localStorage.getItem(STORAGE_KEY)
@@ -344,7 +347,7 @@ export function useSharedSettings() {
       let persistedSettings = result?.data
 
       if ((!response.ok || !result?.success || !result?.data) && response.status === 404) {
-        persistedSettings = await saveSystemSettingsViaSupabase(supabase, settings as any)
+        persistedSettings = await saveSystemSettingsViaSupabase(supabase, settings as SystemSettingsPartial)
       } else if (!response.ok || !result?.success || !result?.data) {
         throw new Error(result?.error || `No se pudo guardar la configuración (${response.status})`)
       }
@@ -361,9 +364,9 @@ export function useSharedSettings() {
 
       return { success: true }
     } catch (err: unknown) {
-      console.error('Error saving settings:', err)
-      const message = err instanceof Error ? err.message : 'Error al guardar las configuraciones'
-      return { success: false, error: message }
+      const error = normalizeSupabaseError(err)
+      console.error('Error saving settings:', error)
+      return { success: false, error: error.message || 'Error al guardar las configuraciones' }
     } finally {
       setIsSaving(false)
     }
