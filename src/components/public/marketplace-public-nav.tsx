@@ -104,6 +104,7 @@ export function MarketplacePublicNav() {
           </Link>
 
           {user ? (
+            <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
                   <Avatar className="h-8 w-8 border border-slate-200 dark:border-slate-700">
