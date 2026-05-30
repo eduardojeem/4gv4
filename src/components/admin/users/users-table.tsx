@@ -24,6 +24,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 interface UsersTableProps {
   users: SupabaseUser[]
   isLoading: boolean
+  showOrganization?: boolean
   page: number
   pageSize: number
   totalCount: number
@@ -36,6 +37,7 @@ interface UsersTableProps {
 export function UsersTable({
   users,
   isLoading,
+  showOrganization = false,
   page,
   pageSize,
   totalCount,
@@ -45,6 +47,7 @@ export function UsersTable({
   onView
 }: UsersTableProps) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+  const tableColSpan = showOrganization ? 7 : 6
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
@@ -90,6 +93,7 @@ export function UsersTable({
             <TableRow className="bg-gray-50/50 dark:bg-gray-900/50 hover:bg-gray-50/50 dark:hover:bg-gray-900/50">
               <TableHead className="w-[300px]">Usuario</TableHead>
               <TableHead>Rol</TableHead>
+              {showOrganization ? <TableHead>Organizacion</TableHead> : null}
               <TableHead>Estado</TableHead>
               <TableHead className="hidden md:table-cell">Departamento</TableHead>
               <TableHead className="hidden lg:table-cell">
@@ -104,7 +108,7 @@ export function UsersTable({
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center">
+                <TableCell colSpan={tableColSpan} className="h-32 text-center">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     <p className="text-muted-foreground text-sm">Cargando usuarios...</p>
@@ -113,7 +117,7 @@ export function UsersTable({
               </TableRow>
             ) : users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={tableColSpan} className="h-32 text-center text-muted-foreground">
                   No se encontraron usuarios que coincidan con los filtros
                 </TableCell>
               </TableRow>
@@ -141,6 +145,26 @@ export function UsersTable({
                       {getRoleLabel(user.role)}
                     </Badge>
                   </TableCell>
+                  {showOrganization ? (
+                    <TableCell>
+                      {user.organizations && user.organizations.length > 0 ? (
+                        <div className="flex max-w-[240px] flex-wrap gap-1">
+                          {user.organizations.slice(0, 2).map((organization) => (
+                            <Badge key={organization.id} variant="secondary" className="max-w-[180px] truncate font-normal">
+                              {organization.name}
+                            </Badge>
+                          ))}
+                          {user.organizations.length > 2 ? (
+                            <Badge variant="outline" className="font-normal">
+                              +{user.organizations.length - 2}
+                            </Badge>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Sin organizacion</span>
+                      )}
+                    </TableCell>
+                  ) : null}
                   <TableCell>
                     <Badge variant="outline" className={`capitalize font-normal ${getStatusBadgeColor(user.status)}`}>
                       {user.status === 'active' ? 'Activo' : user.status === 'inactive' ? 'Inactivo' : 'Suspendido'}

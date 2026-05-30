@@ -1,9 +1,34 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { normalizeRole } from '@/lib/auth/role-utils'
+import { getTenantSlugFromPath, getTenantSlugFromRequest } from '@/lib/saas/tenant'
+import { ACTIVE_ORGANIZATION_COOKIE } from '@/lib/saas/active-organization'
 
 const PROXY_AUTH_TIMEOUT_MS = 4000
 const PROXY_PROFILE_TIMEOUT_MS = 3000
+const DEFAULT_PUBLIC_ORG_SLUG = process.env.DEFAULT_PUBLIC_ORG_SLUG || 'default'
+const LEGACY_PUBLIC_PATHS = ['/inicio', '/productos', '/mis-reparaciones']
+
+function redirectLegacyPublicPath(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  if (pathname === '/products' || pathname.startsWith('/products/')) {
+    const url = request.nextUrl.clone()
+    url.pathname = pathname.replace(/^\/products/, '/dashboard/products')
+    return NextResponse.redirect(url, 308)
+  }
+
+  const legacyPath = LEGACY_PUBLIC_PATHS.find((path) => pathname === path || pathname.startsWith(`${path}/`))
+
+  if (!legacyPath) {
+    return null
+  }
+
+  const url = request.nextUrl.clone()
+  url.pathname = `/${DEFAULT_PUBLIC_ORG_SLUG}${pathname}`
+
+  return NextResponse.redirect(url, 308)
+}
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
@@ -52,7 +77,28 @@ function rewriteForbiddenResponse(
 }
 
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+  const legacyPublicRedirect = redirectLegacyPublicPath(request)
+  if (legacyPublicRedirect) {
+    return legacyPublicRedirect
+  }
+
+  const requestHeaders = new Headers(request.headers)
+  const tenantSlug = getTenantSlugFromRequest(request) ?? getTenantSlugFromPath(request.nextUrl.pathname)
+
+  if (tenantSlug) {
+    requestHeaders.set('x-tenant-slug', tenantSlug)
+  } else {
+    const activeOrganizationId = request.cookies.get(ACTIVE_ORGANIZATION_COOKIE)?.value
+    if (activeOrganizationId) {
+      requestHeaders.set('x-organization-id', activeOrganizationId)
+    }
+  }
+
+  let supabaseResponse = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  })
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -69,7 +115,11 @@ export async function proxy(request: NextRequest) {
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-        supabaseResponse = NextResponse.next({ request })
+        supabaseResponse = NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        })
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options)
         )
@@ -81,10 +131,12 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isProtectedRoute = pathname.startsWith('/dashboard')
   const isAdminRoute = pathname.startsWith('/admin')
+  const isSuperAdminRoute = pathname.startsWith('/superadmin')
+  const isInternalOpsRoute = pathname.startsWith('/debug') || pathname === '/setup' || pathname === '/setup-access'
   const isAuthRoute = pathname === '/login' || pathname === '/register'
 
   // Solo hacer auth check si la ruta lo requiere
-  if (!isProtectedRoute && !isAdminRoute && !isAuthRoute) {
+  if (!isProtectedRoute && !isAdminRoute && !isSuperAdminRoute && !isInternalOpsRoute && !isAuthRoute) {
     return supabaseResponse
   }
 
@@ -109,12 +161,12 @@ export async function proxy(request: NextRequest) {
   let profileIsActive = true
   if (user) {
     try {
-      const { data: roleWithStatus, error: roleWithStatusError } = await withTimeout(
-        supabase
+      const { data: roleWithStatus, error: roleWithStatusError } = await withTimeout<any>(
+        Promise.resolve(supabase
           .from('user_roles')
           .select('role,is_active')
           .eq('user_id', user.id)
-          .maybeSingle(),
+          .maybeSingle()),
         PROXY_PROFILE_TIMEOUT_MS,
         { data: null, error: null }
       )
@@ -124,12 +176,12 @@ export async function proxy(request: NextRequest) {
       if (!roleWithStatusError) {
         roleIsActive = roleWithStatus?.is_active !== false
       } else if (roleWithStatusError.message?.includes('is_active')) {
-        const { data: roleOnly } = await withTimeout(
-          supabase
+        const { data: roleOnly } = await withTimeout<any>(
+          Promise.resolve(supabase
             .from('user_roles')
             .select('role')
             .eq('user_id', user.id)
-            .maybeSingle(),
+            .maybeSingle()),
           PROXY_PROFILE_TIMEOUT_MS,
           { data: null, error: null }
         )
@@ -160,6 +212,7 @@ export async function proxy(request: NextRequest) {
   const isActiveUser = roleIsActive && profileIsActive
   const isClientOrViewer = !isActiveUser || effectiveRole === 'cliente'
   const isAdmin = isActiveUser && (effectiveRole === 'admin' || effectiveRole === 'super_admin')
+  const isSuperAdmin = isActiveUser && effectiveRole === 'super_admin'
 
   // Rutas protegidas (dashboard) - requieren autenticacion y rol no-cliente
   if (isProtectedRoute) {
@@ -182,9 +235,18 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  if (isSuperAdminRoute || isInternalOpsRoute) {
+    if (!user) {
+      return redirectWithCookies(request, supabaseResponse, '/login')
+    }
+    if (!isSuperAdmin) {
+      return rewriteForbiddenResponse(request, supabaseResponse, 'admin')
+    }
+  }
+
   // Si ya autenticado y en ruta de auth, redirigir segun rol
   if (isAuthRoute && user) {
-    const target = isClientOrViewer ? '/inicio' : '/dashboard'
+    const target = isClientOrViewer ? `/${DEFAULT_PUBLIC_ORG_SLUG}/inicio` : '/dashboard'
     return redirectWithCookies(request, supabaseResponse, target)
   }
 
@@ -240,5 +302,6 @@ export const config = {
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
     '/dashboard/:path*',
     '/admin/:path*',
+    '/superadmin/:path*',
   ],
 }

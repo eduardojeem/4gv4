@@ -202,7 +202,7 @@ function openSessionToRecord(reg: CashRegisterState): ZClosureRecord {
     date: new Date().toISOString().split('T')[0],
     openedAt: reg.movements.find(m => m.type === 'opening')?.created_at ?? new Date().toISOString(),
     openedBy: undefined,
-    openingBalance: reg.openingBalance ?? 0,
+    openingBalance: reg.movements.find(m => m.type === 'opening' || (m.type as string) === 'apertura')?.amount ?? 0,
     closedAt: new Date().toISOString(),
     closedBy: '',
     closingBalance: reg.balance,

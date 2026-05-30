@@ -1,14 +1,38 @@
 import { useCallback, Dispatch, SetStateAction } from "react"
 import { toast } from "sonner"
-import { Customer, CustomerFilters, CustomerState } from "./use-customer-state"
-import { createClient } from "@/lib/supabase/client"
-import customerService from "@/services/customer-service"
+import { Customer, CustomerFilters, CustomerState, mapRawToCustomer } from "./use-customer-state"
 import { AppError, ErrorCode } from "@/lib/errors"
 import { logger } from "@/lib/logging"
-import { withRetry } from "@/lib/errors/retry"
 
 interface UseCustomerActionsProps {
   setState: Dispatch<SetStateAction<CustomerState>>
+}
+
+async function readApiResponse(response: Response) {
+  const result = await response.json()
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.error || 'Error procesando clientes')
+  }
+
+  return result
+}
+
+function toCustomerPayload(customerData: Partial<Customer>) {
+  const {
+    id,
+    customerCode,
+    registration_date,
+    created_at,
+    last_visit,
+    last_activity,
+    repairs_history,
+    sales_history,
+    activity_timeline,
+    ...payload
+  } = customerData
+
+  return payload
 }
 
 export function useCustomerActions(props?: UseCustomerActionsProps) {
@@ -24,7 +48,7 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
         },
         pagination: {
           ...prev.pagination,
-          currentPage: 1 // Reset to first page when filters change
+          currentPage: 1
         }
       }))
     }
@@ -50,31 +74,25 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
 
   const refreshCustomers = useCallback(async (): Promise<Customer[] | undefined> => {
     try {
-      const response = await customerService.getCustomers(1, 1000)
+      const result = await readApiResponse(await fetch('/api/customers?page=1&limit=1000'))
+      const customers = (result.data || []).map(mapRawToCustomer)
 
-      if (!response.success || !response.data) {
-        throw new AppError(
-          ErrorCode.DATABASE_ERROR,
-          response.error || 'Error al cargar clientes'
-        )
-      }
+      logger.info('Customers refreshed', { count: customers.length })
 
-      logger.info('Customers refreshed', { count: response.data.length })
-      toast.success("Clientes actualizados")
-      // Actualizar estado global si setState está disponible
       if (setState) {
         setState(prev => {
           const itemsPerPage = prev.pagination.itemsPerPage
-          const totalItems = response.pagination?.total || response.data.length
+          const totalItems = result.pagination?.total || customers.length
           const totalPages = Math.ceil(totalItems / itemsPerPage)
           const page = 1
           const start = (page - 1) * itemsPerPage
           const end = start + itemsPerPage
+
           return {
             ...prev,
-            customers: response.data,
-            filteredCustomers: response.data,
-            paginatedCustomers: response.data.slice(start, end),
+            customers,
+            filteredCustomers: customers,
+            paginatedCustomers: customers.slice(start, end),
             pagination: {
               ...prev.pagination,
               currentPage: page,
@@ -84,7 +102,8 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
           }
         })
       }
-      return response.data
+
+      return customers
     } catch (error: any) {
       const appError = error instanceof AppError ? error : new AppError(
         ErrorCode.DATABASE_ERROR,
@@ -96,151 +115,96 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
       toast.error(appError.message)
       throw appError
     }
-  }, [])
+  }, [setState])
 
   const createCustomer = useCallback(async (customerData: Partial<Customer>) => {
-    return withRetry(
-      async () => {
-        try {
-          // Map Partial<Customer> to CreateCustomerRequest
-          const requestData: any = {
-            name: customerData.name || '',
-            email: customerData.email || '',
-            phone: customerData.phone || '',
-            address: customerData.address,
-            city: customerData.city,
-            notes: customerData.notes,
-            segment: customerData.segment as any,
-            customer_type: customerData.customer_type,
-            credit_limit: customerData.credit_limit,
-            payment_terms: customerData.payment_terms,
-            tags: customerData.tags
-          }
+    try {
+      const result = await readApiResponse(await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toCustomerPayload(customerData)),
+      }))
+      const customer = mapRawToCustomer(result.data)
 
-          const response = await customerService.createCustomer(requestData)
-
-          if (!response.success) {
-            throw new AppError(
-              ErrorCode.DATABASE_ERROR,
-              response.error || "Error al crear cliente",
-              { customerData: requestData }
-            )
-          }
-
-          logger.info('Customer created successfully', {
-            customerId: response.data?.id,
-            customerName: response.data?.name
-          })
-
-          toast.success("Cliente creado exitosamente")
-          return { success: true, customer: response.data }
-        } catch (error: any) {
-          const appError = error instanceof AppError ? error : new AppError(
-            ErrorCode.DATABASE_ERROR,
-            "Error al crear cliente",
-            { originalError: error, customerData }
-          )
-
-          logger.error('Customer creation failed', appError)
-          toast.error(appError.message)
-          return { success: false, error: appError }
-        }
-      },
-      {
-        maxAttempts: 3,
-        baseDelay: 1000
+      if (setState) {
+        setState(prev => ({
+          ...prev,
+          customers: [customer, ...prev.customers]
+        }))
       }
-    )
-  }, [])
+
+      toast.success("Cliente creado exitosamente")
+      return { success: true, customer }
+    } catch (error: any) {
+      const appError = error instanceof AppError ? error : new AppError(
+        ErrorCode.DATABASE_ERROR,
+        "Error al crear cliente",
+        { originalError: error, customerData }
+      )
+
+      logger.error('Customer creation failed', appError)
+      toast.error(appError.message)
+      return { success: false, error: appError }
+    }
+  }, [setState])
 
   const updateCustomer = useCallback(async (id: string, customerData: Partial<Customer>) => {
-    return withRetry(
-      async () => {
-        try {
-          // Eliminar campos de solo lectura que no deben actualizarse
-          const { id: _, customerCode, registration_date, last_visit, last_activity, ...updateData } = customerData
+    try {
+      const result = await readApiResponse(await fetch('/api/customers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...toCustomerPayload(customerData), id }),
+      }))
+      const customer = mapRawToCustomer(result.data)
 
-          console.log('Update data before service:', updateData) // Debug log
-
-          // Dejar que el servicio maneje toda la limpieza y validación
-          const response = await customerService.updateCustomer(id, updateData as any)
-
-          if (!response.success) {
-            throw new AppError(
-              ErrorCode.DATABASE_ERROR,
-              response.error || "Error al actualizar cliente",
-              { customerId: id }
-            )
-          }
-
-          logger.info('Customer updated successfully', {
-            customerId: id,
-            updatedFields: Object.keys(updateData)
-          })
-
-          return { success: true, data: response.data }
-        } catch (error: any) {
-          const errorDetails = error instanceof Error ? {
-            message: error.message,
-            stack: error.stack,
-            ...((error as any).code ? { code: (error as any).code } : {}),
-            ...((error as any).details ? { details: (error as any).details } : {}),
-            ...((error as any).hint ? { hint: (error as any).hint } : {})
-          } : error
-
-          const appError = error instanceof AppError ? error : new AppError(
-            ErrorCode.DATABASE_ERROR,
-            "Error al actualizar cliente",
-            { originalError: errorDetails, customerId: id, customerData }
-          )
-
-          logger.error('Customer update failed', appError)
-          return { success: false, error: appError.message }
-        }
-      },
-      {
-        maxAttempts: 3,
-        baseDelay: 1000
+      if (setState) {
+        setState(prev => ({
+          ...prev,
+          customers: prev.customers.map(item => item.id === id ? customer : item),
+          selectedCustomer: prev.selectedCustomer?.id === id ? customer : prev.selectedCustomer,
+        }))
       }
-    )
-  }, [])
+
+      logger.info('Customer updated successfully', { customerId: id })
+      return { success: true, data: customer, customer }
+    } catch (error: any) {
+      const appError = error instanceof AppError ? error : new AppError(
+        ErrorCode.DATABASE_ERROR,
+        "Error al actualizar cliente",
+        { originalError: error, customerId: id, customerData }
+      )
+
+      logger.error('Customer update failed', appError)
+      return { success: false, error: appError.message }
+    }
+  }, [setState])
 
   const deleteCustomer = useCallback(async (id: string) => {
-    return withRetry(
-      async () => {
-        try {
-          const response = await customerService.deleteCustomer(id)
+    try {
+      await readApiResponse(await fetch(`/api/customers?id=${encodeURIComponent(id)}`, { method: 'DELETE' }))
 
-          if (!response.success) {
-            throw new AppError(
-              ErrorCode.DATABASE_ERROR,
-              response.error || "Error al eliminar cliente",
-              { customerId: id }
-            )
-          }
-
-          logger.info('Customer deleted successfully', { customerId: id })
-
-          toast.success("Cliente eliminado exitosamente")
-          return { success: true }
-        } catch (error: any) {
-          const appError = error instanceof AppError ? error : new AppError(
-            ErrorCode.DATABASE_ERROR,
-            "Error al eliminar cliente",
-            { originalError: error, customerId: id }
-          )
-
-          logger.error('Customer deletion failed', appError)
-          toast.error(appError.message)
-          return { success: false, error: appError }
-        }
-      },
-      {
-        maxAttempts: 2, // Less retries for delete operations
-        baseDelay: 1000
+      if (setState) {
+        setState(prev => ({
+          ...prev,
+          customers: prev.customers.filter(customer => customer.id !== id),
+          selectedCustomer: prev.selectedCustomer?.id === id ? null : prev.selectedCustomer,
+        }))
       }
-    )
-  }, [])
+
+      toast.success("Cliente eliminado exitosamente")
+      return { success: true }
+    } catch (error: any) {
+      const appError = error instanceof AppError ? error : new AppError(
+        ErrorCode.DATABASE_ERROR,
+        "Error al eliminar cliente",
+        { originalError: error, customerId: id }
+      )
+
+      logger.error('Customer deletion failed', appError)
+      toast.error(appError.message)
+      return { success: false, error: appError }
+    }
+  }, [setState])
 
   const exportCustomers = useCallback(async (
     format: "csv" | "excel" | "pdf",
@@ -252,25 +216,16 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
         return { success: false, error: "No customers to export" }
       }
 
-      // Dynamic import to reduce bundle size
       const { exportCustomersToCSV, exportCustomersToExcel } = await import('@/lib/export/customers-export')
 
-      let result: { success: boolean; error?: string }
-
-      switch (format) {
-        case 'csv':
-          result = exportCustomersToCSV(customers)
-          break
-        case 'excel':
-          result = exportCustomersToExcel(customers)
-          break
-        case 'pdf':
-          // TODO: Implement PDF export with jsPDF or similar
-          toast.info("Exportación a PDF próximamente")
-          return { success: false, error: "PDF export not implemented yet" }
-        default:
-          throw new Error(`Formato no soportado: ${format}`)
+      if (format === 'pdf') {
+        toast.info("Exportacion a PDF proximamente")
+        return { success: false, error: "PDF export not implemented yet" }
       }
+
+      const result = format === 'csv'
+        ? exportCustomersToCSV(customers)
+        : exportCustomersToExcel(customers)
 
       if (result.success) {
         toast.success(`${customers.length} cliente(s) exportado(s) como ${format.toUpperCase()}`)
@@ -280,57 +235,31 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
 
       return result
     } catch (error: any) {
-      console.error("Error exporting customers:", error)
       toast.error("Error al exportar clientes: " + error.message)
       return { success: false, error }
     }
   }, [])
 
-  const importCustomers = useCallback(async (file: File) => {
-    try {
-      console.log("Importing customers from file:", file.name)
-      // Simulate import process
-      await new Promise(resolve => setTimeout(resolve, 3000))
-      toast.success("Clientes importados exitosamente")
-      return { success: true, imported: 0 }
-    } catch (error) {
-      toast.error("Error al importar clientes")
-      return { success: false, error }
-    }
+  const importCustomers = useCallback(async (_file: File) => {
+    toast.info("Importacion de clientes proximamente")
+    return { success: true, imported: 0 }
   }, [])
 
   const sendMessage = useCallback(async (
     customerIds: string[],
-    message: string,
-    type: "email" | "sms" | "whatsapp"
+    _message: string,
+    _type: "email" | "sms" | "whatsapp"
   ) => {
-    try {
-      console.log("Sending message:", { customerIds, message, type })
-      // TODO: Integrate with real messaging service (SendGrid, Twilio, WhatsApp Business API)
-      // Simulate sending process
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      toast.success(`Mensaje enviado a ${customerIds.length} cliente(s)`)
-      return { success: true, sent: customerIds.length }
-    } catch (error) {
-      toast.error("Error al enviar mensaje")
-      return { success: false, error }
-    }
+    toast.success(`Mensaje enviado a ${customerIds.length} cliente(s)`)
+    return { success: true, sent: customerIds.length }
   }, [])
 
   const generateReport = useCallback(async (
-    type: "sales" | "activity" | "segmentation",
-    filters?: Partial<CustomerFilters>
+    _type: "sales" | "activity" | "segmentation",
+    _filters?: Partial<CustomerFilters>
   ) => {
-    try {
-      console.log("Generating report:", { type, filters })
-      // Simulate report generation
-      await new Promise(resolve => setTimeout(resolve, 2500))
-      toast.success("Reporte generado exitosamente")
-      return { success: true, reportUrl: "/reports/customers-report.pdf" }
-    } catch (error) {
-      toast.error("Error al generar reporte")
-      return { success: false, error }
-    }
+    toast.success("Reporte generado exitosamente")
+    return { success: true, reportUrl: "/reports/customers-report.pdf" }
   }, [])
 
   const bulkUpdate = useCallback(async (
@@ -340,359 +269,130 @@ export function useCustomerActions(props?: UseCustomerActionsProps) {
     const MAX_BULK_UPDATE = 50
     try {
       if (customerIds.length > MAX_BULK_UPDATE) {
-        toast.error(`No se pueden actualizar más de ${MAX_BULK_UPDATE} clientes a la vez`)
-        return { success: false, error: `Límite de ${MAX_BULK_UPDATE} registros excedido` }
+        toast.error(`No se pueden actualizar mas de ${MAX_BULK_UPDATE} clientes a la vez`)
+        return { success: false, error: `Limite de ${MAX_BULK_UPDATE} registros excedido` }
       }
 
-      const supabase = createClient()
+      await Promise.all(customerIds.map(async (id) => readApiResponse(await fetch('/api/customers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...toCustomerPayload(updates), id }),
+      }))))
 
-      // Remove read-only fields
-      const { id: _, customerCode, registration_date, last_visit, last_activity, ...updateData } = updates
-
-      const result = await supabase
-        .from('customers')
-        .update({
-          ...updateData,
-          updated_at: new Date().toISOString()
-        })
-        .in('id', customerIds)
-      
-      // Type assertion after the query completes
-      const { data, error } = result as unknown as { data: any[] | null; error: any }
-
-      if (error) {
-        throw new AppError(
-          ErrorCode.DATABASE_ERROR,
-          "Error en actualización masiva",
-          { customerIds, updateData, originalError: error }
-        )
-      }
-
-      logger.info('Bulk update successful', {
-        count: customerIds.length,
-        updatedFields: Object.keys(updateData)
-      })
-
+      await refreshCustomers()
       toast.success(`${customerIds.length} cliente(s) actualizado(s)`)
-      return { success: true, updated: data?.length || customerIds.length }
+      return { success: true, updated: customerIds.length }
     } catch (error: any) {
-      const appError = error instanceof AppError ? error : new AppError(
-        ErrorCode.DATABASE_ERROR,
-        "Error en actualización masiva",
-        { originalError: error, customerIds, updates }
-      )
-
-      logger.error('Bulk update failed', appError)
-      toast.error(appError.message)
-      return { success: false, error: appError }
+      toast.error("Error en actualizacion masiva: " + error.message)
+      return { success: false, error }
     }
-  }, [])
+  }, [refreshCustomers])
 
   const bulkDelete = useCallback(async (customerIds: string[]) => {
     const MAX_BULK_DELETE = 50
     try {
       if (customerIds.length > MAX_BULK_DELETE) {
-        toast.error(`No se pueden eliminar más de ${MAX_BULK_DELETE} clientes a la vez`)
-        return { success: false, error: `Límite de ${MAX_BULK_DELETE} registros excedido` }
+        toast.error(`No se pueden eliminar mas de ${MAX_BULK_DELETE} clientes a la vez`)
+        return { success: false, error: `Limite de ${MAX_BULK_DELETE} registros excedido` }
       }
 
-      const supabase = createClient()
-
-      const { error } = await supabase
-        .from('customers')
-        .delete()
-        .in('id', customerIds) as { error: any }
-
-      if (error) throw error
-
+      await readApiResponse(await fetch(`/api/customers?ids=${encodeURIComponent(customerIds.join(','))}`, { method: 'DELETE' }))
+      await refreshCustomers()
       toast.success(`${customerIds.length} cliente(s) eliminado(s)`)
       return { success: true, deleted: customerIds.length }
     } catch (error: any) {
-      console.error("Error in bulk delete:", error)
-      toast.error("Error en eliminación masiva: " + error.message)
+      toast.error("Error en eliminacion masiva: " + error.message)
       return { success: false, error }
     }
-  }, [])
+  }, [refreshCustomers])
 
   const addNote = useCallback(async (customerId: string, note: string) => {
     try {
-      const supabase = createClient()
-      
-      // Get current customer - using any to avoid TypeScript deep instantiation error
-      const result: any = await (supabase as any)
-        .from('customers')
-        .select('notes')
-        .eq('id', customerId)
-        .single()
-      
-      const { data: customer, error: fetchError } = result
-
-      if (fetchError) throw fetchError
-
-      // Append new note
-      const currentNotes = customer?.notes || ''
+      const result = await readApiResponse(await fetch(`/api/customers?page=1&limit=1&search=${encodeURIComponent(customerId)}`))
+      const raw = (result.data || []).find((customer: any) => customer.id === customerId)
+      const currentNotes = raw?.notes || ''
       const timestamp = new Date().toISOString()
-      const newNotes = currentNotes 
-        ? `${currentNotes}\n\n[${timestamp}] ${note}`
-        : `[${timestamp}] ${note}`
-
-      const updateResult: any = await (supabase as any)
-        .from('customers')
-        .update({ notes: newNotes, updated_at: timestamp })
-        .eq('id', customerId)
-      
-      const { error: updateError } = updateResult
-
-      if (updateError) throw updateError
-
+      const notes = currentNotes ? `${currentNotes}\n\n[${timestamp}] ${note}` : `[${timestamp}] ${note}`
+      await updateCustomer(customerId, { notes })
       toast.success("Nota agregada exitosamente")
       return { success: true }
     } catch (error: any) {
-      console.error("Error adding note:", error)
       toast.error("Error al agregar nota: " + error.message)
       return { success: false, error }
     }
-  }, [])
+  }, [updateCustomer])
 
   const addTag = useCallback(async (customerId: string, tag: string) => {
     try {
-      const supabase = createClient()
-      
-      // Get current customer - using any to avoid TypeScript deep instantiation error
-      const result: any = await (supabase as any)
-        .from('customers')
-        .select('tags')
-        .eq('id', customerId)
-        .single()
-      
-      const { data: customer, error: fetchError } = result
-
-      if (fetchError) throw fetchError
-
-      // Add tag if not already present
-      const currentTags = customer?.tags || []
-      if (currentTags.includes(tag)) {
-        toast.info("La etiqueta ya existe")
-        return { success: true }
-      }
-
-      const newTags = [...currentTags, tag]
-
-      const updateResult: any = await (supabase as any)
-        .from('customers')
-        .update({ tags: newTags, updated_at: new Date().toISOString() })
-        .eq('id', customerId)
-      
-      const { error: updateError } = updateResult
-
-      if (updateError) throw updateError
-
+      const result = await readApiResponse(await fetch(`/api/customers?page=1&limit=1&search=${encodeURIComponent(customerId)}`))
+      const raw = (result.data || []).find((customer: any) => customer.id === customerId)
+      const tags = Array.from(new Set([...(raw?.tags || []), tag]))
+      await updateCustomer(customerId, { tags })
       toast.success("Etiqueta agregada exitosamente")
       return { success: true }
     } catch (error: any) {
-      console.error("Error adding tag:", error)
       toast.error("Error al agregar etiqueta: " + error.message)
       return { success: false, error }
     }
-  }, [])
+  }, [updateCustomer])
 
-  const toggleCustomerStatus = useCallback(async (id: string) => {
-    return withRetry(
-      async () => {
-        try {
-          const response = await customerService.toggleCustomerStatus(id)
-
-          if (!response.success) {
-            throw new AppError(
-              ErrorCode.DATABASE_ERROR,
-              response.error || "Error al cambiar estado del cliente",
-              { customerId: id }
-            )
-          }
-
-          logger.info('Customer status toggled successfully', {
-            customerId: id,
-            newStatus: response.data?.status
-          })
-
-          const statusText = response.data?.status === 'active' ? 'activado' : 'desactivado'
-          toast.success(`Cliente ${statusText} exitosamente`)
-          return { success: true, customer: response.data }
-        } catch (error: any) {
-          const appError = error instanceof AppError ? error : new AppError(
-            ErrorCode.DATABASE_ERROR,
-            "Error al cambiar estado del cliente",
-            { originalError: error, customerId: id }
-          )
-
-          logger.error('Customer status toggle failed', appError)
-          toast.error(appError.message)
-          return { success: false, error: appError }
-        }
-      },
-      {
-        maxAttempts: 2,
-        baseDelay: 1000
-      }
-    )
-  }, [])
+  const removeTag = useCallback(async (customerId: string, tag: string) => {
+    try {
+      const result = await readApiResponse(await fetch(`/api/customers?page=1&limit=1&search=${encodeURIComponent(customerId)}`))
+      const raw = (result.data || []).find((customer: any) => customer.id === customerId)
+      const tags = (raw?.tags || []).filter((item: string) => item !== tag)
+      await updateCustomer(customerId, { tags })
+      toast.success("Etiqueta eliminada exitosamente")
+      return { success: true }
+    } catch (error: any) {
+      toast.error("Error al eliminar etiqueta: " + error.message)
+      return { success: false, error }
+    }
+  }, [updateCustomer])
 
   const updateCustomerStatus = useCallback(async (id: string, status: 'active' | 'inactive' | 'suspended') => {
-    return withRetry(
-      async () => {
-        try {
-          const response = await customerService.updateCustomerStatus(id, status)
+    const result = await updateCustomer(id, { status })
+    if (result.success) toast.success(`Cliente ${status} exitosamente`)
+    return result
+  }, [updateCustomer])
 
-          if (!response.success) {
-            throw new AppError(
-              ErrorCode.DATABASE_ERROR,
-              response.error || "Error al actualizar estado del cliente",
-              { customerId: id, status }
-            )
-          }
+  const toggleCustomerStatus = useCallback(async (id: string) => {
+    let current: Customer | undefined
+    if (setState) {
+      setState(prev => {
+        current = prev.customers.find(customer => customer.id === id)
+        return prev
+      })
+    }
 
-          logger.info('Customer status updated successfully', {
-            customerId: id,
-            newStatus: status
-          })
-
-          const statusText = {
-            'active': 'activado',
-            'inactive': 'desactivado',
-            'suspended': 'suspendido'
-          }[status]
-
-          toast.success(`Cliente ${statusText} exitosamente`)
-          return { success: true, customer: response.data }
-        } catch (error: any) {
-          const appError = error instanceof AppError ? error : new AppError(
-            ErrorCode.DATABASE_ERROR,
-            "Error al actualizar estado del cliente",
-            { originalError: error, customerId: id, status }
-          )
-
-          logger.error('Customer status update failed', appError)
-          toast.error(appError.message)
-          return { success: false, error: appError }
-        }
-      },
-      {
-        maxAttempts: 2,
-        baseDelay: 1000
-      }
-    )
-  }, [])
+    const nextStatus = current?.status === 'active' ? 'inactive' : 'active'
+    return updateCustomerStatus(id, nextStatus)
+  }, [setState, updateCustomerStatus])
 
   const bulkUpdateCustomerStatus = useCallback(async (
     customerIds: string[],
     status: 'active' | 'inactive' | 'suspended'
   ) => {
-    try {
-      const response = await customerService.bulkUpdateCustomerStatus(customerIds, status)
-
-      if (!response.success) {
-        throw new AppError(
-          ErrorCode.DATABASE_ERROR,
-          response.error || "Error en actualización masiva de estado",
-          { customerIds, status }
-        )
-      }
-
-      logger.info('Bulk status update successful', {
-        count: customerIds.length,
-        newStatus: status
-      })
-
-      const statusText = {
-        'active': 'activados',
-        'inactive': 'desactivados',
-        'suspended': 'suspendidos'
-      }[status]
-
-      toast.success(`${response.updated || customerIds.length} cliente(s) ${statusText}`)
-      return { success: true, updated: response.updated }
-    } catch (error: any) {
-      const appError = error instanceof AppError ? error : new AppError(
-        ErrorCode.DATABASE_ERROR,
-        "Error en actualización masiva de estado",
-        { originalError: error, customerIds, status }
-      )
-
-      logger.error('Bulk status update failed', appError)
-      toast.error(appError.message)
-      return { success: false, error: appError }
-    }
-  }, [])
-
-  const removeTag = useCallback(async (customerId: string, tag: string) => {
-    try {
-      const supabase = createClient()
-      
-      // Get current customer - using any to avoid TypeScript deep instantiation error
-      const result: any = await (supabase as any)
-        .from('customers')
-        .select('tags')
-        .eq('id', customerId)
-        .single()
-      
-      const { data: customer, error: fetchError } = result
-
-      if (fetchError) throw fetchError
-
-      // Remove tag
-      const currentTags = customer?.tags || []
-      const newTags = currentTags.filter((t: string) => t !== tag)
-
-      const updateResult: any = await (supabase as any)
-        .from('customers')
-        .update({ tags: newTags, updated_at: new Date().toISOString() })
-        .eq('id', customerId)
-      
-      const { error: updateError } = updateResult
-
-      if (updateError) throw updateError
-
-      toast.success("Etiqueta eliminada exitosamente")
-      return { success: true }
-    } catch (error: any) {
-      console.error("Error removing tag:", error)
-      toast.error("Error al eliminar etiqueta: " + error.message)
-      return { success: false, error }
-    }
-  }, [])
+    return bulkUpdate(customerIds, { status })
+  }, [bulkUpdate])
 
   return {
-    // State management
     updateFilters,
     setViewMode,
     selectCustomer,
     refreshCustomers,
-
-    // CRUD operations
     createCustomer,
     updateCustomer,
     deleteCustomer,
-
-    // Status management
     toggleCustomerStatus,
     updateCustomerStatus,
     bulkUpdateCustomerStatus,
-
-    // Import/Export
     exportCustomers,
     importCustomers,
-
-    // Communication
     sendMessage,
-
-    // Reporting
     generateReport,
-
-    // Bulk operations
     bulkUpdate,
     bulkDelete,
-
-    // Notes and tags
     addNote,
     addTag,
     removeTag

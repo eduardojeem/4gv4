@@ -8,13 +8,23 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: [
+          '/saas',
+          '/marketplace',
+          '/marketplace/empresas/',
+          '/default/inicio',
+          '/default/productos',
+          '/default/productos/',
+        ],
+        disallow: [
           '/inicio',
           '/productos',
           '/productos/',
-        ],
-        disallow: [
+          '/products',
+          '/products/',
           '/mis-reparaciones',
           '/mis-reparaciones/',
+          '/*/mis-reparaciones',
+          '/*/mis-reparaciones/',
           '/perfil',
           '/perfil/',
           '/dashboard',

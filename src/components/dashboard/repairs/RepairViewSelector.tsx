@@ -39,7 +39,7 @@ export function RepairViewSelector({ viewMode, onViewModeChange, onPreload }: Re
             variant="ghost"
             size="sm"
             onClick={() => onViewModeChange(option.mode)}
-            onMouseEnter={() => shouldPreload && onPreload?.(option.mode)}
+            onMouseEnter={() => shouldPreload && onPreload?.(option.mode as 'kanban' | 'calendar')}
             className={cn(
               'h-10 rounded-xl px-3 text-xs font-medium transition-all duration-200',
               isActive

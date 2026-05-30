@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
-import customerService from "@/services/customer-service"
 import { useDebounce } from "./use-debounce"
 
 export interface Customer {
@@ -111,7 +110,7 @@ const initialFilters: CustomerFilters = {
  * Maps a raw Supabase row to the Customer interface.
  * Centralized here to avoid duplication in realtime handlers.
  */
-function mapRawToCustomer(raw: Record<string, any>): Customer {
+export function mapRawToCustomer(raw: Record<string, any>): Customer {
   return {
     ...raw,
     id: raw.id,
@@ -193,14 +192,15 @@ export function useCustomerState() {
         const allCustomers: Customer[] = []
 
         while (currentPage <= totalPages) {
-          const response = await customerService.getCustomers(currentPage, pageSize)
+          const response = await fetch(`/api/customers?page=${currentPage}&limit=${pageSize}`)
+          const result = await response.json()
 
-          if (!response.success || !response.data) {
-            throw new Error(response.error || 'Error al cargar clientes')
+          if (!response.ok || !result.success) {
+            throw new Error(result.error || 'Error al cargar clientes')
           }
 
-          allCustomers.push(...response.data)
-          totalPages = response.pagination?.totalPages || 1
+          allCustomers.push(...(result.data || []).map(mapRawToCustomer))
+          totalPages = result.pagination?.totalPages || 1
           currentPage += 1
         }
 

@@ -613,14 +613,14 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       const allMovements = (cashMovementsResponse.data || []) as CashMovementRecord[]
       const allAlerts = (cashAlertsResponse.data || []) as CashAlertRecord[]
       const baseProducts = (productsResponse.data || []) as Array<ProductRecord & { id: string; stock_quantity?: number | string | null }>
-      const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+      const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
         supabase,
         filters.branch === 'all' ? null : filters.branch,
         baseProducts.map((product) => String(product.id))
       )
-      const allProducts = applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped) as ProductRecord[]
+      const allProducts = (applyBranchInventoryToProducts as any)(baseProducts, stockMap, branchScoped) as ProductRecord[]
       const productStockMap = new Map(
-        allProducts.map((product) => [String(product.id), toNumber(product.stock_quantity ?? product.stock)])
+        allProducts.map((product: any) => [String(product.id), toNumber(product.stock_quantity ?? product.stock)])
       )
       const movedProducts = new Set(
         ((productMovementsResponse.data || []) as Array<{ product_id: string; branch_id?: string | null }>)
@@ -686,10 +686,10 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       let saleItemsResponse: { data: SaleItemRecord[] | null; error: unknown } = { data: [], error: null }
       if (selectedSaleIds.length > 0) {
         try {
-          saleItemsResponse = await supabase
+          saleItemsResponse = (await supabase
             .from('sale_items')
             .select('id, sale_id, product_id, quantity, subtotal, unit_price, product:products(id, name, purchase_price, stock_quantity, category:categories(name))')
-            .in('sale_id', selectedSaleIds.slice(0, 500))
+            .in('sale_id', selectedSaleIds.slice(0, 500))) as unknown as { data: SaleItemRecord[] | null; error: unknown }
         } catch (e) {
           console.warn('[analytics] sale_items query failed:', e)
         }

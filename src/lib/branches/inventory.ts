@@ -12,7 +12,7 @@ type BranchInventoryQuery<T> = QueryResult<T> & {
   in?: (field: string, values: string[]) => QueryResult<T>
 }
 
-type BranchInventoryClient = {
+export type BranchInventoryClient = {
   from: (table: string) => {
     select: (columns: string) => BranchInventoryQuery<InventoryRow>
     upsert?: (

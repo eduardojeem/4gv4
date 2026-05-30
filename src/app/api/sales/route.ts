@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withAuth } from '@/lib/api/withAuth'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { saleSchema, saleUpdateSchema } from '@/lib/validation/schemas'
 import { SALE_STATUS } from '@/lib/sales-status'
 
 // GET /api/sales - Get sales with filters
-export const GET = withAuth(async (request, { user }) => {
+export const GET = withTenantAuth({ permission: 'pos.sales.read', module: 'pos' }, async (request, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     
@@ -30,6 +30,7 @@ export const GET = withAuth(async (request, { user }) => {
           product:products(id, name, sku)
         )
       `, { count: 'exact' })
+      .eq('organization_id', organization.id)
     
     // Apply filters
     if (startDate) {
@@ -80,7 +81,7 @@ export const GET = withAuth(async (request, { user }) => {
 })
 
 // POST /api/sales - Create new sale with items
-export const POST = withAuth(async (request, { user }) => {
+export const POST = withTenantAuth({ permission: 'pos.sales.create', module: 'pos' }, async (request, { user, organization }) => {
   try {
     const body = await request.json()
     const supabase = await createClient()
@@ -124,6 +125,8 @@ export const POST = withAuth(async (request, { user }) => {
       .from('sales')
       .insert({
         user_id: user.id,
+        created_by: user.id,
+        organization_id: organization.id,
         customer_id: finalCustomerId || null,
         total: validated.total_amount,
         tax: validated.tax_amount || 0,
@@ -142,6 +145,7 @@ export const POST = withAuth(async (request, { user }) => {
     // 2. Insert sale items
     const saleItems = validated.items.map((item) => ({
       sale_id: sale.id,
+      organization_id: organization.id,
       product_id: item.product_id,
       quantity: item.quantity,
       unit_price: item.unit_price,
@@ -159,7 +163,11 @@ export const POST = withAuth(async (request, { user }) => {
       })
       
       // Rollback: delete the sale
-      await supabase.from('sales').delete().eq('id', sale.id)
+      await supabase
+        .from('sales')
+        .delete()
+        .eq('id', sale.id)
+        .eq('organization_id', organization.id)
       
       return NextResponse.json(
         { success: false, error: 'Failed to create sale items' },
@@ -173,6 +181,7 @@ export const POST = withAuth(async (request, { user }) => {
         .from('products')
         .select('stock_quantity')
         .eq('id', item.product_id)
+        .eq('organization_id', organization.id)
         .single()
       
       if (!productError && product) {
@@ -182,6 +191,7 @@ export const POST = withAuth(async (request, { user }) => {
           .from('products')
           .update({ stock_quantity: Math.max(0, newStock) })
           .eq('id', item.product_id)
+          .eq('organization_id', organization.id)
       }
     }
     
@@ -201,6 +211,7 @@ export const POST = withAuth(async (request, { user }) => {
         sale_items(*, product:products(id, name, sku))
       `)
       .eq('id', sale.id)
+      .eq('organization_id', organization.id)
       .single()
     
     return NextResponse.json({
@@ -217,7 +228,7 @@ export const POST = withAuth(async (request, { user }) => {
 })
 
 // PUT /api/sales - Update sale status
-export const PUT = withAuth(async (request, { user }) => {
+export const PUT = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos' }, async (request, { user, organization }) => {
   try {
     const body = await request.json()
     const supabase = await createClient()
@@ -255,6 +266,7 @@ export const PUT = withAuth(async (request, { user }) => {
       .from('sales')
       .update(updates)
       .eq('id', validated.id)
+      .eq('organization_id', organization.id)
       .select()
       .single()
     
@@ -279,7 +291,7 @@ export const PUT = withAuth(async (request, { user }) => {
 })
 
 // DELETE /api/sales - Delete sale (admin only)
-export const DELETE = withAuth(async (request, { user }) => {
+export const DELETE = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos' }, async (request, { user, organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const saleId = searchParams.get('id')
@@ -293,25 +305,19 @@ export const DELETE = withAuth(async (request, { user }) => {
     
     const supabase = await createClient()
     
-    // Check if user is admin
-    if (user.role !== 'admin' && user.role !== 'super_admin') {
-      return NextResponse.json(
-        { success: false, error: 'Only admins can delete sales' },
-        { status: 403 }
-      )
-    }
-    
     // Delete sale items first (cascade might handle this, but being explicit)
     await supabase
       .from('sale_items')
       .delete()
       .eq('sale_id', saleId)
+      .eq('organization_id', organization.id)
     
     // Delete sale
     const { error } = await supabase
       .from('sales')
       .delete()
       .eq('id', saleId)
+      .eq('organization_id', organization.id)
     
     if (error) {
       logger.error('Failed to delete sale', { error: error.message, saleId })

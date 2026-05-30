@@ -592,7 +592,10 @@ const SupplierManagement: React.FC = () => {
               <Label>Estado</Label>
               <Select 
                 value={editingSupplier.status || ''} 
-                onValueChange={(value) => setEditingSupplier(prev => ({ ...prev, status: value as any }))}
+                onValueChange={(value) => setEditingSupplier(prev => ({
+                  ...prev,
+                  status: value as Supplier['status'],
+                }))}
               >
                 <SelectTrigger className="dark:bg-gray-700 dark:border-gray-600">
                   <SelectValue placeholder="Seleccionar estado" />

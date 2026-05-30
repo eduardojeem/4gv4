@@ -1,5 +1,11 @@
 export interface BranchRecord {
   id: string
+  organization_id?: string | null
+  organization?: {
+    id: string
+    name: string
+    slug?: string | null
+  } | null
   code: string
   name: string
   slug?: string | null

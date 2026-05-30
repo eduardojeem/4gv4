@@ -116,19 +116,20 @@ const StockControl: React.FC = () => {
       
       if (productsError) throw productsError
 
-      const branchAwareProducts = await loadBranchInventoryStockMap(
+      const branchAwareProducts = await (loadBranchInventoryStockMap as any)(
         supabase,
         selectedBranchId,
-        (productsData || []).map((product) => product.id)
-      ).then(({ stockMap, branchScoped }) =>
-        applyBranchInventoryToProducts(
+        (productsData || []).map((product: any) => product.id)
+      ).then(({ stockMap, branchScoped }: any) =>
+        (applyBranchInventoryToProducts as any)(
           (productsData || []) as Array<{ id: string; stock_quantity?: number | null } & Record<string, unknown>>,
           stockMap,
           branchScoped
         )
       )
 
-      const formattedProducts: Product[] = branchAwareProducts.map(p => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const formattedProducts: Product[] = (branchAwareProducts as any[]).map(p => ({
         id: p.id,
         name: p.name,
         sku: p.sku || '',

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import { ArrowRight, Package, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import useSWR from 'swr'
@@ -57,6 +58,10 @@ const offersFetcher = async (url: string): Promise<OfferCard[]> => {
 }
 
 export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselProps) {
+  const pathname = usePathname()
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
+
   const { data: offerCards, error, isLoading } = useSWR(
     '/api/public/products?per_page=50&sort=newest&has_offer=true',
     offersFetcher,
@@ -170,7 +175,7 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
             </p>
           </div>
           <Button asChild variant="outline" className="w-full sm:w-auto">
-            <Link href="/productos">
+            <Link href={`${tenantPrefix}/productos`}>
               Ver catalogo completo
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
@@ -261,7 +266,7 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
                         {offer.inStock ? 'Disponible' : 'Sin stock'}
                       </span>
                       <Button asChild size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700">
-                        <Link href={offer.ctaHref}>Ver detalle</Link>
+                        <Link href={offer.ctaHref.startsWith('/productos') ? `${tenantPrefix}${offer.ctaHref}` : offer.ctaHref}>Ver detalle</Link>
                       </Button>
                     </div>
                   </div>

@@ -2,7 +2,7 @@
 import React from 'react'
 import { Metadata, ResolvingMetadata } from 'next'
 import Link from 'next/link'
-import { ArrowLeft, Check, XCircle, Package } from 'lucide-react'
+import { ArrowLeft, Check, XCircle, Package, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
@@ -14,9 +14,11 @@ import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import { ProductGallery, ProductActions } from './client-components'
 import { BranchAvailability } from '@/components/public/BranchAvailability'
+import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 
 // Allow ISR with 2-minute revalidation
-export const revalidate = 120
+// Same window as the list page — stock changes show within 60 s in both views
+export const revalidate = 60
 
 interface Props {
   params: Promise<{ id: string }>
@@ -27,6 +29,7 @@ export async function generateMetadata(
   parent: ResolvingMetadata
 ): Promise<Metadata> {
   const params = await props.params
+  const tenantPrefix = await getPublicTenantPathPrefix()
   const result = await getPublicProduct(params.id)
 
   if (!result) {
@@ -54,6 +57,7 @@ export async function generateMetadata(
 
 export default async function ProductDetailPage(props: Props) {
   const params = await props.params
+  const tenantPrefix = await getPublicTenantPathPrefix()
 
   // Resolve wholesale status once — shared across all queries in this page
   const { isWholesale } = await resolveWholesaleStatus()
@@ -72,7 +76,7 @@ export default async function ProductDetailPage(props: Props) {
             Es posible que el producto haya sido removido o no este disponible.
           </p>
           <Button variant="outline" className="mt-4 rounded-lg" asChild>
-            <Link href="/productos">
+            <Link href={prefixPublicTenantPath(tenantPrefix, '/productos')}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Volver al catalogo
             </Link>
@@ -83,17 +87,20 @@ export default async function ProductDetailPage(props: Props) {
   }
 
   const { product } = result
+  const productsHref = prefixPublicTenantPath(tenantPrefix, '/productos')
 
   // Prepare display data
   const isInStock = product.in_stock
-  const displayPrice = isWholesale && product.wholesale_price
+  const hasOffer = !isWholesale && product.has_offer === true && product.offer_price != null && product.offer_price < product.sale_price
+  const isWholesaleDiscount = isWholesale && product.wholesale_price != null && product.wholesale_price < product.sale_price
+  const displayPrice = hasOffer
+    ? product.offer_price!
+    : isWholesale && product.wholesale_price
     ? product.wholesale_price
     : product.sale_price
-  const hasDiscount = isWholesale &&
-    product.wholesale_price != null &&
-    product.wholesale_price < product.sale_price
+  const hasDiscount = hasOffer || isWholesaleDiscount
   const discountPercent = hasDiscount
-    ? Math.round(((product.sale_price - product.wholesale_price!) / product.sale_price) * 100)
+    ? Math.round(((product.sale_price - displayPrice) / product.sale_price) * 100)
     : 0
 
   // Fetch related products and branch stock in parallel
@@ -132,12 +139,12 @@ export default async function ProductDetailPage(props: Props) {
           <div className="container py-4">
             <Breadcrumbs
               items={[
-                { label: 'Productos', href: '/productos' },
+                { label: 'Productos', href: productsHref },
                 ...(product.category
                   ? [
                       {
                         label: product.category.name,
-                        href: `/productos?category_id=${product.category.id}`,
+                        href: prefixPublicTenantPath(tenantPrefix, `/productos?category_id=${product.category.id}`),
                       },
                     ]
                   : []),
@@ -150,7 +157,7 @@ export default async function ProductDetailPage(props: Props) {
         <div className="container py-8 lg:py-12">
           {/* Back link */}
           <Link
-            href="/productos"
+            href={productsHref}
             className="mb-8 hidden items-center text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline-flex"
           >
             <ArrowLeft className="mr-1.5 h-4 w-4" />
@@ -196,6 +203,12 @@ export default async function ProductDetailPage(props: Props) {
                   {product.category && (
                     <Badge variant="outline" className="text-xs rounded-full">
                       {product.category.name}
+                    </Badge>
+                  )}
+                  {hasOffer && discountPercent > 0 && (
+                    <Badge className="gap-1 bg-rose-600 text-white text-xs rounded-full">
+                      <Tag className="h-3 w-3" />
+                      -{discountPercent}% OFERTA
                     </Badge>
                   )}
                   {isWholesale && product.wholesale_price && (
@@ -275,7 +288,7 @@ export default async function ProductDetailPage(props: Props) {
                 </h2>
                 {product.category && (
                   <Link
-                    href={`/productos?category_id=${product.category.id}`}
+                    href={prefixPublicTenantPath(tenantPrefix, `/productos?category_id=${product.category.id}`)}
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Ver mas

@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import type { UISupplier } from '@/lib/types/supplier-ui'
-import { computeSupplierStats } from './suppliers-stats'
 import { validateSupplier, formatValidationErrors } from '@/lib/validations/supplier'
 import type { SupplierStats } from './suppliers-stats'
 
@@ -12,7 +10,13 @@ export type Supplier = UISupplier
 
 export type { SupplierStats } from './suppliers-stats'
 
-// computeSupplierStats importado desde './suppliers-stats'
+type SupplierApiRow = Partial<Supplier> & {
+    contact_person?: string | null
+}
+
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : 'Error desconocido'
+}
 
 export function useSuppliers() {
     const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -29,67 +33,7 @@ export function useSuppliers() {
         total_orders: 0,
         total_amount: 0
     })
-    const [statsLoading, setStatsLoading] = useState(false)
-
-    const supabase = createClient()
-
-    // Calculate stats from DB - optimized with RPC
-    const fetchStats = useCallback(async () => {
-        try {
-            setStatsLoading(true)
-
-            // Try to use RPC function first (more efficient)
-            const { data: rpcData, error: rpcError } = await supabase
-                .rpc('get_supplier_stats')
-
-            if (!rpcError && rpcData) {
-                // The function now returns JSON, so we use it directly
-                setStats({
-                    total_suppliers: rpcData.total_suppliers || 0,
-                    active_suppliers: rpcData.active_suppliers || 0,
-                    inactive_suppliers: rpcData.inactive_suppliers || 0,
-                    pending_suppliers: rpcData.pending_suppliers || 0,
-                    avg_rating: rpcData.avg_rating || 0,
-                    total_orders: rpcData.total_orders || 0,
-                    total_amount: rpcData.total_amount || 0
-                })
-                return
-            }
-
-            // Fallback to client-side calculation if RPC doesn't exist
-            console.log('RPC function not found or failed, using fallback method')
-
-            // Execute counts in parallel
-            const [totalResult, activeResult, inactiveResult, pendingResult] = await Promise.all([
-                supabase.from('suppliers').select('*', { count: 'exact', head: true }),
-                supabase.from('suppliers').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-                supabase.from('suppliers').select('*', { count: 'exact', head: true }).eq('status', 'inactive'),
-                supabase.from('suppliers').select('*', { count: 'exact', head: true }).eq('status', 'pending')
-            ])
-
-            let totalOrders = 0
-            let totalAmount = 0
-            let avgRating = 0
-
-            // Try to fetch aggregation data safely - NOT EXISTING IN DB YET, using defaults
-            // We can calculate avgRating if we had it, but for now 0.
-            
-            setStats({
-                total_suppliers: totalResult.count || 0,
-                active_suppliers: activeResult.count || 0,
-                inactive_suppliers: inactiveResult.count || 0,
-                pending_suppliers: pendingResult.count || 0,
-                avg_rating: 0,
-                total_orders: 0,
-                total_amount: 0
-            })
-
-        } catch (error: unknown) {
-            console.error('Error fetching supplier stats:', error)
-        } finally {
-            setStatsLoading(false)
-        }
-    }, [supabase])
+    const [statsLoading] = useState(false)
 
     // Fetch suppliers
     const fetchSuppliers = useCallback(async (params?: {
@@ -104,38 +48,22 @@ export function useSuppliers() {
             setLoading(true)
             const currentPage = params?.page ?? page
             const currentPageSize = params?.pageSize ?? pageSize
-            let query = supabase
-                .from('suppliers')
-                .select('*', { count: 'exact' })
+            const searchParams = new URLSearchParams()
+            searchParams.set('page', String(currentPage))
+            searchParams.set('pageSize', String(currentPageSize))
+            if (params?.search && params.search.trim()) searchParams.set('search', params.search.trim())
+            if (params?.status && params.status !== 'all') searchParams.set('status', params.status)
+            if (params?.businessType && params.businessType !== 'all') searchParams.set('business_type', params.businessType)
 
-            if (params?.search && params.search.trim()) {
-                const q = params.search.trim()
-                query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%,contact_name.ilike.%${q}%`)
-            }
-            if (params?.status && params.status !== 'all') {
-                query = query.eq('status', params.status)
-            }
-            if (params?.businessType && params.businessType !== 'all') {
-                query = query.eq('business_type', params.businessType)
-            }
+            const response = await fetch(`/api/suppliers?${searchParams.toString()}`, { cache: 'no-store' })
+            const result = await response.json()
 
-            const sortKey = params?.sortBy ?? 'created-desc'
-            if (sortKey === 'name-asc') query = query.order('name', { ascending: true })
-            else if (sortKey === 'name-desc') query = query.order('name', { ascending: false })
-            // rating not in DB
-            // else if (sortKey === 'rating-desc') query = query.order('rating', { ascending: false })
-            else query = query.order('created_at', { ascending: false })
+            if (!response.ok || !result.success) throw new Error(result.error || 'No se pudieron cargar los proveedores')
 
-            query = query.range(currentPage * currentPageSize, currentPage * currentPageSize + currentPageSize - 1)
-
-            const { data, error, count } = await query
-
-            if (error) throw error
-
-            const dbSuppliers = data || []
+            const dbSuppliers = (result.data || []) as SupplierApiRow[]
             
             // Map DB supplier to UI Supplier with backward compatibility
-            const list: Supplier[] = dbSuppliers.map((s: any) => ({
+            const list: Supplier[] = dbSuppliers.map((s) => ({
                 id: s.id,
                 name: s.name,
                 contact_name: s.contact_name || s.contact_person || '',
@@ -146,7 +74,7 @@ export function useSuppliers() {
                 country: s.country || '',
                 postal_code: s.postal_code || '',
                 website: s.website || '',
-                business_type: (s.business_type || 'distributor') as any, 
+                business_type: (s.business_type || 'distributor') as Supplier['business_type'],
                 // Use status column if available, otherwise map from is_active
                 status: s.status || 'inactive',
                 rating: s.rating || 0,
@@ -159,11 +87,10 @@ export function useSuppliers() {
             } as unknown as Supplier))
 
             setSuppliers(list)
-            setTotal(count || 0)
-            // Stats are now fetched separately to be accurate across all pages
-            fetchStats()
-        } catch (error: any) {
-            const msg = error?.message || 'Error desconocido'
+            setTotal(result.count || 0)
+            if (result.stats) setStats(result.stats)
+        } catch (error: unknown) {
+            const msg = getErrorMessage(error)
             console.error('Error fetching suppliers:', error)
             
             // Handle specific schema errors gracefully
@@ -180,11 +107,11 @@ export function useSuppliers() {
         } finally {
             setLoading(false)
         }
-    }, [page, pageSize, supabase, fetchStats])
+    }, [page, pageSize])
 
     // Helper to map UI fields to DB fields
     const mapToDbPayload = (supplierData: Partial<Supplier>) => {
-        const payload: any = {
+        const payload: Record<string, unknown> = {
             ...supplierData,
             updated_at: new Date().toISOString()
         }
@@ -216,30 +143,22 @@ export function useSuppliers() {
             const dbPayload = mapToDbPayload(validation.data)
             dbPayload.created_at = new Date().toISOString()
 
-            const { data, error } = await supabase
-                .from('suppliers')
-                .insert([dbPayload])
-                .select()
-                .single()
+            const response = await fetch('/api/suppliers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(dbPayload)
+            })
+            const result = await response.json()
 
-            if (error) {
-                // Handle specific database errors
-                if (error.code === '23505') {
-                    if (error.message.includes('email')) {
-                        throw new Error('Ya existe un proveedor con este email')
-                    }
-                    throw new Error('Ya existe un proveedor con estos datos')
-                }
-                throw new Error(error.message)
-            }
+            if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo crear el proveedor')
 
             toast.success('Proveedor creado exitosamente')
             await fetchSuppliers()
-            return data
-        } catch (error: any) {
+            return result.data
+        } catch (error: unknown) {
             console.error('Error creating supplier:', error)
-            const msg = error?.message || 'Error desconocido'
-            if (error.code === '42501' || msg.includes('policy')) {
+            const msg = getErrorMessage(error)
+            if (msg.includes('42501') || msg.includes('policy')) {
                 toast.error('No tienes permisos para crear proveedores')
             } else {
                 toast.error(msg.includes('Ya existe') ? msg : 'Error al crear proveedor: ' + msg)
@@ -253,22 +172,22 @@ export function useSuppliers() {
         try {
             const dbPayload = mapToDbPayload(supplierData)
 
-            const { data, error } = await supabase
-                .from('suppliers')
-                .update(dbPayload)
-                .eq('id', id)
-                .select()
-                .single()
+            const response = await fetch('/api/suppliers', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...dbPayload, id })
+            })
+            const result = await response.json()
 
-            if (error) throw error
+            if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo actualizar el proveedor')
 
             toast.success('Proveedor actualizado exitosamente')
             await fetchSuppliers()
-            return data
-        } catch (error: any) {
+            return result.data
+        } catch (error: unknown) {
             console.error('Error updating supplier:', error)
-            const msg = error?.message || 'Error desconocido'
-            if (error.code === '42501' || msg.includes('policy')) {
+            const msg = getErrorMessage(error)
+            if (msg.includes('42501') || msg.includes('policy')) {
                 toast.error('No tienes permisos para actualizar este proveedor')
             } else {
                 toast.error('Error al actualizar proveedor: ' + msg)
@@ -280,12 +199,9 @@ export function useSuppliers() {
     // Delete supplier
     const deleteSupplier = async (id: string) => {
         try {
-            const { error } = await supabase
-                .from('suppliers')
-                .delete()
-                .eq('id', id)
-
-            if (error) throw error
+            const response = await fetch(`/api/suppliers?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+            const result = await response.json()
+            if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo eliminar el proveedor')
 
             toast.success('Proveedor eliminado exitosamente')
             await fetchSuppliers()
@@ -299,12 +215,9 @@ export function useSuppliers() {
     // Bulk delete suppliers
     const bulkDeleteSuppliers = async (ids: string[]) => {
         try {
-            const { error } = await supabase
-                .from('suppliers')
-                .delete()
-                .in('id', ids)
-
-            if (error) throw error
+            const response = await fetch(`/api/suppliers?ids=${encodeURIComponent(ids.join(','))}`, { method: 'DELETE' })
+            const result = await response.json()
+            if (!response.ok || !result.success) throw new Error(result.error || 'No se pudieron eliminar los proveedores')
 
             toast.success(`${ids.length} proveedores eliminados exitosamente`)
             await fetchSuppliers()
@@ -318,12 +231,15 @@ export function useSuppliers() {
     // Bulk update supplier status
     const bulkUpdateStatus = async (ids: string[], status: string) => {
         try {
-            const { error } = await supabase
-                .from('suppliers')
-                .update({ status, updated_at: new Date().toISOString() })
-                .in('id', ids)
-
-            if (error) throw error
+            await Promise.all(ids.map(async (id) => {
+                const response = await fetch('/api/suppliers', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, status, updated_at: new Date().toISOString() })
+                })
+                const result = await response.json()
+                if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo actualizar un proveedor')
+            }))
 
             toast.success(`Estado actualizado para ${ids.length} proveedores`)
             await fetchSuppliers()
@@ -344,25 +260,7 @@ export function useSuppliers() {
     useEffect(() => {
         fetchSuppliers()
 
-        const channel = supabase
-            .channel('suppliers-changes')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'suppliers'
-                },
-                () => {
-                    fetchSuppliers()
-                }
-            )
-            .subscribe()
-
-        return () => {
-            channel.unsubscribe()
-        }
-    }, [fetchSuppliers, supabase])
+    }, [fetchSuppliers])
 
     return {
         suppliers,

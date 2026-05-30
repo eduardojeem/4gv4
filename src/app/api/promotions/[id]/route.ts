@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { logger } from '@/lib/logger'
 
 type PromotionRow = {
@@ -50,6 +51,11 @@ function mapPromotionRow(row: PromotionRow) {
   }
 }
 
+async function resolveOrganization(auth: AuthResult) {
+  if (!auth.authenticated) return null
+  return getCurrentOrganizationContext(auth.user.id)
+}
+
 // GET - Obtener promoción específica
 export async function GET(
   _request: NextRequest,
@@ -61,6 +67,10 @@ export async function GET(
       const response = getAuthResponse(auth)
       if (response) return response
     }
+    const organization = await resolveOrganization(auth)
+    if (!organization) {
+      return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
 
     const { id } = await params
     const supabase = await createClient()
@@ -69,6 +79,7 @@ export async function GET(
       .from('promotions')
       .select('*')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (error) {
@@ -120,6 +131,10 @@ export async function PUT(
       const response = getAuthResponse(auth)
       if (response) return response
     }
+    const organization = await resolveOrganization(auth)
+    if (!organization) {
+      return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
 
     const { id } = await params
     const body = await request.json()
@@ -129,6 +144,7 @@ export async function PUT(
       .from('promotions')
       .select('*')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (existingError) {
@@ -145,6 +161,7 @@ export async function PUT(
         .from('promotions')
         .select('id')
         .neq('id', id)
+        .eq('organization_id', organization.id)
         .eq('name', String(body.name))
         .maybeSingle()
 
@@ -205,6 +222,7 @@ export async function PUT(
       .from('promotions')
       .update(patch)
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .select('*')
       .maybeSingle()
 
@@ -235,6 +253,10 @@ export async function DELETE(
       const response = getAuthResponse(auth)
       if (response) return response
     }
+    const organization = await resolveOrganization(auth)
+    if (!organization) {
+      return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
 
     const { id } = await params
     const supabase = await createClient()
@@ -243,6 +265,7 @@ export async function DELETE(
       .from('promotions')
       .select('*')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (existingError) {
@@ -259,6 +282,7 @@ export async function DELETE(
         .from('promotions')
         .update({ is_active: false })
         .eq('id', id)
+        .eq('organization_id', organization.id)
         .select('*')
         .single()
 
@@ -276,7 +300,11 @@ export async function DELETE(
       })
     }
 
-    const { error } = await supabase.from('promotions').delete().eq('id', id)
+    const { error } = await supabase
+      .from('promotions')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organization.id)
     if (error) {
       logger.error('Failed to delete promotion by id', { promotionId: id, error: error.message })
       throw error
@@ -303,6 +331,10 @@ export async function PATCH(
       const response = getAuthResponse(auth)
       if (response) return response
     }
+    const organization = await resolveOrganization(auth)
+    if (!organization) {
+      return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
 
     const { id } = await params
     const body = await request.json()
@@ -313,6 +345,7 @@ export async function PATCH(
       .from('promotions')
       .select('*')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (existingError) {
@@ -368,6 +401,7 @@ export async function PATCH(
       .from('promotions')
       .update(patch)
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .select('*')
       .single()
 

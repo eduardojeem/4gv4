@@ -39,13 +39,13 @@ function isUserBanned(user: { banned_until?: string | null }): boolean {
   return until > Date.now()
 }
 
-async function handler(_request: Request, context: { user: { id: string; email?: string; role: string } }) {
+async function handler(_request: Request, context: { user: { id: string; email?: string; role: string }; organizationId: string | null }) {
   try {
-    logger.info('Starting user sync', { syncedBy: context.user.id })
+    logger.info('Starting user sync', { syncedBy: context.user.id, organizationId: context.organizationId })
 
     const supabaseAdmin = createAdminSupabase()
 
-    // Obtener todos los usuarios de auth.users con paginacion para no truncar resultados.
+    // Obtener usuarios: super_admin sincroniza todos, admin solo los de su org.
     const users: Array<{
       id: string
       email?: string | null
@@ -54,21 +54,37 @@ async function handler(_request: Request, context: { user: { id: string; email?:
     }> = []
 
     let page = 1
-    const perPage = 1000
 
-    while (true) {
-      const { data, error: usersError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
-      if (usersError) {
-        throw usersError
+    if (context.organizationId) {
+      // Scope to org members only
+      const { data: members, error: membersError } = await supabaseAdmin
+        .from('organization_members')
+        .select('user_id')
+        .eq('organization_id', context.organizationId)
+
+      if (membersError) throw membersError
+
+      const userIds = (members ?? []).map((m: { user_id: string }) => m.user_id)
+
+      for (const userId of userIds) {
+        const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(userId)
+        if (!authError && authUser?.user) {
+          users.push(authUser.user as typeof users[number])
+        }
       }
+    } else {
+      // super_admin: sync all users
+      const perPage = 1000
+      while (true) {
+        const { data, error: usersError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
+        if (usersError) throw usersError
 
-      const batch = data?.users || []
-      users.push(...batch)
+        const batch = data?.users || []
+        users.push(...batch)
 
-      if (batch.length < perPage) {
-        break
+        if (batch.length < perPage) break
+        page += 1
       }
-      page += 1
     }
 
     const results = {

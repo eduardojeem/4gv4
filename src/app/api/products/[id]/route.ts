@@ -1,30 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requireAuth, requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { productUpdateSchema } from '@/lib/validation/schemas'
 import { logger } from '@/lib/logger'
+import type { AppRole } from '@/lib/auth/role-utils'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
-import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
+import {
+  applyBranchInventoryToProducts,
+  loadBranchInventoryStockMap,
+  upsertBranchInventoryStock,
+  type BranchInventoryClient,
+} from '@/lib/branches/inventory'
+
+type ProductRouteContext = { params: Promise<{ id: string }> }
 
 // GET /api/products/[id] - Obtener producto especifico (usuario autenticado)
-export async function GET(
+export const GET = withTenantAuth({ permission: 'inventory.products.read', module: 'inventory' }, async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { user, organization },
+  routeContext?: unknown
+) => {
   try {
-    const auth = await requireAuth()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
+    const { params } = routeContext as ProductRouteContext
     const { id } = await params
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request)
     const branchScope = await resolveBranchScopeForUser({
-      userId: auth.user.id,
-      role: auth.role,
+      userId: user.id,
+      role: user.role as AppRole | undefined,
       requestedBranchId,
+      organizationId: organization.id,
       strict: Boolean(requestedBranchId),
     })
 
@@ -32,6 +37,7 @@ export async function GET(
       .from('products')
       .select('*, category:categories(id, name)')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (error) {
@@ -46,8 +52,9 @@ export async function GET(
       )
     }
 
+    const branchInventoryClient = supabase as unknown as BranchInventoryClient
     const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
-      supabase,
+      branchInventoryClient,
       branchScope.branchId,
       [product.id]
     )
@@ -68,28 +75,25 @@ export async function GET(
       { status: 500 }
     )
   }
-}
+})
 
 // PUT /api/products/[id] - Actualizar producto especifico (staff only)
-export async function PUT(
+export const PUT = withTenantAuth({ permission: 'inventory.products.update', module: 'inventory' }, async (
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { user, organization },
+  routeContext?: unknown
+) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
+    const { params } = routeContext as ProductRouteContext
     const { id } = await params
     const body = await request.json()
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
     const branchScope = await resolveBranchScopeForUser({
-      userId: auth.user.id,
-      role: auth.role,
+      userId: user.id,
+      role: user.role as AppRole | undefined,
       requestedBranchId,
+      organizationId: organization.id,
       strict: Boolean(requestedBranchId),
     })
 
@@ -152,6 +156,7 @@ export async function PUT(
         .from('products')
         .update(updatePayload)
         .eq('id', id)
+        .eq('organization_id', organization.id)
         .select('*, category:categories(id, name)')
         .maybeSingle()
 
@@ -165,7 +170,7 @@ export async function PUT(
 
     if (branchScope.branchId && desiredStockQuantity !== undefined) {
       await upsertBranchInventoryStock({
-        supabase,
+        supabase: supabase as unknown as BranchInventoryClient,
         branchId: branchScope.branchId,
         productId: id,
         stockQuantity: Number(desiredStockQuantity),
@@ -176,6 +181,7 @@ export async function PUT(
       .from('products')
       .select('*, category:categories(id, name)')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (refreshedProductError) {
@@ -211,20 +217,16 @@ export async function PUT(
       { status: 500 }
     )
   }
-}
+})
 
 // DELETE /api/products/[id] - Eliminar producto especifico (staff only)
-export async function DELETE(
+export const DELETE = withTenantAuth({ permission: 'inventory.products.delete', module: 'inventory' }, async (
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  { organization },
+  routeContext?: unknown
+) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
+    const { params } = routeContext as ProductRouteContext
     const { id } = await params
     const supabase = await createClient()
 
@@ -232,6 +234,7 @@ export async function DELETE(
       .from('products')
       .select('id,name,sku')
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (existingError) {
@@ -246,7 +249,11 @@ export async function DELETE(
       )
     }
 
-    const { error } = await supabase.from('products').delete().eq('id', id)
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organization.id)
 
     if (error) {
       logger.error('Failed to delete product by id', { productId: id, error: error.message })
@@ -267,4 +274,4 @@ export async function DELETE(
       { status: 500 }
     )
   }
-}
+})

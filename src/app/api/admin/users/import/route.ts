@@ -61,7 +61,17 @@ async function loadExistingUsersByEmail(supabaseAdmin: ReturnType<typeof createA
   return existingMap
 }
 
-async function handler(req: NextRequest, context: { user: { id: string; email?: string; role: string } }) {
+function mapRoleToOrgRole(role: CanonicalRole): string {
+  switch (role) {
+    case 'admin':       return 'admin'
+    case 'vendedor':    return 'seller'
+    case 'tecnico':     return 'technician'
+    case 'cliente':     return 'customer'
+    default:            return 'customer'
+  }
+}
+
+async function handler(req: NextRequest, context: { user: { id: string; email?: string; role: string }; organizationId: string | null }) {
   try {
     const body = await req.json()
     const users: ImportUser[] = Array.isArray(body?.users) ? body.users : []
@@ -172,6 +182,19 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
             )
             if (roleError) throw roleError
 
+            // Ensure the user is a member of the importing admin's org
+            if (context.organizationId && role !== 'super_admin') {
+              await supabaseAdmin.from('organization_members').upsert(
+                {
+                  organization_id: context.organizationId,
+                  user_id: existingId,
+                  role: mapRoleToOrgRole(role),
+                  status: 'active',
+                },
+                { onConflict: 'organization_id,user_id' }
+              )
+            }
+
             results.push({ email, ok: true })
             continue
           }
@@ -216,6 +239,19 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
               { onConflict: 'user_id' }
             )
             if (roleError) throw roleError
+
+            // Add new user to the importing admin's organization
+            if (context.organizationId && role !== 'super_admin') {
+              await supabaseAdmin.from('organization_members').upsert(
+                {
+                  organization_id: context.organizationId,
+                  user_id: userId,
+                  role: mapRoleToOrgRole(role),
+                  status: 'active',
+                },
+                { onConflict: 'organization_id,user_id' }
+              )
+            }
 
             existingMap.set(email, userId)
           }
@@ -273,6 +309,18 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
               },
               { onConflict: 'user_id' }
             )
+
+            if (context.organizationId && role !== 'super_admin') {
+              await supabase.from('organization_members').upsert(
+                {
+                  organization_id: context.organizationId,
+                  user_id: userId,
+                  role: mapRoleToOrgRole(role),
+                  status: 'active',
+                },
+                { onConflict: 'organization_id,user_id' }
+              )
+            }
           }
 
           results.push({ email, ok: true })

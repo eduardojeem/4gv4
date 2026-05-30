@@ -13,11 +13,12 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { ProductFilters } from '@/components/public/ProductFilters'
+import type { Category } from '@/types/public'
 
 interface MobileFiltersProps {
   activeFiltersCount: number
   priceRange: { min: number; max: number }
-  categories: any[]
+  categories: Category[]
   brands: string[]
   branches?: Array<{ id: string; name: string; city: string | null }>
 }

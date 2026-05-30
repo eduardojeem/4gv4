@@ -9,12 +9,23 @@ import { GlobalSearch } from '@/components/ui/global-search'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { BranchSelector } from '@/components/branches/branch-selector'
-import { ChevronDown, ChevronRight, ArrowLeft, Search } from 'lucide-react'
+import { OrganizationSwitcher } from '@/components/saas/organization-switcher'
+import { ChevronDown, ChevronRight, ArrowLeft, Search, Crown, LayoutDashboard, User, Settings, LogOut, Shield } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
 import { cn } from '@/lib/utils'
-import { useSearchParams, usePathname } from 'next/navigation'
+import { useSearchParams, usePathname, useRouter } from 'next/navigation'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { LogoutDialog } from '@/components/profile/logout-dialog'
 
 interface AdminLayoutProps {
     children: React.ReactNode
@@ -23,8 +34,35 @@ interface AdminLayoutProps {
 function AdminLayoutContent({ children }: AdminLayoutProps) {
     const [searchOpen, setSearchOpen] = useState(false)
     const [expandedCategories, setExpandedCategories] = useState<string[]>(['analytics', 'operations', 'administration'])
-    const { hasPermission, isAdmin, loading } = useAuth()
     const { sidebarCollapsed: collapsed, toggleSidebar } = useAdminLayout()
+    const { hasPermission, isAdmin, isSuperAdmin, user, signOut } = useAuth()
+    const [logoutOpen, setLogoutOpen] = useState(false)
+    const [loading, setLoading] = useState(false)
+    const router = useRouter()
+
+    const handleLogout = async () => {
+        setLoading(true)
+        try {
+            await new Promise(resolve => setTimeout(resolve, 500))
+            await signOut()
+            router.push('/login')
+            router.refresh()
+        } catch (error) {
+            console.error('Error logging out:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const userInitials = useMemo(() => {
+        if (!user?.profile?.name) return 'U'
+        return user.profile.name
+            .split(' ')
+            .map((n: string) => n[0])
+            .slice(0, 2)
+            .join('')
+            .toUpperCase()
+    }, [user])
 
     const searchParams = useSearchParams()
     const pathname = usePathname()
@@ -32,22 +70,11 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
     // Determine active tab from URL or default to 'overview'
     const active = searchParams.get('tab') ?? 'overview'
 
-    // Filter categories based on user permissions
-    // AdminGuard already ensures only admins reach this layout,
-    // so we show all categories. Permission filtering is a secondary check.
-    const visibleCategories = useMemo(
-        () => {
-            // Always show all categories since AdminGuard protects access
-            // Only filter if we have a confirmed non-admin (shouldn't happen)
-            if (!isAdmin && !loading) {
-                return filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin)
-            }
-            return adminNavCategories
-        },
-        [hasPermission, isAdmin, loading]
-    )
-
     const currentItem = useMemo(() => getNavItemByKey(active), [active])
+    const visibleCategories = useMemo(
+        () => filterCategoriesByPermissions(adminNavCategories, hasPermission, isAdmin, isSuperAdmin),
+        [hasPermission, isAdmin, isSuperAdmin]
+    )
 
     const toggleCategory = useCallback((categoryId: string) => {
         setExpandedCategories(prev =>
@@ -101,7 +128,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                 <div className="flex h-16 items-center justify-between border-b border-border px-6">
                     {!collapsed && (
                         <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                            Admin Panel
+                            Admin
                         </span>
                     )}
                     <Button 
@@ -245,6 +272,25 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                             </div>
                         </div>
 
+                        {user?.role === 'super_admin' && (
+                            <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 border-purple-200/60 dark:border-purple-800/40 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/20 shadow-sm">
+                                <Link href="/superadmin" className="flex items-center gap-1.5">
+                                    <Crown className="h-4 w-4 shrink-0" />
+                                    <span className="hidden lg:inline font-medium">Super Admin</span>
+                                </Link>
+                            </Button>
+                        )}
+
+                        {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                            <Button asChild variant="outline" size="sm" className="h-9 gap-1.5 border-border/80 shadow-sm">
+                                <Link href="/dashboard" className="flex items-center gap-1.5">
+                                    <LayoutDashboard className="h-4 w-4 shrink-0" />
+                                    <span className="hidden lg:inline font-medium">Dashboard</span>
+                                </Link>
+                            </Button>
+                        )}
+
+                        <OrganizationSwitcher compact />
                         <BranchSelector compact />
 
                         <div className="mx-2 h-6 w-px bg-border/60" />
@@ -254,6 +300,103 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
                         {/* Notifications */}
                         <NotificationBell />
+
+                        <div className="mx-1 h-5 w-px bg-border/60" />
+
+                        {/* User menu */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="relative h-9 w-9 rounded-full ring-2 ring-transparent hover:ring-primary/10 transition-all p-0">
+                                    <Avatar className="h-8 w-8 border border-border shadow-sm">
+                                        <AvatarImage src={user?.profile?.avatar_url || "/avatars/01.svg"} alt={user?.profile?.name || "Usuario"} />
+                                        <AvatarFallback className="bg-primary/10 text-primary font-medium text-xs">{userInitials}</AvatarFallback>
+                                    </Avatar>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-64 p-2" align="end" forceMount sideOffset={8}>
+                                <DropdownMenuLabel className="font-normal p-2">
+                                    <div className="flex flex-col space-y-1.5">
+                                        <p className="text-sm font-semibold leading-none">{user?.profile?.name || 'Usuario'}</p>
+                                        <p className="text-xs leading-none text-muted-foreground break-all">
+                                            {user?.email || 'usuario@email.com'}
+                                        </p>
+                                        {user?.role && (
+                                            <div className="pt-1">
+                                                <span className={cn(
+                                                    "text-[10px] px-1.5 py-0.5 rounded-full font-medium border capitalize",
+                                                    user.role === 'admin'
+                                                        ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700/50"
+                                                        : user.role === 'vendedor'
+                                                        ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700/50"
+                                                        : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50"
+                                                )}>
+                                                    {user.role}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator className="my-2" />
+                                <DropdownMenuItem asChild>
+                                    <Link
+                                        href="/dashboard/profile"
+                                        className="cursor-pointer py-2.5 px-3 focus:bg-accent focus:text-accent-foreground rounded-md transition-colors flex items-center w-full"
+                                    >
+                                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-primary/10 text-primary mr-3">
+                                            <User className="h-4 w-4" />
+                                        </div>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-sm font-medium">Mi Perfil</span>
+                                            <span className="text-xs text-muted-foreground">Ver información personal</span>
+                                        </div>
+                                    </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link
+                                        href="/admin/settings"
+                                        className="cursor-pointer py-2.5 px-3 focus:bg-accent focus:text-accent-foreground rounded-md transition-colors mt-1 flex items-center w-full"
+                                    >
+                                        <div className="flex items-center justify-center h-8 w-8 rounded-md bg-primary/10 text-primary mr-3">
+                                            <Settings className="h-4 w-4" />
+                                        </div>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-sm font-medium">Configuración</span>
+                                            <span className="text-xs text-muted-foreground">Ajustes del sistema</span>
+                                        </div>
+                                    </Link>
+                                </DropdownMenuItem>
+                                {user?.role === 'super_admin' && (
+                                    <DropdownMenuItem asChild>
+                                        <Link
+                                            href="/superadmin"
+                                            className="cursor-pointer py-2.5 px-3 focus:bg-accent focus:text-accent-foreground rounded-md transition-colors mt-1 flex items-center w-full"
+                                        >
+                                            <div className="flex items-center justify-center h-8 w-8 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 mr-3">
+                                                <Shield className="h-4 w-4" />
+                                            </div>
+                                            <div className="flex flex-col gap-0.5">
+                                                <span className="text-sm font-medium">Super Admin</span>
+                                                <span className="text-xs text-muted-foreground">Panel global SaaS</span>
+                                            </div>
+                                        </Link>
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator className="my-2" />
+                                <DropdownMenuItem
+                                    onClick={() => setLogoutOpen(true)}
+                                    disabled={loading}
+                                    className="cursor-pointer py-2.5 px-3 text-red-600 focus:text-red-700 focus:bg-red-50 rounded-md transition-colors mt-1 group"
+                                >
+                                    <div className="flex items-center justify-center h-8 w-8 rounded-md bg-red-100 text-red-600 group-hover:bg-red-200 group-hover:text-red-700 transition-colors mr-3">
+                                        <LogOut className="h-4 w-4" />
+                                    </div>
+                                    <div className="flex flex-col gap-0.5">
+                                        <span className="text-sm font-medium">Cerrar Sesión</span>
+                                        <span className="text-xs text-red-600/70">Salir del sistema</span>
+                                    </div>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </header>
 
@@ -266,6 +409,12 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
             </div>
 
             <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} onSearch={onSearch} />
+            <LogoutDialog
+                open={logoutOpen}
+                loading={loading}
+                onClose={() => setLogoutOpen(false)}
+                onConfirm={handleLogout}
+            />
         </div>
     )
 }

@@ -74,6 +74,8 @@ import {
   type AdminAnalyticsFilters,
   type AnalyticsMetricCard,
   type AnalyticsPreset,
+  type AnalyticsTableRow,
+  type SimpleSeriesPoint,
   useAdminAnalytics,
 } from '@/hooks/use-admin-analytics'
 import {
@@ -795,7 +797,7 @@ export default function AnalyticsDashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={snapshot.topCategories}
+                        data={snapshot.topCategories as any}
                         dataKey="value"
                         nameKey="label"
                         innerRadius={52}

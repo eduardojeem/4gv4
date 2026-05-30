@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { ArrowRight, MessageCircle, Phone, Mail, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { CompanyInfo } from '@/types/website-settings'
@@ -14,6 +15,10 @@ interface ContactCTAProps {
 }
 
 export function ContactCTA({ companyInfo, brand, phoneClean, contactHref }: ContactCTAProps) {
+  const pathname = usePathname()
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
+
   return (
     <section id="contacto" className={`border-t bg-gradient-to-br ${brand.cta} py-16 text-white md:py-24`}>
       <div className="container">
@@ -27,7 +32,7 @@ export function ContactCTA({ companyInfo, brand, phoneClean, contactHref }: Cont
 
           <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
             <Button asChild size="lg" className={`bg-white ${brand.ctaBtn} hover:bg-white/90`}>
-              <Link href="/mis-reparaciones">
+              <Link href={`${tenantPrefix}/mis-reparaciones`}>
                 Rastrear mi reparación
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>

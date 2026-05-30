@@ -13,6 +13,12 @@ export interface CompanyInfo {
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
   headerColor?: string
   showTopBar?: boolean
+  whatsapp?: string
+  ruc?: string
+  businessType?: string
+  instagram?: string
+  facebook?: string
+  tiktok?: string
 }
 
 export interface HeroStats {

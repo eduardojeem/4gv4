@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
+import { resolvePublicOrganization } from '@/lib/saas/public-tenant'
 
 type ProductRow = {
   id: string
@@ -12,6 +15,8 @@ type ProductRow = {
   brand: string | null
   sale_price: number
   wholesale_price: number | null
+  offer_price: number | null
+  has_offer: boolean | null
   stock_quantity: number
   is_active: boolean
   featured: boolean
@@ -35,22 +40,34 @@ export async function GET(
     const { id } = await params
     const productId = decodeURIComponent(id)
 
-    const supabase = await createClient()
+    const supabase = createAdminSupabase() as SupabaseClient
+    const organization = await resolvePublicOrganization(request, supabase)
 
-    const { data: { session } } = await supabase.auth.getSession()
+    if (!organization) {
+      return NextResponse.json(
+        { success: false, error: 'Organization not found' },
+        { status: 404 }
+      )
+    }
+
+    const authSupabase = await createClient()
+
+    const { data: { session } } = await authSupabase.auth.getSession()
     const { isWholesale } = await resolveWholesaleStatus({
-      supabase,
+      supabase: authSupabase,
       user: session?.user ?? null,
     })
 
     const selectFields = isWholesale
-      ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
-      : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+      ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
+      : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
 
-    let byIdQuery = supabase
-      .from('products')
+    const productsTable = supabase.from('products') as any
+
+    let byIdQuery = productsTable
       .select(selectFields)
       .eq('id', productId)
+      .eq('organization_id', organization.id)
       .eq('is_active', true)
 
     if (isWholesale) {
@@ -71,10 +88,10 @@ export async function GET(
     if (!finalProduct) {
       logger.info('Product UUID lookup returned nothing, trying SKU fallback', { productId })
 
-      let bySkuQuery = supabase
-        .from('products')
+      let bySkuQuery = productsTable
         .select(selectFields)
         .eq('sku', productId)
+        .eq('organization_id', organization.id)
         .eq('is_active', true)
 
       if (isWholesale) {
@@ -109,8 +126,11 @@ export async function GET(
       sale_price: finalProduct.sale_price,
       wholesale_price: isWholesale ? finalProduct.wholesale_price : null,
       stock_quantity: finalProduct.stock_quantity,
+      in_stock: finalProduct.stock_quantity > 0,
       is_active: finalProduct.is_active,
       featured: finalProduct.featured || false,
+      has_offer: Boolean(finalProduct.has_offer),
+      offer_price: typeof finalProduct.offer_price === 'number' ? finalProduct.offer_price : null,
       image: finalProduct.image_url || (Array.isArray(finalProduct.images) && finalProduct.images.length > 0 ? finalProduct.images[0] : null),
       images: finalProduct.images,
       unit_measure: finalProduct.unit_measure,

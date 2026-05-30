@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { repairAuthSchema } from '@/schemas/public-auth.schema'
 import { generatePublicToken } from '@/lib/public-session'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { PublicRepair, RepairAuthResponse } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { logSecurityEvent, isIpBlocked } from '@/lib/security-audit'
+import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 
 /**
  * POST /api/public/repairs/auth
@@ -99,6 +101,19 @@ export async function POST(request: NextRequest) {
     }
     
     const { contact, ticketNumber } = validation.data
+    const organizationSlug =
+      typeof body.organizationSlug === 'string' && body.organizationSlug.trim()
+        ? body.organizationSlug.trim()
+        : null
+    const organization = organizationSlug
+      ? await resolvePublicOrganizationBySlug(organizationSlug, createAdminSupabase())
+      : null
+    if (organizationSlug && !organization) {
+      return NextResponse.json(
+        { success: false, error: 'Empresa no encontrada' },
+        { status: 404 }
+      )
+    }
     const normalizedTicket = ticketNumber.trim().toUpperCase()
     const normalizedContact = contact.trim()
     
@@ -114,7 +129,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient()
     
     // Query repair
-    const { data: repair, error } = await supabase
+    let repairQuery = supabase
       .from('repairs')
       .select(`
         id,
@@ -136,7 +151,12 @@ export async function POST(request: NextRequest) {
         customer_id
       `)
       .eq('ticket_number', normalizedTicket)
-      .single()
+
+    if (organization) {
+      repairQuery = repairQuery.eq('organization_id', organization.id)
+    }
+
+    const { data: repair, error } = await repairQuery.single()
     
     if (error || !repair) {
       logger.warn('Public repair auth failed - ticket not found', { ticketNumber: normalizedTicket, clientIp })

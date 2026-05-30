@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Package, Wrench, Menu, X, Phone, MessageCircle, User, Shield, Clock, LayoutDashboard } from 'lucide-react'
+import { Package, Wrench, Menu, X, Phone, User, UserPlus, Shield, Clock, LayoutDashboard, Truck } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/roles-permissions'
 import { PublicRepairReadyNotifications } from '@/components/public/PublicRepairReadyNotifications'
+import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,13 +51,24 @@ export function PublicHeader() {
 
   const companyInfo = settings?.company_info
   const envSupportPhone = (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP || process.env.NEXT_PUBLIC_COMPANY_PHONE || '').toString()
-  const envSupportEmail = (process.env.NEXT_PUBLIC_COMPANY_EMAIL || '').toString()
   const phoneDisplay = companyInfo?.phone || envSupportPhone
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
-  const emailDisplay = companyInfo?.email || envSupportEmail
   const showTopBar = companyInfo?.showTopBar !== false
   const canAccessDashboard = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'
   const isWholesaleUser = hasPermission(WHOLESALE_PRICE_PERMISSION)
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const pathTenantSlug =
+    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente'].includes(pathSegments[1])
+      ? pathSegments[0]
+      : ''
+  const tenantPrefix = pathTenantSlug ? `/${pathTenantSlug}` : ''
+  const withTenantPrefix = (href: string) => {
+    if (!tenantPrefix || !['/inicio', '/productos', '/mis-reparaciones', '/track', '/carrito'].some((path) => href === path || href.startsWith(`${path}/`) || href.startsWith(`${path}#`))) {
+      return href
+    }
+
+    return `${tenantPrefix}${href}`
+  }
 
   // Scroll detection for shadow
   useEffect(() => {
@@ -119,7 +131,7 @@ export function PublicHeader() {
     try {
       await new Promise(resolve => setTimeout(resolve, 500))
       await signOut()
-      router.push('/login')
+      router.push(tenantPrefix ? `${tenantPrefix}/inicio` : '/login')
       router.refresh()
     } catch (error) {
       console.error('Error logging out:', error)
@@ -130,13 +142,16 @@ export function PublicHeader() {
   }
 
   const navLinks = [
-    { href: '/inicio', label: 'Inicio', icon: null },
-    { href: '/productos', label: 'Productos', icon: Package },
-    { href: '/mis-reparaciones', label: 'Rastrear reparaciones', icon: Wrench },
+    { href: withTenantPrefix('/inicio'), label: 'Inicio', icon: null },
+    { href: withTenantPrefix('/productos'), label: 'Productos', icon: Package },
+    { href: withTenantPrefix('/track'), label: 'Rastrear pedidos', icon: Truck },
+    { href: withTenantPrefix('/mis-reparaciones'), label: 'Rastrear reparaciones', icon: Wrench },
   ]
+  const customerLoginHref = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
+  const customerRegisterHref = tenantPrefix ? `${tenantPrefix}/cliente/registro` : '/register'
 
   const isActive = (href: string) => {
-    if (href === '/inicio') return pathname === '/inicio' || pathname === '/'
+    if (href.endsWith('/inicio')) return pathname === href || pathname === '/'
     if (href === '/perfil') return pathname === '/perfil' || pathname.startsWith('/perfil/')
     return pathname === href || pathname.startsWith(`${href}/`)
   }
@@ -168,15 +183,10 @@ export function PublicHeader() {
                 {companyInfo?.hours?.saturday ? ` | Sab: ${companyInfo.hours.saturday}` : ''}
               </span>
             </div>
-            <a
-              href={phoneClean ? `https://wa.me/${phoneClean}` : (emailDisplay ? `mailto:${emailDisplay}` : '/inicio#contacto')}
-              target={phoneClean ? '_blank' : undefined}
-              rel={phoneClean ? 'noopener noreferrer' : undefined}
-              className="flex items-center gap-1.5 transition-colors hover:text-foreground"
-            >
-              <MessageCircle className="h-3 w-3" />
-              Escribinos por WhatsApp
-            </a>
+            <Link href={customerLoginHref} className="flex items-center gap-1.5 transition-colors hover:text-foreground">
+              <User className="h-3 w-3" />
+              Portal cliente
+            </Link>
           </div>
         </div>
       )}
@@ -184,7 +194,7 @@ export function PublicHeader() {
       {/* Main header */}
       <div className="container flex h-16 items-center justify-between gap-4">
         {/* Logo */}
-        <Link href="/inicio" className="group flex items-center gap-3 shrink-0" aria-label="Ir a inicio">
+        <Link href={withTenantPrefix('/inicio')} className="group flex items-center gap-3 shrink-0" aria-label="Ir a inicio">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-transform group-hover:scale-105">
             <Wrench className="h-5 w-5" />
           </div>
@@ -223,39 +233,23 @@ export function PublicHeader() {
           })}
           {mounted && !user && (
             <Link
-              href="/login"
+              href={customerLoginHref}
               className="relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/50"
             >
               <User className="h-4 w-4" />
-              Iniciar sesión
+              Login cliente
             </Link>
           )}
         </nav>
 
         {/* Right side: Theme toggle + CTA + User */}
         <div className="flex items-center gap-2">
+          <PublicCartButton />
+
           {/* Theme toggle - visible on all screens */}
           {mounted && <ThemeToggle />}
 
           {user?.id && <PublicRepairReadyNotifications userId={user.id} />}
-
-          {/* Desktop CTA */}
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="hidden lg:inline-flex gap-2 rounded-lg"
-          >
-            <a
-              href={phoneClean ? `https://wa.me/${phoneClean}` : (emailDisplay ? `mailto:${emailDisplay}` : '/inicio#contacto')}
-              target={phoneClean ? '_blank' : undefined}
-              rel={phoneClean ? 'noopener noreferrer' : undefined}
-              aria-label="Escribir por WhatsApp o Email"
-            >
-              <MessageCircle className="h-4 w-4" />
-              Escribinos
-            </a>
-          </Button>
 
           {/* User menu */}
           {user ? (
@@ -311,7 +305,7 @@ export function PublicHeader() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/mis-reparaciones" className="flex items-center gap-2.5 cursor-pointer">
+                  <Link href={withTenantPrefix('/mis-reparaciones')} className="flex items-center gap-2.5 cursor-pointer">
                     <Wrench className="h-4 w-4 text-muted-foreground" />
                     Mis Reparaciones
                   </Link>
@@ -333,16 +327,29 @@ export function PublicHeader() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button 
-              asChild 
-              size="sm" 
-              className="hidden rounded-lg px-5 md:inline-flex bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
-            >
-              <Link href="/login" className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Iniciar sesión
-              </Link>
-            </Button>
+            <div className="hidden md:flex items-center gap-1.5">
+              <Button 
+                asChild 
+                variant="ghost" 
+                size="sm" 
+                className="rounded-lg px-4 font-semibold text-muted-foreground hover:text-foreground transition-all duration-200"
+              >
+                <Link href={customerLoginHref} className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Ingresar
+                </Link>
+              </Button>
+              <Button 
+                asChild 
+                size="sm" 
+                className="rounded-lg px-5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
+              >
+                <Link href={customerRegisterHref} className="flex items-center gap-2">
+                  <UserPlus className="h-4 w-4" />
+                  Registrarme
+                </Link>
+              </Button>
+            </div>
           )}
 
           {/* Mobile menu toggle */}
@@ -390,17 +397,6 @@ export function PublicHeader() {
 
           {/* Mobile CTAs */}
           <div className="flex flex-col gap-2 px-1">
-            <Button asChild size="sm" className="w-full rounded-lg">
-              <a
-                href={phoneClean ? `https://wa.me/${phoneClean}` : (emailDisplay ? `mailto:${emailDisplay}` : '/inicio#contacto')}
-                target={phoneClean ? '_blank' : undefined}
-                rel={phoneClean ? 'noopener noreferrer' : undefined}
-              >
-                <MessageCircle className="mr-2 h-4 w-4" />
-                Escribinos por WhatsApp
-              </a>
-            </Button>
-
             {user ? (
               <>
                 {canAccessDashboard && (
@@ -440,16 +436,24 @@ export function PublicHeader() {
                 </Button>
               </>
             ) : (
-              <Button 
-                asChild 
-                size="sm" 
-                className="w-full rounded-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
-              >
-                <Link href="/login" className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Iniciar sesión
-                </Link>
-              </Button>
+              <>
+                <Button asChild size="sm" variant="outline" className="w-full rounded-lg">
+                  <Link href={customerLoginHref} className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Login cliente
+                  </Link>
+                </Button>
+                <Button 
+                  asChild 
+                  size="sm" 
+                  className="w-full rounded-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
+                >
+                  <Link href={customerRegisterHref} className="flex items-center gap-2">
+                    <UserPlus className="h-4 w-4" />
+                    Registrarme como cliente
+                  </Link>
+                </Button>
+              </>
             )}
           </div>
 

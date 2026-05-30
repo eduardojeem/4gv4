@@ -235,18 +235,38 @@ export function useCashMonitor() {
     if (!supabase) return
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('cash_alerts')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50)
+
+      if (selectedBranchId) {
+        const { data: branchSessions, error: sessionsError } = await supabase
+          .from('cash_closures')
+          .select('id')
+          .eq('branch_id', selectedBranchId)
+          .limit(500)
+
+        if (sessionsError) throw sessionsError
+
+        const sessionIds = (branchSessions || []).map((session) => session.id)
+        if (sessionIds.length === 0) {
+          setAlerts([])
+          return
+        }
+
+        query = query.in('session_id', sessionIds)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       setAlerts(data || [])
     } catch (error) {
       console.error('Error fetching alerts:', error)
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // =========================================================================
   // FETCH AUDIT LOG
@@ -255,11 +275,31 @@ export function useCashMonitor() {
     if (!supabase) return
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('cash_admin_audit')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100)
+
+      if (selectedBranchId) {
+        const { data: branchSessions, error: sessionsError } = await supabase
+          .from('cash_closures')
+          .select('id')
+          .eq('branch_id', selectedBranchId)
+          .limit(500)
+
+        if (sessionsError) throw sessionsError
+
+        const sessionIds = (branchSessions || []).map((session) => session.id)
+        if (sessionIds.length === 0) {
+          setAuditLog([])
+          return
+        }
+
+        query = query.in('session_id', sessionIds)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
 
@@ -294,7 +334,7 @@ export function useCashMonitor() {
     } catch (error) {
       console.error('Error fetching audit log:', error)
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // =========================================================================
   // COMPUTE METRICS
@@ -355,11 +395,13 @@ export function useCashMonitor() {
       }
 
       // Get current session state for audit
-      const { data: currentSession } = await supabase
+      let currentSessionQuery = supabase
         .from('cash_closures')
         .select('*')
         .eq('id', payload.sessionId)
-        .single()
+
+      currentSessionQuery = withBranchFilter(currentSessionQuery, selectedBranchId)
+      const { data: currentSession } = await currentSessionQuery.single()
 
       if (!currentSession) {
         toast.error('Sesión no encontrada')
@@ -406,10 +448,13 @@ export function useCashMonitor() {
           break
       }
 
-      const { error: updateError } = await supabase
+      let updateQuery = supabase
         .from('cash_closures')
         .update(updateData)
         .eq('id', payload.sessionId)
+
+      updateQuery = withBranchFilter(updateQuery, selectedBranchId)
+      const { error: updateError } = await updateQuery
 
       if (updateError) throw updateError
 
@@ -436,12 +481,13 @@ export function useCashMonitor() {
       await fetchSessions()
       await fetchAuditLog()
       return true
-    } catch (error: Error | { message?: string }) {
+    } catch (error: unknown) {
       console.error('Error performing admin action:', error)
-      toast.error(`Error: ${error.message || 'Acción fallida'}`)
+      const msg = error instanceof Error ? error.message : 'Acción fallida'
+      toast.error(`Error: ${msg}`)
       return false
     }
-  }, [supabase, fetchSessions, fetchAuditLog])
+  }, [selectedBranchId, supabase, fetchSessions, fetchAuditLog])
 
   // Specific action shortcuts
   const remoteClose = useCallback((payload: RemoteActionPayload) =>
@@ -513,11 +559,14 @@ export function useCashMonitor() {
     if (!supabase) return []
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('cash_movements')
         .select('*')
         .eq('session_id', sessionId)
         .order('created_at', { ascending: false })
+
+      query = withBranchFilter(query, selectedBranchId)
+      const { data, error } = await query
 
       if (error) throw error
 
@@ -558,7 +607,7 @@ export function useCashMonitor() {
       console.error('Error fetching movements:', error)
       return []
     }
-  }, [supabase])
+  }, [selectedBranchId, supabase])
 
   // =========================================================================
   // REALTIME SUBSCRIPTIONS

@@ -11,16 +11,40 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Public pages only — never include auth-protected routes
   const staticRoutes: MetadataRoute.Sitemap = [
     {
-      url: `${baseUrl}/inicio`,
+      url: `${baseUrl}/saas`,
       lastModified: lastMod,
       changeFrequency: 'daily',
       priority: 1.0,
     },
     {
-      url: `${baseUrl}/productos`,
+      url: `${baseUrl}/saas/negocios`,
+      lastModified: lastMod,
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/saas/planes`,
+      lastModified: lastMod,
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/marketplace`,
+      lastModified: lastMod,
+      changeFrequency: 'daily',
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/default/inicio`,
+      lastModified: lastMod,
+      changeFrequency: 'daily',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/default/productos`,
       lastModified: lastMod,
       changeFrequency: 'hourly',
-      priority: 0.9,
+      priority: 0.8,
     },
   ]
 
@@ -28,7 +52,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   if (settings?.maintenance_mode?.enabled) {
     return [
       {
-        url: `${baseUrl}/inicio`,
+        url: `${baseUrl}/saas`,
         lastModified: lastMod,
         changeFrequency: 'daily',
         priority: 1.0,

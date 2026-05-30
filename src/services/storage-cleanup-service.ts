@@ -193,7 +193,7 @@ class StorageCleanupService {
   // Eliminar archivos (llama al API seguro del servidor)
   async deleteFiles(bucket: string, paths: string[]): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await fetch('/api/admin/storage-cleanup', {
+      const response = await fetch('/api/superadmin/storage-cleanup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bucket, paths })

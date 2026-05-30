@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -27,9 +27,17 @@ type SearchFormValues = z.infer<typeof searchSchema>
 
 export function RepairSearchForm() {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const hasPrefilledFromQr = useRef(false)
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const tenantPrefix =
+    pathSegments.length > 1 && pathSegments[1] === 'mis-reparaciones'
+      ? `/${pathSegments[0]}`
+      : ''
+  const repairsHref = `${tenantPrefix}/mis-reparaciones`
+  const organizationSlug = tenantPrefix.replace('/', '')
 
   const form = useForm<SearchFormValues>({
     resolver: zodResolver(searchSchema),
@@ -46,7 +54,7 @@ export function RepairSearchForm() {
 
     if (ticketFromQR && verifyHash) {
       toast.info('Redirigiendo a los detalles de la reparacion...')
-      router.replace(`/mis-reparaciones/${encodeURIComponent(ticketFromQR)}?verify=${encodeURIComponent(verifyHash)}`)
+      router.replace(`${repairsHref}/${encodeURIComponent(ticketFromQR)}?verify=${encodeURIComponent(verifyHash)}`)
       return
     }
 
@@ -55,7 +63,7 @@ export function RepairSearchForm() {
       toast.info('Ticket detectado desde QR. Completa tu contacto para continuar.')
       hasPrefilledFromQr.current = true
     }
-  }, [searchParams, router, form])
+  }, [searchParams, router, form, repairsHref])
 
   async function onSubmit(data: SearchFormValues) {
     setIsLoading(true)
@@ -68,6 +76,7 @@ export function RepairSearchForm() {
         body: JSON.stringify({
           ...data,
           ticketNumber: normalizedTicketNumber,
+          organizationSlug: organizationSlug || undefined,
         }),
       })
 
@@ -79,7 +88,7 @@ export function RepairSearchForm() {
 
       toast.success('Ticket verificado correctamente')
       const resolvedTicket = result?.data?.repair?.ticketNumber || normalizedTicketNumber
-      router.push(`/mis-reparaciones/${encodeURIComponent(resolvedTicket)}`)
+      router.push(`${repairsHref}/${encodeURIComponent(resolvedTicket)}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Error desconocido')
     } finally {

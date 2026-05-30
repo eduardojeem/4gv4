@@ -90,6 +90,7 @@ interface CashRegisterContextType {
   activeRegisterId: string
   setActiveRegisterId: (id: string) => void
   setRegisters: React.Dispatch<React.SetStateAction<Array<{ id: string; name: string; isActive: boolean }>>>
+  refreshRegisters: () => Promise<void>
   // Deprecated: setRegisterState
   // setRegisterState: React.Dispatch<React.SetStateAction<Record<string, CashRegisterState>>>
 
@@ -156,6 +157,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     addCashIn: hookAddCashIn,
     addCashOut: hookAddCashOut,
     registerSale: hookRegisterSale,
+    loadRegisters,
     fetchHistory: hookFetchHistory,
     fetchAuditLog: hookFetchAuditLog,
     getReportData: hookGetReportData,
@@ -317,9 +319,10 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
 
   // Load initial data
   useEffect(() => {
+    loadRegisters()
     hookFetchHistory()
     hookFetchAuditLog()
-  }, [hookFetchHistory, hookFetchAuditLog])
+  }, [loadRegisters, hookFetchHistory, hookFetchAuditLog])
 
   // Supabase client (kept for direct ops if needed)
   const supabase = useMemo(() => {
@@ -542,6 +545,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   const contextValue = useMemo(() => ({
     registers,
     setRegisters: setLocalRegisters,
+    refreshRegisters: loadRegisters,
     activeRegisterId,
     setActiveRegisterId,
     getCurrentRegister: currentRegisterState,
@@ -586,7 +590,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     getMonthlyAnalytics
   }), [
     // Fix #5: eliminar updateActiveRegister (deprecated) de las deps
-    registers, activeRegisterId, registerState, currentRegisterState,
+    registers, loadRegisters, activeRegisterId, registerState, currentRegisterState,
     addMovement, registerSale, openRegister, closeRegister,
     cashReport, generateCashReportForRange, exportCashReportCSV,
     registerZClosure, zClosureHistory, fetchZClosureHistory, getZClosureDetails,

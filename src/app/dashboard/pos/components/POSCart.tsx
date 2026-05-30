@@ -1,6 +1,6 @@
-﻿/**
- * POS Cart Component - Optimizacion Fase 4
- * Carrito de compras separado y optimizado
+/**
+ * POS Cart Component — Redesign Premium
+ * Carrito de compras optimizado con diseño premium
  */
 
 import React, { memo, useState } from 'react';
@@ -24,7 +24,8 @@ import {
   Store,
   AlertTriangle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Sparkles
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { cn } from '@/lib/utils';
@@ -80,7 +81,9 @@ interface POSCartProps {
   cartItemCount: number;
   // UI State
   isProcessing?: boolean;
-  taxRate?: number; // Visual only if needed, calculation done in hook
+  taxRate?: number;
+  canCheckout?: boolean;
+  checkoutDisabledReason?: string;
 }
 
 const CartItemRow = memo<{
@@ -111,127 +114,107 @@ const CartItemRow = memo<{
     setLocalQty(item.quantity.toString());
   }, [item.quantity]);
 
-  // Stock warning
   const isLowStock = typeof item.stock === 'number' && !isService && item.stock <= 5;
-  const isStockCritical = typeof item.stock === 'number' && !isService && item.stock <= 2;
 
   return (
     <motion.div 
       layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20, height: 0 }}
       transition={{ duration: 0.2 }}
       className={cn(
-        "relative transition-all border rounded-lg mb-2 overflow-hidden group", 
+        "relative transition-all rounded-xl mb-2 overflow-hidden group", 
         isService 
-          ? "bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30" 
-          : "bg-card border-border/40 hover:border-primary/20 hover:shadow-sm"
+          ? "bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30" 
+          : "bg-card border border-border/40 hover:border-primary/20 hover:shadow-sm"
       )}
     > 
-      <div className={cn(
-        "grid grid-cols-[60px_1fr_auto] gap-3 p-3 items-center",
-      )}>
+      <div className="grid grid-cols-[48px_1fr_auto] gap-2.5 p-2.5 items-center">
         {/* Image */}
-        <div className="h-14 w-14 rounded-md bg-muted/40 border border-border/40 overflow-hidden flex items-center justify-center shrink-0 relative">
+        <div className="h-12 w-12 rounded-lg bg-muted/30 border border-border/30 overflow-hidden flex items-center justify-center shrink-0">
           {imageSrc ? (
             <img src={imageSrc} alt={item.name} className="h-full w-full object-cover" />
           ) : (
-            <ShoppingCart className="h-6 w-6 text-muted-foreground/30" />
-          )}
-          {isService && (
-            <div className="absolute inset-0 bg-blue-500/10 flex items-center justify-center">
-              <WrenchIcon className="h-6 w-6 text-blue-500" />
-            </div>
+            <ShoppingCart className="h-5 w-5 text-muted-foreground/20" />
           )}
         </div>
 
         {/* Info & Controls */}
-        <div className="min-w-0 flex flex-col justify-between h-full gap-2">
+        <div className="min-w-0 flex flex-col gap-1.5">
           <div className="flex justify-between items-start gap-2">
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h4 className="font-semibold text-sm truncate leading-tight">{item.name}</h4>
-              </div>
-              
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-xs text-muted-foreground">
-                {item.sku && <span className="font-mono text-[10px] opacity-80">{item.sku}</span>}
+              <h4 className="font-semibold text-[13px] truncate leading-tight">{item.name}</h4>
+              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
+                {item.sku && <span className="font-mono opacity-80">{item.sku}</span>}
                 {item.variant && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-normal">
+                  <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 font-normal">
                     {item.variant}
                   </Badge>
                 )}
-                {typeof item.stock === 'number' && !isService && (
-                  <span className={cn(
-                    "text-[10px] font-medium flex items-center gap-1", 
-                    isLowStock ? "text-amber-600 dark:text-amber-500" : ""
-                  )}>
-                    {isLowStock && <AlertTriangle className="h-3 w-3" />}
-                    {item.stock} disp.
-                  </span>
+                {isService && (
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                    SERVICIO
+                  </Badge>
                 )}
               </div>
             </div>
 
             {/* Price Column */}
             <div className="text-right shrink-0">
-               <div className="font-bold text-sm text-foreground">
+              <div className="font-bold text-sm text-foreground tabular-nums">
                 {formatCurrency(finalTotal)}
               </div>
-              <div className="text-[10px] text-muted-foreground">
-                {item.quantity} x {formatCurrency(unitPrice)}
+              <div className="text-[10px] text-muted-foreground tabular-nums">
+                {item.quantity} × {formatCurrency(unitPrice)}
               </div>
             </div>
           </div>
 
           <div className="flex items-center justify-between gap-2">
             {/* Qty Controls */}
-            <div className="flex items-center gap-1 bg-muted/50 rounded-md p-0.5 border border-border/50 self-start">
-              {!isService ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onUpdateQuantity(item.id, Math.max(0, item.quantity - 1))}
-                    className="h-6 w-6 hover:bg-background hover:text-destructive rounded-sm"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  
-                  <Input
-                    className="h-6 w-10 p-0 text-center border-none bg-transparent text-xs font-bold tabular-nums focus-visible:ring-0 shadow-none"
-                    value={localQty}
-                    onChange={(e) => setLocalQty(e.target.value)}
-                    onBlur={(e) => {
-                      const val = parseInt(e.target.value) || 1;
-                      if (val > (item.stock || 999)) {
-                        onUpdateQuantity(item.id, item.stock || 1);
-                      } else {
-                        onUpdateQuantity(item.id, Math.max(1, val));
-                      }
-                    }}
-                    onFocus={(e) => e.target.select()}
-                  />
-                  
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                    className="h-6 w-6 hover:bg-background hover:text-primary rounded-sm"
-                    disabled={typeof item.stock === 'number' && item.quantity >= item.stock}
-                  >
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </>
-              ) : (
-                 <Badge variant="secondary" className="h-6 text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                    SERVICIO
-                 </Badge>
-              )}
-            </div>
+            {!isService ? (
+              <div className="flex items-center gap-0.5 bg-muted/40 rounded-lg p-0.5 border border-border/40">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onUpdateQuantity(item.id, Math.max(0, item.quantity - 1))}
+                  className="h-6 w-6 hover:bg-background hover:text-destructive rounded-md"
+                >
+                  <Minus className="h-3 w-3" />
+                </Button>
+                
+                <Input
+                  className="h-6 w-9 p-0 text-center border-none bg-transparent text-xs font-bold tabular-nums focus-visible:ring-0 shadow-none"
+                  value={localQty}
+                  onChange={(e) => setLocalQty(e.target.value)}
+                  onBlur={(e) => {
+                    const val = parseInt(e.target.value) || 1;
+                    if (val > (item.stock || 999)) {
+                      onUpdateQuantity(item.id, item.stock || 1);
+                    } else {
+                      onUpdateQuantity(item.id, Math.max(1, val));
+                    }
+                  }}
+                  onFocus={(e) => e.target.select()}
+                />
+                
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                  className="h-6 w-6 hover:bg-background hover:text-primary rounded-md"
+                  disabled={typeof item.stock === 'number' && item.quantity >= item.stock}
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <div />
+            )}
 
             {/* Actions */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               {/* Discount */}
               {onApplyDiscount && (
                 <Popover>
@@ -240,11 +223,11 @@ const CartItemRow = memo<{
                       variant="ghost" 
                       size="icon" 
                       className={cn(
-                        "h-7 w-7 rounded-full",
-                        itemDiscountRate > 0 ? "text-green-600 bg-green-50 dark:bg-green-900/20" : "text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                        "h-6 w-6 rounded-full",
+                        itemDiscountRate > 0 ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                       )}
                     >
-                      <Percent className="h-3.5 w-3.5" />
+                      <Percent className="h-3 w-3" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-48 p-3" align="end">
@@ -284,38 +267,17 @@ const CartItemRow = memo<{
                 variant="ghost"
                 size="icon"
                 onClick={() => onRemoveItem(item.id)}
-                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="h-3 w-3" />
               </Button>
             </div>
           </div>
         </div>
       </div>
-      {(item as any).showSeparator && <Separator className="opacity-30" />}
     </motion.div>
   );
 });
-
-// Helper Icon
-function WrenchIcon(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  )
-}
 
 CartItemRow.displayName = 'CartItemRow';
 
@@ -327,12 +289,10 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   onCheckout,
   onClearCart,
   onApplyPromoCode,
-  // Wholesale & Discount
   isWholesale,
   onToggleWholesale,
   discount,
   onUpdateDiscount,
-  // Totals
   subtotalApplied,
   subtotalNonWholesale,
   generalDiscountAmount,
@@ -341,64 +301,99 @@ export const POSCart: React.FC<POSCartProps> = memo(({
   cartTax,
   cartTotal,
   cartItemCount,
-  // UI
   isProcessing = false,
-  taxRate = 0.19
+  taxRate = 0.19,
+  canCheckout = true,
+  checkoutDisabledReason
 }) => {
 
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const [showPricingOptions, setShowPricingOptions] = useState(false);
 
+  // ─── Empty state ─────────────────────────────────────────
   if (items.length === 0) {
     return (
-      <Card className="h-full flex flex-col shadow-md border-border/50">
-        <CardHeader className="border-b bg-muted/20 py-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+      <Card className="h-full flex flex-col shadow-sm border-border/50 rounded-xl">
+        <CardHeader className="border-b bg-muted/10 py-3 px-4 rounded-t-xl">
+          <CardTitle className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
             <ShoppingCart className="h-4 w-4" />
             Carrito de Compras
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-gradient-to-b from-transparent to-muted/5">
-          <motion.div 
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 200, damping: 15 }}
-            className="bg-primary/5 p-6 rounded-full mb-6 relative"
-          >
-            <div className="absolute inset-0 bg-primary/10 rounded-full animate-ping opacity-20" />
-            <ShoppingCart className="h-16 w-16 text-primary/40" />
-          </motion.div>
-          <h3 className="font-bold text-xl mb-2 text-foreground/80">Carrito vacio</h3>
-          <p className="text-sm text-muted-foreground max-w-[240px] leading-relaxed">
-            Explora el catalogo o escanea productos para comenzar la venta.
+        <CardContent className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <div className="bg-muted/30 p-5 rounded-2xl mb-5">
+            <ShoppingCart className="h-12 w-12 text-muted-foreground/20" />
+          </div>
+          <h3 className="font-semibold text-base mb-1.5 text-foreground/70">Carrito vacío</h3>
+          <p className="text-sm text-muted-foreground max-w-[220px] leading-relaxed">
+            Seleccioná productos del catálogo o escaneá un código de barras para empezar.
           </p>
         </CardContent>
       </Card>
     );
   }
 
+  // ─── Cart with items ─────────────────────────────────────
   return (
-    <Card className="h-full flex flex-col shadow-md border-border/50 overflow-hidden bg-background/60 backdrop-blur-sm">
-      <CardHeader className="py-3 px-4 border-b bg-gradient-to-r from-muted/20 to-muted/5">
+    <Card className="h-full flex flex-col shadow-sm border-border/50 overflow-hidden rounded-xl bg-background/80 backdrop-blur-sm">
+      {/* Header */}
+      <CardHeader className="py-2.5 px-4 border-b bg-muted/10">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ShoppingCart className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-sm">Carrito Actual</span>
+            <div className="flex items-center justify-center h-6 w-6 rounded-lg bg-primary/10">
+              <ShoppingCart className="h-3.5 w-3.5 text-primary" />
+            </div>
+            <span className="font-semibold text-sm">Carrito</span>
           </div>
-          <Badge variant="secondary" className="px-2.5 text-xs font-medium">
-            {items.length} {items.length === 1 ? 'item' : 'items'} / {cartItemCount} un.
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="px-2 text-[10px] font-semibold tabular-nums">
+              {items.length} {items.length === 1 ? 'item' : 'items'} · {cartItemCount} un.
+            </Badge>
+            <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={isProcessing}
+                  className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
+                  title="Vaciar Carrito"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Vaciar el carrito?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta acción eliminará todos los productos del carrito actual. No se puede deshacer.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={() => {
+                      onClearCart();
+                      setIsClearDialogOpen(false);
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Vaciar
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
       </CardHeader>
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Scrollable Items List */}
-        <div className="flex-1 overflow-y-auto px-3 py-3 scroll-smooth">
+        <div className="flex-1 overflow-y-auto px-3 py-2 scroll-smooth">
           <AnimatePresence mode="popLayout">
-            {items.map((item, index) => (
+            {items.map((item) => (
               <CartItemRow
                 key={item.id}
-                item={{ ...item, showSeparator: false } as any}
+                item={item}
                 isWholesale={isWholesale}
                 onUpdateQuantity={onUpdateQuantity}
                 onRemoveItem={onRemoveItem}
@@ -408,167 +403,131 @@ export const POSCart: React.FC<POSCartProps> = memo(({
           </AnimatePresence>
         </div>
 
-        {/* Controls & Totals Section */}
-        <div className="bg-card border-t shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.1)] z-10">
+        {/* Bottom section: Controls + Totals + CTA */}
+        <div className="bg-card border-t shadow-[0_-2px_8px_-3px_rgba(0,0,0,0.08)] z-10">
           <div className="max-h-[34vh] overflow-y-auto">
           
-          {/* Collapsible Controls: Wholesale, Discount, Promo */}
-          <div className="px-4 pt-3">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setShowPricingOptions(v => !v)}
-            >
-              Opciones de precio
-              {showPricingOptions ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
-            </Button>
-          </div>
-          {showPricingOptions && (
-            <div className="px-4 py-3 bg-muted/10 grid grid-cols-2 gap-3 border-b">
-              <div className="flex items-center space-x-2">
-                <Switch 
-                  id="wholesale-mode" 
-                  checked={isWholesale}
-                  onCheckedChange={onToggleWholesale}
-                  className="scale-90"
-                />
-                <Label htmlFor="wholesale-mode" className="text-xs font-medium cursor-pointer flex items-center gap-1">
-                  <Store className="h-3 w-3" />
-                  Mayorista
-                </Label>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Tag className="h-3 w-3 text-muted-foreground" />
-                <div className="relative flex-1">
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={discount > 0 ? discount : ''}
-                    onChange={(e) => onUpdateDiscount(Number(e.target.value))}
-                    placeholder="Desc. %"
-                    className="h-7 text-xs pr-6"
-                  />
-                  <span className="absolute right-2 top-1.5 text-[10px] text-muted-foreground">%</span>
-                </div>
-              </div>
-              {typeof onApplyPromoCode === 'function' && (
-                <div className="col-span-2 flex items-center gap-2">
-                  <Input
-                    id="pos-promo-code"
-                    type="text"
-                    placeholder="Codigo promocional"
-                    className="h-7 text-xs"
-                    onKeyDown={(e) => {
-                      const target = e.target as HTMLInputElement
-                      if (e.key === 'Enter' && target.value.trim()) {
-                        onApplyPromoCode(target.value.trim())
-                        target.value = ''
-                      }
-                    }}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      const el = (document.activeElement as HTMLInputElement)
-                      const input = el && el.tagName === 'INPUT' ? el : (document.querySelector('#pos-promo-code') as HTMLInputElement | null)
-                      if (input && input.value.trim()) {
-                        onApplyPromoCode(input.value.trim())
-                        input.value = ''
-                      }
-                    }}
-                  >
-                    Aplicar
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Totals Breakdown */}
-          <div className="p-4 space-y-2">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Subtotal</span>
-              <span>{formatCurrency(subtotalNonWholesale)}</span>
-            </div>
-
-            {totalSavings > 0 && (
-              <div className="flex justify-between text-xs text-green-600 dark:text-green-400 font-medium animate-in slide-in-from-left-2">
-                <span className="flex items-center gap-1">
-                  <Percent className="h-3 w-3" /> Ahorro Total
+            {/* Collapsible Controls: Wholesale, Discount, Promo */}
+            <div className="px-4 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground w-full justify-between"
+                onClick={() => setShowPricingOptions(v => !v)}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Tag className="h-3 w-3" />
+                  Opciones de precio
                 </span>
-                <span>-{formatCurrency(totalSavings)}</span>
+                {showPricingOptions ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+
+            {showPricingOptions && (
+              <div className="px-4 py-3 bg-muted/10 grid grid-cols-2 gap-3 border-b border-border/30">
+                <div className="flex items-center space-x-2">
+                  <Switch 
+                    id="wholesale-mode" 
+                    checked={isWholesale}
+                    onCheckedChange={onToggleWholesale}
+                    className="scale-90"
+                  />
+                  <Label htmlFor="wholesale-mode" className="text-xs font-medium cursor-pointer flex items-center gap-1">
+                    <Store className="h-3 w-3" />
+                    Mayorista
+                  </Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Tag className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <div className="relative flex-1">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={discount > 0 ? discount : ''}
+                      onChange={(e) => onUpdateDiscount(Number(e.target.value))}
+                      placeholder="Desc. %"
+                      className="h-7 text-xs pr-6"
+                    />
+                    <span className="absolute right-2 top-1.5 text-[10px] text-muted-foreground">%</span>
+                  </div>
+                </div>
+                {typeof onApplyPromoCode === 'function' && (
+                  <div className="col-span-2 flex items-center gap-2">
+                    <Input
+                      id="pos-promo-code"
+                      type="text"
+                      placeholder="Código promocional"
+                      className="h-7 text-xs"
+                      onKeyDown={(e) => {
+                        const target = e.target as HTMLInputElement
+                        if (e.key === 'Enter' && target.value.trim()) {
+                          onApplyPromoCode(target.value.trim())
+                          target.value = ''
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        const el = (document.activeElement as HTMLInputElement)
+                        const input = el && el.tagName === 'INPUT' ? el : (document.querySelector('#pos-promo-code') as HTMLInputElement | null)
+                        if (input && input.value.trim()) {
+                          onApplyPromoCode(input.value.trim())
+                          input.value = ''
+                        }
+                      }}
+                    >
+                      Aplicar
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Impuesto ({(taxRate * 100).toFixed(0)}%)</span>
-              <span>{formatCurrency(cartTax)}</span>
-            </div>
+            {/* Totals Breakdown */}
+            <div className="px-4 py-3 space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Subtotal</span>
+                <span className="tabular-nums">{formatCurrency(subtotalNonWholesale)}</span>
+              </div>
 
-            <Separator className="my-2" />
+              {totalSavings > 0 && (
+                <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" /> Ahorro
+                  </span>
+                  <span className="tabular-nums">-{formatCurrency(totalSavings)}</span>
+                </div>
+              )}
 
-            <div className="rounded-lg border bg-primary/5 px-3 py-2">
-              <div className="flex justify-between items-end">
-                <span className="text-sm font-semibold text-muted-foreground">Total a cobrar</span>
-                <span className="text-2xl font-bold text-primary tracking-tight">
-                  {formatCurrency(cartTotal)}
-                </span>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Impuesto ({(taxRate * 100).toFixed(0)}%)</span>
+                <span className="tabular-nums">{formatCurrency(cartTax)}</span>
               </div>
             </div>
+          </div>
 
-            <div className="mt-2 flex justify-end">
-              <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    disabled={isProcessing}
-                    className="h-9 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    title="Vaciar Carrito"
-                  >
-                    <Trash2 className="h-4 w-4 mr-1.5" />
-                    Limpiar
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Vaciar el carrito?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta accion eliminara todos los productos del carrito actual. Esta accion no se puede deshacer.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={() => {
-                        onClearCart();
-                        setIsClearDialogOpen(false);
-                      }}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Vaciar
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </div>
-          </div>
-          <div className="sticky bottom-3 z-20 mx-3 mb-3 rounded-xl border bg-background/95 backdrop-blur px-4 py-3 shadow-lg">
+          {/* Sticky CTA — Single total + prominent button */}
+          <div className="p-3 border-t border-border/40 bg-gradient-to-t from-background to-background/95">
             <div className="flex items-center gap-3">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Total a cobrar</p>
-                <p className="text-lg font-bold text-primary leading-tight">{formatCurrency(cartTotal)}</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Total</p>
+                <p className="text-xl font-bold text-primary leading-tight tabular-nums">{formatCurrency(cartTotal)}</p>
               </div>
               <Button
                 onClick={onCheckout}
-                disabled={isProcessing}
-                className="pos-button-primary ml-auto h-11 px-5 text-sm font-semibold shadow-md hover:shadow-lg transition-all"
+                disabled={isProcessing || !canCheckout}
+                title={checkoutDisabledReason}
+                className={cn(
+                  "ml-auto h-11 px-6 text-sm font-bold rounded-xl shadow-md transition-all",
+                  "bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary hover:shadow-lg hover:scale-[1.02]",
+                  "active:scale-[0.98]"
+                )}
               >
                 {isProcessing ? (
                   <>
@@ -578,7 +537,7 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                 ) : (
                   <>
                     <CreditCard className="h-4 w-4 mr-2" />
-                    Cobrar ahora
+                    Cobrar
                   </>
                 )}
               </Button>
@@ -591,5 +550,3 @@ export const POSCart: React.FC<POSCartProps> = memo(({
 });
 
 POSCart.displayName = 'POSCart';
-
-

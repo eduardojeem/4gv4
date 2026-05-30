@@ -10,7 +10,7 @@ import {
   Clock, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save,
   Printer, Download, Share2, Settings, AlertTriangle,
   Loader2, CheckCircle2, XCircle, Tag, Sparkles, Award, ArrowRight, Wrench,
-  ArrowUpCircle, ArrowDownCircle
+  ArrowUpCircle, ArrowDownCircle, MoreHorizontal
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useCashRegisterContext } from './contexts/CashRegisterContext'
@@ -33,6 +33,13 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 import { toast } from 'sonner'
 import { showAddToCartToast } from '@/lib/pos-toasts'
@@ -73,6 +80,8 @@ import { CheckoutModal } from './components/CheckoutModal'
 import { useOptimizedCart } from './hooks/useOptimizedCart'
 import { useCheckout } from './contexts/CheckoutContext'
 import { usePOSCustomer } from './contexts/POSCustomerContext'
+import { useBranch } from '@/contexts/branch-context'
+import { useAuth } from '@/contexts/auth-context'
 import { CartItem, PaymentSplit, PaymentMethodOption } from './types'
 import type { Product } from '@/types/product-unified'
 import { SALE_STATUS } from '@/lib/sales-status'
@@ -275,6 +284,7 @@ function POSPageContent() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showCartDialog, setShowCartDialog] = useState(false)
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false)
   const [heldSales, setHeldSales] = useState<HeldSale[]>([])
   const [isQuickItemDialogOpen, setIsQuickItemDialogOpen] = useState(false)
@@ -303,6 +313,7 @@ function POSPageContent() {
   const { 
     registers, 
     setRegisters,
+    refreshRegisters,
     activeRegisterId, 
     setActiveRegisterId, 
     getCurrentRegister,
@@ -311,6 +322,9 @@ function POSPageContent() {
     openRegister,
     registerSale
   } = useCashRegisterContext()
+  const { selectedBranchId } = useBranch()
+  const { user } = useAuth()
+  const canManageRegisters = user?.role === 'admin' || user?.role === 'super_admin'
 
   const handleRegisterChange = useCallback((id: string) => {
     if (!id || activeRegisterId === id) return
@@ -341,6 +355,62 @@ function POSPageContent() {
   const [newRegisterName, setNewRegisterName] = useState('')
   const [renameRegisterId, setRenameRegisterId] = useState<string | null>(null)
   const [renameRegisterName, setRenameRegisterName] = useState('')
+  const [registerOpenStatus, setRegisterOpenStatus] = useState<Record<string, boolean>>({})
+  const [registerManagerBusy, setRegisterManagerBusy] = useState(false)
+
+  const refreshRegisterOpenStatus = useCallback(async () => {
+    if (!isRegisterManagerOpen || registers.length === 0) {
+      setRegisterOpenStatus({})
+      return
+    }
+
+    const fallbackStatus = Object.fromEntries(
+      registers.map((register) => [
+        register.id,
+        register.id === activeRegisterId && Boolean(registerState[activeRegisterId]?.isOpen),
+      ])
+    )
+
+    if (!config.supabase.isConfigured) {
+      setRegisterOpenStatus(fallbackStatus)
+      return
+    }
+
+    try {
+      const supabase = createSupabaseClient()
+      let query = supabase
+        .from('cash_closures')
+        .select('register_id')
+        .in('register_id', registers.map((register) => register.id))
+        .is('date', null)
+
+      if (selectedBranchId && selectedBranchId !== 'all') {
+        query = query.eq('branch_id', selectedBranchId)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        setRegisterOpenStatus(fallbackStatus)
+        return
+      }
+
+      const openIds = new Set((data || []).map((session) => String(session.register_id)))
+      setRegisterOpenStatus(
+        Object.fromEntries(registers.map((register) => [register.id, openIds.has(register.id)]))
+      )
+    } catch {
+      setRegisterOpenStatus(fallbackStatus)
+    }
+  }, [activeRegisterId, isRegisterManagerOpen, registerState, registers, selectedBranchId])
+
+  useEffect(() => {
+    if (!canManageRegisters && isRegisterManagerOpen) {
+      setIsRegisterManagerOpen(false)
+      return
+    }
+    refreshRegisterOpenStatus()
+  }, [canManageRegisters, isRegisterManagerOpen, refreshRegisterOpenStatus])
 
   // Movement Dialog State
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
@@ -1284,6 +1354,8 @@ function POSPageContent() {
 
     return [...cart, ...repairItems]
   }, [cart, selectedRepairs])
+  const canCheckout = combinedCartItems.length > 0
+  const checkoutDisabledReason = canCheckout ? undefined : 'Agrega productos o vincula una reparacion para cobrar.'
 
   // Unified Remove Handler
   const handleRemoveItem = useCallback((id: string) => {
@@ -2122,7 +2194,7 @@ function POSPageContent() {
     registers={registers}
     activeRegisterId={activeRegisterId}
     onRegisterChange={handleRegisterChange}
-    onOpenRegisterManager={() => setIsRegisterManagerOpen(true)}
+    onOpenRegisterManager={() => canManageRegisters && setIsRegisterManagerOpen(true)}
     onOpenMovements={() => {
       setMovementType('out')
       setMovementAmount('')
@@ -2131,6 +2203,7 @@ function POSPageContent() {
     }}
     onOpenRegister={() => setIsOpenRegisterDialogOpen(true)}
     isRegisterOpen={Boolean(registerState[activeRegisterId]?.isOpen)}
+    canManageRegisters={canManageRegisters}
     isFullscreen={isFullscreen}
     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
     onOpenCart={() => setShowCartDialog(true)}
@@ -2166,7 +2239,7 @@ function POSPageContent() {
     registers={registers}
     activeRegisterId={activeRegisterId}
     onRegisterChange={handleRegisterChange}
-    onOpenRegisterManager={() => setIsRegisterManagerOpen(true)}
+    onOpenRegisterManager={() => canManageRegisters && setIsRegisterManagerOpen(true)}
     onOpenMovements={() => {
       setMovementType('out')
       setMovementAmount('')
@@ -2175,6 +2248,7 @@ function POSPageContent() {
     }}
     onOpenRegister={() => setIsOpenRegisterDialogOpen(true)}
     isRegisterOpen={Boolean(registerState[activeRegisterId]?.isOpen)}
+    canManageRegisters={canManageRegisters}
     isFullscreen={isFullscreen}
     onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
     onOpenCart={() => setShowCartDialog(true)}
@@ -2273,8 +2347,8 @@ function POSPageContent() {
           </div>
 
           {/* Barra de búsqueda y filtros */}
-          <div className="bg-card border-b border-border p-4 lg:p-6">
-            <div className="flex flex-col lg:flex-row gap-4">
+          <div className="border-b border-border bg-card/80 p-3 backdrop-blur lg:p-4">
+            <div className="pos-panel flex flex-col gap-3 rounded-xl p-3 lg:flex-row lg:items-center">
               {/* Búsqueda con autocompletado */}
               <div className="flex-1 relative" id="search-container">
                 <div className="relative">
@@ -2285,7 +2359,7 @@ function POSPageContent() {
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
-                    className="pl-10 pr-4"
+                    className="h-11 pl-10 pr-4 text-base lg:text-sm"
                   />
                 </div>
 
@@ -2309,7 +2383,7 @@ function POSPageContent() {
                 )}
               </div>
 
-              <div className="lg:hidden flex items-center justify-end gap-2 mt-2">
+              <div className="lg:hidden flex items-center justify-end gap-2">
                 <Button
                   variant={isMobileFiltersOpen ? "default" : "outline"}
                   size="sm"
@@ -2330,7 +2404,7 @@ function POSPageContent() {
               {/* Filtros rápidos */}
               <div className={`flex flex-wrap gap-2 ${isMobileFiltersOpen ? '' : 'hidden lg:flex'}`}>
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger className="w-40">
+                  <SelectTrigger className="h-9 w-full sm:w-48 lg:w-44">
                     <SelectValue placeholder="Categoría" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2346,66 +2420,58 @@ function POSPageContent() {
                   variant={showFeatured ? "default" : "outline"}
                   size="sm"
                   onClick={() => setShowFeatured(!showFeatured)}
+                  className="h-9"
                 >
                   <Star className="h-4 w-4 mr-2" />
                   Destacados
                 </Button>
 
                 <Button
-                  variant={viewMode === 'grid' ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                >
-                  {viewMode === 'grid' ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
-                </Button>
-
-                <Button
                   variant={showAdvancedFilters ? "default" : "outline"}
                   size="sm"
                   onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  className="h-9"
                 >
                   <Filter className="h-4 w-4 mr-2" />
                   Filtros
                   {showAdvancedFilters ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
                 </Button>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsQuickItemDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Item rapido
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={holdCurrentSale}
-                  disabled={cart.length === 0 && selectedRepairIds.length === 0}
-                >
-                  <Clock className="h-4 w-4 mr-2" />
-                  En espera
-                </Button>
-
-                <Select value="" onValueChange={resumeHeldSale}>
-                  <SelectTrigger className="w-52">
-                    <SelectValue placeholder={`Recuperar (${heldSales.length})`} />
-                  </SelectTrigger>
-                  <SelectContent>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9">
+                      <MoreHorizontal className="h-4 w-4 mr-2" />
+                      Mas
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuItem onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
+                      {viewMode === 'grid' ? <List className="h-4 w-4 mr-2" /> : <Grid className="h-4 w-4 mr-2" />}
+                      Cambiar a vista {viewMode === 'grid' ? 'lista' : 'grilla'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setIsQuickItemDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Item rapido
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={holdCurrentSale}
+                      disabled={cart.length === 0 && selectedRepairIds.length === 0}
+                    >
+                      <Clock className="h-4 w-4 mr-2" />
+                      Poner venta en espera
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     {heldSales.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-muted-foreground">
-                        No hay ventas en espera
-                      </div>
+                      <DropdownMenuItem disabled>No hay ventas en espera</DropdownMenuItem>
                     ) : (
                       heldSales.map((sale) => (
-                        <SelectItem key={sale.id} value={sale.id}>
-                          {`${sale.label} - ${sale.itemCount} item(s) - ${formatCurrency(sale.total)}`}
-                        </SelectItem>
+                        <DropdownMenuItem key={sale.id} onClick={() => resumeHeldSale(sale.id)}>
+                          Recuperar {sale.label} - {formatCurrency(sale.total)}
+                        </DropdownMenuItem>
                       ))
                     )}
-                  </SelectContent>
-                </Select>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -2598,7 +2664,7 @@ function POSPageContent() {
               ) : !productsLoading && !productsError && inventoryProducts.length > 0 ? (
                 <div
                   className={`grid gap-3 ${viewMode === 'grid'
-                      ? 'product-grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
+                      ? 'product-grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
                       : 'grid-cols-1 max-w-4xl mx-auto'
                     }`}
                   role="grid"
@@ -2713,6 +2779,8 @@ function POSPageContent() {
                 cartTotal={unifiedCalculations.total}
                 cartItemCount={unifiedCalculations.totalItemCount}
                 taxRate={getTaxConfig().rate}
+                canCheckout={canCheckout}
+                checkoutDisabledReason={checkoutDisabledReason}
               />
             </div>
           </div>
@@ -2722,7 +2790,7 @@ function POSPageContent() {
       {/* Mobile Cart Bottom Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t p-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-lg z-50">
         <div className="grid grid-cols-[1fr_auto] gap-2 items-stretch">
-          <Sheet>
+          <Sheet open={isMobileCartOpen} onOpenChange={setIsMobileCartOpen}>
             <SheetTrigger asChild>
               <div className="flex flex-col justify-center cursor-pointer hover:bg-muted/50 px-3 py-2 rounded-md transition-colors border border-border/60">
                  <span className="text-[11px] text-muted-foreground">{unifiedCalculations.totalItemCount} items en carrito</span>
@@ -2740,6 +2808,7 @@ function POSPageContent() {
                   onRemoveItem={handleRemoveItem}
                   onApplyDiscount={updateItemDiscount}
                   onCheckout={() => {
+                    setIsMobileCartOpen(false)
                     setIsCheckoutOpen(true)
                   }}
                   onClearCart={() => clearCart()}
@@ -2757,6 +2826,8 @@ function POSPageContent() {
                   cartTotal={unifiedCalculations.total}
                   cartItemCount={unifiedCalculations.totalItemCount}
                   taxRate={getTaxConfig().rate}
+                  canCheckout={canCheckout}
+                  checkoutDisabledReason={checkoutDisabledReason}
                 />
               </div>
             </SheetContent>
@@ -2765,7 +2836,8 @@ function POSPageContent() {
           <Button
             className="pos-button-primary h-full min-h-[52px] px-4 text-sm font-semibold"
             onClick={() => setIsCheckoutOpen(true)}
-            disabled={cart.length === 0 && selectedRepairIds.length === 0}
+            disabled={!canCheckout}
+            title={checkoutDisabledReason}
           >
             <CreditCard className="mr-2 h-4 w-4" />
             Cobrar
@@ -2904,19 +2976,22 @@ function POSPageContent() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsOpenRegisterDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={() => {
+            <Button onClick={async () => {
               const amount = parseFloat(openingAmount) || 0
-              openRegister(amount, openingNote)
-              setIsOpenRegisterDialogOpen(false)
-              setOpeningAmount('0')
-              setOpeningNote('')
+              const opened = await openRegister(amount, openingNote)
+              if (opened) {
+                await refreshRegisterOpenStatus()
+                setIsOpenRegisterDialogOpen(false)
+                setOpeningAmount('0')
+                setOpeningNote('')
+              }
             }}>Abrir Caja</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Diálogo de Gestión de Cajas */}
-      <Dialog open={isRegisterManagerOpen} onOpenChange={setIsRegisterManagerOpen}>
+      <Dialog open={canManageRegisters && isRegisterManagerOpen} onOpenChange={(open) => setIsRegisterManagerOpen(canManageRegisters && open)}>
         <DialogContent className="max-w-xl dark:bg-gray-900">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2929,13 +3004,21 @@ function POSPageContent() {
           </DialogHeader>
 
           <div className="space-y-6">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+              Solo administradores pueden crear, renombrar o eliminar cajas. Los vendedores operan con la caja asignada o seleccionada.
+            </div>
+
             <div>
               <h3 className="text-sm font-medium mb-3">Cajas actuales</h3>
               {registers.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No hay cajas. Cree una nueva abajo.</p>
               ) : (
                 <div className="space-y-3">
-                  {registers.map((reg) => (
+                  {registers.map((reg) => {
+                    const isOpen = Boolean(registerOpenStatus[reg.id])
+                    const isCurrent = activeRegisterId === reg.id
+
+                    return (
                     <div key={reg.id} className="flex items-center justify-between gap-3 border rounded-md p-3 bg-card">
                       <div className="flex-1">
                         {renameRegisterId === reg.id ? (
@@ -2947,10 +3030,10 @@ function POSPageContent() {
                         ) : (
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{reg.name || `Caja ${reg.id}`}</span>
-                            <Badge className={(registerState[reg.id]?.isOpen) ? 'bg-green-600' : 'bg-gray-500'}>
-                              {(registerState[reg.id]?.isOpen) ? 'Abierta' : 'Cerrada'}
+                            <Badge className={isOpen ? 'bg-green-600' : 'bg-gray-500'}>
+                              {isOpen ? 'Abierta' : 'Cerrada'}
                             </Badge>
-                            {activeRegisterId === reg.id && (
+                            {isCurrent && (
                               <Badge variant="outline">Actual</Badge>
                             )}
                           </div>
@@ -2964,7 +3047,7 @@ function POSPageContent() {
                               onClick={async () => {
                                 const name = renameRegisterName.trim()
                                 if (name.length < 2) { toast.error('Nombre demasiado corto'); return }
-                                setRegisters(registers.map(r => r.id === reg.id ? { ...r, name } : r))
+                                setRegisterManagerBusy(true)
                                 if (config.supabase.isConfigured) {
                                   try {
                                     const supabase = createSupabaseClient()
@@ -2974,11 +3057,21 @@ function POSPageContent() {
                                       .eq('id', reg.id)
                                       .select()
                                       .maybeSingle())
-                                    if (error) toast.error('Error al sincronizar nombre en Supabase')
+                                    if (error) {
+                                      toast.error('Error al sincronizar nombre en Supabase')
+                                      return
+                                    }
                                   } catch (e) {
                                     console.error('Error syncing register name:', e)
+                                    toast.error('Error al sincronizar nombre en Supabase')
+                                    return
+                                  } finally {
+                                    setRegisterManagerBusy(false)
                                   }
                                 }
+                                setRegisters(registers.map(r => r.id === reg.id ? { ...r, name } : r))
+                                await refreshRegisters()
+                                setRegisterManagerBusy(false)
                                 setRenameRegisterId(null)
                                 setRenameRegisterName('')
                                 toast.success('Caja renombrada')
@@ -2999,6 +3092,15 @@ function POSPageContent() {
                             <Button
                               size="sm"
                               variant="outline"
+                              disabled={registerManagerBusy || isCurrent}
+                              onClick={() => handleRegisterChange(reg.id)}
+                            >
+                              Usar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={registerManagerBusy}
                               onClick={() => { setRenameRegisterId(reg.id); setRenameRegisterName(reg.name || '') }}
                             >
                               Renombrar
@@ -3006,13 +3108,15 @@ function POSPageContent() {
                             <Button
                               size="sm"
                               variant="destructive"
+                              disabled={registerManagerBusy || isOpen}
+                              title={isOpen ? 'No puedes eliminar una caja abierta. Cierrala primero.' : undefined}
                               onClick={async () => {
-                                const nextRegs = registers.filter(r => r.id !== reg.id)
-                                setRegisters(nextRegs.length ? nextRegs : [{ id: 'principal', name: 'Caja Principal', isActive: false }])
-                                
-                                if (activeRegisterId === reg.id) {
-                                  setActiveRegisterId(nextRegs.length ? nextRegs[0].id : 'principal')
+                                if (isOpen) {
+                                  toast.error('No puedes eliminar una caja abierta. Cierrala primero.')
+                                  return
                                 }
+                                const nextRegs = registers.filter(r => r.id !== reg.id)
+                                setRegisterManagerBusy(true)
                                 if (config.supabase.isConfigured) {
                                   try {
                                     const supabase = createSupabaseClient()
@@ -3020,11 +3124,26 @@ function POSPageContent() {
                                       .from('cash_registers')
                                       .delete()
                                       .eq('id', reg.id)
-                                    if (error) toast.error('Error al eliminar caja en Supabase')
+                                    if (error) {
+                                      toast.error('Error al eliminar caja en Supabase')
+                                      return
+                                    }
                                   } catch (e) {
                                     console.error('Error deleting register:', e)
+                                    toast.error('Error al eliminar caja en Supabase')
+                                    return
+                                  } finally {
+                                    setRegisterManagerBusy(false)
                                   }
                                 }
+                                setRegisters(nextRegs.length ? nextRegs : [{ id: 'principal', name: 'Caja Principal', isActive: false }])
+                                
+                                if (activeRegisterId === reg.id) {
+                                  setActiveRegisterId(nextRegs.length ? nextRegs[0].id : 'principal')
+                                }
+                                await refreshRegisters()
+                                await refreshRegisterOpenStatus()
+                                setRegisterManagerBusy(false)
                                 toast.success('Caja eliminada')
                               }}
                             >
@@ -3034,7 +3153,8 @@ function POSPageContent() {
                         )}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -3053,20 +3173,28 @@ function POSPageContent() {
               <div className="md:col-span-1">
                 <Button
                   className="w-full"
+                  disabled={registerManagerBusy}
                   onClick={async () => {
                     const name = newRegisterName.trim()
                     if (name.length < 2) { toast.error('Nombre demasiado corto'); return }
                     let newId = `reg-${Date.now()}`
+                    setRegisterManagerBusy(true)
                     if (config.supabase.isConfigured) {
+                      if (!selectedBranchId || selectedBranchId === 'all') {
+                        toast.error('Selecciona una sucursal antes de crear una caja')
+                        setRegisterManagerBusy(false)
+                        return
+                      }
                       try {
                         const supabase = createSupabaseClient()
                         const { data, error } = await supabase
                           .from('cash_registers')
-                          .insert({ name, is_open: false, balance: 0 })
+                          .insert({ name, is_open: false, balance: 0, branch_id: selectedBranchId })
                           .select('id')
                           .single()
                         if (error) {
                           toast.error('Error al crear caja en Supabase')
+                          return
                         } else {
                           const insertedId = (data as { id?: string } | null)?.id
                           if (insertedId) {
@@ -3075,10 +3203,18 @@ function POSPageContent() {
                         }
                       } catch (e) {
                         console.error('Error creating register in Supabase:', e)
+                        toast.error('Error al crear caja en Supabase')
+                        return
+                      } finally {
+                        setRegisterManagerBusy(false)
                       }
                     }
                     setRegisters([...registers, { id: newId, name, isActive: false }])
+                    setActiveRegisterId(newId)
+                    await refreshRegisters()
+                    await refreshRegisterOpenStatus()
                     setNewRegisterName('')
+                    setRegisterManagerBusy(false)
                     toast.success('Caja creada')
                   }}
                 >

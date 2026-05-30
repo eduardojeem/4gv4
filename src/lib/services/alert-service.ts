@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { isDemoMode } from '@/lib/config'
-import { loadBranchInventoryStockMap } from '@/lib/branches/inventory'
+import { loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
 
 export interface ProductAlert {
   id: string
@@ -111,7 +111,11 @@ export class AlertService {
       }
 
       const productIds = [...new Set(data.map((alert) => alert.product_id))]
-      const { stockMap } = await loadBranchInventoryStockMap(this.supabase, branchId, productIds)
+      const { stockMap } = await loadBranchInventoryStockMap(
+        this.supabase as unknown as BranchInventoryClient,
+        branchId,
+        productIds
+      )
 
       return data.map((alert) => ({
         ...alert,

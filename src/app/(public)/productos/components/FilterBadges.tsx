@@ -7,8 +7,9 @@ import { X } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 import { readActiveProductFilters, clearAllProductFilters } from '@/lib/utils/product-filters'
+import type { Category } from '@/types/public'
 
-export function FilterBadges({ categories }: { categories: any[] }) {
+export function FilterBadges({ categories }: { categories: Category[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()

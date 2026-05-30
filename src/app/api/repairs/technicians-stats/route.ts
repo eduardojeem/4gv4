@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,10 @@ type TechnicianProfile = {
 }
 
 type BranchAssignment = {
+  user_id: string
+}
+
+type OrganizationMember = {
   user_id: string
 }
 
@@ -43,6 +48,11 @@ export async function GET(req: NextRequest) {
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse
     const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
+    const organization = await getCurrentOrganizationContext(staffAuth.user.id)
+
+    if (!organization) {
+      return Response.json({ error: 'organization_required' }, { status: 403 })
+    }
 
     const isConfigured = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
     if (!isConfigured) {
@@ -76,6 +86,7 @@ export async function GET(req: NextRequest) {
       userId: staffAuth.user.id,
       role: staffAuth.role,
       requestedBranchId,
+      organizationId: organization.id,
       strict: Boolean(requestedBranchId),
     })
 
@@ -100,35 +111,57 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    let profilesQuery = supabase
+    const { data: memberRows, error: membersError } = await supabase
+      .from('organization_members')
+      .select('user_id')
+      .eq('organization_id', organization.id)
+      .eq('status', 'active')
+
+    if (membersError) {
+      throw membersError
+    }
+
+    const organizationUserIds = ((memberRows ?? []) as OrganizationMember[])
+      .map((member) => member.user_id)
+      .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0)
+
+    if (organizationUserIds.length === 0) {
+      return Response.json({ technicians: [] })
+    }
+
+    let profileIds = organizationUserIds
+    if (technicianIdsForBranch) {
+      const branchTechnicianIds = new Set(technicianIdsForBranch)
+      profileIds = organizationUserIds.filter((userId) => branchTechnicianIds.has(userId))
+    }
+
+    if (profileIds.length === 0) {
+      return Response.json({ technicians: [] })
+    }
+
+    const profilesQuery = supabase
       .from('profiles')
       .select('id, full_name, email, role, specialty')
+      .in('id', profileIds)
       .order('full_name')
-
-    if (technicianIdsForBranch) {
-      profilesQuery = profilesQuery.in('id', technicianIdsForBranch)
-    }
 
     const { data: profiles, error: profilesError } = await profilesQuery
 
     if (profilesError) {
       const msg = (profilesError.message || '').toLowerCase()
       if (msg.includes('specialty') || msg.includes('column')) {
-        let fallbackProfilesQuery = supabase
+        const fallbackProfilesQuery = supabase
           .from('profiles')
           .select('id, full_name, email, role')
+          .in('id', profileIds)
           .order('full_name')
-
-        if (technicianIdsForBranch) {
-          fallbackProfilesQuery = fallbackProfilesQuery.in('id', technicianIdsForBranch)
-        }
 
         const { data: fallbackProfiles, error: fallbackError } = await fallbackProfilesQuery
 
         if (fallbackError) throw fallbackError
 
         const techProfiles = filterTechnicians((fallbackProfiles ?? []) as TechnicianProfile[])
-        const stats = await calculateStats(supabase, techProfiles, branchScope.branchId)
+        const stats = await calculateStats(supabase, techProfiles, organization.id, branchScope.branchId)
         return Response.json({ technicians: stats })
       }
 
@@ -136,7 +169,7 @@ export async function GET(req: NextRequest) {
     }
 
     const techProfiles = filterTechnicians((profiles ?? []) as TechnicianProfile[])
-    const stats = await calculateStats(supabase, techProfiles, branchScope.branchId)
+    const stats = await calculateStats(supabase, techProfiles, organization.id, branchScope.branchId)
 
     return Response.json({ technicians: stats })
   } catch (error: unknown) {
@@ -165,6 +198,7 @@ function filterTechnicians(profiles: TechnicianProfile[]): TechnicianProfile[] {
 async function calculateStats(
   supabase: ReturnType<typeof createAdminSupabase>,
   technicians: TechnicianProfile[],
+  organizationId: string,
   branchId?: string | null
 ) {
   if (technicians.length === 0) return []
@@ -176,6 +210,7 @@ async function calculateStats(
   let repairsQuery = supabase
     .from('repairs')
     .select('technician_id, status, created_at, completed_at')
+    .eq('organization_id', organizationId)
     .in('technician_id', techIds)
 
   if (branchId) {

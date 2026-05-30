@@ -19,35 +19,36 @@ export const productGenerator = (): fc.Arbitrary<Product> => {
     brand: fc.option(fc.string({ minLength: 1, maxLength: 50 }), { nil: null }),
     brand_id: fc.option(fc.uuid(), { nil: null }),
     supplier_id: fc.option(fc.uuid(), { nil: null }),
-    purchase_price: fc.float({ min: 0, max: 10000, noNaN: true }),
+    purchase_price: fc.option(fc.float({ min: 0, max: 10000, noNaN: true }), { nil: null }),
     sale_price: fc.float({ min: 0, max: 10000, noNaN: true }),
     wholesale_price: fc.option(fc.float({ min: 0, max: 10000, noNaN: true }), { nil: null }),
-    stock_quantity: fc.integer({ min: 0, max: 1000 }),
-    min_stock: fc.integer({ min: 0, max: 100 }),
+    stock_quantity: fc.option(fc.integer({ min: 0, max: 1000 }), { nil: null }),
+    min_stock: fc.option(fc.integer({ min: 0, max: 100 }), { nil: null }),
     max_stock: fc.option(fc.integer({ min: 0, max: 2000 }), { nil: null }),
-    unit_measure: fc.constantFrom('unidad', 'kg', 'litro', 'metro', 'caja', 'paquete'),
+    unit_measure: fc.option(fc.constantFrom('unidad', 'kg', 'litro', 'metro', 'caja', 'paquete'), { nil: null }),
     barcode: fc.option(fc.string({ minLength: 8, maxLength: 13 }), { nil: null }),
     images: fc.option(fc.array(fc.webUrl(), { maxLength: 5 }), { nil: null }),
-    image: fc.option(fc.webUrl(), { nil: null }),
     image_url: fc.option(fc.webUrl(), { nil: null }),
     offer_price: fc.option(fc.float({ min: 0, max: 10000, noNaN: true }), { nil: null }),
     has_offer: fc.option(fc.boolean(), { nil: null }),
-    warranty_months: fc.integer({ min: 0, max: 60 }),
+    warranty_months: fc.option(fc.integer({ min: 0, max: 60 }), { nil: null }),
     warranty_info: fc.option(fc.string({ maxLength: 500 }), { nil: null }),
-    return_window_days: fc.integer({ min: 0, max: 90 }),
-    exchange_window_days: fc.integer({ min: 0, max: 90 }),
+    return_window_days: fc.option(fc.integer({ min: 0, max: 90 }), { nil: null }),
+    exchange_window_days: fc.option(fc.integer({ min: 0, max: 90 }), { nil: null }),
     return_policy: fc.option(fc.string({ maxLength: 500 }), { nil: null }),
     exchange_policy: fc.option(fc.string({ maxLength: 500 }), { nil: null }),
-    visibility: fc.constantFrom('public', 'wholesale', 'hidden'),
-    is_active: fc.boolean(),
-    featured: fc.option(fc.boolean(), { nil: undefined }),
+    visibility: fc.option(fc.constantFrom('public', 'wholesale', 'hidden'), { nil: null }),
+    is_active: fc.option(fc.boolean(), { nil: null }),
+    featured: fc.option(fc.boolean(), { nil: null }),
     weight: fc.option(fc.float({ min: 0, max: 1000, noNaN: true }), { nil: null }),
     dimensions: fc.option(fc.string({ maxLength: 50 }), { nil: null }),
     location: fc.option(fc.string({ maxLength: 50 }), { nil: null }),
     tags: fc.option(fc.array(fc.string({ maxLength: 20 }), { maxLength: 10 }), { nil: null }),
-    created_at: fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()),
-    updated_at: fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString())
-  })
+    stock_status_computed: fc.option(fc.constantFrom('in_stock', 'low_stock', 'out_of_stock'), { nil: null }),
+    organization_id: fc.option(fc.uuid(), { nil: null }),
+    created_at: fc.option(fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()), { nil: null }),
+    updated_at: fc.option(fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()), { nil: null }),
+  }) as unknown as fc.Arbitrary<Product>
 }
 
 /**
@@ -81,14 +82,13 @@ export const categoryGenerator = (): fc.Arbitrary<Category> => {
   return fc.record({
     id: fc.uuid(),
     name: fc.string({ minLength: 1, maxLength: 100 }),
-    description: fc.option(fc.string({ maxLength: 500 }), { nil: undefined }),
-    parent_id: fc.option(fc.uuid(), { nil: undefined }),
-    is_active: fc.boolean(),
-    created_at: fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()),
-    updated_at: fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()),
-    subcategories: fc.option(fc.constant([]), { nil: undefined }),
-    products_count: fc.option(fc.integer({ min: 0, max: 100 }), { nil: undefined })
-  })
+    description: fc.option(fc.string({ maxLength: 500 }), { nil: null }),
+    parent_id: fc.option(fc.uuid(), { nil: null }),
+    is_active: fc.option(fc.boolean(), { nil: null }),
+    organization_id: fc.option(fc.uuid(), { nil: null }),
+    created_at: fc.option(fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()), { nil: null }),
+    updated_at: fc.option(fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()), { nil: null }),
+  }) as unknown as fc.Arbitrary<Category>
 }
 
 /**
@@ -98,16 +98,24 @@ export const supplierGenerator = (): fc.Arbitrary<Supplier> => {
   return fc.record({
     id: fc.uuid(),
     name: fc.string({ minLength: 1, maxLength: 100 }),
-    contact_name: fc.option(fc.string({ maxLength: 100 }), { nil: undefined }),
-    contact_email: fc.option(fc.emailAddress(), { nil: undefined }),
-    phone: fc.option(fc.string({ minLength: 10, maxLength: 15 }), { nil: undefined }),
-    address: fc.option(fc.string({ maxLength: 200 }), { nil: undefined }),
-    tax_id: fc.option(fc.string({ minLength: 10, maxLength: 20 }), { nil: undefined }),
+    contact_name: fc.option(fc.string({ maxLength: 100 }), { nil: null }),
+    email: fc.option(fc.emailAddress(), { nil: null }),
+    phone: fc.option(fc.string({ minLength: 10, maxLength: 15 }), { nil: null }),
+    address: fc.option(fc.string({ maxLength: 200 }), { nil: null }),
+    tax_id: fc.option(fc.string({ minLength: 10, maxLength: 20 }), { nil: null }),
+    status: fc.option(fc.string({ maxLength: 20 }), { nil: null }),
+    business_type: fc.option(fc.string({ maxLength: 50 }), { nil: null }),
+    city: fc.option(fc.string({ maxLength: 50 }), { nil: null }),
+    country: fc.option(fc.string({ maxLength: 50 }), { nil: null }),
+    postal_code: fc.option(fc.string({ maxLength: 10 }), { nil: null }),
+    website: fc.option(fc.webUrl(), { nil: null }),
+    rating: fc.option(fc.float({ min: 0, max: 5, noNaN: true }), { nil: null }),
+    notes: fc.option(fc.string({ maxLength: 500 }), { nil: null }),
     is_active: fc.boolean(),
-    created_at: fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()),
-    updated_at: fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()),
-    products_count: fc.option(fc.integer({ min: 0, max: 100 }), { nil: undefined })
-  })
+    organization_id: fc.option(fc.uuid(), { nil: null }),
+    created_at: fc.option(fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()), { nil: null }),
+    updated_at: fc.option(fc.integer({ min: 1577836800000, max: Date.now() }).map(ts => new Date(ts).toISOString()), { nil: null }),
+  }) as unknown as fc.Arbitrary<Supplier>
 }
 
 /**

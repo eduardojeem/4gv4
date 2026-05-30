@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useEffect, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import useSWR from 'swr'
 import {
   ArrowLeft,
@@ -59,13 +59,27 @@ interface RepairDetailClientProps {
 
 export default function RepairDetailClient({ ticketId, initialRepair, verifyHash }: RepairDetailClientProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [qrVerified, setQrVerified] = useState<boolean | null>(verifyHash && initialRepair ? true : null)
   const [sessionExpired, setSessionExpired] = useState(false)
   const hasShownVerifiedToast = useRef(false)
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const tenantPrefix =
+    pathSegments.length > 2 && pathSegments[1] === 'mis-reparaciones'
+      ? `/${pathSegments[0]}`
+      : ''
+  const repairsHref = `${tenantPrefix}/mis-reparaciones`
+  const organizationSlug = tenantPrefix.replace('/', '')
+  const repairApiUrl =
+    `/api/public/repairs/${encodeURIComponent(ticketId)}` +
+    `?${new URLSearchParams({
+      ...(verifyHash ? { verify: verifyHash } : {}),
+      ...(organizationSlug ? { org: organizationSlug } : {}),
+    }).toString()}`
 
   const { data: repair, error, isLoading, mutate } = useSWR<PublicRepair>(
-    `/api/public/repairs/${encodeURIComponent(ticketId)}${verifyHash ? `?verify=${encodeURIComponent(verifyHash)}` : ''}`,
+    repairApiUrl,
     fetcher,
     {
       fallbackData: initialRepair ?? undefined,
@@ -117,7 +131,7 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
           <p className="text-muted-foreground">
             Tu sesión de consulta ha expirado. Por seguridad, necesitas verificar tu identidad nuevamente.
           </p>
-          <Button onClick={() => router.push('/mis-reparaciones')} className="mt-2">
+          <Button onClick={() => router.push(repairsHref)} className="mt-2">
             Volver a verificar
           </Button>
         </div>
@@ -156,7 +170,7 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
               <RefreshCw className="mr-2 h-4 w-4" />
               Reintentar
             </Button>
-            <Button onClick={() => router.push('/mis-reparaciones')} variant="outline">
+            <Button onClick={() => router.push(repairsHref)} variant="outline">
               Volver a Buscar
             </Button>
           </div>
@@ -175,7 +189,7 @@ export default function RepairDetailClient({ ticketId, initialRepair, verifyHash
     <div className="container max-w-5xl py-8 md:py-12">
       {/* Back */}
       <button
-        onClick={() => router.push('/mis-reparaciones')}
+        onClick={() => router.push(repairsHref)}
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />

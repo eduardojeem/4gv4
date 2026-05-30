@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import { ArrowRight, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { CompanyInfo, HeroStats, HeroContent } from '@/types/website-settings'
@@ -17,6 +18,10 @@ interface HeroSectionProps {
 }
 
 export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneClean, contactHref }: HeroSectionProps) {
+  const pathname = usePathname()
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
+
   return (
     <section className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} py-20 text-white md:py-32`}>
       <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
@@ -38,7 +43,7 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
           </p>
           <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
             <Button asChild size="lg" className={`bg-white ${brand.ctaBtn} hover:bg-white/90`}>
-              <Link href="/mis-reparaciones">
+              <Link href={`${tenantPrefix}/mis-reparaciones`}>
                 Rastrear mi reparación
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>

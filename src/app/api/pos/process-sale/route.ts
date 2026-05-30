@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 
 type RouteBody = {
@@ -194,11 +195,13 @@ async function insertSaleRow(
 async function insertSaleItems(
   supabase: ReturnType<typeof createAdminSupabase>,
   saleId: string,
-  items: NormalizedSaleItem[]
+  items: NormalizedSaleItem[],
+  organizationId: string
 ) {
   const attempts = [
     items.map(item => compactRecord({
       sale_id: saleId,
+      organization_id: organizationId,
       product_id: item.productId,
       quantity: item.quantity,
       unit_price: item.unitPrice,
@@ -207,6 +210,7 @@ async function insertSaleItems(
     })),
     items.map(item => compactRecord({
       sale_id: saleId,
+      organization_id: organizationId,
       product_id: item.productId,
       quantity: item.quantity,
       unit_price: item.unitPrice,
@@ -214,6 +218,7 @@ async function insertSaleItems(
     })),
     items.map(item => compactRecord({
       sale_id: saleId,
+      organization_id: organizationId,
       product_id: item.productId,
       quantity: item.quantity,
       unit_price: item.unitPrice,
@@ -239,6 +244,15 @@ export async function POST(request: Request) {
     if (authResponse) return authResponse
 
     const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
+    const organization = await getCurrentOrganizationContext(staffAuth.user.id)
+
+    if (!organization) {
+      return NextResponse.json(
+        { error: 'No hay una organizacion activa para procesar la venta.' },
+        { status: 403 }
+      )
+    }
+
     if (staffAuth.role === 'tecnico') {
       return NextResponse.json(
         { error: 'Permisos insuficientes para procesar ventas POS.' },
@@ -295,6 +309,7 @@ export async function POST(request: Request) {
       userId: staffAuth.user.id,
       role: staffAuth.role,
       requestedBranchId,
+      organizationId: organization.id,
       strict: Boolean(requestedBranchId),
     })
 
@@ -314,6 +329,7 @@ export async function POST(request: Request) {
     const { data: productRows, error: productError } = await supabase
       .from('products')
       .select('id, stock_quantity, is_active')
+      .eq('organization_id', organization.id)
       .in('id', productIds)
 
     let branchInventoryRows: BranchInventoryRow[] = []
@@ -382,6 +398,7 @@ export async function POST(request: Request) {
       for (const statusVariant of statusVariants) {
         for (const paymentStatusVariant of paymentStatusVariants) {
           salePayloadAttempts.push({
+            organization_id: organization.id,
             code,
             customer_id: customerId,
             created_by: staffAuth.user.id,
@@ -398,6 +415,7 @@ export async function POST(request: Request) {
           })
 
           salePayloadAttempts.push({
+            organization_id: organization.id,
             code,
             customer_id: customerId,
             branch_id: branchScope.branchId,
@@ -413,6 +431,7 @@ export async function POST(request: Request) {
           })
 
           salePayloadAttempts.push({
+            organization_id: organization.id,
             sale_number: code,
             customer_id: customerId,
             user_id: staffAuth.user.id,
@@ -426,6 +445,7 @@ export async function POST(request: Request) {
           })
 
           salePayloadAttempts.push({
+            organization_id: organization.id,
             sale_number: code,
             customer_id: customerId,
             branch_id: branchScope.branchId,
@@ -438,6 +458,7 @@ export async function POST(request: Request) {
           })
 
           salePayloadAttempts.push({
+            organization_id: organization.id,
             customer_id: customerId,
             user_id: staffAuth.user.id,
             branch_id: branchScope.branchId,
@@ -450,6 +471,7 @@ export async function POST(request: Request) {
           })
 
           salePayloadAttempts.push({
+            organization_id: organization.id,
             customer_id: customerId,
             branch_id: branchScope.branchId,
             total_amount: totalAmount,
@@ -461,6 +483,7 @@ export async function POST(request: Request) {
 
           if (customerId) {
             salePayloadAttempts.push({
+              organization_id: organization.id,
               code,
               created_by: staffAuth.user.id,
               branch_id: branchScope.branchId,
@@ -476,6 +499,7 @@ export async function POST(request: Request) {
             })
 
             salePayloadAttempts.push({
+              organization_id: organization.id,
               sale_number: code,
               user_id: staffAuth.user.id,
               branch_id: branchScope.branchId,
@@ -502,10 +526,10 @@ export async function POST(request: Request) {
       )
     }
 
-    const saleItemsError = await insertSaleItems(supabase, saleId, items)
+    const saleItemsError = await insertSaleItems(supabase, saleId, items, organization.id)
     if (saleItemsError) {
       console.error('[pos/process-sale] Error creating sale items:', normalizeSupabaseError(saleItemsError))
-      await supabase.from('sales').delete().eq('id', saleId)
+      await supabase.from('sales').delete().eq('id', saleId).eq('organization_id', organization.id)
 
       return NextResponse.json(
         { error: 'No se pudieron registrar los items de la venta.' },
@@ -528,6 +552,7 @@ export async function POST(request: Request) {
         .from('products')
         .update({ stock_quantity: nextStock })
         .eq('id', productId)
+        .eq('organization_id', organization.id)
 
       if (stockError) {
         console.error('[pos/process-sale] Error updating stock:', normalizeSupabaseError(stockError))
@@ -537,6 +562,7 @@ export async function POST(request: Request) {
             .from('products')
             .update({ stock_quantity: snapshot.stock })
             .eq('id', snapshot.productId)
+            .eq('organization_id', organization.id)
 
           await supabase
             .from('branch_inventory')
@@ -549,8 +575,8 @@ export async function POST(request: Request) {
             })
         }
 
-        await supabase.from('sale_items').delete().eq('sale_id', saleId)
-        await supabase.from('sales').delete().eq('id', saleId)
+        await supabase.from('sale_items').delete().eq('sale_id', saleId).eq('organization_id', organization.id)
+        await supabase.from('sales').delete().eq('id', saleId).eq('organization_id', organization.id)
 
         return NextResponse.json(
           { error: 'No se pudo actualizar el stock de los productos vendidos.' },
@@ -576,12 +602,14 @@ export async function POST(request: Request) {
             .from('products')
             .update({ stock_quantity: currentStock })
             .eq('id', productId)
+            .eq('organization_id', organization.id)
 
           for (const snapshot of previousStocks) {
             await supabase
               .from('products')
               .update({ stock_quantity: snapshot.stock })
               .eq('id', snapshot.productId)
+              .eq('organization_id', organization.id)
 
             await supabase
               .from('branch_inventory')
@@ -594,8 +622,8 @@ export async function POST(request: Request) {
               })
           }
 
-          await supabase.from('sale_items').delete().eq('sale_id', saleId)
-          await supabase.from('sales').delete().eq('id', saleId)
+          await supabase.from('sale_items').delete().eq('sale_id', saleId).eq('organization_id', organization.id)
+          await supabase.from('sales').delete().eq('id', saleId).eq('organization_id', organization.id)
 
           return NextResponse.json(
             { error: 'No se pudo sincronizar el stock de la sucursal para los productos vendidos.' },

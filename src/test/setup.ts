@@ -251,8 +251,9 @@ expect.extend({
 
 // Declaración de tipos para TypeScript
 declare module 'vitest' {
-  interface Assertion<T = unknown> {
-    toBeWithinPerformanceThreshold(threshold: number): T
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  interface Assertion<T> {
+    toBeWithinPerformanceThreshold(threshold: number): void
   }
   interface AsymmetricMatchersContaining {
     toBeWithinPerformanceThreshold(threshold: number): unknown

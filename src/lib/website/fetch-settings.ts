@@ -1,6 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { getTenantSlugFromHost } from '@/lib/saas/tenant'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import type { WebsiteSettings } from '@/types/website-settings'
+import { headers } from 'next/headers'
 
 /**
  * Fetch website settings from Supabase server-side.
@@ -9,11 +13,25 @@ import type { WebsiteSettings } from '@/types/website-settings'
  */
 export async function fetchWebsiteSettings(): Promise<WebsiteSettings | null> {
   try {
-    const supabase = await createClient()
+    const headerStore = await headers()
+    const tenantSlug =
+      headerStore.get('x-tenant-slug') ||
+      getTenantSlugFromHost(headerStore.get('host') ?? '')
 
-    const { data: rows, error } = await supabase
+    const supabase = tenantSlug ? createAdminSupabase() : await createClient()
+    const organization = tenantSlug
+      ? await resolvePublicOrganizationBySlug(tenantSlug, supabase)
+      : null
+
+    let query = supabase
       .from('website_settings')
       .select('key, value')
+
+    if (organization) {
+      query = query.eq('organization_id', organization.id)
+    }
+
+    const { data: rows, error } = await query
 
     if (error) return null
 

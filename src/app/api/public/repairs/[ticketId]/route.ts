@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { verifyPublicToken, extractBearerToken } from '@/lib/public-session'
 import { verifyRepairHash } from '@/lib/repair-qr'
 import { PublicRepair } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { LRUCache } from '@/lib/cache'
+import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 
 // Cache for repair details - 100 entries, 5 minute TTL
 const repairCache = new LRUCache<PublicRepair>(100, 5 * 60 * 1000)
@@ -22,6 +24,16 @@ export async function GET(
     const { ticketId } = await props.params
     const searchParams = request.nextUrl.searchParams
     const verifyHash = searchParams.get('verify')
+    const organizationSlug = searchParams.get('org')?.trim() || null
+    const organization = organizationSlug
+      ? await resolvePublicOrganizationBySlug(organizationSlug, createAdminSupabase())
+      : null
+    if (organizationSlug && !organization) {
+      return NextResponse.json(
+        { success: false, error: 'Empresa no encontrada' },
+        { status: 404 }
+      )
+    }
     
     // 1. Try authentication via Token
     let token = request.cookies.get('repair_token')?.value
@@ -39,8 +51,24 @@ export async function GET(
       }
     }
 
-    // 2. If not authenticated via token and no hash, reject
-    if (!isTokenAuthorized && !verifyHash) {
+    const supabase = await createClient()
+    const { data: auth } = await supabase.auth.getUser()
+    const user = auth?.user
+    let customerIdForUser: string | null = null
+
+    if (user && organization) {
+      const { data: customerData } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('profile_id', user.id)
+        .eq('organization_id', organization.id)
+        .maybeSingle()
+
+      customerIdForUser = customerData?.id ?? null
+    }
+
+    // 2. If not authenticated via token, QR hash, or tenant customer session, reject
+    if (!isTokenAuthorized && !verifyHash && !customerIdForUser) {
       return NextResponse.json(
         { success: false, error: 'Token de autenticación requerido' },
         { status: 401 }
@@ -50,7 +78,7 @@ export async function GET(
     // Check cache (with lazy cleanup of expired entries)
     if (isTokenAuthorized) {
       repairCache.cleanup()
-      const cached = repairCache.get(ticketId)
+      const cached = repairCache.get(`${organization?.id || 'public'}:${ticketId}`)
       if (cached) {
         return NextResponse.json({
           success: true,
@@ -59,11 +87,9 @@ export async function GET(
         })
       }
     }
-    
-    const supabase = await createClient()
-    
+
     // Fetch repair data with specific fields only
-    const { data: repair, error } = await supabase
+    let repairQuery = supabase
       .from('repairs')
       .select(`
         id,
@@ -85,7 +111,16 @@ export async function GET(
         customer_id
       `)
       .eq('ticket_number', ticketId)
-      .single()
+
+    if (organization) {
+      repairQuery = repairQuery.eq('organization_id', organization.id)
+    }
+
+    if (customerIdForUser && !isTokenAuthorized && !verifyHash) {
+      repairQuery = repairQuery.eq('customer_id', customerIdForUser)
+    }
+
+    const { data: repair, error } = await repairQuery.single()
     
     if (error || !repair) {
       logger.error('Failed to fetch public repair', { error: error?.message, ticketId })
@@ -154,7 +189,7 @@ export async function GET(
     }
     
     // Cache the result
-    repairCache.set(ticketId, publicRepair)
+    repairCache.set(`${organization?.id || 'public'}:${ticketId}`, publicRepair)
     
     return NextResponse.json({
       success: true,
@@ -173,6 +208,6 @@ export async function GET(
 /**
  * Invalidate cache for a specific ticket (called when repair is updated)
  */
-export function invalidateRepairCache(ticketId: string) {
-  repairCache.delete(ticketId)
+export function invalidateRepairCache(ticketId: string, organizationId?: string) {
+  repairCache.delete(`${organizationId || 'public'}:${ticketId}`)
 }

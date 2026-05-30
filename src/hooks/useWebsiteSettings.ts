@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import useSWR, { mutate } from 'swr'
 import { WebsiteSettings } from '@/types/website-settings'
 import { createSupabaseClient } from '@/lib/supabase/client'
+import { usePathname } from 'next/navigation'
 
 type FetchError = Error & { status?: number }
 type RealtimeClient = ReturnType<typeof createSupabaseClient>
@@ -79,8 +80,16 @@ function releaseAdminWebsiteSettingsRealtime() {
 }
 
 export function useWebsiteSettings() {
+  const pathname = usePathname()
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const tenantSlug =
+    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'cliente'].includes(pathSegments[1])
+      ? pathSegments[0]
+      : ''
+  const cacheKey = tenantSlug ? `${WEBSITE_SETTINGS_CACHE_KEY}?org=${encodeURIComponent(tenantSlug)}` : WEBSITE_SETTINGS_CACHE_KEY
+
   const fetcher = useMemo(() => async () => {
-    const res = await fetch(WEBSITE_SETTINGS_CACHE_KEY)
+    const res = await fetch(cacheKey)
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}))
       const statusText = res.statusText || 'Error'
@@ -91,9 +100,9 @@ export function useWebsiteSettings() {
     }
     const data = await res.json()
     return data.data as WebsiteSettings
-  }, [])
+  }, [cacheKey])
 
-  const { data, error, isLoading } = useSWR<WebsiteSettings>(WEBSITE_SETTINGS_CACHE_KEY, fetcher)
+  const { data, error, isLoading } = useSWR<WebsiteSettings>(cacheKey, fetcher)
 
   // Share a single realtime subscription across all consumers of this hook.
   useEffect(() => {

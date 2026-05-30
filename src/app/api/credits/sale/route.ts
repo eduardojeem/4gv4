@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
 type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
 
@@ -84,6 +85,10 @@ export async function POST(request: Request) {
         { status: 403 }
       )
     }
+    const organization = await getCurrentOrganizationContext(staffAuth.user.id)
+    if (!organization) {
+      return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
 
     const body = await request.json() as CreateCreditSaleBody
     const customerId = typeof body.customerId === 'string' ? body.customerId.trim() : ''
@@ -114,6 +119,7 @@ export async function POST(request: Request) {
       .from('customers')
       .select('id, credit_limit')
       .eq('id', customerId)
+      .eq('organization_id', organization.id)
       .maybeSingle()
 
     if (customerError) {
@@ -133,6 +139,7 @@ export async function POST(request: Request) {
     const { data: existingCredit, error: existingCreditError } = await supabase
       .from('customer_credits')
       .select('id, principal, interest_rate, term_months, start_date, status')
+      .eq('organization_id', organization.id)
       .eq('customer_id', customerId)
       .maybeSingle()
 
@@ -197,6 +204,7 @@ export async function POST(request: Request) {
           status: 'active',
         })
         .eq('id', existingCredit.id)
+        .eq('organization_id', organization.id)
 
       if (updateCreditError) {
         console.error('[credits/sale] Error updating credit header:', updateCreditError)
@@ -209,6 +217,7 @@ export async function POST(request: Request) {
         .from('customer_credits')
         .insert({
           customer_id: customerId,
+          organization_id: organization.id,
           principal: amount,
           interest_rate: interestRate,
           term_months: installmentCount,
@@ -256,8 +265,9 @@ export async function POST(request: Request) {
             status: previousCreditSnapshot.status,
           })
           .eq('id', existingCredit.id)
+          .eq('organization_id', organization.id)
       } else {
-        await supabase.from('customer_credits').delete().eq('id', creditId)
+        await supabase.from('customer_credits').delete().eq('id', creditId).eq('organization_id', organization.id)
       }
 
       return NextResponse.json({ error: 'No se pudieron generar las cuotas de la venta a crédito.' }, { status: 500 })

@@ -17,9 +17,16 @@ async function handler(
 
     const supabase = await createClient()
 
-    const { data: settings, error } = await supabase
-      .from('website_settings')
-      .select('key, value')
+    // Load website_settings + org data in parallel for fallback hydration
+    const [
+      { data: settings, error },
+      { data: orgSettings },
+      { data: branch },
+    ] = await Promise.all([
+      supabase.from('website_settings').select('key, value'),
+      supabase.from('organization_settings').select('display_name').maybeSingle(),
+      supabase.from('branches').select('phone, email, address, city').eq('is_default', true).maybeSingle(),
+    ])
 
     if (error) {
       console.error('Failed to fetch website settings', { error: error.message })
@@ -33,6 +40,16 @@ async function handler(
     })
 
     const normalized = applyWebsiteSettingsDefaults(settingsObj)
+
+    // Hydrate company_info with real org/branch data for any fields that are still empty
+    const ci = normalized.company_info
+    normalized.company_info = {
+      ...ci,
+      name:    ci.name    || orgSettings?.display_name || '',
+      phone:   ci.phone   || branch?.phone   || '',
+      email:   ci.email   || branch?.email   || '',
+      address: ci.address || branch?.address || '',
+    }
 
     return NextResponse.json({
       success: true,

@@ -17,6 +17,7 @@ import {
 } from './components'
 import { Search } from 'lucide-react'
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
+import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 
 export const revalidate = 60
 
@@ -40,6 +41,7 @@ export default async function ProductsPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
   const searchParams = await props.searchParams
+  const tenantPrefix = await getPublicTenantPathPrefix()
   const page = Number(searchParams.page) || 1
   const query = searchParams.query as string || ''
   const categoryId = searchParams.category_id as string || ''
@@ -96,7 +98,7 @@ export default async function ProductsPage(props: {
   
   return (
     <div className="min-h-screen bg-background">
-      <PaginationLinks currentPage={page} totalPages={totalPages} />
+      <PaginationLinks currentPage={page} totalPages={totalPages} baseUrl={prefixPublicTenantPath(tenantPrefix, '/productos')} />
       {/* Breadcrumb + title bar */}
       <div className="border-b border-border/40 bg-muted/20">
         <div className="container py-6">

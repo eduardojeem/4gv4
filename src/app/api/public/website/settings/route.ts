@@ -1,19 +1,29 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebsiteSettings } from '@/types/website-settings'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 
 /**
  * GET /api/public/website/settings
  * Obtener configuraciones del sitio web (público)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminSupabase()
+    const organization = await resolvePublicOrganization(request, supabase)
+
+    if (!organization) {
+      return NextResponse.json(
+        { success: false, error: 'Organization not found' },
+        { status: 404 }
+      )
+    }
 
     const { data: settings, error } = await supabase
       .from('website_settings')
       .select('key, value')
+      .eq('organization_id', organization.id)
 
     if (error) {
       throw error
@@ -29,7 +39,8 @@ export async function GET() {
 
     const response = NextResponse.json({
       success: true,
-      data: normalized
+      data: normalized,
+      organization: toPublicOrganizationPayload(organization),
     })
     response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=60')
     return response

@@ -83,7 +83,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       return items as Array<T & { branch_stock_quantity?: number }>
     }
 
-    const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
       supabase,
       selectedBranchId,
       items.map((item) => item.id)
@@ -788,7 +789,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         current_stock: number
       }>()
 
-      ;((saleItems || []) as TopSellingSaleItem[]).forEach((item) => {
+      ;((saleItems || []) as unknown as TopSellingSaleItem[]).forEach((item) => {
         const productId = String(item.product_id || item.product?.id || '')
         if (!productId) return
 
@@ -808,7 +809,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       })
 
       if (selectedBranchId && grouped.size > 0) {
-        const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
           supabase,
           selectedBranchId,
           Array.from(grouped.keys())

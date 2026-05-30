@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Search, LogOut, User, Settings, Menu, Shield } from 'lucide-react'
+import { Search, LogOut, User, Settings, Menu, Shield, Crown, LayoutDashboard } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { NotificationSystem, useNotifications } from '@/components/dashboard/notification-system'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useDashboardSearch } from '@/hooks/use-dashboard-search'
 import { BranchSelector } from '@/components/branches/branch-selector'
+import { OrganizationSwitcher } from '@/components/saas/organization-switcher'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { cn } from '@/lib/utils'
@@ -127,6 +128,7 @@ export const Header = memo(function Header() {
   const breadcrumb = useMemo(() => {
     const sectionMap: Array<{ prefix: string; label: string }> = [
       { prefix: '/dashboard/customers', label: 'Clientes' },
+      { prefix: '/dashboard/orders', label: 'Pedidos' },
       { prefix: '/dashboard/products', label: 'Productos' },
       { prefix: '/dashboard/suppliers', label: 'Proveedores' },
       { prefix: '/dashboard/pos/caja', label: 'Caja' },
@@ -225,6 +227,11 @@ export const Header = memo(function Header() {
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+
+
+          <div className="hidden md:block">
+            <OrganizationSwitcher compact={isCompact} />
+          </div>
           <div className="hidden lg:block">
             <BranchSelector compact={isCompact} />
           </div>
@@ -249,6 +256,10 @@ export const Header = memo(function Header() {
 
           <div className="lg:hidden">
             <BranchSelector compact />
+          </div>
+
+          <div className="md:hidden">
+            <OrganizationSwitcher compact />
           </div>
 
           {/* Separator */}
@@ -316,7 +327,23 @@ export const Header = memo(function Header() {
                   </div>
                 </Link>
               </DropdownMenuItem>
-              {user?.role === 'admin' && (
+              {user?.role === 'super_admin' && (
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/superadmin"
+                    className="cursor-pointer py-2.5 px-3 focus:bg-accent focus:text-accent-foreground rounded-md transition-colors mt-1 flex items-center w-full"
+                  >
+                    <div className="flex items-center justify-center h-8 w-8 rounded-md bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 mr-3">
+                      <Shield className="h-4 w-4" />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium">Super Admin</span>
+                      <span className="text-xs text-muted-foreground">Panel global SaaS</span>
+                    </div>
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {(user?.role === 'admin' || user?.role === 'super_admin') && (
                 <DropdownMenuItem asChild>
                   <Link
                     href="/admin"

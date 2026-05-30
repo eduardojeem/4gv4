@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles } from 'lucide-react'
+import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles, MessageCircle, Building2, Upload } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { CompanyInfo } from '@/types/website-settings'
@@ -16,8 +16,31 @@ import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 export function CompanyInfoForm() {
   const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
   const [draft, setDraft] = useState<CompanyInfo | null>(null)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const formData = draft ?? settings?.company_info ?? getWebsiteSettingsDefaults().company_info
   const hasChanges = draft !== null
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLogoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/admin/website/logo', { method: 'POST', body: fd })
+      const body = await res.json().catch(() => ({})) as { url?: string; error?: string }
+      if (!res.ok || !body.url) {
+        toast.error(body.error || 'Error al subir el logo')
+        return
+      }
+      handleChange('logoUrl', body.url)
+      toast.success('Logo subido correctamente')
+    } finally {
+      setLogoUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -77,7 +100,13 @@ export function CompanyInfoForm() {
       brandColor: formData.brandColor || 'blue',
       headerStyle: formData.headerStyle || 'glass',
       headerColor: formData.headerColor || '',
-      showTopBar: formData.showTopBar !== undefined ? formData.showTopBar : true
+      showTopBar: formData.showTopBar !== undefined ? formData.showTopBar : true,
+      whatsapp: formData.whatsapp || '',
+      ruc: formData.ruc || '',
+      businessType: formData.businessType || '',
+      instagram: formData.instagram || '',
+      facebook: formData.facebook || '',
+      tiktok: formData.tiktok || '',
     }
 
     const result = await updateSetting('company_info', sanitizedData)
@@ -87,6 +116,18 @@ export function CompanyInfoForm() {
         icon: <Check className="h-4 w-4" />
       })
       setDraft(null)
+
+      // Sync name/phone/address to organizations, organization_settings and default branch
+      fetch('/api/admin/website/sync-company', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: sanitizedData.name,
+          phone: sanitizedData.phone,
+          address: sanitizedData.address,
+          email: sanitizedData.email,
+        }),
+      }).catch(() => null)
     } else {
       toast.error(result.error || 'Error al guardar')
     }
@@ -169,17 +210,48 @@ export function CompanyInfoForm() {
               />
             </div>
 
-            {/* Logo URL */}
+            {/* Logo */}
             <div className="space-y-2 md:col-span-1">
-              <Label htmlFor="logoUrl" className="text-sm font-medium">Logo (URL)</Label>
-              <Input
-                id="logoUrl"
-                value={formData.logoUrl || ''}
-                onChange={(e) => handleChange('logoUrl', e.target.value)}
-                placeholder="https://cdn.miempresa.com/logo.png"
-                maxLength={300}
-                className="border-gray-200 focus:border-indigo-500 focus:ring-indigo-500 h-11"
-              />
+              <Label htmlFor="logoUrl" className="text-sm font-medium">Logo</Label>
+              <div className="flex items-start gap-3">
+                {formData.logoUrl && (
+                  <img
+                    src={formData.logoUrl}
+                    alt="Logo"
+                    className="h-11 w-11 shrink-0 rounded-lg border border-border object-contain bg-gray-50"
+                  />
+                )}
+                <div className="flex-1 flex gap-2">
+                  <Input
+                    id="logoUrl"
+                    value={formData.logoUrl || ''}
+                    onChange={(e) => handleChange('logoUrl', e.target.value)}
+                    placeholder="https://cdn.miempresa.com/logo.png"
+                    maxLength={500}
+                    className="border-gray-200 focus:border-indigo-500 focus:ring-indigo-500 h-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={logoUploading}
+                    title="Subir imagen"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                  >
+                    {logoUploading
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Upload className="h-4 w-4" />
+                    }
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                    className="hidden"
+                    onChange={handleLogoUpload}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">JPG, PNG, WebP o SVG — máx. 2 MB</p>
             </div>
           </div>
         </CardContent>
@@ -302,10 +374,30 @@ export function CompanyInfoForm() {
                 id="phone"
                 value={formData.phone}
                 onChange={(e) => handleChange('phone', e.target.value)}
-                placeholder="+595 123 456 789"
-                maxLength={20}
+                placeholder="+595 981 000 000"
+                maxLength={50}
                 className="border-gray-200 focus:border-blue-500 focus:ring-blue-500 h-11"
               />
+            </div>
+
+            {/* WhatsApp */}
+            <div className="space-y-2">
+              <Label htmlFor="whatsapp" className="flex items-center gap-2 text-sm font-medium">
+                <MessageCircle className="h-4 w-4 text-green-600" />
+                WhatsApp <span className="text-xs font-normal text-muted-foreground">— opcional</span>
+              </Label>
+              <Input
+                id="whatsapp"
+                type="tel"
+                value={formData.whatsapp || ''}
+                onChange={(e) => handleChange('whatsapp', e.target.value)}
+                placeholder="+595 981 000 000"
+                maxLength={50}
+                className="border-gray-200 focus:border-green-500 focus:ring-green-500 h-11"
+              />
+              {formData.whatsapp && (
+                <p className="text-xs text-muted-foreground">wa.me/{formData.whatsapp.replace(/\D/g, '')}</p>
+              )}
             </div>
 
             {/* Email */}
@@ -336,7 +428,7 @@ export function CompanyInfoForm() {
                 value={formData.address}
                 onChange={(e) => handleChange('address', e.target.value)}
                 placeholder="Av. Principal 123, Ciudad"
-                maxLength={200}
+                maxLength={300}
                 className="border-gray-200 focus:border-purple-500 focus:ring-purple-500 h-11"
               />
             </div>
@@ -396,6 +488,115 @@ export function CompanyInfoForm() {
                 maxLength={50}
                 className="border-gray-200 focus:border-green-500 focus:ring-green-500 h-11"
               />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Legal y negocio */}
+      <Card className="border-none shadow-lg hover:shadow-xl transition-shadow duration-300">
+        <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 dark:from-slate-950/20 dark:to-gray-950/20 p-4 md:p-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400 shrink-0">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle className="text-lg md:text-xl">Legal y Negocio</CardTitle>
+              <CardDescription className="text-xs md:text-sm">RUC, tipo de actividad y datos fiscales</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="ruc" className="text-sm font-medium">
+                RUC / Tax ID <span className="text-xs font-normal text-muted-foreground">— opcional</span>
+              </Label>
+              <Input
+                id="ruc"
+                value={formData.ruc || ''}
+                onChange={(e) => handleChange('ruc', e.target.value)}
+                placeholder="12345678-9"
+                maxLength={50}
+                className="border-gray-200 focus:border-slate-500 focus:ring-slate-500 h-11"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="businessType" className="text-sm font-medium">Tipo de negocio</Label>
+              <select
+                id="businessType"
+                value={formData.businessType || ''}
+                onChange={(e) => handleChange('businessType', e.target.value)}
+                className="flex h-11 w-full rounded-md border border-gray-200 bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Seleccionar...</option>
+                <option value="retail">Minorista (tienda fisica)</option>
+                <option value="repair">Reparaciones tecnicas</option>
+                <option value="wholesale">Mayorista / distribucion</option>
+                <option value="service">Servicios profesionales</option>
+                <option value="mixed">Mixto (venta + servicio)</option>
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Redes sociales */}
+      <Card className="border-none shadow-lg hover:shadow-xl transition-shadow duration-300">
+        <CardHeader className="bg-gradient-to-r from-violet-50 to-fuchsia-50 dark:from-violet-950/20 dark:to-fuchsia-950/20 p-4 md:p-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-900 dark:text-violet-400 shrink-0">
+              <MessageCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle className="text-lg md:text-xl">Redes Sociales</CardTitle>
+              <CardDescription className="text-xs md:text-sm">Enlaza el perfil de la empresa en cada red — opcional</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="instagram" className="text-sm font-medium">Instagram</Label>
+              <div className="flex overflow-hidden rounded-md border border-gray-200 ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                <span className="flex shrink-0 items-center border-r border-gray-200 bg-muted/40 px-3 text-xs text-muted-foreground">instagram.com/</span>
+                <Input
+                  id="instagram"
+                  value={formData.instagram || ''}
+                  onChange={(e) => handleChange('instagram', e.target.value)}
+                  placeholder="tu_usuario"
+                  maxLength={100}
+                  className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-10"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="facebook" className="text-sm font-medium">Facebook</Label>
+              <div className="flex overflow-hidden rounded-md border border-gray-200 ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                <span className="flex shrink-0 items-center border-r border-gray-200 bg-muted/40 px-3 text-xs text-muted-foreground">facebook.com/</span>
+                <Input
+                  id="facebook"
+                  value={formData.facebook || ''}
+                  onChange={(e) => handleChange('facebook', e.target.value)}
+                  placeholder="tu_pagina"
+                  maxLength={100}
+                  className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-10"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tiktok" className="text-sm font-medium">TikTok</Label>
+              <div className="flex overflow-hidden rounded-md border border-gray-200 ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                <span className="flex shrink-0 items-center border-r border-gray-200 bg-muted/40 px-3 text-xs text-muted-foreground">tiktok.com/@</span>
+                <Input
+                  id="tiktok"
+                  value={formData.tiktok || ''}
+                  onChange={(e) => handleChange('tiktok', e.target.value)}
+                  placeholder="tu_usuario"
+                  maxLength={100}
+                  className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 h-10"
+                />
+              </div>
             </div>
           </div>
         </CardContent>

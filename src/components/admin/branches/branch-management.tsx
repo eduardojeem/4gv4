@@ -11,9 +11,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useAuth } from '@/contexts/auth-context'
 import type { BranchSummary } from '@/lib/branches/types'
 
 type BranchFormState = {
+  organization_id: string
   name: string
   code: string
   slug: string
@@ -27,6 +30,7 @@ type BranchFormState = {
 }
 
 const EMPTY_FORM: BranchFormState = {
+  organization_id: '',
   name: '',
   code: '',
   slug: '',
@@ -37,6 +41,12 @@ const EMPTY_FORM: BranchFormState = {
   manager_name: '',
   is_active: true,
   is_default: false,
+}
+
+type OrganizationOption = {
+  id: string
+  name: string
+  slug?: string | null
 }
 
 function toCurrency(value: number | undefined) {
@@ -57,7 +67,10 @@ function slugify(value: string) {
 }
 
 export function BranchManagement() {
+  const { isSuperAdmin } = useAuth()
   const [branches, setBranches] = useState<BranchSummary[]>([])
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState('')
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -80,6 +93,7 @@ export function BranchManagement() {
 
     setEditingBranch(branch)
     setForm({
+      organization_id: branch.organization_id || '',
       name: branch.name || '',
       code: branch.code || '',
       slug: branch.slug || '',
@@ -96,22 +110,36 @@ export function BranchManagement() {
   const loadBranches = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/admin/branches', { cache: 'no-store' })
-      const result = await response.json().catch(() => null) as { branches?: BranchSummary[]; error?: string } | null
+      const searchParams = new URLSearchParams()
+      if (isSuperAdmin && selectedOrganizationId) {
+        searchParams.set('organizationId', selectedOrganizationId)
+      }
+
+      const response = await fetch(
+        `/api/admin/branches${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`,
+        { cache: 'no-store' }
+      )
+      const result = await response.json().catch(() => null) as {
+        branches?: BranchSummary[]
+        organizations?: OrganizationOption[]
+        error?: string
+      } | null
 
       if (!response.ok) {
         throw new Error(result?.error || 'No se pudieron cargar las sucursales.')
       }
 
       setBranches(result?.branches || [])
+      setOrganizations(result?.organizations || [])
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error al cargar sucursales.'
       toast.error(message)
       setBranches([])
+      setOrganizations([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isSuperAdmin, selectedOrganizationId])
 
   useEffect(() => {
     void loadBranches()
@@ -120,6 +148,11 @@ export function BranchManagement() {
   const handleSubmit = useCallback(async () => {
     if (!form.name.trim()) {
       toast.error('El nombre de la sucursal es obligatorio.')
+      return
+    }
+
+    if (isSuperAdmin && !form.organization_id) {
+      toast.error('Selecciona la organizacion de la sucursal.')
       return
     }
 
@@ -157,12 +190,15 @@ export function BranchManagement() {
     } finally {
       setSaving(false)
     }
-  }, [editingBranch, form, hydrateForm, loadBranches])
+  }, [editingBranch, form, hydrateForm, isSuperAdmin, loadBranches])
 
   const openCreate = useCallback(() => {
     hydrateForm(null)
+    if (isSuperAdmin && selectedOrganizationId) {
+      setForm((prev) => ({ ...prev, organization_id: selectedOrganizationId }))
+    }
     setDialogOpen(true)
-  }, [hydrateForm])
+  }, [hydrateForm, isSuperAdmin, selectedOrganizationId])
 
   const openEdit = useCallback((branch: BranchSummary) => {
     hydrateForm(branch)
@@ -189,9 +225,32 @@ export function BranchManagement() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Sucursales</h1>
           <p className="text-sm text-muted-foreground">
-            Base operativa para aislar ventas, cajas, reparaciones y trazabilidad por sede.
+            {isSuperAdmin
+              ? 'Vista global de sucursales por organizacion. Cada alta debe quedar asociada a una empresa.'
+              : 'Base operativa para aislar ventas, cajas, reparaciones y trazabilidad por sede.'}
           </p>
         </div>
+
+        {isSuperAdmin ? (
+          <div className="min-w-[260px] space-y-2">
+            <Label htmlFor="branches-organization-filter">Empresa</Label>
+            <Select
+              value={selectedOrganizationId}
+              onValueChange={(value) => setSelectedOrganizationId(value)}
+            >
+              <SelectTrigger id="branches-organization-filter" className="w-full">
+                <SelectValue placeholder="Selecciona una empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                {organizations.map((organization) => (
+                  <SelectItem key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
 
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => void loadBranches()} disabled={loading}>
@@ -201,7 +260,7 @@ export function BranchManagement() {
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={openCreate}>
+              <Button onClick={openCreate} disabled={isSuperAdmin && !selectedOrganizationId}>
                 <Plus className="mr-2 h-4 w-4" />
                 Nueva sucursal
               </Button>
@@ -215,6 +274,28 @@ export function BranchManagement() {
               </DialogHeader>
 
               <div className="grid gap-4 sm:grid-cols-2">
+                {isSuperAdmin ? (
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="branch-organization">Organizacion</Label>
+                    <Select
+                      value={form.organization_id}
+                      onValueChange={(value) => setForm((prev) => ({ ...prev, organization_id: value }))}
+                      disabled={Boolean(editingBranch)}
+                    >
+                      <SelectTrigger id="branch-organization" className="w-full">
+                        <SelectValue placeholder="Selecciona una organizacion" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {organizations.map((organization) => (
+                          <SelectItem key={organization.id} value={organization.id}>
+                            {organization.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="branch-name">Nombre</Label>
                   <Input
@@ -384,15 +465,23 @@ export function BranchManagement() {
                 <Building2 className="h-8 w-8" />
               </div>
               <div>
-                <p className="text-lg font-semibold">Todavía no hay sucursales configuradas</p>
+                <p className="text-lg font-semibold">
+                  {isSuperAdmin && !selectedOrganizationId
+                    ? 'Selecciona una empresa para ver sus sucursales'
+                    : 'Todavia no hay sucursales configuradas'}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  Crea la primera sucursal para empezar a segmentar ventas, cajas y reparaciones.
+                  {isSuperAdmin && !selectedOrganizationId
+                    ? 'La vista operativa se mantiene filtrada por empresa para evitar mezclar datos.'
+                    : 'Crea la primera sucursal para empezar a segmentar ventas, cajas y reparaciones.'}
                 </p>
               </div>
-              <Button onClick={openCreate}>
-                <Plus className="mr-2 h-4 w-4" />
-                Crear primera sucursal
-              </Button>
+              {isSuperAdmin && !selectedOrganizationId ? null : (
+                <Button onClick={openCreate}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Crear primera sucursal
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -406,8 +495,13 @@ export function BranchManagement() {
                       {branch.name}
                     </CardTitle>
                     <CardDescription>
-                      {branch.code} {branch.city ? `• ${branch.city}` : ''} {branch.manager_name ? `• ${branch.manager_name}` : ''}
+                      {branch.code} {branch.city ? ` - ${branch.city}` : ''} {branch.manager_name ? ` - ${branch.manager_name}` : ''}
                     </CardDescription>
+                    {isSuperAdmin && branch.organization ? (
+                      <Badge variant="outline" className="w-fit">
+                        {branch.organization.name}
+                      </Badge>
+                    ) : null}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">

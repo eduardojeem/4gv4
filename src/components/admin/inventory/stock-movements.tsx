@@ -162,7 +162,7 @@ const StockMovements: React.FC = () => {
       const normalizedMovements: StockMovement[] = ((data || []) as ProductMovementRow[]).map((movement) => ({
         id: movement.id,
         product_id: movement.product_id,
-        product: movement.product || { name: 'Producto Desconocido', sku: 'N/A' },
+        product: { name: movement.product?.name || 'Producto Desconocido', sku: movement.product?.sku || 'N/A' },
         type: normalizeMovementType(movement.type ?? movement.movement_type),
         quantity: Number(movement.quantity || 0),
         previous_stock: Number(movement.previous_stock || 0),

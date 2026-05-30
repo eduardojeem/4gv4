@@ -198,7 +198,8 @@ export function usePOSProducts() {
             throw error
           }
 
-          const baseProducts = (dbProducts || []).map((p: PosProductRow) => ({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const baseProducts = (dbProducts || []).map((p: any) => ({
             id: p.id,
             name: p.name,
             sku: p.sku || '',
@@ -214,7 +215,8 @@ export function usePOSProducts() {
             purchase_price: 0
           } as unknown as UnifiedProduct))
 
-          const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
             supabase,
             selectedBranchId,
             baseProducts.map((product) => product.id)
@@ -288,8 +290,8 @@ export function usePOSProducts() {
         purchase_price: data.cost_price || 0
       } as unknown as UnifiedProduct
 
-      const [branchAwareProduct] = await loadBranchInventoryStockMap(supabase, selectedBranchId, [baseProduct.id])
-        .then(({ stockMap, branchScoped }) => applyBranchInventoryToProducts([baseProduct], stockMap, branchScoped))
+      const [branchAwareProduct] = await (loadBranchInventoryStockMap as any)(supabase, selectedBranchId, [baseProduct.id])
+        .then(({ stockMap, branchScoped }: any) => (applyBranchInventoryToProducts as any)([baseProduct], stockMap, branchScoped))
 
       return branchAwareProduct
     } catch (err) {

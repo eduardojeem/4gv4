@@ -1,152 +1,76 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CompanyInfoForm } from '@/components/admin/website/CompanyInfoForm'
 import { HeroEditor } from '@/components/admin/website/HeroEditor'
 import { ServicesManager } from '@/components/admin/website/ServicesManager'
-import { MaintenanceModeToggle } from '@/components/admin/website/MaintenanceModeToggle'
-import { Settings, Building2, Sparkles, Briefcase, Eye, Database, Loader2, Footprints } from 'lucide-react'
+import { ProcessStepsEditor } from '@/components/admin/website/ProcessStepsEditor'
+import { Building2, Briefcase, Eye, Footprints, Globe, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { toast } from 'sonner'
-import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
-import { ProcessStepsEditor } from '@/components/admin/website/ProcessStepsEditor'
+
+const TABS = [
+  { value: 'company',  label: 'Empresa',   icon: Building2 },
+  { value: 'hero',     label: 'Hero',      icon: Sparkles  },
+  { value: 'services', label: 'Servicios', icon: Briefcase },
+  { value: 'process',  label: 'Proceso',   icon: Footprints },
+]
 
 export default function WebsiteAdminPage() {
-  const { initializeMissingSettings, isInitializing } = useAdminWebsiteSettings()
+  const [orgSlug, setOrgSlug] = useState('')
 
-  const handleInitMissingSettings = async () => {
-    const result = await initializeMissingSettings()
-    if (!result.success) {
-      toast.error(result.error || 'No se pudo inicializar la configuración')
-      return
-    }
-
-    if (result.insertedCount === 0) {
-      toast.success('No faltan claves por inicializar')
-      return
-    }
-
-    toast.success(`Inicialización completada (${result.insertedCount})`, {
-      description: `Claves creadas: ${result.insertedKeys.join(', ')}`
-    })
-  }
+  useEffect(() => {
+    fetch('/api/onboarding/status')
+      .then(r => r.json())
+      .catch(() => null)
+      .then((d: { organization?: { slug?: string } } | null) => {
+        if (d?.organization?.slug) setOrgSlug(d.organization.slug)
+      })
+  }, [])
 
   return (
     <div className="space-y-6">
-      {/* Header Premium */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 p-6 md:p-8 text-white shadow-2xl">
-        <div className="absolute inset-0 bg-grid-white/10 bg-[size:20px_20px]" />
-        
-        <div className="relative z-10">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm shrink-0">
-                  <Settings className="h-6 w-6" />
-                </div>
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Configuración del Sitio Web</h1>
-                  <p className="text-blue-100 text-sm md:text-base">Administra el contenido que se muestra en el portal público</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="w-full md:w-auto flex flex-col sm:flex-row gap-2">
-              <Button
-                variant="secondary"
-                onClick={handleInitMissingSettings}
-                disabled={isInitializing}
-                className="w-full md:w-auto bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
-              >
-                {isInitializing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Inicializando...
-                  </>
-                ) : (
-                  <>
-                    <Database className="mr-2 h-4 w-4" />
-                    Inicializar Faltantes
-                  </>
-                )}
-              </Button>
-
-              <Link href="/inicio" target="_blank" className="w-full md:w-auto">
-                <Button 
-                  variant="secondary" 
-                  className="w-full md:w-auto bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
-                >
-                  <Eye className="mr-2 h-4 w-4" />
-                  Vista Previa
-                </Button>
-              </Link>
-            </div>
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background shadow-sm">
+            <Globe className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold">Sitio web</h1>
+            <p className="text-sm text-muted-foreground">Contenido y apariencia del portal publico</p>
           </div>
         </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={orgSlug ? `/${orgSlug}/inicio` : '/inicio'} target="_blank">
+            <Eye className="mr-2 h-4 w-4" />
+            Vista previa
+          </Link>
+        </Button>
       </div>
 
-      {/* Tabs Premium */}
+      {/* Tabs */}
       <Tabs defaultValue="company" className="space-y-6">
-        <div className="overflow-x-auto pb-2 -mb-2 scrollbar-hide">
-          <TabsList className="flex w-max md:grid md:w-full md:grid-cols-5 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-md border min-w-full">
-            <TabsTrigger 
-              value="company" 
-              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white transition-all px-4 md:px-2"
-            >
-              <Building2 className="mr-2 h-4 w-4" />
-              Empresa
-            </TabsTrigger>
-            <TabsTrigger 
-              value="hero"
-              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-pink-600 data-[state=active]:text-white transition-all px-4 md:px-2"
-            >
-              <Sparkles className="mr-2 h-4 w-4" />
-              Hero & Stats
-            </TabsTrigger>
-            <TabsTrigger 
-              value="services"
-              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-600 data-[state=active]:to-teal-600 data-[state=active]:text-white transition-all px-4 md:px-2"
-            >
-              <Briefcase className="mr-2 h-4 w-4" />
-              Servicios
-            </TabsTrigger>
-            <TabsTrigger 
-              value="process"
-              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-600 data-[state=active]:to-indigo-600 data-[state=active]:text-white transition-all px-4 md:px-2"
-            >
-              <Footprints className="mr-2 h-4 w-4" />
-              Proceso
-            </TabsTrigger>
-            <TabsTrigger 
-              value="maintenance"
-              className="rounded-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-600 data-[state=active]:to-orange-600 data-[state=active]:text-white transition-all px-4 md:px-2"
-            >
-              <Settings className="mr-2 h-4 w-4" />
-              Mantenimiento
-            </TabsTrigger>
+        <div className="-mb-px overflow-x-auto">
+          <TabsList className="inline-flex h-auto w-max min-w-full items-end gap-0 rounded-none border-b border-border bg-transparent p-0">
+            {TABS.map(({ value, label, icon: Icon }) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="relative -mb-px inline-flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none"
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">{label}</span>
+              </TabsTrigger>
+            ))}
           </TabsList>
         </div>
 
-        <TabsContent value="company" className="space-y-4">
-          <CompanyInfoForm />
-        </TabsContent>
-
-        <TabsContent value="hero" className="space-y-4">
-          <HeroEditor />
-        </TabsContent>
-
-        <TabsContent value="services" className="space-y-4">
-          <ServicesManager />
-        </TabsContent>
-
-        <TabsContent value="process" className="space-y-4">
-          <ProcessStepsEditor />
-        </TabsContent>
-
-        <TabsContent value="maintenance" className="space-y-4">
-          <MaintenanceModeToggle />
-        </TabsContent>
+        <TabsContent value="company"  className="mt-0"><CompanyInfoForm /></TabsContent>
+        <TabsContent value="hero"     className="mt-0"><HeroEditor /></TabsContent>
+        <TabsContent value="services" className="mt-0"><ServicesManager /></TabsContent>
+        <TabsContent value="process"  className="mt-0"><ProcessStepsEditor /></TabsContent>
       </Tabs>
     </div>
   )

@@ -203,8 +203,8 @@ export function useProductAnalytics(
               new_stock: m.new_stock || 0,
               unit_cost: m.unit_cost ?? undefined,
               reference_id: m.reference_id ?? undefined,
-              reference_type: m.reference_type ?? undefined,
-              notes: m.reason ?? undefined,
+              reference_type: m.reference_type as ProductMovement['reference_type'] ?? undefined,
+              notes: m.notes ?? undefined,
               user_id: m.user_id ?? undefined,
               created_at: m.created_at
             }))
@@ -215,7 +215,7 @@ export function useProductAnalytics(
 
       // Cargar alertas si está habilitado
       if (stableConfig.includeAlerts) {
-        const generatedAlerts: ProductAlert[] = products.flatMap((product) => {
+        const generatedAlerts: ProductAlert[] = ((products as any[]).flatMap((product: any): any[] => {
           const currentStock = Number(product.stock_quantity || 0)
           const minStock = Number(product.min_stock || 0)
           const createdAt = new Date().toISOString()
@@ -263,7 +263,7 @@ export function useProductAnalytics(
           }
 
           return []
-        })
+        }) as ProductAlert[])
 
         promises.push(
           Promise.resolve({ type: 'alerts' as const, data: generatedAlerts })

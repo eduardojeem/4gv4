@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { logger } from '@/lib/logger'
 
 export interface AdminAuthContext {
@@ -9,6 +11,8 @@ export interface AdminAuthContext {
     email?: string
     role: string
   }
+  /** null for super_admin (global access). Set to the admin's organization_id for regular admins. */
+  organizationId: string | null
 }
 
 export type AdminAuthenticatedHandler = (
@@ -61,7 +65,7 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
         )
       }
 
-      const allowedRoles = ['admin', 'super_admin']
+      const allowedRoles = ['super_admin', 'admin']
       const supabase = await createClient()
 
       if (!allowedRoles.includes(auth.user.role)) {
@@ -115,12 +119,52 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
         }
       }
 
+      let organizationId: string | null = null
+      if (auth.user.role !== 'super_admin') {
+        try {
+          const activeOrganization = await getCurrentOrganizationContext(auth.user.id)
+          organizationId = activeOrganization?.id ?? null
+        } catch (err) {
+          logger.error('Failed to resolve active admin organization', { error: err, userId: auth.user.id })
+        }
+
+        if (!organizationId) {
+          try {
+            const admin = createAdminSupabase()
+            const { data: membership } = await admin
+              .from('organization_members')
+              .select('organization_id')
+              .eq('user_id', auth.user.id)
+              .eq('status', 'active')
+              .order('created_at', { ascending: true })
+              .limit(1)
+              .maybeSingle()
+            organizationId = membership?.organization_id ?? null
+          } catch (err) {
+            logger.error('Failed to resolve admin organization', { error: err, userId: auth.user.id })
+          }
+        }
+
+        if (!organizationId) {
+          return NextResponse.json(
+            {
+              error: 'Forbidden',
+              message: 'No active organization found for this administrator',
+            },
+            { status: 403 }
+          )
+        }
+      }
+
+      // super_admin keeps global access. Regular admins are always scoped above.
+
       const context: AdminAuthContext = {
         user: {
           id: auth.user.id,
           email: auth.user.email,
           role: auth.user.role,
         },
+        organizationId,
       }
 
       return await handler(request, context)

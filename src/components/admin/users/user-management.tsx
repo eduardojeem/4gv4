@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useUsersSupabase, SupabaseUser } from '@/hooks/use-users-supabase'
 import { useAuth } from '@/contexts/auth-context'
@@ -23,34 +23,17 @@ import {
 import { UserStatsCards } from './user-stats-cards'
 import { UserAvatarUpload } from './user-avatar-upload'
 import { UserActivityTimeline } from './user-activity-timeline'
-import { createClient } from '@/lib/supabase/client'
 import { UsersTable } from './users-table'
 import { UsersFilters } from './users-filters'
 import { UserDetailDialog } from './user-detail-dialog'
 import { useDebounce } from '@/hooks/use-debounce'
-import { normalizeRole as normalizeAppRole } from '@/lib/auth/role-utils'
 import { toast } from 'sonner'
 import { EditUserForm } from './EditUserForm'
-
-interface ProfileLookupRow {
-  id: string
-  full_name?: string | null
-  email?: string | null
-  role?: string | null
-  status?: string | null
-  department?: string | null
-  phone?: string | null
-  avatar_url?: string | null
-  updated_at?: string | null
-  created_at?: string | null
-  permissions?: string[] | null
-}
 
 export function UserManagement() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, isAdmin, isSuperAdmin, loading: authLoading } = useAuth()
-  const supabase = useMemo(() => createClient(), [])
 
   // Estados de filtros y paginación
   const [page, setPage] = useState(1)
@@ -117,11 +100,16 @@ export function UserManagement() {
     permissions: [] as string[]
   })
 
-  const mapProfileToDialogUser = useCallback((profile: ProfileLookupRow): SupabaseUser => ({
+  const mapApiUserToDialogUser = useCallback((profile: Partial<SupabaseUser> & {
+    id: string
+    full_name?: string | null
+    updated_at?: string | null
+    created_at?: string | null
+  }): SupabaseUser => ({
     id: profile.id,
-    name: profile.full_name || profile.email?.split('@')[0] || 'Usuario',
+    name: profile.name || profile.full_name || profile.email?.split('@')[0] || 'Usuario',
     email: profile.email || '',
-    role: normalizeAppRole(profile.role) ?? 'cliente',
+    role: profile.role || 'cliente',
     status: profile.status === 'inactive' || profile.status === 'suspended' ? profile.status : 'active',
     department: profile.department || '',
     phone: profile.phone || '',
@@ -219,35 +207,8 @@ export function UserManagement() {
     const merged = { ...targetUser, permissions: targetUser.permissions || [] }
     setSelectedUser(merged)
     setIsEditDialogOpen(true)
-    setIsLoadingEditPermissions(true)
-
-    void (async () => {
-      let specificPerms: string[] = []
-      try {
-        const { data, error } = await supabase
-          .from('user_permissions')
-          .select('permission')
-          .eq('user_id', targetUser.id)
-          .eq('is_active', true)
-
-        if (!error && data) {
-          specificPerms = data.map((row) => row.permission as string)
-        }
-      } catch {
-        specificPerms = []
-      } finally {
-        setIsLoadingEditPermissions(false)
-      }
-
-      setSelectedUser((current) => {
-        if (!current || current.id !== targetUser.id) return current
-        return {
-          ...current,
-          permissions: specificPerms.length > 0 ? specificPerms : current.permissions || [],
-        }
-      })
-    })()
-  }, [supabase])
+    setIsLoadingEditPermissions(false)
+  }, [])
 
   useEffect(() => {
     if (!requestedEditUserId || authLoading || dataLoading || !isAdmin) return
@@ -271,21 +232,19 @@ export function UserManagement() {
         return
       }
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, role, status, department, phone, avatar_url, updated_at, created_at')
-        .eq('id', requestedEditUserId)
-        .maybeSingle()
+      const response = await fetch(`/api/admin/users?id=${encodeURIComponent(requestedEditUserId)}&pageSize=1`)
+      const payload = await response.json().catch(() => ({}))
 
       if (cancelled) return
 
-      if (error || !data) {
+      const apiUser = payload?.data?.[0]
+      if (!response.ok || !payload?.success || !apiUser) {
         toast.error('No se pudo abrir el usuario solicitado para edicion')
         clearRequestedEdit()
         return
       }
 
-      openEditDialog(mapProfileToDialogUser(data))
+      openEditDialog(mapApiUserToDialogUser(apiUser))
       clearRequestedEdit()
     }
 
@@ -298,12 +257,11 @@ export function UserManagement() {
     authLoading,
     dataLoading,
     isAdmin,
-    mapProfileToDialogUser,
+    mapApiUserToDialogUser,
     openEditDialog,
     requestedEditUserId,
     router,
     searchParams,
-    supabase,
     users,
   ])
 
@@ -393,6 +351,7 @@ export function UserManagement() {
               <UsersTable
                 users={users}
                 isLoading={dataLoading}
+                showOrganization={isSuperAdmin}
                 page={page}
                 pageSize={pageSize}
                 totalCount={totalCount}

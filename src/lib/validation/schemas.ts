@@ -36,6 +36,7 @@ export const productSchema = z.object({
   
   brand: z.string()
     .max(100, 'Brand name must be less than 100 characters')
+    .transform(v => v.trim().replace(/\b\w/g, c => c.toUpperCase()))
     .optional()
     .nullable(),
   

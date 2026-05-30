@@ -6,7 +6,6 @@ import {
     Package,
     FileText,
     BarChart3,
-    Database,
     Globe,
     Monitor,
     Building2,
@@ -25,6 +24,8 @@ export interface NavItem {
     href?: string
     permissions?: string[]
     description?: string
+    /** If true, only super_admin users can see and access this item */
+    superAdminOnly?: boolean
 }
 
 export interface NavCategory {
@@ -120,22 +121,6 @@ export const adminNavCategories: NavCategory[] = [
                 permissions: ['settings.read']
             },
             {
-                key: 'database-monitoring',
-                label: 'Monitoreo BD',
-                icon: Database,
-                href: '/admin/database-monitoring',
-                description: 'Monitoreo de base de datos y rendimiento',
-                permissions: ['settings.read']
-            },
-            {
-                key: 'storage-cleanup',
-                label: 'Storage Cleanup',
-                icon: Database,
-                href: '/admin/storage-cleanup',
-                description: 'Limpieza controlada de archivos huerfanos',
-                permissions: ['settings.read']
-            },
-            {
                 key: 'security',
                 label: 'Seguridad',
                 icon: Shield,
@@ -184,10 +169,16 @@ export function getCategoryByItemKey(key: string): NavCategory | undefined {
 export function filterNavItemsByPermissions(
     items: NavItem[],
     hasPermission: (permission: string) => boolean,
-    isAdmin: boolean
+    isAdmin: boolean,
+    isSuperAdmin: boolean = false
 ): NavItem[] {
     return items.filter(item => {
-        // Si es admin, permitir acceso a todo (ya pasó AdminGuard)
+        // Super-admin-only items: only visible to super_admin
+        if (item.superAdminOnly && !isSuperAdmin) {
+            return false
+        }
+
+        // Si es admin, permitir acceso al resto (ya pasó AdminGuard)
         if (isAdmin) {
             return true
         }
@@ -209,12 +200,13 @@ export function filterNavItemsByPermissions(
 export function filterCategoriesByPermissions(
     categories: NavCategory[],
     hasPermission: (permission: string) => boolean,
-    isAdmin: boolean
+    isAdmin: boolean,
+    isSuperAdmin: boolean = false
 ): NavCategory[] {
     return categories
         .map(category => ({
             ...category,
-            items: filterNavItemsByPermissions(category.items, hasPermission, isAdmin)
+            items: filterNavItemsByPermissions(category.items, hasPermission, isAdmin, isSuperAdmin)
         }))
         .filter(category => category.items.length > 0)
 }

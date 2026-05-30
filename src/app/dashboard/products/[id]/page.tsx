@@ -133,7 +133,7 @@ export default function ProductDetailPage() {
       id: s.id,
       name: s.name,
       contact_name: s.contact_name || null,
-      contact_email: s.contact_email || null,
+      contact_email: s.email || null,
       phone: s.phone || null,
       address: s.address || null,
       tax_id: s.tax_id || null,
@@ -874,9 +874,9 @@ export default function ProductDetailPage() {
             isOpen={editModalOpen}
             onClose={() => setEditModalOpen(false)}
             product={product ? ({ ...product, images: product.images ?? [] } as unknown as import('@/types/products').Product) : null}
-            categories={normalizedCategories}
-            brands={normalizedBrands}
-            suppliers={normalizedSuppliers}
+            categories={normalizedCategories as any[]}
+            brands={normalizedBrands as any[]}
+            suppliers={normalizedSuppliers as any[]}
             onSave={async (data) => {
               try {
                 const normalizedData = {

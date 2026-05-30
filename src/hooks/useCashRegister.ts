@@ -79,7 +79,6 @@ export function useCashRegister() {
         let query = supabase
             .from('cash_registers')
             .select('*')
-            .eq('is_active', true)
             .order('name')
 
         query = withBranchFilter(query, selectedBranchId)
@@ -90,7 +89,10 @@ export function useCashRegister() {
             return
         }
 
-        setRegisters(data || [])
+        setRegisters((data || []).map(register => ({
+            ...register,
+            is_active: true
+        })))
     }, [selectedBranchId, supabase])
 
     // Fetch history (closed sessions)

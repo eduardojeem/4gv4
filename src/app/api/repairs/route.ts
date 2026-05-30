@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { getAuthResponse, requireStaff } from '@/lib/auth/require-auth'
+import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
 import { withBranchFilter } from '@/lib/branches/client'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
 const REPAIR_SELECT_VARIANTS = [
   `
@@ -28,6 +29,12 @@ export async function GET(request: NextRequest) {
   const auth = await requireStaff()
   const authResponse = getAuthResponse(auth)
   if (authResponse) return authResponse
+  const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
+  const organization = await getCurrentOrganizationContext(staffAuth.user.id)
+
+  if (!organization) {
+    return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+  }
 
   try {
     const branchId = request.headers.get('x-branch-id')
@@ -38,6 +45,7 @@ export async function GET(request: NextRequest) {
       let query = supabase
         .from('repairs')
         .select(selectExpr)
+        .eq('organization_id', organization.id)
         .order('created_at', { ascending: false })
 
       query = withBranchFilter(query, branchId)

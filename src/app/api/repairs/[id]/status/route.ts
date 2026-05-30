@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
 type RepairStage = 'recibido' | 'diagnostico' | 'reparacion' | 'pausado' | 'listo' | 'entregado' | 'cancelado'
 
@@ -63,6 +64,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const authResponse = getAuthResponse(auth)
     if (authResponse) return authResponse
     const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
+    const organization = await getCurrentOrganizationContext(staffAuth.user.id)
+
+    if (!organization) {
+      return NextResponse.json({ ok: false, error: 'organization_required' }, { status: 403 })
+    }
 
     const { id } = await context.params
     const body = await req.json().catch(() => ({} as Record<string, unknown>))
@@ -83,6 +89,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       userId: staffAuth.user.id,
       role: staffAuth.role,
       requestedBranchId,
+      organizationId: organization.id,
       strict: Boolean(requestedBranchId),
     })
 
@@ -97,6 +104,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       .from('repairs')
       .update(buildStatusUpdate(stage))
       .eq('id', id)
+      .eq('organization_id', organization.id)
       .eq('branch_id', branchScope.branchId)
       .select('id')
       .maybeSingle()

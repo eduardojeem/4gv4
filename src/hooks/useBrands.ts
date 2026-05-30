@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/lib/supabase/types'
 
 type BrandRow = Database['public']['Tables']['brands']['Row']
@@ -33,8 +32,11 @@ export function validateBrandInput(input: Pick<BrandInsert, 'name' | 'descriptio
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error || 'Error desconocido')
+}
+
 export function useBrands() {
-  const supabase = createClient()
   const [brands, setBrands] = useState<Brand[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -73,64 +75,52 @@ export function useBrands() {
     abortControllerRef.current = requestController
 
     try {
-      let query = supabase
-        .from('brands')
-        .select('*', { count: 'exact' })
+      const params = new URLSearchParams()
       
       if (active.isActive !== undefined) {
-        query = query.eq('is_active', active.isActive)
+        params.set('is_active', String(active.isActive))
       }
       
       if (active.search) {
-        const searchTerm = active.search.trim()
-        query = query.or(`name.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`)
+        params.set('search', active.search.trim())
       }
-      
-      // Sorting
-      const orderBy = active.orderBy || 'name'
-      const orderDir = active.orderDir || 'asc'
-      query = query.order(orderBy, { ascending: orderDir === 'asc' })
 
-      // Pagination
       const page = active.page || 1
       const limit = active.limit || 12
-      const from = (page - 1) * limit
-      const to = from + limit - 1
-      
-      query = query.range(from, to)
-      
-      // Execute query with abort signal
-      const { data, error, count } = await query.abortSignal(requestController.signal)
+      params.set('page', String(page))
+      params.set('limit', String(limit))
 
-      if (error) {
-        if (error.code !== '20') { // Ignore abort error (code 20 usually, strictly check if needed)
-           throw error
-        }
-        return // Aborted, do nothing
+      const response = await fetch(`/api/brands?${params.toString()}`, {
+        cache: 'no-store',
+        signal: requestController.signal,
+      })
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'No se pudieron cargar las marcas')
       }
 
-      // Add dummy stats for now (as per original code)
-      const brandsWithStats = (data || []).map(brand => ({
+      const brandsWithStats = ((result.data || []) as BrandRow[]).map(brand => ({
         ...brand,
         stats: { product_count: 0 }
       }))
 
       setBrands(brandsWithStats)
-      if (count !== null) setTotalCount(count)
+      setTotalCount(Number(result.count || 0))
       
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
         return
       }
       console.error('Error fetching brands:', err)
-      setError(err instanceof Error ? err.message : String(err))
+      setError(getErrorMessage(err))
     } finally {
       // Only set loading false if this is the latest request (not aborted)
       if (abortControllerRef.current === requestController) {
         setLoading(false)
       }
     }
-  }, [supabase, filters])
+  }, [filters])
 
   const createBrand = useCallback(async (payload: BrandInsert) => {
     const { valid, errors } = validateBrandInput({ name: payload.name, description: payload.description })
@@ -144,41 +134,22 @@ export function useBrands() {
       const normalizedName = payload.name.trim()
       
       // Check for duplicates
-      const { data: existing, error: checkError } = await supabase
-        .from('brands')
-        .select('id')
-        .ilike('name', normalizedName)
-        .limit(1)
-        .maybeSingle()
-      
-      if (checkError) {
-          console.error('Error checking duplicate:', checkError)
-          throw checkError
-      }
-      if (existing) {
-        return { success: false as const, error: 'Ya existe una marca con este nombre' }
-      }
+      const response = await fetch('/api/brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, name: normalizedName }),
+      })
+      const result = await response.json()
 
-      const { data, error } = await supabase
-        .from('brands')
-        .insert({ ...payload, name: normalizedName })
-        .select()
-        .single()
-      
-      if (error) {
-          console.error('Supabase create error:', error)
-          throw error
-      }
+      if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo crear la marca')
       
       await fetchBrands() // Refresh list
-      return { success: true as const, data }
-    } catch (err: any) {
+      return { success: true as const, data: result.data }
+    } catch (err: unknown) {
       console.error('Error creating brand:', err)
-      const message = err?.message || 'Error desconocido'
-      const code = err?.code ? ` (Code: ${err.code})` : ''
-      return { success: false as const, error: `${message}${code}` }
+      return { success: false as const, error: getErrorMessage(err) }
     }
-  }, [supabase, fetchBrands])
+  }, [fetchBrands])
 
   const updateBrand = useCallback(async (id: string, updates: BrandUpdate) => {
     try {
@@ -188,18 +159,6 @@ export function useBrands() {
 
         const normalizedName = updates.name.trim()
         
-        // Check duplicate name on update (excluding self)
-        const { data: existing, error: checkError } = await supabase
-          .from('brands')
-          .select('id')
-          .ilike('name', normalizedName)
-          .neq('id', id)
-          .limit(1)
-          .maybeSingle()
-        
-        if (checkError) throw checkError
-        if (existing) return { success: false as const, error: 'Ya existe otra marca con este nombre' }
-        
         updates.name = normalizedName
       }
 
@@ -208,49 +167,37 @@ export function useBrands() {
         updated_at: new Date().toISOString()
       }
 
-      const { data, error } = await supabase
-        .from('brands')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single()
-      
-      if (error) throw error
+      const response = await fetch('/api/brands', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updateData, id }),
+      })
+      const result = await response.json()
+
+      if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo actualizar la marca')
       
       await fetchBrands() // Refresh list
-      return { success: true as const, data }
-    } catch (err: any) {
+      return { success: true as const, data: result.data }
+    } catch (err: unknown) {
       console.error('Error updating brand:', err)
-      const message = err?.message || 'Error desconocido'
-      const code = err?.code ? ` (Code: ${err.code})` : ''
-      return { success: false as const, error: `${message}${code}` }
+      return { success: false as const, error: getErrorMessage(err) }
     }
-  }, [supabase, fetchBrands])
+  }, [fetchBrands])
 
   const deleteBrand = useCallback(async (id: string) => {
     try {
-      // Check associated products first
-      const { count: productCount, error: productError } = await supabase
-        .from('products')
-        .select('*', { count: 'exact', head: true })
-        .eq('brand_id', id)
+      const response = await fetch(`/api/brands?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const result = await response.json()
 
-      if (!productError && productCount && productCount > 0) {
-        return { success: false as const, error: `No se puede eliminar: Esta marca tiene ${productCount} productos asociados.` }
-      }
-
-      const { error } = await supabase.from('brands').delete().eq('id', id)
-      if (error) throw error
+      if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo eliminar la marca')
       
       await fetchBrands() // Refresh list
       return { success: true as const }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting brand:', err)
-      const message = err?.message || 'Error desconocido'
-      const code = err?.code ? ` (Code: ${err.code})` : ''
-      return { success: false as const, error: `${message}${code}` }
+      return { success: false as const, error: getErrorMessage(err) }
     }
-  }, [supabase, fetchBrands])
+  }, [fetchBrands])
 
   // Initial fetch
   useEffect(() => {

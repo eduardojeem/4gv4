@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 
 type CreditRow = {
   id: string
@@ -53,6 +54,10 @@ export async function POST(request: Request) {
         { status: 403 }
       )
     }
+    const organization = await getCurrentOrganizationContext(staffAuth.user.id)
+    if (!organization) {
+      return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
 
     const body = await request.json() as { customerIds?: unknown }
     const { customerIds } = body
@@ -67,6 +72,7 @@ export async function POST(request: Request) {
     const { data: credits, error: creditsError } = await supabase
       .from('customer_credits')
       .select('id, customer_id, principal, interest_rate, term_months, start_date, status')
+      .eq('organization_id', organization.id)
       .in('customer_id', customerIds as string[])
 
     if (creditsError) {

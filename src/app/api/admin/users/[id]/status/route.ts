@@ -11,7 +11,11 @@ function isAllowedStatus(value: unknown): value is AllowedStatus {
 
 async function handler(
   request: NextRequest,
-  context: { params: Promise<{ id: string }>; user: { id: string; email?: string; role: string } }
+  context: {
+    params: Promise<{ id: string }>
+    user: { id: string; email?: string; role: string }
+    organizationId: string | null
+  }
 ) {
   try {
     const { id } = await context.params
@@ -40,6 +44,23 @@ async function handler(
     }
 
     const supabaseAdmin = createAdminSupabase()
+
+    // For non-super_admin: verify the target user belongs to the same organization
+    if (context.organizationId) {
+      const { data: targetMembership } = await supabaseAdmin
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', id)
+        .eq('organization_id', context.organizationId)
+        .maybeSingle()
+
+      if (!targetMembership) {
+        return NextResponse.json(
+          { success: false, error: 'User not found in your organization' },
+          { status: 403 }
+        )
+      }
+    }
     const { data: roleRow, error: roleError } = await supabaseAdmin
       .from('user_roles')
       .select('role')
@@ -69,11 +90,20 @@ async function handler(
     }
 
     if (deactivatingUser && (targetRole === 'admin' || targetRole === 'super_admin')) {
-      const { count: activeAdminCount, error: activeAdminError } = await supabaseAdmin
-        .from('user_roles')
-        .select('*', { count: 'exact', head: true })
-        .in('role', ['admin', 'super_admin'])
-        .eq('is_active', true)
+      const activeAdminQuery = context.organizationId
+        ? supabaseAdmin
+            .from('organization_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('organization_id', context.organizationId)
+            .in('role', ['owner', 'admin'])
+            .eq('status', 'active')
+        : supabaseAdmin
+            .from('user_roles')
+            .select('*', { count: 'exact', head: true })
+            .in('role', ['admin', 'super_admin'])
+            .eq('is_active', true)
+
+      const { count: activeAdminCount, error: activeAdminError } = await activeAdminQuery
 
       if (activeAdminError) {
         logger.error('Failed to count active administrators', {
@@ -95,32 +125,47 @@ async function handler(
     }
 
     const nowIso = new Date().toISOString()
-    const [{ error: profileUpdateError }, { error: roleUpdateError }, { error: auditError }] =
+    const updateOperations = [
+      supabaseAdmin
+        .from('profiles')
+        .update({
+          status: nextStatus,
+          updated_at: nowIso,
+        })
+        .eq('id', id),
+      supabaseAdmin
+        .from('user_roles')
+        .update({
+          is_active: nextStatus === 'active',
+          updated_at: nowIso,
+        })
+        .eq('user_id', id),
+      supabaseAdmin.from('audit_log').insert({
+        user_id: context.user.id,
+        action: 'update_user_status',
+        resource: 'users',
+        resource_id: id,
+        new_values: {
+          status: nextStatus,
+          updated_by: context.user.id,
+          organization_id: context.organizationId,
+        },
+      }),
+    ]
+
+    if (context.organizationId) {
+      updateOperations.push(
+        supabaseAdmin
+          .from('organization_members')
+          .update({ status: nextStatus === 'active' ? 'active' : 'inactive' })
+          .eq('organization_id', context.organizationId)
+          .eq('user_id', id)
+      )
+    }
+
+    const [{ error: profileUpdateError }, { error: roleUpdateError }, { error: auditError }, memberResult] =
       await Promise.all([
-        supabaseAdmin
-          .from('profiles')
-          .update({
-            status: nextStatus,
-            updated_at: nowIso,
-          })
-          .eq('id', id),
-        supabaseAdmin
-          .from('user_roles')
-          .update({
-            is_active: nextStatus === 'active',
-            updated_at: nowIso,
-          })
-          .eq('user_id', id),
-        supabaseAdmin.from('audit_log').insert({
-          user_id: context.user.id,
-          action: 'update_user_status',
-          resource: 'users',
-          resource_id: id,
-          new_values: {
-            status: nextStatus,
-            updated_by: context.user.id,
-          },
-        }),
+        ...updateOperations,
       ])
 
     if (profileUpdateError) {
@@ -154,6 +199,19 @@ async function handler(
       })
     }
 
+    if (memberResult?.error) {
+      logger.error('Failed to update organization member status', {
+        userId: id,
+        organizationId: context.organizationId,
+        error: memberResult.error.message,
+      })
+
+      return NextResponse.json(
+        { success: false, error: 'Failed to update organization member status' },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json({
       success: true,
       status: nextStatus,
@@ -172,6 +230,6 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   return withAdminAuth((req, authContext) =>
-    handler(req, { params: context.params, user: authContext.user })
+    handler(req, { params: context.params, user: authContext.user, organizationId: authContext.organizationId })
   )(request)
 }

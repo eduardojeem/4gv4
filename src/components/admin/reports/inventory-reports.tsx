@@ -29,7 +29,11 @@ import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
-import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
+import {
+  applyBranchInventoryToProducts,
+  loadBranchInventoryStockMap,
+  type BranchInventoryClient,
+} from '@/lib/branches/inventory'
 
 // Interfaces
 interface ReportData {
@@ -147,6 +151,15 @@ interface ReportSupplierRow {
   rating?: number | null
 }
 
+type ReportProductRow = {
+  id: string
+  stock_quantity?: number | null
+  sale_price?: number | null
+  purchase_price?: number | null
+  min_stock?: number | null
+  category?: { name?: string | null } | null
+}
+
 const REPORT_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4', '#84CC16']
 
 const InventoryReports: React.FC = () => {
@@ -181,7 +194,7 @@ const InventoryReports: React.FC = () => {
       if (productsError) throw productsError
 
       const branchAwareProducts = await loadBranchInventoryStockMap(
-        supabase,
+        supabase as unknown as BranchInventoryClient,
         selectedBranchId,
         (products || []).map((product) => product.id)
       ).then(({ stockMap, branchScoped }) =>
@@ -247,7 +260,8 @@ const InventoryReports: React.FC = () => {
       // Category Distribution
       const categoryMap = new Map<string, { count: number; value: number; marginSum: number }>()
       branchAwareProducts?.forEach(p => {
-        const catName = p.category?.name || 'Sin Categoría'
+        const product = p as ReportProductRow
+        const catName = product.category?.name || 'Sin Categoria'
         const current = categoryMap.get(catName) || { count: 0, value: 0, marginSum: 0 }
         
         const salePrice = Number(p.sale_price || 0)

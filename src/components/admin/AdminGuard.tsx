@@ -59,7 +59,7 @@ export function AdminGuard({ children, fallback }: AdminGuardProps) {
             Acceso Denegado
           </h2>
           <p className="text-muted-foreground">
-            No tienes permisos para acceder a esta seccion.
+            Esta seccion requiere permisos de administrador.
           </p>
         </div>
       </div>
@@ -68,3 +68,4 @@ export function AdminGuard({ children, fallback }: AdminGuardProps) {
 
   return <>{children}</>
 }
+

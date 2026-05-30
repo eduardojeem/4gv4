@@ -1,8 +1,11 @@
 import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
+import { headers } from 'next/headers'
 import { verifyPublicToken } from '@/lib/public-session'
 import { verifyRepairHash } from '@/lib/repair-qr'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import type { PublicRepair } from '@/types/public'
 import RepairDetailClient from './RepairDetailClient'
@@ -14,6 +17,14 @@ async function fetchRepairServerSide(
   try {
     // 1. Check token from cookie
     const cookieStore = await cookies()
+    const headerStore = await headers()
+    const organizationSlug = headerStore.get('x-tenant-slug')
+    const organization = organizationSlug
+      ? await resolvePublicOrganizationBySlug(organizationSlug, createAdminSupabase())
+      : null
+    if (organizationSlug && !organization) {
+      return null
+    }
     const token = cookieStore.get('repair_token')?.value
     let isTokenAuthorized = false
 
@@ -24,14 +35,29 @@ async function fetchRepairServerSide(
       }
     }
 
-    // 2. If no token and no hash, can't authorize
-    if (!isTokenAuthorized && !verifyHash) {
+    const supabase = await createClient()
+    const { data: auth } = await supabase.auth.getUser()
+    const user = auth?.user
+
+    let customerIdForUser: string | null = null
+
+    if (user && organization) {
+      const { data: customerData } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('profile_id', user.id)
+        .eq('organization_id', organization.id)
+        .maybeSingle()
+
+      customerIdForUser = customerData?.id ?? null
+    }
+
+    // 2. If no token/hash/customer session, can't authorize
+    if (!isTokenAuthorized && !verifyHash && !customerIdForUser) {
       return null
     }
 
-    const supabase = await createClient()
-
-    const { data: repair, error } = await supabase
+    let repairQuery = supabase
       .from('repairs')
       .select(`
         id, ticket_number, device_brand, device_model, device_type,
@@ -40,7 +66,16 @@ async function fetchRepairServerSide(
         estimated_completion, completed_at, technician_id, customer_id
       `)
       .eq('ticket_number', ticketId)
-      .single()
+
+    if (organization) {
+      repairQuery = repairQuery.eq('organization_id', organization.id)
+    }
+
+    if (customerIdForUser && !isTokenAuthorized && !verifyHash) {
+      repairQuery = repairQuery.eq('customer_id', customerIdForUser)
+    }
+
+    const { data: repair, error } = await repairQuery.single()
 
     if (error || !repair) return null
 

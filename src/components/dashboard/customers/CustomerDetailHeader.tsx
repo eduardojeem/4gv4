@@ -26,13 +26,15 @@ interface CustomerDetailHeaderProps {
     onBack: () => void
     onEdit: () => void
     onViewHistory: () => void
+    compact?: boolean
 }
 
 export function CustomerDetailHeader({
     customer,
     onBack,
     onEdit,
-    onViewHistory
+    onViewHistory,
+    compact: _compact,
 }: CustomerDetailHeaderProps) {
 
     const getStatusColor = (status: string) => {

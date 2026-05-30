@@ -16,28 +16,25 @@ export function WhatsAppFloatButton({
   showOnPages,
   hideOnPages 
 }: WhatsAppFloatButtonProps = {}) {
-  const [isVisible, setIsVisible] = useState(false)
+  const [isVisible, setIsVisible]     = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
-  const [pingDone, setPingDone] = useState(false)
+  const [pingDone, setPingDone]       = useState(false)
+  const [hovered, setHovered]         = useState(false)
   const { contactBusiness } = useWhatsApp()
   const pathname = usePathname()
 
+  // Reveal button after 1 s
   useEffect(() => {
-    // Show button after a delay for better UX
     const timer = setTimeout(() => setIsVisible(true), 1000)
     return () => clearTimeout(timer)
   }, [])
 
+  // Auto-show tooltip once after button appears, then auto-hide after 5 s
   useEffect(() => {
-    // Show tooltip after button appears
-    if (isVisible) {
-      const tooltipTimer = setTimeout(() => {
-        setShowTooltip(true)
-        // Hide tooltip after 5 seconds
-        setTimeout(() => setShowTooltip(false), 5000)
-      }, 2000)
-      return () => clearTimeout(tooltipTimer)
-    }
+    if (!isVisible) return
+    const show = setTimeout(() => setShowTooltip(true),  2000)
+    const hide = setTimeout(() => setShowTooltip(false), 7000)
+    return () => { clearTimeout(show); clearTimeout(hide) }
   }, [isVisible])
 
   // Stop ping animation after a few seconds to save GPU
@@ -108,6 +105,10 @@ export function WhatsAppFloatButton({
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => contactBusiness()}
+            onMouseEnter={() => { setHovered(true);  setShowTooltip(true)  }}
+            onMouseLeave={() => { setHovered(false); setShowTooltip(false) }}
+            onFocus={()  => setShowTooltip(true)}
+            onBlur={()   => !hovered && setShowTooltip(false)}
             className={cn(
               'flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all',
               'bg-[#25D366] text-white hover:bg-[#20BA5A]',

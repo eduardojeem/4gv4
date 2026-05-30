@@ -1,14 +1,23 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
+import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 
 /**
  * GET /api/public/products/meta
  * Returns metadata for faceted search (brands, price range)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminSupabase()
+    const organization = await resolvePublicOrganization(request, supabase)
+
+    if (!organization) {
+      return NextResponse.json(
+        { success: false, error: 'Organization not found' },
+        { status: 404 }
+      )
+    }
 
     // Fetch all unique brands and min/max prices from active products
     // We fetch brands separately and price range separately to keep it efficient
@@ -17,6 +26,7 @@ export async function GET() {
     const { data: brandsData, error: brandsError } = await supabase
       .from('products')
       .select('brand')
+      .eq('organization_id', organization.id)
       .eq('is_active', true)
       .not('brand', 'is', null)
 
@@ -28,6 +38,7 @@ export async function GET() {
     const { data: minData } = await supabase
       .from('products')
       .select('sale_price')
+      .eq('organization_id', organization.id)
       .eq('is_active', true)
       .gt('sale_price', 0)
       .order('sale_price', { ascending: true })
@@ -37,6 +48,7 @@ export async function GET() {
     const { data: maxData } = await supabase
       .from('products')
       .select('sale_price')
+      .eq('organization_id', organization.id)
       .eq('is_active', true)
       .gt('sale_price', 0)
       .order('sale_price', { ascending: false })
@@ -55,7 +67,8 @@ export async function GET() {
         priceRange: {
           min: minPrice,
           max: maxPrice
-        }
+        },
+        organization: toPublicOrganizationPayload(organization),
       }
     })
 

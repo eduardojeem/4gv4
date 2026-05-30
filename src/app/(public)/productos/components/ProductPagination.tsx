@@ -20,7 +20,7 @@ export function ProductPagination({ currentPage, totalPages }: ProductPagination
     params.set('page', page.toString())
 
     startTransition(() => {
-      router.push(`?${params.toString()}`, { scroll: true })
+      router.push(`?${params.toString()}`, { scroll: false })
     })
   }
 

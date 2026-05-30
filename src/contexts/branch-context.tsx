@@ -107,6 +107,16 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user?.id, refreshBranches])
 
+  useEffect(() => {
+    const handleOrganizationChange = () => {
+      setSelectedBranchId(null)
+      void refreshBranches()
+    }
+
+    window.addEventListener('organization:changed', handleOrganizationChange)
+    return () => window.removeEventListener('organization:changed', handleOrganizationChange)
+  }, [refreshBranches, setSelectedBranchId])
+
   const selectedBranch = useMemo(
     () => branches.find((branch) => branch.id === selectedBranchId) ?? null,
     [branches, selectedBranchId]

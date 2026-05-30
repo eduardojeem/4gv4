@@ -5,7 +5,7 @@ import type {
   MaintenanceTask,
   MaintenanceTaskParams,
   QuickDatabaseMetrics,
-} from '@/lib/admin/database-monitoring/contracts'
+} from '@/lib/superadmin/database-monitoring/contracts'
 
 export type {
   ConnectionStats,
@@ -24,7 +24,7 @@ export type {
   SlowQuery,
   StorageBreakdown,
   TableSize,
-} from '@/lib/admin/database-monitoring/contracts'
+} from '@/lib/superadmin/database-monitoring/contracts'
 
 export function formatBytes(bytes: number | null): string {
   if (bytes === null) return 'Unavailable'
@@ -135,7 +135,7 @@ class DatabaseMonitoringService {
   async getDatabaseMetrics(forceRefresh = false): Promise<{ success: boolean; data?: DatabaseMetrics; error?: string }> {
     try {
       void forceRefresh
-      const response = await fetch('/api/admin/database-monitoring', {
+      const response = await fetch('/api/superadmin/database-monitoring', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -203,7 +203,7 @@ class DatabaseMonitoringService {
     try {
       const apiTask = task === 'rotate_logs' ? 'rotate_audit_logs' : task
 
-      const response = await fetch('/api/admin/database/maintenance', {
+      const response = await fetch('/api/superadmin/database/maintenance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task: apiTask, params }),

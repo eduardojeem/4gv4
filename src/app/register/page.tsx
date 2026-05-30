@@ -1,36 +1,59 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Eye, EyeOff, ArrowRight, ArrowLeft, Cpu, Shield } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, Shield, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { config } from '@/lib/config'
+import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { validatePassword, getPasswordChecks } from '@/lib/auth/password-validation'
+import { slugifyTenantName } from '@/lib/saas/tenant'
 
-export default function RegisterPage() {
+const PLAN_LABELS: Record<string, string> = {
+  free: 'FREE',
+  basic: 'BASIC',
+  pro: 'PRO',
+  enterprise: 'ENTERPRISE',
+}
+
+function RegisterForm() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     confirmPassword: '',
     fullName: '',
+    companyName: '',
+    companySlug: '',
   })
+  // Track whether the user has manually edited the slug field
+  const [slugTouched, setSlugTouched] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const router = useRouter()
-  const supabase = createClient()
+  const searchParams = useSearchParams()
   const reduceMotion = useReducedMotion()
 
+  const planParam = searchParams.get('plan')?.toLowerCase() ?? ''
+  const selectedPlanLabel = PLAN_LABELS[planParam] ?? ''
+  const selectedPlan = selectedPlanLabel ? planParam : 'free'
+
   const handleInputChange = (field: string, value: string) => {
+    if (field === 'companyName' && !slugTouched) {
+      // Auto-mirror the company name into the slug preview (but don't fill the field)
+      setFormData((prev) => ({ ...prev, companyName: value }))
+      return
+    }
+    if (field === 'companySlug') {
+      setSlugTouched(value.trim().length > 0)
+    }
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -58,30 +81,52 @@ export default function RegisterPage() {
       return
     }
 
+    if (!formData.companyName.trim()) {
+      setError('El nombre de la empresa es requerido')
+      setLoading(false)
+      return
+    }
+
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.fullName,
-          },
-        },
+      const response = await fetch('/api/auth/register-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          email: formData.email,
+          password: formData.password,
+          companyName: formData.companyName,
+          // Use the resolved slug (user input or auto-generated from company name)
+          companySlug: previewSlug,
+          plan: selectedPlan,
+        }),
       })
 
-      if (authError) {
-        setError(authError.message)
+      const result = await response.json()
+
+      if (response.status === 429) {
+        setError(result.error || 'Demasiados intentos de registro. Intenta nuevamente en unos minutos.')
         setLoading(false)
         return
       }
 
-      if (authData.user) {
-        toast.success('Cuenta creada correctamente. Revisa tu correo para verificarla.')
-        setTimeout(() => {
-          router.push('/login')
-          router.refresh()
-        }, 900)
+      if (!response.ok || !result.success) {
+        setError(result.error || 'No se pudo crear la cuenta.')
+        setLoading(false)
+        return
       }
+
+      toast.success(
+        result.data?.requiresEmailConfirmation
+          ? 'Empresa creada. Revisa tu correo para verificar la cuenta.'
+          : 'Empresa creada correctamente. Ya puedes iniciar sesion.'
+      )
+      setTimeout(() => {
+        const redirectTarget = encodeURIComponent('/dashboard/onboarding')
+        const registeredCompany = encodeURIComponent(previewSlug)
+        router.push(`/login?registered=1&company=${registeredCompany}&redirect=${redirectTarget}`)
+        router.refresh()
+      }, 900)
     } catch (err) {
       console.error('Unexpected error:', err)
       setError('Error inesperado. Intenta de nuevo.')
@@ -92,13 +137,17 @@ export default function RegisterPage() {
 
   const pwd = formData.password
   const pwdChecks = getPasswordChecks(pwd)
+  // Always resolve slug: prefer what the user typed, fall back to slugified company name
+  const previewSlug = slugifyTenantName(formData.companySlug || formData.companyName)
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(6,182,212,0.16),transparent_40%),radial-gradient(circle_at_85%_85%,rgba(59,130,246,0.14),transparent_40%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(14,165,233,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(14,165,233,0.06)_1px,transparent_1px)] bg-[size:42px_42px] opacity-40" />
 
-      <main className="relative z-10 flex min-h-screen items-center justify-center p-4 sm:p-6">
+      <SaaSPublicNav />
+
+      <main className="relative z-10 flex min-h-[calc(100vh-4rem)] items-center justify-center p-4 sm:p-6">
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 12 }}
           animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
@@ -107,27 +156,19 @@ export default function RegisterPage() {
         >
           <Card className="border-slate-800/80 bg-slate-900/80 shadow-2xl backdrop-blur-xl">
             <CardHeader className="space-y-4 pb-5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-900/30">
-                    <Cpu className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-200">{config.company.name}</p>
-                  </div>
-                </div>
-                <Link
-                  href="/inicio"
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Inicio
-                </Link>
-              </div>
               <div>
-                <CardTitle className="text-2xl font-bold text-white">Crear cuenta</CardTitle>
-                <CardDescription className="mt-1 text-slate-400">Registro de clientes</CardDescription>
+                <CardTitle className="text-2xl font-bold text-white">Crear empresa</CardTitle>
+                <CardDescription className="mt-1 text-slate-400">Registro SaaS para nuevos negocios</CardDescription>
               </div>
+              {selectedPlanLabel && (
+                <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-300">
+                  <Sparkles className="h-4 w-4 shrink-0" />
+                  <span>
+                    Plan seleccionado: <strong>{selectedPlanLabel}</strong>
+                    <span className="ml-1 text-xs text-cyan-400/70">· Empiezas con 14 días de prueba gratis</span>
+                  </span>
+                </div>
+              )}
             </CardHeader>
 
             <CardContent className="space-y-6">
@@ -164,6 +205,46 @@ export default function RegisterPage() {
                     disabled={loading}
                     className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="companyName" className="text-slate-200">
+                    Nombre de la empresa
+                  </Label>
+                  <Input
+                    id="companyName"
+                    type="text"
+                    placeholder="Mi empresa"
+                    value={formData.companyName}
+                    onChange={(e) => handleInputChange('companyName', e.target.value)}
+                    required
+                    disabled={loading}
+                    className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="companySlug" className="text-slate-200">
+                    Subdominio <span className="text-slate-500 font-normal">(opcional)</span>
+                  </Label>
+                  <Input
+                    id="companySlug"
+                    type="text"
+                    placeholder={previewSlug || 'mi-empresa'}
+                    value={formData.companySlug}
+                    onChange={(e) => handleInputChange('companySlug', e.target.value)}
+                    disabled={loading}
+                    className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                  />
+                  {previewSlug ? (
+                    <p className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <span className="text-slate-500">URL:</span>
+                      <span className="font-mono text-cyan-400">{previewSlug}</span>
+                      <span className="text-slate-500">.tu-dominio.com</span>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-500">Se genera automaticamente desde el nombre de la empresa.</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -259,7 +340,7 @@ export default function RegisterPage() {
                     </>
                   ) : (
                     <>
-                      Registrarme
+                      Crear mi empresa
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </>
                   )}
@@ -279,5 +360,13 @@ export default function RegisterPage() {
         </motion.div>
       </main>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterForm />
+    </Suspense>
   )
 }

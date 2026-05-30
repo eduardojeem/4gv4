@@ -8,6 +8,8 @@ type AssignmentRow = {
   is_active?: boolean | null
 }
 
+const BRANCH_SELECT = 'id, organization_id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at'
+
 function isUuidLike(value: string | null | undefined) {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim())
 }
@@ -35,15 +37,21 @@ export function getRequestedBranchId(request: Request, bodyBranchId?: unknown) {
   return null
 }
 
-async function fetchBranchesByIds(branchIds: string[]) {
+async function fetchBranchesByIds(branchIds: string[], organizationId?: string | null) {
   if (branchIds.length === 0) return []
 
   const supabase = createAdminSupabase()
-  const { data, error } = await supabase
+  let query = supabase
     .from('branches')
-    .select('id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
+    .select(BRANCH_SELECT)
     .in('id', branchIds)
     .eq('is_active', true)
+
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('[branches] Error loading branches by ids:', error)
@@ -53,16 +61,22 @@ async function fetchBranchesByIds(branchIds: string[]) {
   return (data ?? []) as BranchRecord[]
 }
 
-export async function getDefaultBranch(): Promise<BranchRecord | null> {
+export async function getDefaultBranch(organizationId?: string | null): Promise<BranchRecord | null> {
   try {
     const supabase = createAdminSupabase()
-    const { data, error } = await supabase
+    let query = supabase
       .from('branches')
-      .select('id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
+      .select(BRANCH_SELECT)
       .eq('is_active', true)
       .order('is_default', { ascending: false })
       .order('created_at', { ascending: true })
       .limit(1)
+
+    if (organizationId) {
+      query = query.eq('organization_id', organizationId)
+    }
+
+    const { data, error } = await query
       .maybeSingle()
 
     if (error) {
@@ -77,7 +91,7 @@ export async function getDefaultBranch(): Promise<BranchRecord | null> {
   }
 }
 
-export async function listUserBranches(userId: string) {
+export async function listUserBranches(userId: string, organizationId?: string | null) {
   try {
     const supabase = createAdminSupabase()
     const { data: assignments, error: assignmentsError } = await supabase
@@ -96,7 +110,7 @@ export async function listUserBranches(userId: string) {
       .map((assignment) => assignment.branch_id)
       .filter((branchId): branchId is string => typeof branchId === 'string' && branchId.length > 0)
 
-    const branches = await fetchBranchesByIds(branchIds)
+    const branches = await fetchBranchesByIds(branchIds, organizationId)
     const assignmentMap = new Map(
       safeAssignments.map((assignment) => [assignment.branch_id, assignment])
     )
@@ -125,15 +139,16 @@ export async function resolveBranchScopeForUser(params: {
   userId: string
   role?: AppRole
   requestedBranchId?: string | null
+  organizationId?: string | null
   strict?: boolean
 }): Promise<BranchScopeResolution> {
-  const { userId, role, requestedBranchId, strict = false } = params
+  const { userId, role, requestedBranchId, organizationId, strict = false } = params
 
-  const defaultBranch = await getDefaultBranch()
+  const defaultBranch = await getDefaultBranch(organizationId)
 
   if (role === 'super_admin') {
     if (requestedBranchId) {
-      const branches = await fetchBranchesByIds([requestedBranchId])
+      const branches = await fetchBranchesByIds([requestedBranchId], organizationId)
       const requestedBranch = branches[0] ?? null
       if (requestedBranch) {
         return { branchId: requestedBranch.id, branch: requestedBranch, source: 'requested' }
@@ -151,7 +166,7 @@ export async function resolveBranchScopeForUser(params: {
     return { branchId: null, branch: null, source: 'unavailable' }
   }
 
-  const availableBranches = await listUserBranches(userId)
+  const availableBranches = await listUserBranches(userId, organizationId)
 
   if (requestedBranchId) {
     const requestedBranch = availableBranches.find((branch) => branch.id === requestedBranchId)

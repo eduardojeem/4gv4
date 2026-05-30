@@ -105,7 +105,7 @@ export function CatalogManager({
       id: s.id,
       name: s.name,
       contact_name: s.contact_name || '',
-      email: s.contact_email || '',
+      email: s.email || '',
       phone: s.phone || '',
       address: s.address || '',
       city: '',
@@ -328,7 +328,7 @@ export function CatalogManager({
         const res = await createSupplier({
           name: supplier.name,
           contact_name: supplier.contact_name || supplier.contact_person,
-          contact_email: supplier.email,
+          email: supplier.email,
           phone: supplier.phone,
           address: supplier.address,
           tax_id: supplier.tax_id,
@@ -344,7 +344,7 @@ export function CatalogManager({
         const res = await updateSupplier(supplier.id, {
           name: supplier.name,
           contact_name: supplier.contact_name || supplier.contact_person,
-          contact_email: supplier.email,
+          email: supplier.email,
           phone: supplier.phone,
           address: supplier.address,
           tax_id: supplier.tax_id,

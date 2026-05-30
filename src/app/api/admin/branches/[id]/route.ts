@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
-import { requireAdmin, getAuthResponse } from '@/lib/auth/require-auth'
+import { NextRequest, NextResponse } from 'next/server'
+import { withAdminAuth, AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 
 type BranchUpdatePayload = {
@@ -28,16 +28,12 @@ function toBoolean(value: unknown) {
   return typeof value === 'boolean' ? value : undefined
 }
 
-export async function PATCH(
-  request: Request,
-  context: { params: Promise<{ id: string }> }
+async function patchHandler(
+  request: NextRequest,
+  ctx: AdminAuthContext & { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireAdmin()
-    const authResponse = getAuthResponse(auth)
-    if (authResponse) return authResponse
-
-    const { id } = await context.params
+    const { id } = await ctx.params
     const body = await request.json() as BranchUpdatePayload
 
     if (!id) {
@@ -69,14 +65,23 @@ export async function PATCH(
     }
 
     const supabase = createAdminSupabase()
-    const { data, error } = await supabase
+    let updateQuery = supabase
       .from('branches')
       .update(patch)
       .eq('id', id)
-      .select('id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
-      .single()
+
+    if (ctx.organizationId) {
+      updateQuery = updateQuery.eq('organization_id', ctx.organizationId)
+    }
+
+    const { data, error } = await updateQuery
+      .select('id, organization_id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
+      .maybeSingle()
 
     if (error || !data) {
+      if (!data && !error) {
+        return NextResponse.json({ error: 'Sucursal no encontrada.' }, { status: 404 })
+      }
       const status = error?.message?.includes('duplicate') || error?.message?.includes('unique') ? 409 : 500
       return NextResponse.json(
         { error: error?.message || 'No se pudo actualizar la sucursal.' },
@@ -89,4 +94,13 @@ export async function PATCH(
     const message = error instanceof Error ? error.message : 'Error interno del servidor.'
     return NextResponse.json({ error: message }, { status: 500 })
   }
+}
+
+export function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return withAdminAuth((req, authCtx) =>
+    patchHandler(req, { ...authCtx, params: context.params })
+  )(request)
 }

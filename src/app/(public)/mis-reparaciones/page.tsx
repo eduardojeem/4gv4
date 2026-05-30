@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
-import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
+import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
@@ -11,6 +12,9 @@ import {
   ArrowRight, Wrench, Clock, CheckCircle2, Package,
   AlertCircle, Calendar, Banknote, Ticket
 } from 'lucide-react'
+import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false }
@@ -58,10 +62,23 @@ export default async function MisReparacionesPage() {
   const supabase = await createClient()
   const { data: auth } = await supabase.auth.getUser()
   const user = auth?.user
+  const tenantPrefix = await getPublicTenantPathPrefix()
+  const repairsHref = prefixPublicTenantPath(tenantPrefix, '/mis-reparaciones')
+  const tenantSlug = tenantPrefix.replace('/', '') || null
 
   // — Redirect unauthenticated users to login —
   if (!user) {
-    redirect('/login?next=/mis-reparaciones')
+    const loginHref = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
+    redirect(`${loginHref}?next=${encodeURIComponent(repairsHref)}`)
+  }
+
+  const headerStore = await headers()
+  const organizationSlug = tenantSlug || headerStore.get('x-tenant-slug')
+  const organization = organizationSlug
+    ? await resolvePublicOrganizationBySlug(organizationSlug, createAdminSupabase())
+    : null
+  if (organizationSlug && !organization) {
+    notFound()
   }
 
   const settings = await fetchWebsiteSettings()
@@ -69,19 +86,47 @@ export default async function MisReparacionesPage() {
 
   let repairs: RepairRow[] = []
   let customerName = ''
+  let membership: { role: string; status: string } | null = null
 
-  const { data: customerData } = await supabase
+  if (organization) {
+    const admin = createAdminSupabase()
+    const { data } = await admin
+      .from('organization_members')
+      .select('role, status')
+      .eq('organization_id', organization.id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    membership = data
+  }
+
+  let customerQuery = supabase
     .from('customers')
     .select('id, name')
     .eq('profile_id', user.id)
-    .maybeSingle()
+
+  if (organization) {
+    customerQuery = customerQuery.eq('organization_id', organization.id)
+  }
+
+  const { data: customerData } = await customerQuery.maybeSingle()
+
+  if (organization && (!membership || membership.status !== 'active' || !customerData)) {
+    redirect(`${tenantPrefix}/cliente/login?next=${encodeURIComponent(repairsHref)}`)
+  }
 
   if (customerData) {
     customerName = customerData.name || ''
-    const { data: repairsData } = await supabase
+    let repairsQuery = supabase
       .from('repairs')
       .select('id, ticket_number, device_type, device_brand, device_model, problem_description, status, created_at, final_cost, estimated_cost')
       .eq('customer_id', customerData.id)
+
+    if (organization) {
+      repairsQuery = repairsQuery.eq('organization_id', organization.id)
+    }
+
+    const { data: repairsData } = await repairsQuery
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -154,7 +199,7 @@ export default async function MisReparacionesPage() {
                 const cost = r.final_cost ?? r.estimated_cost
                 const created = r.created_at ? new Date(r.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
                 return (
-                  <Link key={r.id} href={`/mis-reparaciones/${encodeURIComponent(r.ticket_number || r.id)}`}>
+                  <Link key={r.id} href={`${repairsHref}/${encodeURIComponent(r.ticket_number || r.id)}`}>
                     <Card className="group border-2 border-transparent hover:border-primary/30 hover:shadow-lg transition-all duration-200 cursor-pointer h-full">
                       <CardContent className="p-5 space-y-4">
                         <div className="flex items-start justify-between gap-2">
@@ -203,7 +248,7 @@ export default async function MisReparacionesPage() {
                   const cost = r.final_cost ?? r.estimated_cost
                   const created = r.created_at ? new Date(r.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
                   return (
-                    <Link key={r.id} href={`/mis-reparaciones/${encodeURIComponent(r.ticket_number || r.id)}`} className="block">
+                    <Link key={r.id} href={`${repairsHref}/${encodeURIComponent(r.ticket_number || r.id)}`} className="block">
                       <div className="flex items-center gap-4 px-5 py-4 hover:bg-muted/40 transition-colors group">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">

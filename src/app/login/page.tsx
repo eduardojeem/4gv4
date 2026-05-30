@@ -9,13 +9,14 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
-import { Loader2, Eye, EyeOff, ArrowRight, ArrowLeft, Cpu, Shield } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, ArrowLeft, Cpu, Shield, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { config } from '@/lib/config'
 import { sanitizeRedirectPath, isValidEmail } from '@/lib/auth/password-validation'
 import { logAuthEventClient } from '@/lib/auth-event-client'
+import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -33,6 +34,7 @@ export default function LoginPage() {
   const searchParams = useSearchParams()
   const supabase = createClient()
   const reduceMotion = useReducedMotion()
+  const registeredCompany = searchParams.get('registered') === '1' ? searchParams.get('company') : null
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -141,11 +143,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_20%,rgba(6,182,212,0.16),transparent_40%),radial-gradient(circle_at_90%_80%,rgba(59,130,246,0.14),transparent_40%)]" />
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(14,165,233,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(14,165,233,0.06)_1px,transparent_1px)] bg-[size:42px_42px] opacity-40" />
+    <div className="relative flex flex-col min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <SaaSPublicNav />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_20%,rgba(6,182,212,0.16),transparent_40%),radial-gradient(circle_at_90%_80%,rgba(59,130,246,0.14),transparent_40%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(14,165,233,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(14,165,233,0.06)_1px,transparent_1px)] bg-[size:42px_42px] opacity-40 pointer-events-none" />
 
-      <main className="relative z-10 flex min-h-screen items-center justify-center p-4 sm:p-6">
+      <main className="relative z-10 flex-1 flex items-center justify-center p-4 sm:p-6">
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 12 }}
           animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
@@ -164,7 +167,7 @@ export default function LoginPage() {
                   </div>
                 </div>
                 <Link
-                  href="/inicio"
+                  href="/saas"
                   className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
@@ -180,6 +183,20 @@ export default function LoginPage() {
             </CardHeader>
 
             <CardContent className="space-y-6">
+              {registeredCompany && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">
+                  <div className="flex gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                      <p className="font-medium">Empresa creada correctamente</p>
+                      <p className="mt-0.5 text-xs text-emerald-200/80">
+                        Inicia sesion para completar el onboarding de {registeredCompany}.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-slate-200">

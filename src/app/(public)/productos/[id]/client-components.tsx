@@ -5,11 +5,13 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { MessageCircle, Mail, Phone, Share2, Package } from 'lucide-react'
+import { MessageCircle, Mail, Phone, Share2, Package, ShoppingCart } from 'lucide-react'
 import { toast } from 'sonner'
 import { resolveProductImageUrl } from '@/lib/images'
 import { PublicProduct } from '@/types/public'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { usePathname } from 'next/navigation'
+import { usePublicCart } from '@/hooks/use-public-cart'
 
 interface ProductGalleryProps {
   product: PublicProduct
@@ -148,6 +150,13 @@ interface ProductActionsProps {
 
 export function ProductActions({ product, isInStock }: ProductActionsProps) {
   const { settings } = useWebsiteSettings()
+  const pathname = usePathname()
+  const { addProduct } = usePublicCart()
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const tenantPrefix =
+    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito'].includes(pathSegments[1])
+      ? `/${pathSegments[0]}`
+      : ''
 
   const companyInfo = settings?.company_info
   const envSupportPhone = (
@@ -161,6 +170,17 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
   const phoneDisplay = companyInfo?.phone || envSupportPhone
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
   const emailDisplay = companyInfo?.email || envSupportEmail
+  const displayPrice = Number(product.offer_price || product.sale_price || 0)
+
+  const handleAddToCart = () => {
+    if (!isInStock) {
+      toast.error('Producto sin stock')
+      return
+    }
+
+    addProduct(product, displayPrice, 1)
+    toast.success('Producto agregado al carrito')
+  }
 
   const handleContact = (method: 'whatsapp' | 'email' | 'phone') => {
     const message = `Hola, me interesa el producto: ${product.name} (SKU: ${product.sku})`
@@ -214,6 +234,16 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
         <Button
           size="lg"
           className="w-full gap-2 rounded-xl"
+          onClick={handleAddToCart}
+          disabled={!isInStock}
+        >
+          <ShoppingCart className="h-4 w-4" />
+          Agregar al carrito
+        </Button>
+        <Button
+          size="lg"
+          variant="outline"
+          className="w-full gap-2 rounded-xl"
           onClick={() => handleContact('whatsapp')}
         >
           <MessageCircle className="h-4 w-4" />
@@ -241,7 +271,7 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
         </div>
         {!isInStock && (
           <Button asChild variant="secondary" className="w-full rounded-xl">
-            <Link href={product.category ? `/productos?category_id=${product.category.id}` : '/productos'}>
+            <Link href={product.category ? `${tenantPrefix}/productos?category_id=${product.category.id}` : `${tenantPrefix}/productos`}>
               Ver productos similares
             </Link>
           </Button>

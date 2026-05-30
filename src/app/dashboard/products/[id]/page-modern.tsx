@@ -106,7 +106,7 @@ export default function ProductDetailPageModern() {
       id: s.id,
       name: s.name,
       contact_name: s.contact_name || null,
-      contact_email: s.contact_email || null,
+      contact_email: s.email || null,
       phone: s.phone || null,
       address: s.address || null,
       tax_id: s.tax_id || null,
@@ -172,7 +172,7 @@ export default function ProductDetailPageModern() {
           quantity: m.quantity,
           previousStock: m.previous_stock,
           newStock: m.new_stock,
-          reason: m.reason || '',
+          reason: m.notes || '',
           date: m.created_at,
           user: m.user_id || 'Sistema'
         }))
@@ -627,16 +627,16 @@ export default function ProductDetailPageModern() {
             isOpen={editModalOpen}
             onClose={() => setEditModalOpen(false)}
             product={product ?? null}
-            categories={normalizedCategories}
-            brands={normalizedBrands}
-            suppliers={normalizedSuppliers}
+            categories={normalizedCategories as any[]}
+            brands={normalizedBrands as any[]}
+            suppliers={normalizedSuppliers as any[]}
             onSave={async (data) => {
               try {
                 // Transform dimensions to ensure compatibility
                 // Convertir ProductFormData a formato compatible con Supabase
                 const transformedData: Database['public']['Tables']['products']['Update'] = {
                   ...data,
-                  dimensions: data.dimensions as Json | null
+                  dimensions: data.dimensions as unknown as string | null
                 }
                 await updateProduct(product.id, transformedData)
                 setEditModalOpen(false)

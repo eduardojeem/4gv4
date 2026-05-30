@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -32,63 +31,30 @@ export function BranchAssignment({ userId, userRole }: BranchAssignmentProps) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const supabase = createClient()
-
   // Only show for staff roles
   const isStaffRole = ['vendedor', 'tecnico', 'admin'].includes(userRole)
-  if (!isStaffRole) return null
 
   const fetchData = useCallback(async () => {
+    if (!isStaffRole) return
     setLoading(true)
     try {
-      // Fetch branches
-      const { data: branchesData, error: branchesError } = await supabase
-        .from('branches')
-        .select('id, name, city, is_default')
-        .eq('is_active', true)
-        .order('is_default', { ascending: false })
-        .order('name', { ascending: true })
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/branches`, {
+        cache: 'no-store',
+      })
+      const payload = await response.json().catch(() => ({}))
 
-      if (branchesError) {
-        // Table might not exist
-        const msg = branchesError.message?.toLowerCase() || ''
-        if (msg.includes('does not exist') || msg.includes('relation')) {
-          setLoading(false)
-          return
-        }
-        throw branchesError
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudieron cargar sucursales')
       }
 
-      setBranches(branchesData || [])
-
-      // Fetch current assignments
-      const { data: assignmentsData, error: assignmentsError } = await supabase
-        .from('user_branch_assignments')
-        .select('branch_id, is_primary')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-
-      if (assignmentsError) {
-        const msg = assignmentsError.message?.toLowerCase() || ''
-        if (msg.includes('does not exist') || msg.includes('relation')) {
-          setLoading(false)
-          return
-        }
-        throw assignmentsError
-      }
-
-      setAssignments(
-        (assignmentsData || []).map(a => ({
-          branchId: a.branch_id,
-          isPrimary: a.is_primary,
-        }))
-      )
+      setBranches(payload.branches || [])
+      setAssignments(payload.assignments || [])
     } catch (error) {
       console.error('[BranchAssignment] Error loading:', error)
     } finally {
       setLoading(false)
     }
-  }, [supabase, userId])
+  }, [isStaffRole, userId])
 
   useEffect(() => {
     fetchData()
@@ -103,43 +69,24 @@ export function BranchAssignment({ userId, userRole }: BranchAssignmentProps) {
   const toggleBranch = async (branchId: string, checked: boolean) => {
     setSaving(true)
     try {
-      if (checked) {
-        // Assign user to branch
-        const isFirst = assignments.length === 0
-        const { error } = await supabase
-          .from('user_branch_assignments')
-          .upsert({
-            user_id: userId,
-            branch_id: branchId,
-            is_primary: isFirst, // First assignment is primary
-            is_active: true,
-          }, { onConflict: 'user_id,branch_id' })
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/branches`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          branchId,
+          assigned: checked,
+          primary: checked && assignments.length === 0,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
 
-        if (error) throw error
-
-        setAssignments(prev => [
-          ...prev,
-          { branchId, isPrimary: isFirst }
-        ])
-      } else {
-        // Remove assignment
-        const { error } = await supabase
-          .from('user_branch_assignments')
-          .update({ is_active: false })
-          .eq('user_id', userId)
-          .eq('branch_id', branchId)
-
-        if (error) throw error
-
-        setAssignments(prev => prev.filter(a => a.branchId !== branchId))
-
-        // If we removed the primary, make the first remaining one primary
-        const remaining = assignments.filter(a => a.branchId !== branchId)
-        if (isPrimary(branchId) && remaining.length > 0) {
-          await setPrimaryBranch(remaining[0].branchId)
-        }
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo actualizar sucursal')
       }
-    } catch (error: any) {
+
+      setBranches(payload.branches || branches)
+      setAssignments(payload.assignments || [])
+    } catch (error: unknown) {
       console.error('[BranchAssignment] Error toggling:', error)
       toast.error('Error al actualizar sucursal')
     } finally {
@@ -150,29 +97,29 @@ export function BranchAssignment({ userId, userRole }: BranchAssignmentProps) {
   const setPrimaryBranch = async (branchId: string) => {
     setSaving(true)
     try {
-      // The DB trigger handles unsetting other primaries
-      const { error } = await supabase
-        .from('user_branch_assignments')
-        .update({ is_primary: true })
-        .eq('user_id', userId)
-        .eq('branch_id', branchId)
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/branches`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ branchId }),
+      })
+      const payload = await response.json().catch(() => ({}))
 
-      if (error) throw error
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo cambiar sucursal principal')
+      }
 
-      setAssignments(prev =>
-        prev.map(a => ({
-          ...a,
-          isPrimary: a.branchId === branchId,
-        }))
-      )
+      setBranches(payload.branches || branches)
+      setAssignments(payload.assignments || [])
       toast.success('Sucursal principal actualizada')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[BranchAssignment] Error setting primary:', error)
       toast.error('Error al cambiar sucursal principal')
     } finally {
       setSaving(false)
     }
   }
+
+  if (!isStaffRole) return null
 
   if (loading) {
     return (

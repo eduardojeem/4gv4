@@ -1,8 +1,12 @@
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PublicProduct } from '@/types/public'
 import { resolveWholesaleAccessForUser } from '@/lib/auth/wholesale-access'
 import { SupabaseClient } from '@supabase/supabase-js'
+import { headers } from 'next/headers'
+import { getTenantSlugFromHost } from '@/lib/saas/tenant'
+import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
 
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 
@@ -10,6 +14,15 @@ import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 function sanitizeSearch(input: string): string {
   // Remove PostgREST special characters: . , ( ) : ! < > = & | %
   return input.replace(/[.,()!<>=&|%:*\\]/g, '').trim().slice(0, 100)
+}
+
+async function resolveServerPublicOrganization(supabase: SupabaseClient) {
+  const headerStore = await headers()
+  const tenantSlug =
+    headerStore.get('x-tenant-slug') ||
+    getTenantSlugFromHost(headerStore.get('host') ?? '')
+
+  return resolvePublicOrganizationBySlug(tenantSlug, supabase)
 }
 
 /** Resolve whether the current session belongs to a wholesale customer.
@@ -64,7 +77,8 @@ export type ProductsResponse = {
 const MAX_PRICE = PRODUCTS_MAX_PRICE
 
 export async function getPublicProducts(filters: ProductFilters): Promise<ProductsResponse> {
-  const supabase = await createClient()
+  const supabase = createAdminSupabase() as SupabaseClient
+  const organization = await resolveServerPublicOrganization(supabase)
 
   const {
     query: rawQuery = '',
@@ -81,6 +95,19 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
 
   const query = sanitizeSearch(rawQuery)
 
+  if (!organization) {
+    return {
+      products: [],
+      total: 0,
+      page,
+      perPage,
+      totalPages: 0,
+      brands: [],
+      priceRange: { min: 0, max: MAX_PRICE },
+      isWholesale: false,
+    }
+  }
+
   interface DBProduct {
     id: string
     name: string
@@ -89,6 +116,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     brand: string | null
     sale_price: number
     wholesale_price: number | null
+    has_offer: boolean | null
+    offer_price: number | null
     stock_quantity: number
     is_active: boolean
     featured: boolean
@@ -108,13 +137,16 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   }
 
   // Build query - only active products, never select wholesale_price for non-wholesale
-  const selectFields = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
-    : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+  // Typed as string to avoid TS2590 (union type too complex with long string literals)
+  const selectFields: string = isWholesale
+    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
 
-  let queryBuilder = supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let queryBuilder = (supabase as any)
     .from('products')
     .select(selectFields, { count: 'exact' })
+    .eq('organization_id', organization.id)
     .eq('is_active', true)
 
   // Filter visibility
@@ -175,8 +207,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
           isWholesale,
         }
       }
-    } catch {
-      // branch_inventory table might not exist — ignore filter
+    } catch (err) {
+      // branch_inventory table might not exist — log and ignore filter
+      console.warn('[getPublicProducts] Branch filter skipped:', err instanceof Error ? err.message : err)
     }
   }
 
@@ -218,6 +251,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       category: cat ? { id: cat.id, name: cat.name } : undefined,
       sale_price: p.sale_price as number,
       wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
+      has_offer: (p.has_offer as boolean) || false,
+      offer_price: (p.offer_price as number | null) ?? null,
       stock_quantity: (p.stock_quantity as number) ?? 0,
       in_stock: ((p.stock_quantity as number) ?? 0) > 0,
       is_active: p.is_active as boolean,
@@ -236,6 +271,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   const { data: productsData } = await supabase
     .from('products')
     .select('brand, brand_details:brands(name)')
+    .eq('organization_id', organization.id)
     .eq('is_active', true)
     // Also apply visibility filter to brands query to show relevant brands only
     .or(isWholesale ? 'visibility.in.(public,wholesale)' : 'visibility.eq.public')
@@ -253,6 +289,7 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   const { data: priceData } = await supabase
     .from('products')
     .select(priceCol)
+    .eq('organization_id', organization.id)
     .eq('is_active', true)
     .not(priceCol, 'is', null)
     // Also apply visibility filter
@@ -285,10 +322,17 @@ interface CategoryWithSub extends DBCategory {
 }
 
 export async function getPublicCategories(): Promise<CategoryWithSub[]> {
-  const supabase = await createClient()
+  const supabase = createAdminSupabase() as SupabaseClient
+  const organization = await resolveServerPublicOrganization(supabase)
+
+  if (!organization) {
+    return []
+  }
+
   const { data } = await supabase
     .from('categories')
     .select('id, name, parent_id')
+    .eq('organization_id', organization.id)
     .order('name')
   
   const categories = (data as DBCategory[]) || []
@@ -315,7 +359,10 @@ export async function getPublicCategories(): Promise<CategoryWithSub[]> {
 }
 
 export async function getPublicProduct(id: string, isWholesaleOverride?: boolean) {
-  const supabase = await createClient()
+  const supabase = createAdminSupabase() as SupabaseClient
+  const organization = await resolveServerPublicOrganization(supabase)
+
+  if (!organization) return null
 
   // Clean ID
   const cleanId = decodeURIComponent(id).trim()
@@ -327,14 +374,18 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     isWholesale = result.isWholesale
   }
 
-  const selectFields = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
-    : 'id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+  // Typed as string to avoid TS2590 with long string literal unions
+  const selectFields: string = isWholesale
+    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
 
-  let queryBuilder = supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let queryBuilder = (supabase as any)
     .from('products')
     .select(selectFields)
     .eq('id', cleanId)
+    .eq('organization_id', organization.id)
+    .eq('is_active', true)
 
   // Visibility check is tricky with single() because if filtered out it returns null/error.
   // We can't use .or() easily here for filtering visibility because it's an AND condition with ID.
@@ -352,7 +403,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
   if (error || !data) return null
 
   // Transform
-  const p = data as unknown as { id: string; name: string; sku: string; description: string; brand: string; sale_price: number; wholesale_price?: number; stock_quantity: number; is_active: boolean; featured: boolean; image_url: string | null; images: string[] | null; unit_measure: string | null; barcode: string | null; category: { id: string; name: string } | { id: string; name: string }[] | null; brand_details: { name: string }[] | null }
+  const p = data as unknown as { id: string; name: string; sku: string; description: string; brand: string; sale_price: number; wholesale_price?: number; has_offer?: boolean; offer_price?: number | null; stock_quantity: number; is_active: boolean; featured: boolean; image_url: string | null; images: string[] | null; unit_measure: string | null; barcode: string | null; category: { id: string; name: string } | { id: string; name: string }[] | null; brand_details: { name: string }[] | null }
   const category = Array.isArray(p.category) ? p.category[0] : p.category
   const cat = category as { id: string; name: string } | null
 
@@ -365,6 +416,8 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     category: cat ? { id: cat.id, name: cat.name } : undefined,
     sale_price: p.sale_price,
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
+    has_offer: p.has_offer || false,
+    offer_price: p.offer_price ?? null,
     stock_quantity: (p.stock_quantity as number) ?? 0,
     in_stock: ((p.stock_quantity as number) ?? 0) > 0,
     is_active: p.is_active,
@@ -399,14 +452,17 @@ export interface BranchStockInfo {
  * Returns empty array if branch_inventory table doesn't exist yet.
  */
 export async function getProductBranchStock(productId: string): Promise<BranchStockInfo[]> {
-  const supabase = await createClient()
+  const supabase = createAdminSupabase() as SupabaseClient
+  const organization = await resolveServerPublicOrganization(supabase)
+
+  if (!organization) return []
 
   try {
     const { data, error } = await supabase
       .from('branch_inventory')
       .select(`
         stock_quantity,
-        branch:branches(id, name, city, phone, is_active)
+        branch:branches(id, organization_id, name, city, phone, is_active)
       `)
       .eq('product_id', productId)
 
@@ -425,6 +481,7 @@ export async function getProductBranchStock(productId: string): Promise<BranchSt
     // Filter only active branches and map to public-safe format
     return data
       .filter((row: any) => row.branch?.is_active === true)
+      .filter((row: any) => row.branch?.organization_id === undefined || row.branch?.organization_id === organization.id)
       .map((row: any) => ({
         branchId: row.branch.id,
         branchName: row.branch.name,
@@ -450,12 +507,16 @@ export interface PublicBranch {
 }
 
 export async function getPublicBranches(): Promise<PublicBranch[]> {
-  const supabase = await createClient()
+  const supabase = createAdminSupabase() as SupabaseClient
+  const organization = await resolveServerPublicOrganization(supabase)
+
+  if (!organization) return []
 
   try {
     const { data, error } = await supabase
       .from('branches')
       .select('id, name, city')
+      .eq('organization_id', organization.id)
       .eq('is_active', true)
       .order('is_default', { ascending: false })
       .order('name', { ascending: true })
@@ -490,12 +551,16 @@ export interface BranchLocationInfo {
 }
 
 export async function getPublicBranchLocations(): Promise<BranchLocationInfo[]> {
-  const supabase = await createClient()
+  const supabase = createAdminSupabase() as SupabaseClient
+  const organization = await resolveServerPublicOrganization(supabase)
+
+  if (!organization) return []
 
   try {
     const { data, error } = await supabase
       .from('branches')
       .select('id, name, address, city, phone, email, manager_name, is_default')
+      .eq('organization_id', organization.id)
       .eq('is_active', true)
       .order('is_default', { ascending: false })
       .order('name', { ascending: true })

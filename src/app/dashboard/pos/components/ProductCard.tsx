@@ -1,13 +1,14 @@
-﻿'use client'
+'use client'
 
 import React, { memo } from 'react'
-import { Plus, Minus, Star, Package, ShoppingCart } from 'lucide-react'
+import { Plus, Star, Package, ShoppingCart, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/currency'
 import { formatStockStatus } from '@/lib/inventory-manager'
 import { resolveProductImageUrl } from '@/lib/images'
+import { cn } from '@/lib/utils'
 import type { Product } from '@/types/product-unified'
 
 interface ProductCardProps {
@@ -64,10 +65,20 @@ export const ProductCard = memo(({
     }
   }
 
+  // Stock bar percentage
+  const stockPercent = Math.min(100, Math.max(0, (stock / Math.max(minStock * 3, 1)) * 100))
+  const stockBarColor = stockStatus?.status === 'out' ? 'bg-red-500' 
+    : stockStatus?.status === 'critical' ? 'bg-orange-500' 
+    : stockStatus?.status === 'low' ? 'bg-amber-400' 
+    : 'bg-emerald-500'
+
   if (viewMode === 'list') {
     return (
       <Card 
-        className={`transition-all duration-200 hover:shadow-md ${isOutOfStock ? 'opacity-50' : ''}`}
+        className={cn(
+          "transition-all duration-200 hover:shadow-md border-border/60",
+          isOutOfStock && 'opacity-50'
+        )}
         onKeyDown={handleKeyDown}
         tabIndex={0}
         role="button"
@@ -92,11 +103,12 @@ export const ProductCard = memo(({
                 {showStock && stockStatus && (
                   <Badge 
                     variant="outline" 
-                    className={`h-5 px-1.5 text-[10px] font-normal border-0 ${
+                    className={cn(
+                      "h-5 px-1.5 text-[10px] font-normal border-0",
                       stockStatus.status === 'out' || stockStatus.status === 'critical' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 
                       stockStatus.status === 'low' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 
                       'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                    }`}
+                    )}
                   >
                     {stock} un.
                   </Badge>
@@ -160,128 +172,125 @@ export const ProductCard = memo(({
     )
   }
 
-  // Grid View - Optimized Layout
+  // Grid View — Premium Redesign
   return (
     <Card 
-      className={`
-        relative overflow-hidden transition-all duration-200 
-        hover:shadow-lg hover:-translate-y-0.5 cursor-pointer group 
-        focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2
-        bg-card border-border/60
-        ${isOutOfStock ? 'opacity-60 grayscale' : ''}
-        ${cartQuantity > 0 ? 'ring-2 ring-primary ring-offset-1' : ''}
-      `}
+      className={cn(
+        "relative overflow-hidden transition-all duration-200 cursor-pointer group",
+        "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+        "bg-card border-border/50 rounded-xl",
+        "hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 hover:border-primary/30",
+        isOutOfStock && 'opacity-50 grayscale pointer-events-none',
+        cartQuantity > 0 && 'ring-2 ring-primary/70 ring-offset-1 shadow-md shadow-primary/10'
+      )}
       onClick={() => !isOutOfStock && addToCart(product)}
       onKeyDown={handleKeyDown}
       tabIndex={0}
       role="button"
       aria-label={`Agregar ${product.name} al carrito. Precio: ${formatCurrency(appliedPrice)}.`}
     >
-      {/* Badge Flotante de Stock (Solo visible si es bajo o critico) */}
+      {/* Badge: Stock bajo/critico */}
       {showStock && stockStatus && (stockStatus.status === 'low' || stockStatus.status === 'critical' || stockStatus.status === 'out') && (
         <div className="absolute top-2 right-2 z-10">
           <Badge 
             variant="secondary"
-            className={`
-              shadow-sm border-0 font-medium px-2 py-0.5 text-[10px]
-              ${stockStatus.status === 'out' ? 'bg-destructive text-destructive-foreground' : 
-                stockStatus.status === 'critical' ? 'bg-orange-500 text-white' : 
-                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'}
-            `}
+            className={cn(
+              "shadow-sm border-0 font-semibold px-2 py-0.5 text-[10px] backdrop-blur-sm",
+              stockStatus.status === 'out' ? 'bg-red-500/90 text-white' : 
+                stockStatus.status === 'critical' ? 'bg-orange-500/90 text-white' : 
+                'bg-amber-100/90 text-amber-800 dark:bg-amber-900/80 dark:text-amber-200'
+            )}
           >
+            <AlertTriangle className="h-2.5 w-2.5 mr-1" />
             {stockStatus.message}
           </Badge>
         </div>
       )}
 
-      {/* Badge de Cantidad en Carrito */}
+      {/* Badge: Cantidad en carrito */}
       {cartQuantity > 0 && (
-        <div className="absolute top-2 left-2 z-10 animate-in zoom-in duration-200">
-          <Badge className="bg-primary text-primary-foreground font-bold shadow-md h-6 min-w-[1.5rem] flex items-center justify-center p-1">
+        <div className="absolute top-2 left-2 z-10 animate-in zoom-in-75 duration-200">
+          <Badge className="bg-primary text-primary-foreground font-bold shadow-lg h-7 min-w-[1.75rem] flex items-center justify-center text-xs rounded-lg">
             {cartQuantity}
           </Badge>
         </div>
       )}
 
+      {/* Featured star */}
+      {product.featured && (
+        <div className="absolute top-2 left-2 z-10">
+          {cartQuantity === 0 && <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 drop-shadow-sm" />}
+        </div>
+      )}
+
       <CardContent className="p-0 h-full flex flex-col">
-        {/* Imagen / Icono Grande */}
-        <div className="h-24 bg-muted/20 flex items-center justify-center text-5xl border-b border-border/40 group-hover:bg-muted/40 transition-colors overflow-hidden">
+        {/* Imagen — más grande */}
+        <div className="h-28 sm:h-32 bg-gradient-to-b from-muted/30 to-muted/10 flex items-center justify-center border-b border-border/30 overflow-hidden relative">
           {imageSrc ? (
-            <img src={imageSrc} alt={product.name} className="w-full h-full object-cover" />
+            <img 
+              src={imageSrc} 
+              alt={product.name} 
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+            />
           ) : (
-            <Package className="h-10 w-10 text-muted-foreground/40" />
+            <Package className="h-10 w-10 text-muted-foreground/25 sm:h-12 sm:w-12" />
           )}
         </div>
         
-        <div className="p-3 flex flex-col flex-1 gap-2">
+        <div className="p-3 flex flex-col flex-1 gap-1.5">
           {/* Titulo y Categoria */}
-          <div>
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold text-sm leading-tight line-clamp-2 text-foreground/90 group-hover:text-primary transition-colors">
-                {product.name}
-              </h3>
-              {product.featured && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500 flex-shrink-0 mt-0.5" />}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-1 truncate">
+          <div className="flex-1">
+            <h3 className="font-semibold text-[13px] leading-tight line-clamp-2 text-foreground group-hover:text-primary transition-colors sm:text-sm">
+              {product.name}
+            </h3>
+            <p className="text-[10px] text-muted-foreground mt-1 truncate">
               {product.category?.name || product.category_id}
             </p>
           </div>
 
-          <div className="mt-auto pt-2 border-t border-border/40 flex flex-col gap-2">
-            {/* Precios */}
-            <div className="flex items-end justify-between">
+          {/* Stock bar */}
+          {showStock && stockStatus && !isOutOfStock && (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden">
+                <div 
+                  className={cn("h-full rounded-full transition-all duration-500", stockBarColor)} 
+                  style={{ width: `${stockPercent}%` }} 
+                />
+              </div>
+              <span className="text-[9px] text-muted-foreground font-medium tabular-nums shrink-0">
+                {stock}
+              </span>
+            </div>
+          )}
+
+          {/* Precios + Botón Agregar (SIEMPRE visible) */}
+          <div className="pt-2 border-t border-border/30">
+            <div className="flex items-end justify-between gap-2">
               <div className="flex flex-col">
                 {isWholesale && (
                   <span className="text-[10px] text-muted-foreground line-through leading-none mb-0.5">
                     {formatCurrency(price)}
                   </span>
                 )}
-                <span className="text-lg font-bold text-primary leading-none">
+                <span className="text-base font-bold text-primary leading-none sm:text-lg">
                   {formatCurrency(appliedPrice)}
                 </span>
               </div>
-              
-              {/* Indicador de stock sutil si es normal */}
-              {showStock && stockStatus && stockStatus.status === 'ok' && (
-                <span className="text-[10px] text-muted-foreground font-medium bg-muted/50 px-1.5 py-0.5 rounded-sm">
-                  {stock} un.
-                </span>
-              )}
-            </div>
 
-            {/* Botones de Accion Rapida (Visibles al hover en desktop, siempre en mobile) */}
-            <div className="grid grid-cols-2 gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-all duration-200 translate-y-0 sm:translate-y-2 sm:group-hover:translate-y-0 sm:group-focus-within:translate-y-0">
-              {onQuickAdd && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={(e) => { e.stopPropagation(); handleQuickAdd(1); }}
-                  disabled={isOutOfStock}
-                  className="h-7 text-xs border-primary/20 hover:bg-primary/5 hover:text-primary"
-                >
-                  +1
-                </Button>
-              )}
+              {/* Botón siempre visible */}
               <Button
                 onClick={(e) => { e.stopPropagation(); addToCart(product); }}
                 disabled={isOutOfStock}
                 size="sm"
-                className="h-7 text-xs bg-primary hover:bg-primary/90"
+                className={cn(
+                  "h-8 px-3 text-xs font-semibold rounded-lg shadow-sm transition-all",
+                  cartQuantity > 0 
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                    : "bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
+                )}
               >
-                Agregar
-              </Button>
-            </div>
-            
-            {/* Fallback para mobile/touch donde no hay hover */}
-            <div className="lg:hidden w-full">
-               <Button
-                onClick={(e) => { e.stopPropagation(); addToCart(product); }}
-                disabled={isOutOfStock}
-                size="sm"
-                variant="secondary"
-                className="w-full h-8 text-xs font-medium"
-              >
-                {isOutOfStock ? 'Agotado' : 'Agregar'}
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                {isOutOfStock ? 'Agotado' : cartQuantity > 0 ? `+1` : 'Agregar'}
               </Button>
             </div>
           </div>
@@ -292,5 +301,3 @@ export const ProductCard = memo(({
 })
 
 ProductCard.displayName = 'ProductCard'
-
-

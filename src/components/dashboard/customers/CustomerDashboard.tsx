@@ -120,6 +120,8 @@ export function CustomerDashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [compactMode, setCompactMode] = useState(true)
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [showImportDialog, setShowImportDialog] = useState(false)
   
   // Estados para navegación
   const [currentView, setCurrentView] = useState<ViewState>('list')

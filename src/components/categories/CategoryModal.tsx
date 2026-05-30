@@ -11,8 +11,10 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { validateCategoryInput } from '@/hooks/useCategories'
 import type { Category } from '@/hooks/useCategories'
-import { Loader2, FolderOpen, FolderTree, ChevronRight } from 'lucide-react'
+import { Loader2, FolderOpen, FolderTree, ChevronRight, Sparkles, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useGlobalCategorySuggest } from '@/hooks/useGlobalCategorySuggest'
+import type { GlobalCategorySuggestion } from '@/hooks/useGlobalCategorySuggest'
 
 interface CategoryModalProps {
     isOpen: boolean
@@ -45,6 +47,14 @@ export function CategoryModal({
     const [isActive, setIsActive] = useState(true)
     const [errors, setErrors] = useState<Record<string, string>>({})
     const [submitting, setSubmitting] = useState(false)
+    // Mapeo a categoría global (opcional, mejora el marketplace)
+    const [globalCategoryId, setGlobalCategoryId] = useState<string | null>(null)
+    const [globalCategoryName, setGlobalCategoryName] = useState<string>('')
+    const isNewCategory = !category
+
+    // Sugerencias de categoría global (solo al crear)
+    const { suggestions, isLoading: suggestLoading, dismiss: dismissSuggestions } =
+      useGlobalCategorySuggest(name, isNewCategory && isOpen)
 
     useEffect(() => {
         if (isOpen) {
@@ -61,6 +71,8 @@ export function CategoryModal({
             }
             setErrors({})
             setSubmitting(false)
+            setGlobalCategoryId(null)
+            setGlobalCategoryName('')
         }
     }, [isOpen, category, initialParentId])
 
@@ -77,7 +89,9 @@ export function CategoryModal({
                 name: name.trim(),
                 description: description.trim(),
                 parent_id: parentId === 'none' ? null : parentId,
-                is_active: isActive
+                is_active: isActive,
+                // @ts-expect-error — campo extendido para mapeo global
+                global_category_id: globalCategoryId ?? null,
             })
             onClose()
         } catch {
@@ -85,6 +99,17 @@ export function CategoryModal({
         } finally {
             setSubmitting(false)
         }
+    }
+
+    const handlePickSuggestion = (s: GlobalCategorySuggestion) => {
+        setGlobalCategoryId(s.id)
+        setGlobalCategoryName(s.name)
+        dismissSuggestions()
+    }
+
+    const handleClearGlobal = () => {
+        setGlobalCategoryId(null)
+        setGlobalCategoryName('')
     }
 
     // Prevent circular hierarchy
@@ -148,6 +173,75 @@ export function CategoryModal({
                             autoFocus
                         />
                         {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+
+                        {/* Panel de sugerencias de categoría global */}
+                        {isNewCategory && !globalCategoryId && suggestions.length > 0 && (
+                            <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-800 dark:bg-blue-950/30">
+                                <div className="mb-2 flex items-center justify-between">
+                                    <p className="flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-300">
+                                        <Sparkles className="h-3.5 w-3.5" />
+                                        ¿Querés usar una categoría del marketplace?
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={dismissSuggestions}
+                                        className="text-blue-400 hover:text-blue-600"
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {suggestions.map((s) => (
+                                        <button
+                                            key={s.id}
+                                            type="button"
+                                            onClick={() => handlePickSuggestion(s)}
+                                            className={cn(
+                                                'flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
+                                                'border-blue-200 bg-white text-blue-700 hover:border-blue-400 hover:bg-blue-50',
+                                                'dark:border-blue-700 dark:bg-slate-900 dark:text-blue-300'
+                                            )}
+                                        >
+                                            {s.parent_name ? (
+                                                <span className="text-blue-400">{s.parent_name} /</span>
+                                            ) : null}
+                                            {s.name}
+                                            <span className="text-blue-300">
+                                                {Math.round(s.similarity * 100)}%
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="mt-1.5 text-[10px] text-blue-500/70 dark:text-blue-400/60">
+                                    Asociar tu categoría al marketplace mejora la visibilidad de tus productos.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Categoría global seleccionada */}
+                        {isNewCategory && globalCategoryId && (
+                            <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-950/30">
+                                <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                                    <Sparkles className="h-3.5 w-3.5" />
+                                    Vinculada al marketplace como:
+                                    <span className="font-semibold">{globalCategoryName}</span>
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={handleClearGlobal}
+                                    className="text-emerald-400 hover:text-emerald-600"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        )}
+
+                        {isNewCategory && suggestLoading && (
+                            <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Buscando similitudes en el marketplace…
+                            </p>
+                        )}
                     </div>
 
                     {/* Description */}

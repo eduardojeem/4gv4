@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
   ShoppingCart,
+  ShoppingBag,
   Package,
   Users,
   Wrench,
@@ -28,6 +29,7 @@ type NavItem = {
 const MOBILE_NAV_ITEMS: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor', 'tecnico'] },
   { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart, roles: ['admin', 'vendedor'] },
+  { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, roles: ['admin', 'vendedor'] },
   { name: 'Productos', href: '/dashboard/products', icon: Package, roles: ['admin', 'vendedor'] },
   { name: 'Clientes', href: '/dashboard/customers', icon: Users, roles: ['admin', 'vendedor'] },
   { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, roles: ['admin', 'vendedor', 'tecnico'] },

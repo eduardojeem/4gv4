@@ -1,8 +1,8 @@
 'use client'
 
 import { useAuth } from '@/contexts/auth-context'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { Loader2, ShieldAlert } from 'lucide-react'
 
 interface DashboardGuardProps {
@@ -19,25 +19,77 @@ interface DashboardGuardProps {
 export function DashboardGuard({ children }: DashboardGuardProps) {
   const { user, loading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
+  const [checkingOnboarding, setCheckingOnboarding] = useState(false)
 
   const isInactiveUser = user?.status === 'inactive' || user?.status === 'suspended'
   const isAccessDenied = Boolean(user && isInactiveUser)
+  const canRequireOnboarding = Boolean(
+    user &&
+    !isInactiveUser &&
+    user.role !== 'cliente' &&
+    user.role !== 'super_admin' &&
+    !pathname.startsWith('/dashboard/onboarding')
+  )
 
   useEffect(() => {
     if (loading) return
     if (!user) {
       router.replace('/login')
     } else if (user.role === 'cliente') {
-      router.replace('/inicio')
+      router.replace('/default/inicio')
     }
   }, [user, loading, router])
 
-  if (loading) {
+  useEffect(() => {
+    if (loading || !canRequireOnboarding) {
+      setCheckingOnboarding(false)
+      return
+    }
+
+    const controller = new AbortController()
+
+    async function checkOnboardingStatus() {
+      try {
+        setCheckingOnboarding(true)
+        const response = await fetch('/api/onboarding/status', {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+
+        if (!response.ok) return
+
+        const payload = await response.json() as { needsOnboarding?: boolean }
+
+        if (payload.needsOnboarding) {
+          router.replace('/dashboard/onboarding')
+        }
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Error checking onboarding status:', error)
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setCheckingOnboarding(false)
+        }
+      }
+    }
+
+    checkOnboardingStatus()
+
+    return () => {
+      controller.abort()
+    }
+  }, [canRequireOnboarding, loading, router])
+
+  if (loading || checkingOnboarding) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Cargando...</p>
+          <p className="text-muted-foreground">
+            {checkingOnboarding ? 'Validando configuracion inicial...' : 'Cargando...'}
+          </p>
         </div>
       </div>
     )

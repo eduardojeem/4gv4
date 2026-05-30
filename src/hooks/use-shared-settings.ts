@@ -118,10 +118,27 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
 // Cache
 // ============================================================================
 
-const STORAGE_KEY = 'app-shared-settings'
+const STORAGE_KEY_PREFIX = 'app-shared-settings'
 let sharedSettingsCache: SharedSettings | null = null
 let cacheTimestamp = 0
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+function getStorageKey(): string {
+  try {
+    // Scope localStorage cache to the authenticated user so different users
+    // on the same browser never see each other's company data.
+    const supabaseKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+    if (supabaseKey) {
+      const raw = localStorage.getItem(supabaseKey)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        const userId = parsed?.user?.id
+        if (userId) return `${STORAGE_KEY_PREFIX}-${userId}`
+      }
+    }
+  } catch { /* ignore */ }
+  return STORAGE_KEY_PREFIX
+}
 
 function isCacheFresh(): boolean {
   return sharedSettingsCache !== null && (Date.now() - cacheTimestamp) < CACHE_TTL
@@ -130,9 +147,9 @@ function isCacheFresh(): boolean {
 function getInitialSettings(): SharedSettings {
   if (sharedSettingsCache) return sharedSettingsCache
 
-  // Try localStorage on first load
+  // Try localStorage on first load (scoped per user)
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
+    const saved = localStorage.getItem(getStorageKey())
     if (saved) {
       const parsed = JSON.parse(saved)
       sharedSettingsCache = parsed
@@ -220,23 +237,38 @@ export function useSharedSettings() {
     setError(null)
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('system_settings')
-        .select('*')
-        .eq('id', 'system')
-        .maybeSingle()
+      // Fetch system_settings + org-scoped company data in parallel.
+      // system_settings is a global table (single row 'system'), so we overlay
+      // the company fields with org-scoped data from organization_settings / branches.
+      const [
+        { data, error: fetchError },
+        { data: orgSettings },
+        { data: defaultBranch },
+      ] = await Promise.all([
+        supabase.from('system_settings').select('*').eq('id', 'system').maybeSingle(),
+        supabase.from('organization_settings').select('display_name').maybeSingle(),
+        supabase.from('branches').select('phone, email, address, city').eq('is_default', true).maybeSingle(),
+      ])
 
       if (fetchError) throw fetchError
 
       if (data) {
         const mapped = mapToAppSettings(data as SystemSettingsRow)
+
+        // Overlay company fields with org-scoped sources (higher priority than global system_settings)
+        if (orgSettings?.display_name) mapped.companyName = orgSettings.display_name
+        if (defaultBranch?.email) mapped.companyEmail = defaultBranch.email
+        if (defaultBranch?.phone) mapped.companyPhone = defaultBranch.phone
+        if (defaultBranch?.address) mapped.companyAddress = defaultBranch.address
+        if (defaultBranch?.city) mapped.city = defaultBranch.city
+
         sharedSettingsCache = mapped
         cacheTimestamp = Date.now()
         setSettings(mapped)
         setOriginalSettings(mapped)
         originalRef.current = JSON.stringify(mapped)
         setSettingsSource('remote')
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
+        localStorage.setItem(getStorageKey(), JSON.stringify(mapped))
         return
       }
 
@@ -253,7 +285,7 @@ export function useSharedSettings() {
       setError(`Error al cargar configuraciones: ${error.message}`)
 
       // Fallback to localStorage
-      const saved = localStorage.getItem(STORAGE_KEY)
+      const saved = localStorage.getItem(getStorageKey())
       if (saved) {
         try {
           const parsed = JSON.parse(saved)
@@ -302,7 +334,7 @@ export function useSharedSettings() {
             setOriginalSettings(mapped)
             originalRef.current = JSON.stringify(mapped)
             setSettingsSource('remote')
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
+            localStorage.setItem(getStorageKey(), JSON.stringify(mapped))
           }
         }
       )
@@ -353,14 +385,35 @@ export function useSharedSettings() {
       }
 
       const mapped = mapToAppSettings(persistedSettings as SystemSettingsRow)
-      sharedSettingsCache = mapped
+
+      // Sync company fields back to org-scoped tables (fire-and-forget, non-blocking)
+      fetch('/api/admin/website/sync-company', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: settings.companyName,
+          email: settings.companyEmail,
+          phone: settings.companyPhone,
+          address: settings.companyAddress,
+        }),
+      }).catch(() => { /* non-blocking */ })
+
+      // Apply org-scoped company values to what we store in state/cache
+      const withOrgData = { ...mapped }
+      if (settings.companyName) withOrgData.companyName = settings.companyName
+      if (settings.companyEmail) withOrgData.companyEmail = settings.companyEmail
+      if (settings.companyPhone) withOrgData.companyPhone = settings.companyPhone
+      if (settings.companyAddress) withOrgData.companyAddress = settings.companyAddress
+      if (settings.city) withOrgData.city = settings.city
+
+      sharedSettingsCache = withOrgData
       cacheTimestamp = Date.now()
-      setSettings(mapped)
-      setOriginalSettings(mapped)
-      originalRef.current = JSON.stringify(mapped)
+      setSettings(withOrgData)
+      setOriginalSettings(withOrgData)
+      originalRef.current = JSON.stringify(withOrgData)
       setError(null)
       setSettingsSource('remote')
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped))
+      localStorage.setItem(getStorageKey(), JSON.stringify(withOrgData))
 
       return { success: true }
     } catch (err: unknown) {

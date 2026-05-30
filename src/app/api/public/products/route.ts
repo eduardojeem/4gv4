@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
+import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -32,11 +34,21 @@ export async function GET(request: NextRequest) {
     const perPage = Math.min(parseInt(searchParams.get('per_page') || '20'), 50)
     const sort = searchParams.get('sort') || 'name'
 
-    const supabase = await createClient()
+    const supabase = createAdminSupabase()
+    const organization = await resolvePublicOrganization(request, supabase)
 
-    const { data: { session } } = await supabase.auth.getSession()
+    if (!organization) {
+      return NextResponse.json(
+        { success: false, error: 'Organization not found' },
+        { status: 404 }
+      )
+    }
+
+    const authSupabase = await createClient()
+
+    const { data: { session } } = await authSupabase.auth.getSession()
     const { isWholesale } = await resolveWholesaleStatus({
-      supabase,
+      supabase: authSupabase,
       user: session?.user ?? null,
     })
 
@@ -47,6 +59,7 @@ export async function GET(request: NextRequest) {
 
     let queryBuilder = supabase.from('products')
       .select(selectFields as '*', { count: 'exact' })
+      .eq('organization_id', organization.id)
       .eq('is_active', true)
 
     // Apply visibility by customer type.
@@ -148,6 +161,7 @@ export async function GET(request: NextRequest) {
         page,
         per_page: perPage,
         total_pages: Math.ceil((count || 0) / perPage),
+        organization: toPublicOrganizationPayload(organization),
       },
     })
     response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=60')

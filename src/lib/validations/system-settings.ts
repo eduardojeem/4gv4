@@ -156,7 +156,7 @@ export function mapDBToSettings(dbData: z.infer<typeof SystemSettingsDBSchema>):
     currency: dbData.currency as 'PYG' | 'USD' | 'EUR' | 'MXN',
     taxRate: typeof dbData.tax_rate === 'string' ? parseFloat(dbData.tax_rate) : dbData.tax_rate,
     theme: (dbData.theme as 'light' | 'dark' | 'system') || 'system',
-    primaryColor: dbData.primary_color || 'blue',
+    primaryColor: (dbData.primary_color || 'blue') as import('@/lib/theme/color-schemes').SystemColorScheme,
     dateFormat: dbData.date_format || 'DD/MM/YYYY',
     timeZone: dbData.time_zone || 'America/Asuncion',
     language: dbData.language || 'es',

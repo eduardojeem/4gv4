@@ -20,6 +20,7 @@ import {
   Package,
   Truck,
   ShoppingCart,
+  ShoppingBag,
   Wrench,
   BarChart3,
   Settings,
@@ -31,7 +32,8 @@ import {
   Percent,
   Building2,
   Smartphone,
-  LogOut
+  LogOut,
+  Rocket
 } from 'lucide-react'
 
 type NavItem = { name: string; href: string; icon: LucideIcon; roles: UserRole[]; description?: string }
@@ -41,6 +43,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     label: 'Principal',
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor', 'tecnico'] },
+      { name: 'Onboarding', href: '/dashboard/onboarding', icon: Rocket, roles: ['admin', 'vendedor', 'tecnico'], description: 'Configuracion inicial' },
       { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, roles: ['admin', 'vendedor'] },
       { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, roles: ['admin', 'vendedor'] },
       { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor'] },
@@ -51,6 +54,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { name: 'Clientes', href: '/dashboard/customers', icon: Users, roles: ['admin', 'vendedor'] },
       { name: 'Créditos', href: '/dashboard/credits', icon: CreditCard, roles: ['admin', 'vendedor'] },
+      { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, roles: ['admin', 'vendedor'] },
       { name: 'Productos', href: '/dashboard/products', icon: Package, roles: ['admin', 'vendedor'] },
       { name: 'Marcas', href: '/dashboard/brands', icon: Building2, roles: ['admin'] },
       { name: 'Categorías', href: '/dashboard/categories', icon: Tag, roles: ['admin', 'vendedor'] },
@@ -75,6 +79,7 @@ export const Sidebar = memo(function Sidebar() {
   const { sidebarCollapsed: collapsed, toggleSidebar } = useDashboardLayout()
   const { user, signOut } = useAuth()
   const [sidebarBadges, setSidebarBadges] = useState({ repairs: 0, lowStock: 0 })
+  const [onboardingDone, setOnboardingDone] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
 
@@ -100,6 +105,17 @@ export const Sidebar = memo(function Sidebar() {
     return () => clearInterval(interval)
   }, [])
 
+  // Check onboarding completion once on mount to hide the sidebar item when done
+  useEffect(() => {
+    if (!config.supabase.isConfigured) return
+    fetch('/api/onboarding/status')
+      .then(r => r.json())
+      .catch(() => null)
+      .then((data: { completed?: boolean } | null) => {
+        if (data?.completed) setOnboardingDone(true)
+      })
+  }, [])
+
   const handleQuickLogout = async () => {
     setIsSigningOut(true)
     try {
@@ -116,6 +132,8 @@ export const Sidebar = memo(function Sidebar() {
 
   const filteredGroups = useMemo(() => {
     const filterFn = (item: NavItem) => {
+      // Hide onboarding link once setup is complete
+      if (item.href === '/dashboard/onboarding' && onboardingDone) return false
       // Always enforce role restrictions — never bypass in dev
       if (userRole === 'super_admin') return item.roles.includes('admin') || item.roles.includes('super_admin')
       return item.roles.includes(userRole)
@@ -124,7 +142,7 @@ export const Sidebar = memo(function Sidebar() {
       label: group.label,
       items: group.items.filter(filterFn)
     })).filter(group => group.items.length > 0)
-  }, [userRole])
+  }, [userRole, onboardingDone])
 
   return (
     <>

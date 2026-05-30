@@ -9,6 +9,7 @@ import { GlobalSearch } from '@/components/ui/global-search'
 import { NotificationBell } from '@/components/ui/notification-bell'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { BranchSelector } from '@/components/branches/branch-selector'
+import { OrganizationSwitcher } from '@/components/saas/organization-switcher'
 import { Menu, MoreVertical, Download, Upload, PlusCircle, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useAuth } from '@/contexts/auth-context'
@@ -187,6 +188,7 @@ export function AdminShell({ active, onNavigate, topRightActions, onContextActio
                 onFocus={() => setSearchOpen(true)}
                 readOnly
               />
+              <OrganizationSwitcher compact={compact} />
               <BranchSelector compact={compact} />
               <ThemeToggle />
               {topRightActions}

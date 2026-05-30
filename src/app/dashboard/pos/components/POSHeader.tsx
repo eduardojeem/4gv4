@@ -36,6 +36,7 @@ interface POSHeaderProps {
   onOpenMovements: () => void
   onOpenRegister?: () => void
   isRegisterOpen?: boolean
+  canManageRegisters?: boolean
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   children?: React.ReactNode;
@@ -53,6 +54,7 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
   onOpenMovements,
   onOpenRegister,
   isRegisterOpen,
+  canManageRegisters = false,
   isFullscreen,
   onToggleFullscreen,
   children,
@@ -74,8 +76,14 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
         {children && <div className="h-8 w-px bg-border/60" />}
 
         <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1 bg-muted/40 px-2 py-1 md:px-3 md:py-1.5 rounded-md border border-border/40">
-            <span className="hidden md:inline text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Caja Activa</span>
+        <div className="flex items-center gap-1.5 bg-muted/40 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border border-border/40">
+            {isRegisterOpen && (
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+            )}
+            <span className="hidden md:inline text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{isRegisterOpen ? 'Caja Abierta' : 'Caja Cerrada'}</span>
             <div className="hidden md:block h-2 w-px bg-border/50" />
             
             <div className="flex items-center gap-2">
@@ -111,7 +119,7 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
                 </Select>
               )}
               
-              {!mobileCompact && (
+              {!mobileCompact && canManageRegisters && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -157,10 +165,12 @@ export const POSHeader: React.FC<POSHeaderProps> = React.memo(({
                 <GSIcon className="h-4 w-4 mr-2" />
                 {isRegisterOpen ? 'Movimientos' : 'Abrir caja'}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onOpenRegisterManager}>
-                <Settings className="h-4 w-4 mr-2" />
-                Gestionar cajas
-              </DropdownMenuItem>
+              {canManageRegisters && (
+                <DropdownMenuItem onClick={onOpenRegisterManager}>
+                  <Settings className="h-4 w-4 mr-2" />
+                  Gestionar cajas
+                </DropdownMenuItem>
+              )}
               {isRegisterOpen && (
                 <DropdownMenuItem asChild>
                   <Link href="/dashboard/pos/caja">

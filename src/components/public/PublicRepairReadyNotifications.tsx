@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Bell, CheckCheck, CheckCircle2, Clock3, Wrench } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -88,6 +89,13 @@ function formatRelativeTime(date: string): string {
 }
 
 export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNotificationsProps) {
+  const pathname = usePathname()
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const tenantPrefix =
+    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones'].includes(pathSegments[1])
+      ? `/${pathSegments[0]}`
+      : ''
+  const repairsHref = `${tenantPrefix}/mis-reparaciones`
   const supabase = useMemo(() => createClient(), [])
   const [customerId, setCustomerId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -541,8 +549,8 @@ export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNoti
               const ticket = notification.ticketNumber || notification.id.slice(0, 8).toUpperCase()
               const meta = STATUS_META[notification.status]
               const href = notification.ticketNumber
-                ? `/mis-reparaciones/${encodeURIComponent(notification.ticketNumber)}`
-                : '/mis-reparaciones'
+                ? `${repairsHref}/${encodeURIComponent(notification.ticketNumber)}`
+                : repairsHref
 
               return (
                 <div
@@ -617,7 +625,7 @@ export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNoti
         <DropdownMenuSeparator />
         <div className="px-2 py-2">
           <Button asChild variant="outline" size="sm" className="w-full">
-            <Link href="/mis-reparaciones">Ver mis reparaciones</Link>
+            <Link href={repairsHref}>Ver mis reparaciones</Link>
           </Button>
         </div>
       </DropdownMenuContent>

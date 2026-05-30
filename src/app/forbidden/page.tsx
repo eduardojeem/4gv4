@@ -49,7 +49,7 @@ export default async function ForbiddenPage({
 
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
             <Button asChild>
-              <Link href="/inicio">
+              <Link href="/saas">
                 <Home className="mr-2 h-4 w-4" />
                 Ir a Inicio
               </Link>

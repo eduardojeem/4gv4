@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/lib/supabase/types'
 
 type SupplierRow = Database['public']['Tables']['suppliers']['Row']
@@ -23,15 +22,14 @@ export function validateSupplierInput(input: Partial<SupplierInsert>) {
   else if (name.length < 2) errors.name = 'El nombre debe tener al menos 2 caracteres'
   
   // Basic email validation if provided
-  if (input.contact_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.contact_email)) {
-    errors.contact_email = 'El email no es válido'
+  if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) {
+    errors.email = 'El email no es válido'
   }
 
   return { valid: Object.keys(errors).length === 0, errors }
 }
 
 export function useSuppliers() {
-  const supabase = createClient()
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -42,27 +40,23 @@ export function useSuppliers() {
     setLoading(true)
     setError(null)
     try {
-      let query = supabase
-        .from('suppliers')
-        .select('*')
+      const params = new URLSearchParams()
       
-      if (active.isActive !== undefined) query = query.eq('is_active', active.isActive)
-      if (active.search) {
-        query = query.or(`name.ilike.%${active.search}%,contact_name.ilike.%${active.search}%,contact_email.ilike.%${active.search}%`)
-      }
+      if (active.isActive !== undefined) params.set('is_active', String(active.isActive))
+      if (active.search) params.set('search', active.search.trim())
       
-      query = query.order('name', { ascending: true })
-      
-      const { data, error } = await query
-      if (error) throw error
-      setSuppliers((data ?? []) as SupplierRow[])
+      const response = await fetch(`/api/suppliers?${params.toString()}`, { cache: 'no-store' })
+      const result = await response.json()
+
+      if (!response.ok || !result.success) throw new Error(result.error || 'No se pudieron cargar los proveedores')
+      setSuppliers((result.data ?? []) as SupplierRow[])
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(msg)
     } finally {
       setLoading(false)
     }
-  }, [supabase, filters])
+  }, [filters])
 
   const createSupplier = useCallback(async (payload: SupplierInsert) => {
     const { valid, errors } = validateSupplierInput(payload)
@@ -70,15 +64,6 @@ export function useSuppliers() {
     
     try {
       const normalizedName = payload.name.trim()
-      const { data: existing } = await supabase
-        .from('suppliers')
-        .select('id,name')
-        .eq('name', normalizedName)
-        .maybeSingle()
-        
-      if (existing) {
-        return { success: false as const, error: 'Ya existe un proveedor con este nombre' }
-      }
 
       const now = new Date().toISOString()
       const insert: SupplierInsert = {
@@ -89,14 +74,19 @@ export function useSuppliers() {
         updated_at: now,
       }
       
-      const { data, error } = await supabase.from('suppliers').insert(insert).select('*').single()
-      if (error) throw error
+      const response = await fetch('/api/suppliers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(insert),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo crear el proveedor')
       await fetchSuppliers()
-      return { success: true as const, data }
+      return { success: true as const, data: result.data }
     } catch (err) {
       return { success: false as const, error: err instanceof Error ? err.message : 'Error desconocido' }
     }
-  }, [supabase, fetchSuppliers])
+  }, [fetchSuppliers])
 
   const updateSupplier = useCallback(async (id: string, updates: SupplierUpdate) => {
     if (updates.name) {
@@ -105,44 +95,31 @@ export function useSuppliers() {
     }
 
     try {
-      if (updates.name) {
-        const normalizedName = updates.name.trim()
-        const { data: existing } = await supabase
-          .from('suppliers')
-          .select('id,name')
-          .eq('name', normalizedName)
-          .maybeSingle()
-          
-        if (existing && existing.id !== id) {
-          return { success: false as const, error: 'Ya existe un proveedor con este nombre' }
-        }
-      }
-
-      const { data, error } = await supabase
-        .from('suppliers')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select('*')
-        .single()
-        
-      if (error) throw error
+      const response = await fetch('/api/suppliers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updates, id, updated_at: new Date().toISOString() }),
+      })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo actualizar el proveedor')
       await fetchSuppliers()
-      return { success: true as const, data }
+      return { success: true as const, data: result.data }
     } catch (err) {
       return { success: false as const, error: err instanceof Error ? err.message : 'Error desconocido' }
     }
-  }, [supabase, fetchSuppliers])
+  }, [fetchSuppliers])
 
   const deleteSupplier = useCallback(async (id: string) => {
     try {
-      const { error } = await supabase.from('suppliers').delete().eq('id', id)
-      if (error) throw error
+      const response = await fetch(`/api/suppliers?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const result = await response.json()
+      if (!response.ok || !result.success) throw new Error(result.error || 'No se pudo eliminar el proveedor')
       await fetchSuppliers()
       return { success: true as const }
     } catch (err) {
       return { success: false as const, error: err instanceof Error ? err.message : 'Error desconocido' }
     }
-  }, [supabase, fetchSuppliers])
+  }, [fetchSuppliers])
 
   useEffect(() => {
     fetchSuppliers()

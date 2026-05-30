@@ -9,7 +9,7 @@ import { RepairsChart } from '@/components/dashboard/repairs-chart'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
 import {
-  Users, Shield, Globe, Database, Settings,
+  Users, Shield, Globe, Settings,
   BarChart3, AlertTriangle, TrendingUp, Clock, Activity, Building2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -41,7 +41,6 @@ export default function AdminHome() {
     { title: 'Sucursales', description: 'Cobertura multi sucursal y control operativo', icon: Building2, href: '/admin/branches', color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-950/30' },
     { title: 'Sitio Web', description: 'Configuración pública', icon: Globe, href: '/admin/website', color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-950/30' },
     { title: 'Seguridad', description: 'Auditoría y accesos', icon: Shield, href: '/admin/security', color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-950/30' },
-    { title: 'Base de Datos', description: 'Monitoreo y salud', icon: Database, href: '/admin/database-monitoring', color: 'text-violet-500', bg: 'bg-violet-50 dark:bg-violet-950/30' },
     { title: 'Reportes', description: 'Analíticas y métricas', icon: BarChart3, href: '/admin/analytics', color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
     { title: 'Configuración', description: 'Ajustes del sistema', icon: Settings, href: '/admin/settings', color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-950/30' },
   ]

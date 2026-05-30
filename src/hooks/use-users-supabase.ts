@@ -7,6 +7,13 @@ import { toast } from 'sonner'
 export interface SupabaseUser extends User {
   avatar_url?: string
   updated_at?: string
+  organizations?: Array<{
+    id: string
+    name: string
+    slug?: string | null
+    role?: string | null
+    status?: string | null
+  }>
 }
 
 interface UseUsersOptions {
@@ -20,17 +27,33 @@ interface UseUsersOptions {
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
 type CanonicalRole = 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
+type SerializableError = {
+  message?: string
+  name?: string
+  code?: string
+  details?: string
+  hint?: string
+  status?: number
+  stack?: string
+}
+
+type ApiUserProfile = {
+  id: string
+  full_name?: string | null
+  email?: string | null
+  role?: string | null
+  status?: string | null
+  department?: string | null
+  phone?: string | null
+  avatar_url?: string | null
+  permissions?: string[] | null
+  organizations?: SupabaseUser['organizations']
+  updated_at?: string | null
+  created_at?: string | null
+}
 
 const DEFAULT_ROLE: CanonicalRole = 'cliente'
 const DEFAULT_STATUS: ProfileStatus = 'active'
-
-const ROLE_WRITE_CANDIDATES: Record<CanonicalRole, CanonicalRole[]> = {
-  super_admin: ['super_admin'],
-  admin: ['admin'],
-  vendedor: ['vendedor'],
-  tecnico: ['tecnico'],
-  cliente: ['cliente'],
-}
 
 function normalizeRole(role: unknown): CanonicalRole {
   if (typeof role !== 'string') return DEFAULT_ROLE
@@ -58,41 +81,25 @@ function normalizeStatus(status: unknown): ProfileStatus {
   return DEFAULT_STATUS
 }
 
-function isRoleConstraintViolation(error: { message?: string; code?: string } | null): boolean {
-  if (!error) return false
-  if (error.code === '23514') return true
-  const message = (error.message || '').toLowerCase()
-  return message.includes('user_roles_role_check') || message.includes('violates check constraint')
+const serializeError = (err: unknown) => {
+  if (err && typeof err === 'object') {
+    const e = err as SerializableError
+    return {
+      message: e?.message,
+      name: e?.name,
+      code: e?.code,
+      details: e?.details,
+      hint: e?.hint,
+      status: e?.status,
+      stack: e?.stack,
+    }
+  }
+  return { message: String(err) }
 }
 
-function getRoleWriteCandidates(role: unknown): CanonicalRole[] {
-  if (typeof role !== 'string' || role.trim().length === 0) {
-    return [...ROLE_WRITE_CANDIDATES[DEFAULT_ROLE]]
-  }
-
-  const canonical = normalizeRole(role)
-  return Array.from(new Set(ROLE_WRITE_CANDIDATES[canonical])) as CanonicalRole[]
-}
-
-async function upsertUserRole(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  role: CanonicalRole,
-  isActive: boolean
-) {
-  const { error: roleSyncError } = await supabase.from('user_roles').upsert(
-    {
-      user_id: userId,
-      role,
-      is_active: isActive,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id' }
-  )
-
-  if (roleSyncError) {
-    throw roleSyncError
-  }
+const errorMessage = (err: unknown) => {
+  const e = serializeError(err)
+  return e.message || 'Error desconocido'
 }
 
 export function useUsersSupabase({
@@ -117,7 +124,7 @@ export function useUsersSupabase({
   const { isSuperAdmin } = useAuth()
   const supabase = useMemo(() => createClient(), [])
 
-  const mapProfileToUser = (profile: any): SupabaseUser => ({
+  const mapProfileToUser = (profile: ApiUserProfile): SupabaseUser => ({
     id: profile.id,
     name: profile.full_name || profile.email?.split('@')[0] || 'Usuario',
     email: profile.email || '',
@@ -127,6 +134,7 @@ export function useUsersSupabase({
     phone: profile.phone || '',
     avatar_url: profile.avatar_url,
     permissions: profile.permissions || [],
+    organizations: profile.organizations || [],
     lastLogin: profile.updated_at || new Date().toISOString(),
     createdAt: profile.created_at || new Date().toISOString(),
     loginAttempts: 0,
@@ -134,99 +142,38 @@ export function useUsersSupabase({
     notes: '',
   })
 
-  const serializeError = (err: unknown) => {
-    if (err && typeof err === 'object') {
-      const e = err as any
-      return {
-        message: e?.message,
-        name: e?.name,
-        code: e?.code,
-        details: e?.details,
-        hint: e?.hint,
-        status: e?.status,
-        stack: e?.stack,
-      }
-    }
-    return { message: String(err) }
-  }
-
-  const errorMessage = (err: unknown) => {
-    const e = serializeError(err)
-    return e.message || 'Error desconocido'
-  }
-
-  const fetchStats = useCallback(async () => {
-    try {
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
-
-      const [
-        { count: total },
-        { count: active },
-        { count: inactive },
-        { count: admins },
-        { count: newThisMonth },
-      ] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'inactive'),
-        supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .in('role', ['admin', 'super_admin']),
-        supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', startOfMonth),
-      ])
-
-      setStats({
-        total: total || 0,
-        active: active || 0,
-        inactive: inactive || 0,
-        admins: admins || 0,
-        newThisMonth: newThisMonth || 0,
-      })
-    } catch (err) {
-      console.error('Error fetching user stats:', serializeError(err))
-    }
-  }, [supabase])
-
   const fetchUsers = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      let query = supabase
-        .from('profiles')
-        .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        role: roleFilter || 'all',
+        status: statusFilter || 'all',
+      })
 
-      if (search) {
-        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`)
+      if (search.trim()) {
+        params.set('search', search.trim())
       }
 
-      if (roleFilter && roleFilter !== 'all') {
-        const normalizedRoleFilter = normalizeRole(roleFilter)
-        query = query.eq('role', normalizedRoleFilter)
+      const response = await fetch(`/api/admin/users?${params.toString()}`)
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudieron cargar los usuarios')
       }
 
-      if (statusFilter && statusFilter !== 'all') {
-        query = query.eq('status', normalizeStatus(statusFilter))
-      }
-
-      const from = (page - 1) * pageSize
-      const to = from + pageSize - 1
-      query = query.range(from, to)
-
-      const [{ data: profiles, count, error: profilesError }] = await Promise.all([
-        query,
-        fetchStats(),
-      ])
-
-      if (profilesError) throw profilesError
-
-      setTotalCount(count || 0)
-      setUsers((profiles || []).map(mapProfileToUser))
+      setTotalCount(payload.count || 0)
+      setStats({
+        total: payload.stats?.total || 0,
+        active: payload.stats?.active || 0,
+        inactive: payload.stats?.inactive || 0,
+        admins: payload.stats?.admins || 0,
+        newThisMonth: payload.stats?.newThisMonth || 0,
+      })
+      setUsers((payload.data || []).map(mapProfileToUser))
     } catch (err: unknown) {
       console.error('Error fetching users:', serializeError(err))
       const msg = errorMessage(err)
@@ -235,7 +182,7 @@ export function useUsersSupabase({
     } finally {
       setIsLoading(false)
     }
-  }, [page, pageSize, search, roleFilter, statusFilter, supabase, fetchStats])
+  }, [page, pageSize, search, roleFilter, statusFilter])
 
   useEffect(() => {
     void fetchUsers()
@@ -316,141 +263,25 @@ export function useUsersSupabase({
 
   const updateUser = async (userId: string, userData: Partial<SupabaseUser>) => {
     try {
-      const [
-        { data: currentProfile, error: currentProfileError },
-        { data: currentUserRole, error: currentUserRoleError },
-      ] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('role,status')
-          .eq('id', userId)
-          .maybeSingle(),
-        supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', userId)
-          .maybeSingle(),
-      ])
-
-      if (currentProfileError) {
-        throw currentProfileError
-      }
-      if (currentUserRoleError) {
-        throw currentUserRoleError
-      }
-
-      const currentCanonicalRole = normalizeRole(currentUserRole?.role ?? currentProfile?.role)
-      const mergedRole = normalizeRole(userData.role ?? currentCanonicalRole)
-      if (mergedRole === 'super_admin' && !isSuperAdmin) {
+      if (normalizeRole(userData.role) === 'super_admin' && !isSuperAdmin) {
         throw new Error('Solo un super admin puede asignar el rol super_admin')
       }
 
-      const mergedStatus = normalizeStatus(userData.status ?? currentProfile?.status)
-      const profileUpdatePayload: Record<string, unknown> = {}
+      const response = await fetch('/api/admin/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: userId, ...userData }),
+      })
+      const payload = await response.json().catch(() => ({}))
 
-      if (typeof userData.name === 'string') profileUpdatePayload.full_name = userData.name
-      if (typeof userData.role === 'string') profileUpdatePayload.role = normalizeRole(userData.role)
-      if (typeof userData.department === 'string') profileUpdatePayload.department = userData.department
-      if (typeof userData.phone === 'string') profileUpdatePayload.phone = userData.phone
-      if (typeof userData.status === 'string') profileUpdatePayload.status = normalizeStatus(userData.status)
-      if (typeof userData.avatar_url === 'string') profileUpdatePayload.avatar_url = userData.avatar_url
-      if (Array.isArray(userData.permissions)) profileUpdatePayload.permissions = userData.permissions
-
-      let updatedProfile: any = null
-
-      if (Object.keys(profileUpdatePayload).length > 0) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .update(profileUpdatePayload)
-          .eq('id', userId)
-          .select('*')
-          .single()
-
-        if (error) {
-          throw new Error(error.message)
-        }
-
-        updatedProfile = data
-      }
-
-      const shouldSyncRoleRow =
-        typeof userData.role === 'string' ||
-        typeof userData.status === 'string' ||
-        !currentUserRole?.role
-
-      if (shouldSyncRoleRow) {
-        const roleForSync =
-          typeof userData.role === 'string'
-            ? mergedRole
-            : currentCanonicalRole ?? mergedRole
-
-        const roleCandidates = getRoleWriteCandidates(roleForSync)
-        let synced = false
-        let lastConstraintError = ''
-
-        for (const roleCandidate of roleCandidates) {
-          try {
-            await upsertUserRole(supabase, userId, roleCandidate, mergedStatus === 'active')
-            synced = true
-            break
-          } catch (roleSyncError: any) {
-            if (isRoleConstraintViolation(roleSyncError)) {
-              lastConstraintError = roleSyncError.message || 'Role constraint violation'
-              continue
-            }
-
-            throw new Error(roleSyncError.message)
-          }
-        }
-
-        if (!synced) {
-          if (mergedRole === 'super_admin') {
-            throw new Error(
-              'La base de datos no permite super_admin en user_roles. Actualiza la constraint user_roles_role_check.'
-            )
-          }
-          throw new Error(lastConstraintError || 'No se pudo sincronizar el rol del usuario')
-        }
-      }
-
-      if (Array.isArray(userData.permissions)) {
-        const { data: currentPermissions, error: currentPermissionsError } = await supabase
-          .from('user_permissions')
-          .select('permission')
-          .eq('user_id', userId)
-          .eq('is_active', true)
-
-        if (currentPermissionsError) {
-          throw new Error(currentPermissionsError.message)
-        }
-
-        const currentSet = new Set((currentPermissions || []).map((row) => row.permission as string))
-        const nextSet = new Set(userData.permissions)
-
-        const toInsert = Array.from(nextSet).filter((permission) => !currentSet.has(permission))
-        const toDelete = Array.from(currentSet).filter((permission) => !nextSet.has(permission))
-
-        if (toInsert.length > 0) {
-          const rows = toInsert.map((permission) => ({ user_id: userId, permission, is_active: true }))
-          const { error: insertError } = await supabase.from('user_permissions').insert(rows)
-          if (insertError) throw new Error(insertError.message)
-        }
-
-        if (toDelete.length > 0) {
-          const { error: deleteError } = await supabase
-            .from('user_permissions')
-            .delete()
-            .eq('user_id', userId)
-            .in('permission', toDelete)
-
-          if (deleteError) throw new Error(deleteError.message)
-        }
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo actualizar el usuario')
       }
 
       toast.success('Usuario actualizado correctamente')
 
-      if (updatedProfile) {
-        const mapped = mapProfileToUser(updatedProfile)
+      if (payload.data) {
+        const mapped = mapProfileToUser(payload.data)
         setUsers((prev) => prev.map((user) => (user.id === userId ? mapped : user)))
       } else {
         await fetchUsers()
@@ -466,61 +297,13 @@ export function useUsersSupabase({
 
   const deleteUser = async (userId: string) => {
     try {
-      const [
-        { data: profile, error: profileReadError },
-        { data: currentUserRole, error: currentUserRoleError },
-      ] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', userId)
-          .maybeSingle(),
-        supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', userId)
-          .maybeSingle(),
-      ])
+      const response = await fetch(`/api/admin/users?id=${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      })
+      const payload = await response.json().catch(() => ({}))
 
-      if (profileReadError) {
-        throw profileReadError
-      }
-      if (currentUserRoleError) {
-        throw currentUserRoleError
-      }
-
-      const { error: profileUpdateError } = await supabase
-        .from('profiles')
-        .update({ status: 'inactive' })
-        .eq('id', userId)
-
-      if (profileUpdateError) {
-        throw profileUpdateError
-      }
-
-      const normalizedCurrentRole = normalizeRole(currentUserRole?.role)
-      const roleForSync = normalizedCurrentRole ?? normalizeRole(profile?.role)
-      const roleCandidates = getRoleWriteCandidates(roleForSync)
-      let synced = false
-      let lastConstraintError = ''
-
-      for (const roleCandidate of roleCandidates) {
-        try {
-          await upsertUserRole(supabase, userId, roleCandidate, false)
-          synced = true
-          break
-        } catch (roleSyncError: any) {
-          if (isRoleConstraintViolation(roleSyncError)) {
-            lastConstraintError = roleSyncError.message || 'Role constraint violation'
-            continue
-          }
-
-          throw roleSyncError
-        }
-      }
-
-      if (!synced) {
-        throw new Error(lastConstraintError || 'No se pudo sincronizar el estado del usuario')
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo desactivar el usuario')
       }
 
       toast.success('Usuario desactivado correctamente')

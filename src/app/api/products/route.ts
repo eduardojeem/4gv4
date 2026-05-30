@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { withAuth } from '@/lib/api/withAuth'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
@@ -8,7 +8,7 @@ import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } fro
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
 
 // GET /api/products - Get products with variants
-export const GET = withAuth(async (request, { user }) => {
+export const GET = withTenantAuth({ permission: 'inventory.products.read', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     
@@ -25,6 +25,7 @@ export const GET = withAuth(async (request, { user }) => {
       userId: user.id,
       role: user.role as AppRole | undefined,
       requestedBranchId,
+      organizationId: organization.id,
       strict: Boolean(requestedBranchId),
     })
     
@@ -32,6 +33,7 @@ export const GET = withAuth(async (request, { user }) => {
     let queryBuilder = supabase
       .from('products')
       .select('*, category:categories(id, name)', { count: 'exact' })
+      .eq('organization_id', organization.id)
     
     // Apply filters
     if (query) {
@@ -45,7 +47,7 @@ export const GET = withAuth(async (request, { user }) => {
     }
     
     if (brand) {
-      queryBuilder = queryBuilder.eq('brand', brand)
+      queryBuilder = queryBuilder.ilike('brand', brand)
     }
     
     if (inStock && !branchScope.branchId) {
@@ -66,8 +68,9 @@ export const GET = withAuth(async (request, { user }) => {
     }
     
     const baseProducts = (products || []) as Array<Record<string, unknown> & { id: string; stock_quantity?: number | null }>
+    const branchInventoryClient = supabase as unknown as Parameters<typeof loadBranchInventoryStockMap>[0]
     const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
-      supabase,
+      branchInventoryClient,
       branchScope.branchId,
       baseProducts.map((product) => product.id)
     )
@@ -95,7 +98,7 @@ export const GET = withAuth(async (request, { user }) => {
 })
 
 // POST /api/products - Create new product
-export const POST = withAuth(async (request, { user }) => {
+export const POST = withTenantAuth({ permission: 'inventory.products.create', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const body = await request.json()
     const supabase = await createClient()
@@ -104,9 +107,10 @@ export const POST = withAuth(async (request, { user }) => {
       userId: user.id,
       role: user.role as AppRole | undefined,
       requestedBranchId,
+      organizationId: organization.id,
       strict: Boolean(requestedBranchId),
     })
-    const defaultBranch = await getDefaultBranch()
+    const defaultBranch = await getDefaultBranch(organization.id)
     
     // Validate input with Zod
     const validationResult = productSchema.safeParse(body)
@@ -137,6 +141,7 @@ export const POST = withAuth(async (request, { user }) => {
       .from('products')
       .insert({
         name: validated.name,
+        organization_id: organization.id,
         sku: validated.sku,
         description: validated.description,
         category_id: validated.category_id,
@@ -169,9 +174,11 @@ export const POST = withAuth(async (request, { user }) => {
 
     if (branchScopedCreate && branchScope.branchId) {
       try {
+        const branchInventoryClient = supabase as unknown as Parameters<typeof upsertBranchInventoryStock>[0]['supabase']
+
         if (defaultBranch?.id && defaultBranch.id !== branchScope.branchId) {
           await upsertBranchInventoryStock({
-            supabase,
+            supabase: branchInventoryClient,
             branchId: defaultBranch.id,
             productId: product.id,
             stockQuantity: 0,
@@ -179,7 +186,7 @@ export const POST = withAuth(async (request, { user }) => {
         }
 
         await upsertBranchInventoryStock({
-          supabase,
+          supabase: branchInventoryClient,
           branchId: branchScope.branchId,
           productId: product.id,
           stockQuantity: requestedStock,
@@ -191,7 +198,11 @@ export const POST = withAuth(async (request, { user }) => {
           branchId: branchScope.branchId,
         })
 
-        await supabase.from('products').delete().eq('id', product.id)
+        await supabase
+          .from('products')
+          .delete()
+          .eq('id', product.id)
+          .eq('organization_id', organization.id)
 
         return NextResponse.json(
           { success: false, error: 'No se pudo sincronizar el stock inicial de la sucursal.' },
@@ -224,7 +235,7 @@ export const POST = withAuth(async (request, { user }) => {
 })
 
 // PUT /api/products - Update product
-export const PUT = withAuth(async (request, { user }) => {
+export const PUT = withTenantAuth({ permission: 'inventory.products.update', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const body = await request.json()
     const supabase = await createClient()
@@ -233,6 +244,7 @@ export const PUT = withAuth(async (request, { user }) => {
       userId: user.id,
       role: user.role as AppRole | undefined,
       requestedBranchId,
+      organizationId: organization.id,
       strict: Boolean(requestedBranchId),
     })
     
@@ -289,6 +301,7 @@ export const PUT = withAuth(async (request, { user }) => {
         .from('products')
         .update(normalizedPayload)
         .eq('id', validated.id)
+        .eq('organization_id', organization.id)
         .select()
         .single()
 
@@ -302,7 +315,7 @@ export const PUT = withAuth(async (request, { user }) => {
 
     if (branchScope.branchId && desiredStockQuantity !== undefined) {
       await upsertBranchInventoryStock({
-        supabase,
+        supabase: supabase as unknown as Parameters<typeof upsertBranchInventoryStock>[0]['supabase'],
         branchId: branchScope.branchId,
         productId: validated.id,
         stockQuantity: Number(desiredStockQuantity),
@@ -313,6 +326,7 @@ export const PUT = withAuth(async (request, { user }) => {
       .from('products')
       .select('*')
       .eq('id', validated.id)
+      .eq('organization_id', organization.id)
       .single()
 
     if (refreshedProductError) {
@@ -349,7 +363,7 @@ export const PUT = withAuth(async (request, { user }) => {
 })
 
 // DELETE /api/products - Delete products (single or bulk)
-export const DELETE = withAuth(async (request, { user }) => {
+export const DELETE = withTenantAuth({ permission: 'inventory.products.delete', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const idsParam = searchParams.get('ids')
@@ -368,6 +382,7 @@ export const DELETE = withAuth(async (request, { user }) => {
       .from('products')
       .delete()
       .in('id', ids)
+      .eq('organization_id', organization.id)
     
     if (error) {
       logger.error('Failed to delete products', { error: error.message, ids })

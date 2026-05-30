@@ -1,19 +1,36 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
+import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
+
+type PublicCategoryNode = {
+  id: string
+  name: string
+  parent_id: string | null
+  subcategories: PublicCategoryNode[]
+}
 
 /**
  * GET /api/public/categories
  * Public endpoint - Returns active categories with hierarchy (parent/subcategories)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createAdminSupabase()
+    const organization = await resolvePublicOrganization(request, supabase)
+
+    if (!organization) {
+      return NextResponse.json(
+        { success: false, error: 'Organization not found' },
+        { status: 404 }
+      )
+    }
     
     // Obtener todas las categorías con parent_id
     const { data: categories, error } = await supabase
       .from('categories')
       .select('id, name, parent_id')
+      .eq('organization_id', organization.id)
       .order('name', { ascending: true })
     
     if (error) {
@@ -22,8 +39,13 @@ export async function GET() {
     }
     
     // Organizar categorías en jerarquía
-    const categoryMap = new Map(categories?.map(cat => [cat.id, { ...cat, subcategories: [] }]) || [])
-    const rootCategories: any[] = []
+    const categoryMap = new Map(
+      categories?.map(cat => [
+        cat.id,
+        { ...cat, subcategories: [] } as PublicCategoryNode,
+      ]) || []
+    )
+    const rootCategories: PublicCategoryNode[] = []
     
     categoryMap.forEach(category => {
       if (category.parent_id) {
@@ -41,7 +63,8 @@ export async function GET() {
     
     const response = NextResponse.json({
       success: true,
-      data: rootCategories
+      data: rootCategories,
+      organization: toPublicOrganizationPayload(organization),
     })
     
     // Cache control para datos públicos

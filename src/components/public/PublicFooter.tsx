@@ -3,10 +3,17 @@
 import Link from 'next/link'
 import { Mail, Phone, MapPin, Clock } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { usePathname } from 'next/navigation'
 
 export function PublicFooter() {
   const { settings } = useWebsiteSettings()
+  const pathname = usePathname()
   const company = settings?.company_info
+  const pathSegments = pathname.split('/').filter(Boolean)
+  const tenantPrefix =
+    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito'].includes(pathSegments[1])
+      ? `/${pathSegments[0]}`
+      : ''
 
   const phoneDisplay = company?.phone || process.env.NEXT_PUBLIC_COMPANY_PHONE || ''
   const emailDisplay = company?.email || process.env.NEXT_PUBLIC_COMPANY_EMAIL || ''
@@ -36,7 +43,7 @@ export function PublicFooter() {
             <ul className="space-y-2.5 text-sm">
               <li>
                 <Link
-                  href="/inicio"
+                  href={`${tenantPrefix}/inicio`}
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Inicio
@@ -44,7 +51,7 @@ export function PublicFooter() {
               </li>
               <li>
                 <Link
-                  href="/productos"
+                  href={`${tenantPrefix}/productos`}
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Productos
@@ -52,7 +59,7 @@ export function PublicFooter() {
               </li>
               <li>
                 <Link
-                  href="/mis-reparaciones"
+                  href={`${tenantPrefix}/mis-reparaciones`}
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Mis Reparaciones
@@ -60,7 +67,15 @@ export function PublicFooter() {
               </li>
               <li>
                 <Link
-                  href="/inicio#contacto"
+                  href={`${tenantPrefix}/track`}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Mis Pedidos
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href={`${tenantPrefix}/inicio#contacto`}
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Contacto

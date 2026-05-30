@@ -5,6 +5,7 @@ import { MaintenanceGuard } from '@/components/public/MaintenanceGuard'
 import { SkipToContentLink } from '@/components/ui/skip-link'
 import { WhatsAppFloatButton } from '@/components/whatsapp-float-button'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
+import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWithDrawer'
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await fetchWebsiteSettings()
@@ -39,13 +40,15 @@ export default function PublicLayout({
 }) {
   return (
     <MaintenanceGuard>
-      <div className="flex min-h-screen flex-col">
-        <SkipToContentLink />
-        <PublicHeader />
-        <main id="main-content" className="flex-1">{children}</main>
-        <PublicFooter />
-        <WhatsAppFloatButton />
-      </div>
+      <CartProviderWithDrawer>
+        <div className="flex min-h-screen flex-col">
+          <SkipToContentLink />
+          <PublicHeader />
+          <main id="main-content" className="flex-1">{children}</main>
+          <PublicFooter />
+          <WhatsAppFloatButton />
+        </div>
+      </CartProviderWithDrawer>
     </MaintenanceGuard>
   )
 }

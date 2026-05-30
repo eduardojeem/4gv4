@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server'
-import { requireAdmin, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
+import { NextRequest, NextResponse } from 'next/server'
+import { withAdminAuth, AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 
 type BranchPayload = {
+  organization_id?: unknown
   name?: unknown
   code?: unknown
   slug?: unknown
@@ -13,6 +14,12 @@ type BranchPayload = {
   manager_name?: unknown
   is_active?: unknown
   is_default?: unknown
+}
+
+type OrganizationSummary = {
+  id: string
+  name: string
+  slug?: string | null
 }
 
 function toText(value: unknown) {
@@ -35,6 +42,99 @@ function slugify(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '')
+}
+
+async function loadOrganizationMap(organizationIds: string[]) {
+  const supabase = createAdminSupabase()
+  const uniqueIds = Array.from(new Set(organizationIds.filter(Boolean)))
+  const organizations = new Map<string, OrganizationSummary>()
+
+  if (uniqueIds.length === 0) {
+    return organizations
+  }
+
+  const [{ data: orgRows }, { data: settingRows }] = await Promise.all([
+    supabase
+      .from('organizations')
+      .select('id, name, slug')
+      .in('id', uniqueIds),
+    supabase
+      .from('organization_settings')
+      .select('organization_id, display_name')
+      .in('organization_id', uniqueIds),
+  ])
+
+  const settingsByOrgId = new Map(
+    (settingRows ?? []).map((row: { organization_id: string; display_name?: string | null }) => [
+      row.organization_id,
+      row.display_name,
+    ])
+  )
+
+  for (const organization of orgRows ?? []) {
+    organizations.set(organization.id, {
+      id: organization.id,
+      name: settingsByOrgId.get(organization.id) || organization.name || 'Organizacion sin nombre',
+      slug: organization.slug ?? null,
+    })
+  }
+
+  return organizations
+}
+
+async function listOrganizations() {
+  const organizationMap = await loadOrganizationMap([])
+  const supabase = createAdminSupabase()
+  const [{ data: orgRows }, { data: settingRows }] = await Promise.all([
+    supabase
+      .from('organizations')
+      .select('id, name, slug')
+      .order('name', { ascending: true }),
+    supabase
+      .from('organization_settings')
+      .select('organization_id, display_name'),
+  ])
+
+  const settingsByOrgId = new Map(
+    (settingRows ?? []).map((row: { organization_id: string; display_name?: string | null }) => [
+      row.organization_id,
+      row.display_name,
+    ])
+  )
+
+  for (const organization of orgRows ?? []) {
+    organizationMap.set(organization.id, {
+      id: organization.id,
+      name: settingsByOrgId.get(organization.id) || organization.name || 'Organizacion sin nombre',
+      slug: organization.slug ?? null,
+    })
+  }
+
+  return Array.from(organizationMap.values()).sort((left, right) => left.name.localeCompare(right.name, 'es'))
+}
+
+async function resolveWritableOrganizationId(ctx: AdminAuthContext, requestedOrganizationId: unknown) {
+  if (ctx.organizationId) {
+    return ctx.organizationId
+  }
+
+  const organizationId = toText(requestedOrganizationId)
+  if (!organizationId) {
+    return null
+  }
+
+  const supabase = createAdminSupabase()
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('id', organizationId)
+    .maybeSingle()
+
+  if (error || !data) {
+    return null
+  }
+
+  return data.id
 }
 
 async function getBranchMetrics(branchId: string) {
@@ -104,18 +204,33 @@ async function getBranchMetrics(branchId: string) {
   }
 }
 
-export async function GET() {
+async function getHandler(request: NextRequest, ctx: AdminAuthContext) {
   try {
-    const auth = await requireAdmin()
-    const authResponse = getAuthResponse(auth)
-    if (authResponse) return authResponse
-
     const supabase = createAdminSupabase()
-    const { data, error } = await supabase
+    const requestedOrganizationId = toText(request.nextUrl.searchParams.get('organizationId'))
+    const organizations = ctx.user.role === 'super_admin' ? await listOrganizations() : []
+
+    if (ctx.user.role === 'super_admin' && !requestedOrganizationId) {
+      return NextResponse.json({ branches: [], organizations })
+    }
+
+    if (ctx.user.role === 'super_admin' && !organizations.some((organization) => organization.id === requestedOrganizationId)) {
+      return NextResponse.json({ error: 'Organizacion invalida.' }, { status: 400 })
+    }
+
+    let query = supabase
       .from('branches')
-      .select('id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
+      .select('id, organization_id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
       .order('is_default', { ascending: false })
       .order('name', { ascending: true })
+
+    if (ctx.organizationId) {
+      query = query.eq('organization_id', ctx.organizationId)
+    } else if (requestedOrganizationId) {
+      query = query.eq('organization_id', requestedOrganizationId)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       return NextResponse.json(
@@ -124,27 +239,30 @@ export async function GET() {
       )
     }
 
+    const rows = (data ?? []) as Array<Record<string, unknown>>
+    const organizationMap = ctx.user.role === 'super_admin'
+      ? await loadOrganizationMap(rows.map((branch) => String(branch.organization_id ?? '')))
+      : new Map<string, OrganizationSummary>()
+
     const branches = await Promise.all(
-      ((data ?? []) as Array<Record<string, unknown>>).map(async (branch) => ({
+      rows.map(async (branch) => ({
         ...branch,
+        organization: typeof branch.organization_id === 'string'
+          ? organizationMap.get(branch.organization_id) ?? null
+          : null,
         ...(await getBranchMetrics(String(branch.id))),
       }))
     )
 
-    return NextResponse.json({ branches })
+    return NextResponse.json({ branches, organizations })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error interno del servidor.'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
-export async function POST(request: Request) {
+async function postHandler(request: NextRequest, ctx: AdminAuthContext) {
   try {
-    const auth = await requireAdmin()
-    const authResponse = getAuthResponse(auth)
-    if (authResponse) return authResponse
-
-    const adminAuth = auth as Extract<AuthResult, { authenticated: true }>
     const body = await request.json() as BranchPayload
 
     const name = toText(body.name)
@@ -164,21 +282,33 @@ export async function POST(request: Request) {
     }
 
     const supabase = createAdminSupabase()
+    const organizationId = await resolveWritableOrganizationId(ctx, body.organization_id)
+
+    if (!organizationId) {
+      return NextResponse.json(
+        { error: 'Selecciona una organizacion valida para crear la sucursal.' },
+        { status: 400 }
+      )
+    }
+
+    const insertPayload: Record<string, unknown> = {
+      organization_id: organizationId,
+      name,
+      code,
+      slug,
+      address: toOptionalText(body.address),
+      city: toOptionalText(body.city),
+      phone: toOptionalText(body.phone),
+      email: toOptionalText(body.email),
+      manager_name: toOptionalText(body.manager_name),
+      is_active: toBoolean(body.is_active, true),
+      is_default: toBoolean(body.is_default, false),
+    }
+
     const { data, error } = await supabase
       .from('branches')
-      .insert({
-        name,
-        code,
-        slug,
-        address: toOptionalText(body.address),
-        city: toOptionalText(body.city),
-        phone: toOptionalText(body.phone),
-        email: toOptionalText(body.email),
-        manager_name: toOptionalText(body.manager_name),
-        is_active: toBoolean(body.is_active, true),
-        is_default: toBoolean(body.is_default, false),
-      })
-      .select('id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
+      .insert(insertPayload)
+      .select('id, organization_id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
       .single()
 
     if (error || !data) {
@@ -192,11 +322,11 @@ export async function POST(request: Request) {
     await supabase
       .from('user_branch_assignments')
       .insert({
-        user_id: adminAuth.user.id,
+        user_id: ctx.user.id,
         branch_id: data.id,
         is_active: true,
         is_primary: false,
-        assigned_by: adminAuth.user.id,
+        assigned_by: ctx.user.id,
       })
       .select('id')
       .maybeSingle()
@@ -207,3 +337,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+
+export const GET = withAdminAuth(getHandler)
+export const POST = withAdminAuth(postHandler)
