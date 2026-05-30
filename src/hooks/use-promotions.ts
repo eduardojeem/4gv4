@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { parseISO, isAfter, isBefore, differenceInDays } from 'date-fns'
 import type { Promotion, PromotionFilters, PromotionStats } from '@/types/promotion'
@@ -15,26 +14,22 @@ export function usePromotions() {
     type: 'all'
   })
 
-  const supabase = createClient()
-
   // Fetch promotions with caching
   const fetchPromotions = useCallback(async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('promotions')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const response = await fetch('/api/promotions?limit=100', { cache: 'no-store' })
+      const result = await response.json()
 
-      if (error) throw error
-      setPromotions(data || [])
+      if (!response.ok) throw new Error(result.error || 'No se pudieron cargar promociones')
+      setPromotions(result.promotions || [])
     } catch (error) {
       console.error('Error fetching promotions:', error)
       toast.error('Error al cargar promociones')
     } finally {
       setLoading(false)
     }
-  }, [supabase])
+  }, [])
 
   // Initial load
   useEffect(() => {
@@ -125,15 +120,19 @@ export function usePromotions() {
   // CRUD operations
   const createPromotion = useCallback(async (data: Omit<Promotion, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      const { error } = await supabase
-        .from('promotions')
-        .insert(data)
-      
-      if (error) throw error
+      const response = await fetch('/api/promotions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const result = await response.json()
+
+      if (!response.ok) throw new Error(result.error || 'No se pudo crear la promocion')
       
       toast.success('Promoción creada exitosamente')
       await fetchPromotions()
       return true
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('Error creating promotion:', error)
       if (error.code === '23505') {
@@ -143,20 +142,23 @@ export function usePromotions() {
       }
       return false
     }
-  }, [supabase, fetchPromotions])
+  }, [fetchPromotions])
 
   const updatePromotion = useCallback(async (id: string, data: Partial<Promotion>) => {
     try {
-      const { error } = await supabase
-        .from('promotions')
-        .update(data)
-        .eq('id', id)
-      
-      if (error) throw error
+      const response = await fetch(`/api/promotions/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const result = await response.json()
+
+      if (!response.ok) throw new Error(result.error || 'No se pudo actualizar la promocion')
       
       toast.success('Promoción actualizada exitosamente')
       await fetchPromotions()
       return true
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error('Error updating promotion:', error)
       if (error.code === '23505') {
@@ -166,16 +168,14 @@ export function usePromotions() {
       }
       return false
     }
-  }, [supabase, fetchPromotions])
+  }, [fetchPromotions])
 
   const deletePromotion = useCallback(async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('promotions')
-        .delete()
-        .eq('id', id)
-      
-      if (error) throw error
+      const response = await fetch(`/api/promotions/${id}`, { method: 'DELETE' })
+      const result = await response.json()
+
+      if (!response.ok) throw new Error(result.error || 'No se pudo eliminar la promocion')
       
       toast.success('Promoción eliminada exitosamente')
       await fetchPromotions()
@@ -185,7 +185,7 @@ export function usePromotions() {
       toast.error('Error al eliminar la promoción')
       return false
     }
-  }, [supabase, fetchPromotions])
+  }, [fetchPromotions])
 
   const togglePromotionStatus = useCallback(async (id: string, isActive: boolean) => {
     return updatePromotion(id, { is_active: !isActive })
@@ -305,8 +305,11 @@ export function usePromotions() {
     }
     
     // Remove fields that shouldn't be duplicated
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (duplicatedData as any).id
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (duplicatedData as any).created_at
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (duplicatedData as any).updated_at
     
     return createPromotion(duplicatedData)
@@ -314,12 +317,15 @@ export function usePromotions() {
 
   const bulkUpdateStatus = useCallback(async (promotionIds: string[], isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from('promotions')
-        .update({ is_active: isActive })
-        .in('id', promotionIds)
-      
-      if (error) throw error
+      await Promise.all(promotionIds.map(async (id) => {
+        const response = await fetch(`/api/promotions/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: isActive }),
+        })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'No se pudo actualizar una promocion')
+      }))
       
       toast.success(`${promotionIds.length} promociones ${isActive ? 'activadas' : 'desactivadas'}`)
       await fetchPromotions()
@@ -329,16 +335,15 @@ export function usePromotions() {
       toast.error('Error al actualizar promociones')
       return false
     }
-  }, [supabase, fetchPromotions])
+  }, [fetchPromotions])
 
   const bulkDelete = useCallback(async (promotionIds: string[]) => {
     try {
-      const { error } = await supabase
-        .from('promotions')
-        .delete()
-        .in('id', promotionIds)
-      
-      if (error) throw error
+      await Promise.all(promotionIds.map(async (id) => {
+        const response = await fetch(`/api/promotions/${id}`, { method: 'DELETE' })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.error || 'No se pudo eliminar una promocion')
+      }))
       
       toast.success(`${promotionIds.length} promociones eliminadas`)
       await fetchPromotions()
@@ -348,30 +353,22 @@ export function usePromotions() {
       toast.error('Error al eliminar promociones')
       return false
     }
-  }, [supabase, fetchPromotions])
+  }, [fetchPromotions])
 
   // Validation functions
   const validatePromotionCode = useCallback(async (code: string, excludeId?: string) => {
     try {
-      let query = supabase
-        .from('promotions')
-        .select('id')
-        .eq('code', code)
-      
-      if (excludeId) {
-        query = query.neq('id', excludeId)
-      }
-      
-      const { data, error } = await query
-      
-      if (error) throw error
-      
-      return data.length === 0
+      const response = await fetch('/api/promotions?limit=100', { cache: 'no-store' })
+      const result = await response.json()
+
+      if (!response.ok) throw new Error(result.error || 'No se pudo validar el codigo')
+
+      return !(result.promotions || []).some((promotion: Promotion) => promotion.code === code && promotion.id !== excludeId)
     } catch (error) {
       console.error('Error validating promotion code:', error)
       return false
     }
-  }, [supabase])
+  }, [])
 
   const validatePromotionDates = useCallback((startDate: Date | null, endDate: Date | null) => {
     if (!startDate || !endDate) return true
@@ -499,21 +496,8 @@ export function usePromotions() {
 
   // Real-time subscription (optional)
   const subscribeToPromotions = useCallback(() => {
-    const subscription = supabase
-      .channel('promotions_changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'promotions' },
-        (payload) => {
-          console.log('Promotion change detected:', payload)
-          fetchPromotions()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [supabase, fetchPromotions])
+    return () => undefined
+  }, [])
 
   // Automatic cleanup of expired promotions
   const cleanupExpiredPromotions = useCallback(async () => {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { PromotionType } from '@/types/promotion'
-import { requireStaff, getAuthResponse } from '@/lib/auth/require-auth'
+import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
@@ -57,14 +57,8 @@ function mapPromotionRow(row: PromotionRow) {
 }
 
 // GET - Obtener promociones con filtros
-export async function GET(request: NextRequest) {
+export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request: NextRequest, { organization }) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
     const { searchParams } = new URL(request.url)
     const active = searchParams.get('active')
     const type = searchParams.get('type')
@@ -78,6 +72,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('promotions')
       .select('*')
+      .eq('organization_id', organization.id)
       .order('created_at', { ascending: false })
 
     if (active !== null) {
@@ -135,17 +130,11 @@ export async function GET(request: NextRequest) {
     logger.error('Promotions GET API error', { error })
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
-}
+})
 
 // POST - Crear nueva promoción (staff only)
-export async function POST(request: NextRequest) {
+export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request: NextRequest, { organization }) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
     const body = await request.json()
     const type = normalizePromotionType(body?.type)
 
@@ -172,6 +161,7 @@ export async function POST(request: NextRequest) {
     const { data: existingByCode, error: existingError } = await supabase
       .from('promotions')
       .select('id')
+      .eq('organization_id', organization.id)
       .eq('code', String(body.code))
       .maybeSingle()
 
@@ -185,6 +175,7 @@ export async function POST(request: NextRequest) {
     }
 
     const insertPayload = {
+      organization_id: organization.id,
       code: String(body.code).trim(),
       name: String(body.name).trim(),
       description: body.description ? String(body.description) : null,
@@ -217,17 +208,11 @@ export async function POST(request: NextRequest) {
     logger.error('Promotions POST API error', { error })
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
-}
+})
 
 // PUT - Actualización masiva de promociones (staff only)
-export async function PUT(request: NextRequest) {
+export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request: NextRequest, { organization }) => {
   try {
-    const auth = await requireStaff()
-    {
-      const response = getAuthResponse(auth)
-      if (response) return response
-    }
-
     const body = await request.json()
     const promotions = Array.isArray(body?.promotions) ? body.promotions : null
 
@@ -270,6 +255,7 @@ export async function PUT(request: NextRequest) {
         .from('promotions')
         .update(patch)
         .eq('id', String(promotion.id))
+        .eq('organization_id', organization.id)
         .select('*')
         .maybeSingle()
 
@@ -294,4 +280,4 @@ export async function PUT(request: NextRequest) {
     logger.error('Promotions PUT API error', { error })
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
-}
+})

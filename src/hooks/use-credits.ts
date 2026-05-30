@@ -114,6 +114,27 @@ const fetchData = async (supabase: SupabaseClient) => {
   }
 }
 
+void fetchData
+
+const fetchTenantCreditsData = async () => {
+  const response = await fetch('/api/credits', { cache: 'no-store' })
+  const result = await response.json()
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.error || 'No se pudieron cargar los creditos.')
+  }
+
+  const data = result.data || {}
+  return {
+    dbCredits: data.credits,
+    dbInstallments: data.installments,
+    dbPayments: data.payments,
+    dbSummary: data.summary,
+    dbInstallmentsProgress: data.installmentsProgress,
+    dbCustomers: data.customers
+  }
+}
+
 export function useCredits() {
     const supabase = useMemo(() => createClient(), [])
     const [isPending, startTransition] = useTransition()
@@ -140,7 +161,7 @@ export function useCredits() {
         setLoading(true)
         setError(null)
         try {
-            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers } = await fetchData(supabase as SupabaseClient)
+            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers } = await fetchTenantCreditsData()
 
             const customersMap = ((dbCustomers || []) as Array<{ id: string; customer_code?: string }>).reduce((acc, c) => {
                 acc[c.id] = c.customer_code ?? ''
@@ -204,7 +225,7 @@ export function useCredits() {
         } finally {
             setLoading(false)
         }
-    }, [supabase])
+    }, [])
 
     const refreshData = useCallback(() => {
         startTransition(() => {
@@ -438,5 +459,3 @@ export function useCredits() {
         filteredInstallments
     }
 }
-
-
