@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import type { 
@@ -25,7 +25,7 @@ export function useProducts() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId } = useBranch()
 
   const applySelectedBranchStock = useCallback(async <T extends { id: string; stock_quantity?: number | null }>(items: T[]) => {

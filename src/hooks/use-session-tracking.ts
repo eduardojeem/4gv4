@@ -42,30 +42,18 @@ const detectOS = (userAgent: string): string => {
 
 const getGeolocation = async (): Promise<{ country?: string; city?: string }> => {
   try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 3000)
-
-    const response = await fetch('https://ipapi.co/json/', {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json'
-      },
-      signal: controller.signal
+    const response = await fetch('/api/geoip', {
+      signal: AbortSignal.timeout(4000),
     })
 
-    clearTimeout(timeoutId)
+    if (!response.ok) return {}
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch geolocation')
-    }
-
-    const data = await response.json()
+    const data = await response.json() as { country?: string | null; city?: string | null }
     return {
-      country: data.country_name || undefined,
-      city: data.city || undefined
+      country: data.country ?? undefined,
+      city: data.city ?? undefined,
     }
-  } catch (error) {
-    console.warn('Could not fetch geolocation:', error)
+  } catch {
     return {}
   }
 }

@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { generateOrderNumber, normalizeOrder, sanitizeOrderSearch } from '@/lib/orders/helpers'
 import type { FulfillmentType, PaymentMethod } from '@/lib/orders/types'
 
+const STAT_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const
+
 const orderItemSchema = z.object({
   productId: z.string().uuid(),
   quantity: z.number().int().min(1).max(1000),
@@ -34,7 +36,12 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
     const page = Math.max(1, Number(searchParams.get('page') || 1))
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || 20)))
     const status = searchParams.get('status')
+    const paymentStatus = searchParams.get('payment_status')
+    const fulfillmentType = searchParams.get('fulfillment_type')
     const search = sanitizeOrderSearch(searchParams.get('search') || '')
+    const dateFrom = searchParams.get('date_from')
+    const sort = searchParams.get('sort') || 'newest'
+    const includeStats = searchParams.get('include_stats') === 'true'
     const from = (page - 1) * limit
     const to = from + limit - 1
     const supabase = await createClient()
@@ -47,30 +54,49 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
     if (status && status !== 'ALL') {
       query = query.eq('status', status)
     }
-
+    if (paymentStatus && paymentStatus !== 'ALL') {
+      query = query.eq('payment_status', paymentStatus)
+    }
+    if (fulfillmentType && fulfillmentType !== 'ALL') {
+      query = query.eq('fulfillment_type', fulfillmentType)
+    }
     if (search) {
       query = query.or(
         `order_number.ilike.%${search}%,customer_name.ilike.%${search}%,customer_email.ilike.%${search}%,customer_phone.ilike.%${search}%`
       )
     }
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom)
+    }
 
-    const { data, error, count } = await query
-      .order('created_at', { ascending: false })
-      .range(from, to)
+    switch (sort) {
+      case 'oldest':
+        query = query.order('created_at', { ascending: true }); break
+      case 'amount_desc':
+        query = query.order('total', { ascending: false }); break
+      case 'amount_asc':
+        query = query.order('total', { ascending: true }); break
+      default:
+        query = query.order('created_at', { ascending: false })
+    }
 
+    const { data, error, count } = await query.range(from, to)
     if (error) throw error
 
-    // Fetch global status counts (all statuses, no page/search filter)
-    const { data: statsData } = await supabase
-      .from('customer_orders')
-      .select('status')
-      .eq('organization_id', organization.id)
-
-    const stats = (statsData ?? []).reduce<Record<string, number>>((acc, row) => {
-      const s = String(row.status)
-      acc[s] = (acc[s] || 0) + 1
-      return acc
-    }, {})
+    // Stats: use parallel HEAD-only COUNT queries instead of fetching all rows
+    let stats: Record<string, number> | null = null
+    if (includeStats) {
+      const statsResults = await Promise.all(
+        STAT_STATUSES.map((s) =>
+          supabase
+            .from('customer_orders')
+            .select('*', { count: 'exact', head: true })
+            .eq('organization_id', organization.id)
+            .eq('status', s)
+        )
+      )
+      stats = Object.fromEntries(STAT_STATUSES.map((s, i) => [s, statsResults[i].count ?? 0]))
+    }
 
     return NextResponse.json({
       success: true,
@@ -162,6 +188,18 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
     const missingProduct = productIds.find((id) => !productMap.has(id))
     if (missingProduct) {
       return NextResponse.json({ success: false, error: 'Uno de los productos no existe en esta empresa.' }, { status: 400 })
+    }
+
+    // Stock validation — only for products that track stock (stock_quantity !== null)
+    for (const item of input.items) {
+      const product = productMap.get(item.productId)!
+      const stock = product.stock_quantity != null ? Number(product.stock_quantity) : null
+      if (stock !== null && Number.isFinite(stock) && stock < item.quantity) {
+        return NextResponse.json({
+          success: false,
+          error: `Stock insuficiente para "${product.name}". Disponible: ${stock} unidad${stock !== 1 ? 'es' : ''}.`,
+        }, { status: 409 })
+      }
     }
 
     const orderItems = input.items.map((item) => {

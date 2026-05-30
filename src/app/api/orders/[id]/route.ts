@@ -37,9 +37,11 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
       .select('*, order_items:customer_order_items(*)')
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .single()
+      .maybeSingle()
 
     if (error) throw error
+    if (!data) return NextResponse.json({ success: false, error: 'Pedido no encontrado.' }, { status: 404 })
+
     return NextResponse.json({ success: true, data: normalizeOrder(data) })
   } catch (error) {
     logger.error('Orders API detail error', { error })
@@ -63,15 +65,19 @@ export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
       .select('subtotal, shipping_cost, discount_amount')
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .single()
+      .maybeSingle()
 
     if (currentError) throw currentError
+    if (!current) return NextResponse.json({ success: false, error: 'Pedido no encontrado.' }, { status: 404 })
 
     const updates = validation.data
     const subtotal = Number(current.subtotal || 0)
+
+    // Only recompute total when shipping or discount are explicitly changed
+    const needsTotalUpdate = 'shipping_cost' in updates || 'discount_amount' in updates
     const shipping = updates.shipping_cost ?? Number(current.shipping_cost || 0)
     const discount = updates.discount_amount ?? Number(current.discount_amount || 0)
-    const totalPatch = shipping !== undefined || discount !== undefined
+    const totalPatch = needsTotalUpdate
       ? { total: Math.max(0, subtotal + Number(shipping) - Number(discount)) }
       : {}
 

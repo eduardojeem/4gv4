@@ -15,7 +15,6 @@ function toNumber(value: unknown) {
 export function generateOrderNumber() {
   const now = new Date()
   const date = now.toISOString().slice(0, 10).replace(/-/g, '')
-  // Use crypto.randomUUID for stronger uniqueness, take last 8 hex chars
   const entropy = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID().replace(/-/g, '').slice(-8).toUpperCase()
     : Math.random().toString(36).slice(2, 10).toUpperCase()
@@ -70,6 +69,7 @@ export function getOrderProgress(status: string) {
   return ORDER_FLOW.indexOf(status as OrderStatus)
 }
 
+// Strip characters that could manipulate PostgREST filter strings or SQL LIKE patterns
 export function sanitizeOrderSearch(value: string) {
-  return value.replace(/[.,()!<>=&|%:*\\]/g, '').trim().slice(0, 120)
+  return value.replace(/[.,()!<>=&|%_:*\\]/g, '').trim().slice(0, 120)
 }

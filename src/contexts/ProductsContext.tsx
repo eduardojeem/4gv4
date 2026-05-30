@@ -95,7 +95,7 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
         productsRef.current = products
     }, [products])
 
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
 
     // Fetch all products
     const fetchProducts = useCallback(async () => {

@@ -88,7 +88,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     const [error, setError] = useState<Error | null>(null)
     const { selectedBranchId } = useBranch()
 
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
 
     const fetchRepairsWithCustomerFallback = useCallback(async () => {
         const response = await fetch('/api/repairs', {
@@ -141,7 +141,6 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
 
             const { parts, notes, ...repairData } = data
 
-            // Calculate warranty expiration if warranty months > 0
             let warrantyExpiresAt = null
             if (repairData.warrantyMonths && repairData.warrantyMonths > 0) {
                 const expirationDate = new Date()
@@ -149,10 +148,13 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 warrantyExpiresAt = expirationDate.toISOString()
             }
 
-            // 1. Create Repair
-            const { data: newRepair, error: createError } = await supabase
-                .from('repairs')
-                .insert([{
+            const response = await fetch('/api/repairs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...branchHeaders(selectedBranchId),
+                },
+                body: JSON.stringify({
                     customer_id: repairData.customer_id,
                     device_brand: repairData.brand,
                     device_model: repairData.model,
@@ -164,7 +166,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     status: 'recibido',
                     priority: repairData.priority,
                     urgency: repairData.urgency,
-                    technician_id: repairData.technician_id,
+                    technician_id: repairData.technician_id || null,
                     estimated_cost: repairData.estimated_cost,
                     labor_cost: repairData.laborCost || 0,
                     final_cost: repairData.finalCost,
@@ -173,58 +175,29 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     warranty_notes: repairData.warrantyNotes || null,
                     warranty_expires_at: warrantyExpiresAt,
                     ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
-                    received_at: new Date().toISOString()
-                }])
-                .select()
-                .single()
+                    received_at: new Date().toISOString(),
+                    parts: parts?.map((p: any) => ({
+                        part_name: p.name,
+                        unit_cost: p.cost,
+                        quantity: p.quantity,
+                        supplier: p.supplier,
+                        part_number: p.partNumber,
+                    })) ?? [],
+                    notes: notes?.map((n: any) => ({
+                        note_text: n.text,
+                        is_internal: n.isInternal,
+                    })) ?? [],
+                }),
+            })
 
-            if (createError) throw createError
-            
-            const newRepairId = newRepair.id
+            const payload = await response.json().catch(() => null) as { repair?: unknown; error?: string } | null
 
-            // 2. Insert Parts
-            if (parts && parts.length > 0) {
-                 const partsToInsert = parts.map((p: any) => ({
-                     repair_id: newRepairId,
-                     part_name: p.name,
-                     unit_cost: p.cost,
-                     quantity: p.quantity,
-                     supplier: p.supplier,
-                     part_number: p.partNumber
-                 }))
-                 const { error: insertPartsError } = await supabase.from('repair_parts').insert(partsToInsert)
-                 if (insertPartsError) throw insertPartsError
+            if (!response.ok) {
+                throw new Error(payload?.error || 'No se pudo crear la reparación')
             }
 
-            // 3. Insert Notes
-            if (notes && notes.length > 0) {
-                 const notesToInsert = notes.map((n: any) => ({
-                     repair_id: newRepairId,
-                     note_text: n.text,
-                     is_internal: n.isInternal
-                 }))
-                 const { error: insertNotesError } = await supabase.from('repair_notes').insert(notesToInsert)
-                 if (insertNotesError) throw insertNotesError
-            }
-
-            // 4. Fetch Complete Repair
-            let finalRepairQuery = supabase
-                .from('repairs')
-                .select(`
-                  *,
-                  customer:customers(name, phone, email),
-                  technician:profiles(id, full_name),
-                  images:repair_images(id, image_url, description),
-                  parts:repair_parts(*),
-                  notes:repair_notes(*)
-                `)
-                .eq('id', newRepairId)
-            finalRepairQuery = withBranchFilter(finalRepairQuery, selectedBranchId)
-            const { data: finalRepair, error: fetchError } = await finalRepairQuery.single()
-
-            if (fetchError) throw fetchError
-
-            const mapped = mapSupabaseRepairToUi(finalRepair)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const mapped = mapSupabaseRepairToUi(payload?.repair as any)
             const transformedRepair = { ...mapped, dbStatus: mapped.status }
 
             setRepairs(prev => [transformedRepair, ...prev])
@@ -236,7 +209,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al crear reparación: ' + error.message)
             return null
         }
-    }, [selectedBranchId, supabase])
+    }, [selectedBranchId])
 
     // Update repair
     const updateRepair = useCallback(async (

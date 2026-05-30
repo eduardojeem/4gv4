@@ -48,7 +48,10 @@ type DraftItem = {
   sku?: string | null
   quantity: number
   unitPrice: number
+  stock: number | null
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function CreateOrderDialog({
   open,
@@ -74,13 +77,13 @@ export function CreateOrderDialog({
   const [paymentMethod, setPaymentMethod] = useState('CASH')
   const [fulfillmentType, setFulfillmentType] = useState('PICKUP')
   const [shippingCost, setShippingCost] = useState(0)
+  const [discountAmount, setDiscountAmount] = useState(0)
   const [notes, setNotes] = useState('')
   const [items, setItems] = useState<DraftItem[]>([])
   const [loading, setLoading] = useState(false)
-  const [step, setStep] = useState<'form' | 'review'>('form')
 
   const subtotal = useMemo(() => items.reduce((s, i) => s + i.quantity * i.unitPrice, 0), [items])
-  const total = subtotal + shippingCost
+  const total = Math.max(0, subtotal + shippingCost - discountAmount)
 
   // Load products
   useEffect(() => {
@@ -88,7 +91,10 @@ export function CreateOrderDialog({
     const controller = new AbortController()
     const t = window.setTimeout(async () => {
       try {
-        const res = await fetch(`/api/products?per_page=12&query=${encodeURIComponent(productSearch)}`, { signal: controller.signal })
+        const res = await fetch(
+          `/api/products?per_page=12&query=${encodeURIComponent(productSearch)}`,
+          { signal: controller.signal }
+        )
         const payload = await res.json().catch(() => ({}))
         const all: ProductOption[] = Array.isArray(payload?.data?.products) ? payload.data.products : []
         setProducts(all.filter((p) => p.stock_quantity === null || (p.stock_quantity ?? 0) > 0))
@@ -105,7 +111,10 @@ export function CreateOrderDialog({
     const controller = new AbortController()
     const t = window.setTimeout(async () => {
       try {
-        const res = await fetch(`/api/customers?limit=20&search=${encodeURIComponent(customerSearch)}`, { signal: controller.signal })
+        const res = await fetch(
+          `/api/customers?limit=20&search=${encodeURIComponent(customerSearch)}`,
+          { signal: controller.signal }
+        )
         const payload = await res.json().catch(() => ({}))
         setCustomers(Array.isArray(payload?.data) ? payload.data : [])
       } catch {
@@ -120,23 +129,34 @@ export function CreateOrderDialog({
     setSelectedCustomer(null); setNewCustomer(false)
     setCustomerName(''); setCustomerEmail(''); setCustomerPhone(''); setCustomerAddress('')
     setPaymentMethod('CASH'); setFulfillmentType('PICKUP')
-    setShippingCost(0); setNotes(''); setItems([]); setStep('form')
+    setShippingCost(0); setDiscountAmount(0); setNotes(''); setItems([])
   }
 
   function addProduct(product: ProductOption) {
     const price = Number(product.offer_price || product.sale_price || 0)
+    const stock = product.stock_quantity != null ? Number(product.stock_quantity) : null
     setItems((cur) => {
       const existing = cur.find((i) => i.productId === product.id)
-      if (existing) return cur.map((i) => i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i)
-      return [...cur, { productId: product.id, name: product.name, sku: product.sku, quantity: 1, unitPrice: price }]
+      if (existing) {
+        return cur.map((i) =>
+          i.productId === product.id
+            ? { ...i, quantity: stock !== null ? Math.min(i.quantity + 1, stock) : i.quantity + 1 }
+            : i
+        )
+      }
+      return [...cur, { productId: product.id, name: product.name, sku: product.sku, quantity: 1, unitPrice: price, stock }]
     })
     setProductSearch('')
   }
 
   function changeQty(productId: string, delta: number) {
     setItems((cur) =>
-      cur
-        .map((i) => i.productId === productId ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i)
+      cur.map((i) => {
+        if (i.productId !== productId) return i
+        const next = Math.max(1, i.quantity + delta)
+        const capped = i.stock !== null ? Math.min(next, i.stock) : next
+        return { ...i, quantity: capped }
+      })
     )
   }
 
@@ -150,17 +170,25 @@ export function CreateOrderDialog({
     setCustomerSearch('')
   }
 
+  function validate(): string | null {
+    if (items.length === 0) return 'Agrega al menos un producto.'
+    if (!newCustomer && !customerId) return 'Selecciona un cliente o crea uno nuevo.'
+    if (newCustomer && !customerName.trim()) return 'Ingresa el nombre del cliente.'
+    if (newCustomer && customerEmail.trim() && !EMAIL_RE.test(customerEmail.trim())) {
+      return 'El email no tiene un formato válido.'
+    }
+    for (const item of items) {
+      if (item.stock !== null && item.quantity > item.stock) {
+        return `Stock insuficiente para "${item.name}". Disponible: ${item.stock}.`
+      }
+    }
+    return null
+  }
+
   async function submit() {
-    if (items.length === 0) {
-      toast({ title: 'Pedido vacío', description: 'Agrega al menos un producto.', variant: 'destructive' })
-      return
-    }
-    if (!newCustomer && !customerId) {
-      toast({ title: 'Cliente requerido', description: 'Selecciona un cliente o crea uno nuevo.', variant: 'destructive' })
-      return
-    }
-    if (newCustomer && !customerName.trim()) {
-      toast({ title: 'Nombre requerido', description: 'Ingresa el nombre del cliente.', variant: 'destructive' })
+    const validationError = validate()
+    if (validationError) {
+      toast({ title: 'Revisa el formulario', description: validationError, variant: 'destructive' })
       return
     }
 
@@ -171,27 +199,37 @@ export function CreateOrderDialog({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerId: newCustomer ? null : customerId,
-          customer: newCustomer ? { name: customerName, email: customerEmail, phone: customerPhone, address: customerAddress } : undefined,
+          customer: newCustomer
+            ? { name: customerName.trim(), email: customerEmail.trim() || null, phone: customerPhone.trim() || null, address: customerAddress.trim() || null }
+            : undefined,
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
-          paymentMethod, fulfillmentType, shippingCost, notes,
+          paymentMethod,
+          fulfillmentType,
+          shippingCost,
+          discountAmount,
+          notes: notes.trim() || null,
         }),
       })
       const payload = await res.json().catch(() => ({}))
-      if (!res.ok || payload?.success === false) throw new Error(payload?.error || 'No se pudo crear el pedido.')
-      toast({ title: 'Pedido creado', description: 'El cliente ya puede verlo en seguimiento.' })
+      if (!res.ok || payload?.success === false) throw new Error(payload?.error ?? 'No se pudo crear el pedido.')
+      toast({ title: 'Pedido creado', description: 'El pedido fue registrado exitosamente.' })
       reset()
       onOpenChange(false)
       onCreated()
     } catch (error) {
-      toast({ title: 'No se pudo crear', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })
+      toast({
+        title: 'No se pudo crear',
+        description: error instanceof Error ? error.message : 'Intenta nuevamente.',
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }
   }
 
   const customerLabel = newCustomer
-    ? customerName || 'Nuevo cliente'
-    : selectedCustomer?.name || 'Sin cliente'
+    ? customerName.trim() || 'Nuevo cliente'
+    : selectedCustomer?.name ?? 'Sin cliente'
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!loading) { if (!next) reset(); onOpenChange(next) } }}>
@@ -221,7 +259,7 @@ export function CreateOrderDialog({
         <div className="overflow-y-auto">
           <div className="grid gap-0 lg:grid-cols-[1fr_320px]">
             {/* ── Left column ── */}
-            <div className="space-y-0 divide-y">
+            <div className="divide-y">
               {/* Customer section */}
               <div className="p-5">
                 <div className="mb-3 flex items-center justify-between">
@@ -254,20 +292,41 @@ export function CreateOrderDialog({
                 {newCustomer ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Nombre *</Label>
-                      <Input className="h-8 text-sm" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Nombre completo" />
+                      <Label className="text-xs">Nombre <span className="text-rose-500">*</span></Label>
+                      <Input
+                        className="h-8 text-sm"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        placeholder="Nombre completo"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Email</Label>
-                      <Input className="h-8 text-sm" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="email@ejemplo.com" />
+                      <Input
+                        className="h-8 text-sm"
+                        type="email"
+                        value={customerEmail}
+                        onChange={(e) => setCustomerEmail(e.target.value)}
+                        placeholder="email@ejemplo.com"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Teléfono</Label>
-                      <Input className="h-8 text-sm" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="+595 9xx xxx xxx" />
+                      <Input
+                        className="h-8 text-sm"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        placeholder="+595 9xx xxx xxx"
+                      />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs">Dirección</Label>
-                      <Input className="h-8 text-sm" value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} placeholder="Calle, ciudad" />
+                      <Input
+                        className="h-8 text-sm"
+                        value={customerAddress}
+                        onChange={(e) => setCustomerAddress(e.target.value)}
+                        placeholder="Calle, ciudad"
+                      />
                     </div>
                   </div>
                 ) : (
@@ -297,7 +356,9 @@ export function CreateOrderDialog({
                       </div>
                     )}
                     {customerSearch && customers.length === 0 && (
-                      <p className="py-2 text-center text-xs text-muted-foreground">Sin resultados. Prueba crear un cliente nuevo.</p>
+                      <p className="py-2 text-center text-xs text-muted-foreground">
+                        Sin resultados. Prueba crear un cliente nuevo.
+                      </p>
                     )}
                   </div>
                 )}
@@ -323,12 +384,16 @@ export function CreateOrderDialog({
                   <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
                     {products.slice(0, 8).map((product) => {
                       const inCart = items.find((i) => i.productId === product.id)
+                      const price = Number(product.offer_price || product.sale_price || 0)
+                      const stock = product.stock_quantity != null ? Number(product.stock_quantity) : null
+                      const outOfStock = stock !== null && stock <= 0
                       return (
                         <button
                           key={product.id}
                           type="button"
-                          onClick={() => addProduct(product)}
-                          className={`group flex items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-all hover:shadow-sm ${
+                          onClick={() => !outOfStock && addProduct(product)}
+                          disabled={outOfStock}
+                          className={`group flex items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-all hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 ${
                             inCart
                               ? 'border-primary/40 bg-primary/5'
                               : 'border-border bg-card hover:border-border/80 hover:bg-muted/30'
@@ -338,15 +403,15 @@ export function CreateOrderDialog({
                             <span className="block truncate text-sm font-medium">{product.name}</span>
                             <span className="block text-xs text-muted-foreground">
                               {product.sku || 'Sin SKU'}
-                              {product.stock_quantity != null && (
-                                <span className="ml-1.5 opacity-60">· {product.stock_quantity} en stock</span>
+                              {stock !== null && (
+                                <span className={`ml-1.5 ${stock <= 3 ? 'text-amber-600' : 'opacity-60'}`}>
+                                  · {stock} en stock
+                                </span>
                               )}
                             </span>
                           </span>
                           <span className="ml-3 shrink-0 text-right">
-                            <span className="block text-sm font-bold tabular-nums">
-                              {formatMoney(Number(product.offer_price || product.sale_price || 0))}
-                            </span>
+                            <span className="block text-sm font-bold tabular-nums">{formatMoney(price)}</span>
                             {inCart && (
                               <span className="block text-xs text-primary">×{inCart.quantity}</span>
                             )}
@@ -378,21 +443,46 @@ export function CreateOrderDialog({
                       <div key={item.productId} className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{item.name}</p>
-                          <p className="text-xs text-muted-foreground">{item.sku || 'Sin SKU'} · {formatMoney(item.unitPrice)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.sku || 'Sin SKU'} · {formatMoney(item.unitPrice)}
+                            {item.stock !== null && item.quantity >= item.stock && (
+                              <span className="ml-1 text-amber-600"> · máx. stock</span>
+                            )}
+                          </p>
                         </div>
-                        {/* Qty stepper */}
                         <div className="flex items-center gap-1">
-                          <Button type="button" variant="outline" size="icon" className="h-6 w-6" onClick={() => changeQty(item.productId, -1)}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => changeQty(item.productId, -1)}
+                          >
                             <Minus className="h-3 w-3" />
                           </Button>
-                          <span className="w-6 text-center text-sm font-bold tabular-nums">{item.quantity}</span>
-                          <Button type="button" variant="outline" size="icon" className="h-6 w-6" onClick={() => changeQty(item.productId, 1)}>
+                          <span className="w-7 text-center text-sm font-bold tabular-nums">{item.quantity}</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => changeQty(item.productId, 1)}
+                            disabled={item.stock !== null && item.quantity >= item.stock}
+                          >
                             <Plus className="h-3 w-3" />
                           </Button>
                         </div>
-                        <span className="w-20 text-right text-sm font-bold tabular-nums">{formatMoney(item.quantity * item.unitPrice)}</span>
-                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeItem(item.productId)}>
-                          <X className="h-3.5 w-3.5" />
+                        <span className="w-20 text-right text-sm font-bold tabular-nums">
+                          {formatMoney(item.quantity * item.unitPrice)}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeItem(item.productId)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     ))}
@@ -401,7 +491,7 @@ export function CreateOrderDialog({
               </div>
             </div>
 
-            {/* ── Right column — order config ── */}
+            {/* ── Right column — config ── */}
             <div className="flex flex-col border-l bg-muted/20">
               <div className="flex-1 space-y-4 p-5">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Configuración</p>
@@ -443,6 +533,17 @@ export function CreateOrderDialog({
                   </div>
 
                   <div className="space-y-1.5">
+                    <Label className="text-xs">Descuento</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      className="h-8 text-sm"
+                      value={discountAmount}
+                      onChange={(e) => setDiscountAmount(Math.max(0, Number(e.target.value || 0)))}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
                     <Label className="text-xs">Notas internas</Label>
                     <Textarea
                       className="resize-none text-sm"
@@ -450,13 +551,14 @@ export function CreateOrderDialog({
                       onChange={(e) => setNotes(e.target.value)}
                       rows={3}
                       placeholder="Instrucciones especiales, referencias…"
+                      maxLength={2000}
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Order summary + CTA */}
-              <div className="border-t p-5 space-y-4">
+              {/* Summary + CTA */}
+              <div className="space-y-4 border-t p-5">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Resumen</p>
                 <div className="space-y-1.5 text-sm">
                   <div className="flex justify-between text-muted-foreground">
@@ -467,6 +569,12 @@ export function CreateOrderDialog({
                     <div className="flex justify-between text-muted-foreground">
                       <span>Envío</span>
                       <span className="tabular-nums">{formatMoney(shippingCost)}</span>
+                    </div>
+                  )}
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>Descuento</span>
+                      <span className="tabular-nums">−{formatMoney(discountAmount)}</span>
                     </div>
                   )}
                   <Separator className="my-1" />
