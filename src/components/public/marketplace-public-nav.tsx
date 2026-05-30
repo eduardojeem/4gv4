@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Building2, Grid3X3, LayoutDashboard, LayoutGrid, LogOut, Menu, Package, Search, ShoppingBag, Store, User, X } from 'lucide-react'
+import { Building2, Grid3X3, LayoutDashboard, LayoutGrid, LogOut, Menu, Package, Rocket, Search, ShoppingBag, Store, User, X } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -94,8 +94,16 @@ export function MarketplacePublicNav() {
 
         {/* Right actions */}
         <div className="flex items-center gap-2">
+          {/* SaaS CTA — desktop */}
+          <Link
+            href="/saas"
+            className="hidden items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-semibold text-cyan-700 transition-colors hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/70 lg:flex"
+          >
+            <Rocket className="h-3.5 w-3.5" />
+            ¿Tenés un negocio?
+          </Link>
+
           {user ? (
-            <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
                   <Avatar className="h-8 w-8 border border-slate-200 dark:border-slate-700">
@@ -126,6 +134,12 @@ export function MarketplacePublicNav() {
                   <Link href="/marketplace" className="cursor-pointer">
                     <ShoppingBag className="mr-2 h-4 w-4" />
                     Marketplace
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/saas" className="cursor-pointer">
+                    <Rocket className="mr-2 h-4 w-4" />
+                    Planes SaaS
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -208,6 +222,12 @@ export function MarketplacePublicNav() {
                       </Link>
                     </Button>
                   )}
+                  <Button asChild variant="outline" size="sm" className="w-full justify-start gap-2 border-cyan-200 text-cyan-700 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-300">
+                    <Link href="/saas" onClick={() => setMobileOpen(false)}>
+                      <Rocket className="h-4 w-4" />
+                      Planes SaaS
+                    </Link>
+                  </Button>
                   <Button type="button" variant="outline" size="sm" className="w-full justify-start gap-2 text-destructive" onClick={handleLogout}>
                     <LogOut className="h-4 w-4" />
                     Cerrar sesion
@@ -225,6 +245,12 @@ export function MarketplacePublicNav() {
                     <Link href="/register" onClick={() => setMobileOpen(false)}>
                       <ShoppingBag className="h-4 w-4" />
                       Crear mi tienda
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="sm" className="w-full gap-2 border-cyan-200 text-cyan-700 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-300">
+                    <Link href="/saas" onClick={() => setMobileOpen(false)}>
+                      <Rocket className="h-4 w-4" />
+                      ¿Tenés un negocio?
                     </Link>
                   </Button>
                 </div>
