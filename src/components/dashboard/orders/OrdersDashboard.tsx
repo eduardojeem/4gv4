@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, Calendar, Check,
-  ChevronLeft, ChevronRight, Download, Loader2, Mail, MapPin,
-  Package, PackageSearch, Phone, Plus, RefreshCw, Search,
-  SlidersHorizontal, Store, Truck, X,
+  AlertTriangle, ArrowLeft, ArrowRight, Calendar, Check, ChevronLeft,
+  ChevronRight, Copy, Download, ExternalLink, Loader2, Mail, MapPin,
+  MessageSquare, Package, PackageSearch, Pencil, Phone, Plus, RefreshCw,
+  Search, SlidersHorizontal, Store, TrendingUp, Truck, X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,11 +13,12 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 import {
   ORDER_FLOW, ORDER_STATUS_META, ORDER_STATUS_OPTIONS,
-  PAYMENT_STATUS_META, PAYMENT_STATUS_OPTIONS,
+  PAYMENT_METHOD_META, PAYMENT_STATUS_META, PAYMENT_STATUS_OPTIONS,
 } from '@/lib/orders/constants'
 import type { CustomerOrder, OrderStatus, PaymentStatus } from '@/lib/orders/types'
 import { CreateOrderDialog } from './CreateOrderDialog'
@@ -27,6 +28,8 @@ import { formatDate, formatMoney, formatRelativeTime } from './format'
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DatePreset = 'all' | 'today' | 'week' | 'month'
 type SortKey = 'newest' | 'oldest' | 'amount_desc' | 'amount_asc'
+type ViewMode = 'list' | 'kanban'
+
 type OrdersPayload = {
   orders: CustomerOrder[]
   pagination: { page: number; limit: number; total: number; totalPages: number }
@@ -64,46 +67,79 @@ function getInitials(name: string) {
   return name.split(' ').slice(0,2).map((w) => w[0]?.toUpperCase() ?? '').join('')
 }
 
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query || !text) return <>{text}</>
+  const escaped = query.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase()
+          ? <mark key={i} className="rounded-[2px] bg-amber-100 px-0.5 font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200">{part}</mark>
+          : part
+      )}
+    </>
+  )
+}
+
 // ─── Stat card ────────────────────────────────────────────────────────────────
 const STAT_KEYS: OrderStatus[] = ['PENDING', 'CONFIRMED', 'READY', 'SHIPPED']
 
-function StatCard({ statusKey, count, active, onClick }: {
-  statusKey: OrderStatus; count: number; active: boolean; onClick: () => void
+function StatCard({ statusKey, count, revenue, active, onClick }: {
+  statusKey: OrderStatus; count: number; revenue?: number; active: boolean; onClick: () => void
 }) {
   const meta = ORDER_STATUS_META[statusKey]
   const Icon = meta.icon
   return (
-    <button
-      type="button" onClick={onClick}
+    <button type="button" onClick={onClick}
       className={cn(
-        'group relative flex flex-col gap-3 rounded-2xl border p-4 text-left transition-all duration-200',
+        'group relative flex flex-col gap-2.5 rounded-2xl border p-4 text-left transition-all duration-200',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         active
-          ? 'border-primary/30 bg-gradient-to-br from-primary/8 to-primary/4 shadow-md ring-1 ring-primary/20'
+          ? 'border-primary/30 bg-gradient-to-br from-primary/8 to-primary/3 shadow-lg ring-1 ring-primary/20'
           : 'border-border bg-card hover:border-primary/20 hover:shadow-md hover:-translate-y-0.5'
-      )}
-    >
+      )}>
       <div className="flex items-center justify-between">
-        <span className={cn('text-xs font-semibold', active ? 'text-primary/80' : 'text-muted-foreground')}>
+        <span className={cn('text-xs font-semibold tracking-wide', active ? 'text-primary/80' : 'text-muted-foreground')}>
           {meta.label}
         </span>
-        <div className={cn(
-          'flex h-8 w-8 items-center justify-center rounded-xl transition-colors',
-          active ? 'bg-primary/15' : 'bg-muted group-hover:bg-primary/10'
-        )}>
+        <div className={cn('flex h-8 w-8 items-center justify-center rounded-xl transition-colors',
+          active ? 'bg-primary/15' : 'bg-muted group-hover:bg-primary/10')}>
           <Icon className={cn('h-4 w-4', active ? 'text-primary' : 'text-muted-foreground group-hover:text-primary/70')} />
         </div>
       </div>
-      <div className="flex items-end justify-between">
-        <span className={cn('text-3xl font-bold tabular-nums tracking-tight', active ? 'text-primary' : 'text-foreground')}>
+      <div>
+        <span className={cn('text-3xl font-bold tabular-nums tracking-tight', active ? 'text-primary' : '')}>
           {count}
         </span>
-        {active && (
-          <span className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-primary/60">activo</span>
+        {revenue !== undefined && revenue > 0 && (
+          <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">{formatMoney(revenue)}</p>
         )}
       </div>
       {active && <div className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full bg-primary/40" />}
     </button>
+  )
+}
+
+// ─── Revenue summary bar ──────────────────────────────────────────────────────
+function RevenueSummary({ orders }: { orders: CustomerOrder[] }) {
+  const total = orders.reduce((s, o) => s + o.total, 0)
+  const paid = orders.filter((o) => o.payment_status === 'PAID').reduce((s, o) => s + o.total, 0)
+  const pending = orders.filter((o) => o.payment_status === 'PENDING').reduce((s, o) => s + o.total, 0)
+  if (orders.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-4 rounded-2xl border bg-card px-5 py-3.5">
+      <div className="flex items-center gap-2">
+        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Esta página</span>
+      </div>
+      <div className="flex flex-wrap gap-5 text-sm">
+        <div><span className="text-muted-foreground">Total </span><strong className="tabular-nums">{formatMoney(total)}</strong></div>
+        <div><span className="text-muted-foreground">Cobrado </span><strong className="tabular-nums text-emerald-600 dark:text-emerald-400">{formatMoney(paid)}</strong></div>
+        <div><span className="text-muted-foreground">Pendiente </span><strong className="tabular-nums text-amber-600 dark:text-amber-400">{formatMoney(pending)}</strong></div>
+        <div><span className="text-muted-foreground">Pedidos </span><strong>{orders.length}</strong></div>
+      </div>
+    </div>
   )
 }
 
@@ -131,13 +167,10 @@ function StatusTimeline({ status }: { status: OrderStatus }) {
                   : active ? 'border-primary bg-primary/10 shadow-sm shadow-primary/20'
                   : 'border-muted bg-muted/30'
               )}>
-                {done
-                  ? <Check className="h-3.5 w-3.5 text-primary-foreground" />
-                  : <Icon className={cn('h-3 w-3', active ? 'text-primary' : 'text-muted-foreground/30')} />
-                }
+                {done ? <Check className="h-3.5 w-3.5 text-primary-foreground" />
+                  : <Icon className={cn('h-3 w-3', active ? 'text-primary' : 'text-muted-foreground/30')} />}
               </div>
-              <span className={cn(
-                'mt-1.5 px-0.5 text-center text-[10px] font-medium leading-tight',
+              <span className={cn('mt-1.5 px-0.5 text-center text-[10px] font-medium leading-tight',
                 done || active ? 'text-foreground' : 'text-muted-foreground/40'
               )}>{meta.label}</span>
             </div>
@@ -152,53 +185,71 @@ function StatusTimeline({ status }: { status: OrderStatus }) {
 }
 
 // ─── Order row ────────────────────────────────────────────────────────────────
-function OrderRow({ order, selected, updating, onClick, onAdvanceStatus }: {
-  order: CustomerOrder; selected: boolean; updating: boolean
+function OrderRow({ order, selected, updating, searchQuery = '', onClick, onAdvanceStatus }: {
+  order: CustomerOrder; selected: boolean; updating: boolean; searchQuery?: string
   onClick: () => void; onAdvanceStatus: (s: OrderStatus) => void
 }) {
+  const { toast } = useToast()
   const currentIdx = ORDER_FLOW.indexOf(order.status)
   const isTerminal = ['DELIVERED', 'CANCELLED'].includes(order.status)
   const nextStatus = !isTerminal && currentIdx < ORDER_FLOW.length - 1 ? ORDER_FLOW[currentIdx + 1] : null
+  const PayIcon = PAYMENT_METHOD_META[order.payment_method]?.icon
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const items = order.order_items.map((i) => `• ${i.quantity}x ${i.product_name}`).join('\n')
+    const text = `Pedido: ${order.order_number}\nCliente: ${order.customer_name}\nTel: ${order.customer_phone ?? '-'}\nTotal: ${formatMoney(order.total)}\nEntrega: ${order.fulfillment_type === 'PICKUP' ? 'Retiro' : 'Delivery'}\n${items}`
+    navigator.clipboard.writeText(text)
+    toast({ title: 'Copiado', description: `Detalles de ${order.order_number}` })
+  }
+
+  const handleWhatsApp = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!order.customer_phone) return
+    const phone = order.customer_phone.replace(/\D/g, '')
+    const msg = `¡Hola ${order.customer_name}! Te contactamos sobre tu pedido ${order.order_number}.`
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
+  }
 
   return (
     <div className={cn(
-      'group rounded-2xl border transition-all duration-200',
+      'group overflow-hidden rounded-2xl border transition-all duration-200',
       selected
         ? 'border-primary/30 bg-gradient-to-r from-primary/5 to-transparent shadow-md ring-1 ring-primary/20'
         : 'border-border bg-card hover:border-primary/20 hover:shadow-md hover:-translate-y-px'
     )}>
       <button type="button" onClick={onClick}
-        className="w-full rounded-t-2xl p-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40">
+        className="w-full p-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40">
         <div className="flex items-start gap-3">
-          {/* Avatar */}
           <div className={cn(
             'hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold transition-colors',
             selected ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary/70'
-          )}>
-            {getInitials(order.customer_name)}
-          </div>
-          {/* Info */}
+          )}>{getInitials(order.customer_name)}</div>
+
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-              <span className="font-mono text-sm font-bold text-primary">{order.order_number}</span>
+              <span className="font-mono text-sm font-bold text-primary">
+                <HighlightText text={order.order_number} query={searchQuery} />
+              </span>
               <OrderStatusBadge status={order.status} />
               <PaymentStatusBadge status={order.payment_status} />
               {updating && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
             </div>
-            <p className="text-sm font-semibold truncate">{order.customer_name}</p>
+            <p className="text-sm font-semibold truncate">
+              <HighlightText text={order.customer_name} query={searchQuery} />
+            </p>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-              {order.customer_phone && <span>{order.customer_phone}</span>}
+              {order.customer_phone && <span><HighlightText text={order.customer_phone} query={searchQuery} /></span>}
               {order.customer_phone && <span className="opacity-30">·</span>}
               <span className="flex items-center gap-1">
-                {order.fulfillment_type === 'PICKUP'
-                  ? <><Store className="h-3 w-3" /> Retiro</>
-                  : <><Truck className="h-3 w-3" /> Delivery</>}
+                {order.fulfillment_type === 'PICKUP' ? <><Store className="h-3 w-3" /> Retiro</> : <><Truck className="h-3 w-3" /> Delivery</>}
               </span>
               <span className="opacity-30">·</span>
-              <span>{order.order_items.length} {order.order_items.length === 1 ? 'producto' : 'productos'}</span>
+              <span>{order.order_items.length} prod.</span>
+              {PayIcon && <><span className="opacity-30">·</span><PayIcon className="h-3 w-3" /></>}
             </div>
           </div>
-          {/* Amount */}
+
           <div className="text-right shrink-0">
             <p className="font-bold tabular-nums text-base">{formatMoney(order.total)}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{formatRelativeTime(order.created_at)}</p>
@@ -206,27 +257,35 @@ function OrderRow({ order, selected, updating, onClick, onAdvanceStatus }: {
         </div>
       </button>
 
-      {/* Action bar */}
-      <div className="flex items-center justify-between border-t border-border/60 px-4 py-2.5 gap-2">
-        <button type="button" onClick={onClick}
-          className="text-xs font-medium text-muted-foreground hover:text-primary transition-colors">
-          {selected ? 'Cerrar detalle' : 'Ver detalle →'}
-        </button>
+      {/* Quick action bar */}
+      <div className="flex items-center justify-between border-t border-border/60 bg-muted/10 px-4 py-2 gap-2">
+        <div className="flex items-center gap-1">
+          <button type="button" title="Copiar detalles" onClick={handleCopy}
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          {order.customer_phone && (
+            <button type="button" title="WhatsApp" onClick={handleWhatsApp}
+              className="rounded-md p-1 text-emerald-600 transition-colors hover:bg-emerald-50 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950/20">
+              <MessageSquare className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button type="button" onClick={onClick}
+            className="ml-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-primary">
+            {selected ? 'Cerrar ↑' : 'Ver detalle →'}
+          </button>
+        </div>
+
         <div className="flex items-center gap-1.5">
           {isTerminal ? (
-            <span className={cn('text-xs font-semibold',
-              order.status === 'DELIVERED' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'
-            )}>
-              {ORDER_STATUS_META[order.status].label}
-            </span>
+            <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold',
+              order.status === 'DELIVERED' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400'
+                : 'bg-rose-50 text-rose-500 dark:bg-rose-950/30 dark:text-rose-400'
+            )}>{ORDER_STATUS_META[order.status].label}</span>
           ) : nextStatus ? (
             <button type="button" disabled={updating}
               onClick={(e) => { e.stopPropagation(); onAdvanceStatus(nextStatus) }}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-semibold transition-all',
-                'border-primary/25 bg-primary/8 text-primary hover:bg-primary/15 hover:border-primary/40',
-                'disabled:opacity-40 disabled:cursor-not-allowed'
-              )}>
+              className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-xs font-bold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40">
               {updating ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
               {ORDER_STATUS_META[nextStatus].label}
             </button>
@@ -237,31 +296,116 @@ function OrderRow({ order, selected, updating, onClick, onAdvanceStatus }: {
   )
 }
 
+// ─── Kanban column ────────────────────────────────────────────────────────────
+function KanbanColumn({ statusKey, orders, updatingId, onSelect, onAdvanceStatus }: {
+  statusKey: OrderStatus; orders: CustomerOrder[]; updatingId: string | null
+  onSelect: (o: CustomerOrder) => void; onAdvanceStatus: (o: CustomerOrder, s: OrderStatus) => void
+}) {
+  const meta = ORDER_STATUS_META[statusKey]
+  const Icon = meta.icon
+  const currentIdx = ORDER_FLOW.indexOf(statusKey)
+  const nextStatus = currentIdx < ORDER_FLOW.length - 1 ? ORDER_FLOW[currentIdx + 1] : null
+  const colRevenue = orders.reduce((s, o) => s + o.total, 0)
+
+  return (
+    <div className="flex min-w-[260px] flex-1 flex-col rounded-2xl border bg-muted/20">
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <div className="flex items-center gap-2">
+          <div className={cn('flex h-7 w-7 items-center justify-center rounded-lg border', meta.className)}>
+            <Icon className="h-3.5 w-3.5" />
+          </div>
+          <span className="text-sm font-semibold">{meta.label}</span>
+          <Badge variant="secondary" className="tabular-nums text-xs">{orders.length}</Badge>
+        </div>
+        {colRevenue > 0 && <span className="text-xs text-muted-foreground tabular-nums">{formatMoney(colRevenue)}</span>}
+      </div>
+
+      <div className="flex-1 space-y-2 overflow-y-auto p-3" style={{ maxHeight: '65vh' }}>
+        {orders.length === 0 ? (
+          <div className="flex h-20 items-center justify-center rounded-xl border border-dashed text-xs text-muted-foreground">
+            Sin pedidos
+          </div>
+        ) : orders.map((order) => (
+          <div key={order.id}
+            className="cursor-pointer rounded-xl border bg-card p-3 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+            onClick={() => onSelect(order)}>
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <span className="font-mono text-xs font-bold text-primary">{order.order_number}</span>
+              <PaymentStatusBadge status={order.payment_status} />
+            </div>
+            <p className="text-sm font-semibold truncate">{order.customer_name}</p>
+            <div className="mt-1.5 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">{formatRelativeTime(order.created_at)}</span>
+              <span className="text-sm font-bold tabular-nums">{formatMoney(order.total)}</span>
+            </div>
+            {nextStatus && (
+              <button type="button"
+                disabled={updatingId === order.id}
+                onClick={(e) => { e.stopPropagation(); onAdvanceStatus(order, nextStatus) }}
+                className="mt-2 w-full rounded-lg border border-primary/20 bg-primary/5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-40">
+                {updatingId === order.id ? <Loader2 className="mx-auto h-3 w-3 animate-spin" /> : `→ ${ORDER_STATUS_META[nextStatus].label}`}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Order detail panel ───────────────────────────────────────────────────────
-function OrderDetailPanel({ order, updating, cancelConfirmId, onClose, onStatusChange, onPaymentChange, onCancelConfirm, onCancelDismiss }: {
+function OrderDetailPanel({ order, updating, cancelConfirmId, onClose, onStatusChange, onPaymentChange, onOrderUpdate, onCancelConfirm, onCancelDismiss }: {
   order: CustomerOrder; updating: boolean; cancelConfirmId: string | null
   onClose: () => void; onStatusChange: (s: OrderStatus) => void
-  onPaymentChange: (s: PaymentStatus) => void; onCancelConfirm: () => void; onCancelDismiss: () => void
+  onPaymentChange: (s: PaymentStatus) => void
+  onOrderUpdate: (patch: { notes?: string | null; customer_address?: string | null }) => void
+  onCancelConfirm: () => void; onCancelDismiss: () => void
 }) {
+  const { toast } = useToast()
   const currentIdx = ORDER_FLOW.indexOf(order.status)
   const isTerminal = ['DELIVERED', 'CANCELLED'].includes(order.status)
   const nextStatus = !isTerminal && currentIdx < ORDER_FLOW.length - 1 ? ORDER_FLOW[currentIdx + 1] : null
   const prevStatus = !isTerminal && currentIdx > 0 ? ORDER_FLOW[currentIdx - 1] : null
+
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [editingAddress, setEditingAddress] = useState(false)
+  const [draftNotes, setDraftNotes] = useState(order.notes ?? '')
+  const [draftAddress, setDraftAddress] = useState(order.customer_address ?? '')
+
+  const handleWhatsApp = () => {
+    if (!order.customer_phone) return
+    const phone = order.customer_phone.replace(/\D/g, '')
+    const msg = `¡Hola ${order.customer_name}! Tu pedido ${order.order_number} está ${ORDER_STATUS_META[order.status].label.toLowerCase()}.`
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
+  }
+
+  const handleCopyLink = () => {
+    const url = `${window.location.origin}/track?order=${order.order_number}`
+    navigator.clipboard.writeText(url)
+    toast({ title: 'Link copiado', description: 'El cliente puede rastrear su pedido con este link.' })
+  }
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex shrink-0 items-start justify-between border-b bg-muted/30 px-5 py-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <p className="font-mono text-sm font-bold text-primary">{order.order_number}</p>
             <OrderStatusBadge status={order.status} />
+            <PaymentStatusBadge status={order.payment_status} />
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 rounded-lg" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <button type="button" title="Link de rastreo" onClick={handleCopyLink}
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <ExternalLink className="h-3.5 w-3.5" />
+          </button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Body */}
@@ -270,7 +414,7 @@ function OrderDetailPanel({ order, updating, cancelConfirmId, onClose, onStatusC
 
           {/* Timeline */}
           <section>
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">Progreso</p>
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">Progreso del pedido</p>
             <StatusTimeline status={order.status} />
           </section>
 
@@ -280,11 +424,19 @@ function OrderDetailPanel({ order, updating, cancelConfirmId, onClose, onStatusC
           <section>
             <p className="mb-2.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">Cliente</p>
             <div className="rounded-xl border bg-muted/20 p-3.5">
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
-                  {getInitials(order.customer_name)}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
+                    {getInitials(order.customer_name)}
+                  </div>
+                  <span className="font-semibold text-sm">{order.customer_name}</span>
                 </div>
-                <span className="font-semibold text-sm">{order.customer_name}</span>
+                {order.customer_phone && (
+                  <button type="button" onClick={handleWhatsApp}
+                    className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <MessageSquare className="h-3 w-3" /> WhatsApp
+                  </button>
+                )}
               </div>
               <div className="space-y-1.5">
                 {order.customer_phone && (
@@ -298,14 +450,26 @@ function OrderDetailPanel({ order, updating, cancelConfirmId, onClose, onStatusC
                     <span className="truncate">{order.customer_email}</span>
                   </div>
                 )}
-                {order.customer_address && (
-                  <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                    <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground/60" />{order.customer_address}
-                  </div>
-                )}
-                {!order.customer_phone && !order.customer_email && !order.customer_address && (
-                  <p className="text-xs italic text-muted-foreground/60">Sin datos de contacto</p>
-                )}
+                {/* Editable address */}
+                <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground/60" />
+                  {editingAddress ? (
+                    <div className="flex-1 space-y-1.5">
+                      <Input className="h-7 text-xs" value={draftAddress} onChange={(e) => setDraftAddress(e.target.value)} placeholder="Dirección de entrega" />
+                      <div className="flex gap-1">
+                        <Button size="sm" className="h-6 text-xs px-2" onClick={() => { onOrderUpdate({ customer_address: draftAddress || null }); setEditingAddress(false) }}>Guardar</Button>
+                        <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => { setDraftAddress(order.customer_address ?? ''); setEditingAddress(false) }}>Cancelar</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-1 items-center justify-between gap-1">
+                      <span>{order.customer_address || <span className="italic opacity-50">Sin dirección</span>}</span>
+                      <button type="button" onClick={() => setEditingAddress(true)} className="shrink-0 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted">
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -335,7 +499,7 @@ function OrderDetailPanel({ order, updating, cancelConfirmId, onClose, onStatusC
 
           {/* Financial summary */}
           <section className="rounded-xl border bg-muted/20 p-4">
-            <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">Resumen</p>
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">Resumen financiero</p>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span><span className="tabular-nums">{formatMoney(order.subtotal)}</span>
@@ -364,20 +528,39 @@ function OrderDetailPanel({ order, updating, cancelConfirmId, onClose, onStatusC
             <Select value={order.payment_status} onValueChange={(v) => onPaymentChange(v as PaymentStatus)} disabled={updating}>
               <SelectTrigger className="h-9 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {PAYMENT_STATUS_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
+                {PAYMENT_STATUS_OPTIONS.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </section>
 
-          {/* Notes */}
-          {order.notes && (
-            <section>
-              <p className="mb-2.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">Notas</p>
-              <p className="rounded-xl border bg-muted/20 px-3.5 py-3 text-sm italic text-muted-foreground">{order.notes}</p>
-            </section>
-          )}
+          {/* Editable notes */}
+          <section>
+            <div className="mb-2.5 flex items-center justify-between">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/70">Notas internas</p>
+              {!editingNotes && (
+                <button type="button" onClick={() => setEditingNotes(true)}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+                  <Pencil className="h-3 w-3" /> Editar
+                </button>
+              )}
+            </div>
+            {editingNotes ? (
+              <div className="space-y-2">
+                <Textarea className="resize-none text-sm" rows={3} value={draftNotes}
+                  onChange={(e) => setDraftNotes(e.target.value)} placeholder="Instrucciones, referencias…" maxLength={2000} />
+                <div className="flex gap-2">
+                  <Button size="sm" className="h-7 text-xs" onClick={() => { onOrderUpdate({ notes: draftNotes || null }); setEditingNotes(false) }}>Guardar</Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setDraftNotes(order.notes ?? ''); setEditingNotes(false) }}>Cancelar</Button>
+                </div>
+              </div>
+            ) : (
+              <p className={cn('rounded-xl border bg-muted/20 px-3.5 py-3 text-sm',
+                order.notes ? 'italic text-muted-foreground' : 'italic text-muted-foreground/40'
+              )}>
+                {order.notes || 'Sin notas'}
+              </p>
+            )}
+          </section>
         </div>
       </div>
 
@@ -440,13 +623,9 @@ function OrderListSkeleton() {
             <Skeleton className="h-10 w-10 shrink-0 rounded-xl" />
             <div className="flex-1 space-y-2">
               <div className="flex gap-2"><Skeleton className="h-4 w-32" /><Skeleton className="h-4 w-20" /><Skeleton className="h-4 w-16" /></div>
-              <Skeleton className="h-4 w-44" />
-              <Skeleton className="h-3 w-60" />
+              <Skeleton className="h-4 w-44" /><Skeleton className="h-3 w-60" />
             </div>
-            <div className="space-y-1.5 text-right">
-              <Skeleton className="ml-auto h-5 w-24" />
-              <Skeleton className="ml-auto h-3 w-16" />
-            </div>
+            <div className="space-y-1.5 text-right"><Skeleton className="ml-auto h-5 w-24" /><Skeleton className="ml-auto h-3 w-16" /></div>
           </div>
         </div>
       ))}
@@ -454,13 +633,14 @@ function OrderListSkeleton() {
   )
 }
 
-// ─── Date presets ─────────────────────────────────────────────────────────────
 const DATE_PRESETS: { value: DatePreset; label: string }[] = [
   { value: 'today', label: 'Hoy' },
   { value: 'week', label: '7 días' },
   { value: 'month', label: '30 días' },
   { value: 'all', label: 'Todo' },
 ]
+
+const KANBAN_STATUSES: OrderStatus[] = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED']
 
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 export function OrdersDashboard() {
@@ -475,6 +655,7 @@ export function OrdersDashboard() {
   const [fulfillmentFilter, setFulfillmentFilter] = useState('ALL')
   const [datePreset, setDatePreset] = useState<DatePreset>('all')
   const [sort, setSort] = useState<SortKey>('newest')
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
@@ -564,23 +745,40 @@ export function OrdersDashboard() {
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || payload?.success === false) throw new Error(payload?.error ?? 'No se pudo actualizar.')
       const updated = payload.data as CustomerOrder
-      setOrders((cur) => {
-        const mapped = cur.map((r) => r.id === order.id ? updated : r)
-        return paymentFilter !== 'ALL' && updated.payment_status !== paymentFilter ? mapped.filter((r) => r.id !== order.id) : mapped
-      })
-      if (selectedOrder?.id === order.id) {
-        if (paymentFilter !== 'ALL' && updated.payment_status !== paymentFilter) setSelectedOrder(null)
-        else setSelectedOrder(updated)
-      }
+      setOrders((cur) => cur.map((r) => r.id === order.id ? updated : r))
+      if (selectedOrder?.id === order.id) setSelectedOrder(updated)
       toast({ title: 'Pago actualizado', description: `${order.order_number} → ${PAYMENT_STATUS_META[paymentStatus].label}` })
     } catch (error) {
       toast({ title: 'No se pudo actualizar el pago', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })
     } finally { setUpdatingId(null) }
   }
 
+  async function updateOrderFields(order: CustomerOrder, patch: { notes?: string | null; customer_address?: string | null }) {
+    try {
+      const response = await fetch(`/api/orders/${order.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload?.success === false) throw new Error(payload?.error ?? 'No se pudo actualizar.')
+      const updated = payload.data as CustomerOrder
+      setOrders((cur) => cur.map((r) => r.id === order.id ? updated : r))
+      if (selectedOrder?.id === order.id) setSelectedOrder(updated)
+      toast({ title: 'Pedido actualizado' })
+    } catch (error) {
+      toast({ title: 'No se pudo guardar', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })
+    }
+  }
+
   const hasActiveFilters = search !== '' || statusFilter !== 'ALL' || paymentFilter !== 'ALL' || fulfillmentFilter !== 'ALL' || datePreset !== 'all'
   function clearFilters() { setPage(1); setSearch(''); setStatusFilter('ALL'); setPaymentFilter('ALL'); setFulfillmentFilter('ALL'); setDatePreset('all') }
   function handleSelectOrder(order: CustomerOrder) { setSelectedOrder((prev) => prev?.id === order.id ? null : order) }
+
+  // Kanban: group orders by status (use all loaded orders)
+  const kanbanGroups = KANBAN_STATUSES.reduce<Record<string, CustomerOrder[]>>((acc, s) => {
+    acc[s] = orders.filter((o) => o.status === s)
+    return acc
+  }, {})
 
   return (
     <div className="flex flex-col gap-6">
@@ -590,7 +788,18 @@ export function OrdersDashboard() {
           <h1 className="text-2xl font-bold tracking-tight">Pedidos</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">Gestiona pedidos, estados y pagos en tiempo real.</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* View toggle */}
+          <div className="flex overflow-hidden rounded-xl border">
+            {(['list', 'kanban'] as ViewMode[]).map((v) => (
+              <button key={v} type="button" onClick={() => setViewMode(v)}
+                className={cn('px-3 py-1.5 text-xs font-semibold transition-colors',
+                  viewMode === v ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted'
+                )}>
+                {v === 'list' ? 'Lista' : 'Kanban'}
+              </button>
+            ))}
+          </div>
           <Button variant="outline" size="sm" onClick={() => exportOrdersCSV(orders)} disabled={orders.length === 0} className="gap-1.5 rounded-xl">
             <Download className="h-3.5 w-3.5" /> Exportar
           </Button>
@@ -606,7 +815,8 @@ export function OrdersDashboard() {
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {STAT_KEYS.map((key) => (
-          <StatCard key={key} statusKey={key} count={stats[key] ?? 0} active={statusFilter === key}
+          <StatCard key={key} statusKey={key} count={stats[key] ?? 0}
+            active={statusFilter === key}
             onClick={() => { setPage(1); setStatusFilter((prev) => prev === key ? 'ALL' : key) }} />
         ))}
       </div>
@@ -667,12 +877,8 @@ export function OrdersDashboard() {
                 <button key={preset.value} type="button"
                   onClick={() => { setPage(1); setDatePreset(preset.value) }}
                   className={cn('px-3 py-1.5 text-xs font-semibold transition-colors',
-                    datePreset === preset.value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
-                  )}>
-                  {preset.label}
-                </button>
+                    datePreset === preset.value ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}>{preset.label}</button>
               ))}
             </div>
           </div>
@@ -684,69 +890,88 @@ export function OrdersDashboard() {
         </div>
       </div>
 
+      {/* ── Revenue summary ── */}
+      {!loading && orders.length > 0 && <RevenueSummary orders={orders} />}
+
       {/* ── Content ── */}
-      <div className={cn('grid gap-4', selectedOrder ? 'lg:grid-cols-[1fr_420px]' : 'grid-cols-1')}>
-        {/* List */}
-        <div className="space-y-3 min-w-0">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-sm font-medium text-muted-foreground">
-              {loading ? 'Cargando…' : `${total} pedido${total !== 1 ? 's' : ''}`}
-            </span>
-            {hasActiveFilters && <Badge variant="secondary" className="rounded-full text-xs">Filtrado</Badge>}
+      {viewMode === 'kanban' ? (
+        /* Kanban view */
+        <div className="overflow-x-auto pb-4">
+          <div className="flex gap-3 min-w-max">
+            {KANBAN_STATUSES.map((s) => (
+              <KanbanColumn key={s} statusKey={s} orders={kanbanGroups[s] ?? []}
+                updatingId={updatingId}
+                onSelect={handleSelectOrder}
+                onAdvanceStatus={(o, ns) => void updateStatus(o, ns)} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* List view */
+        <div className={cn('grid gap-4', selectedOrder ? 'lg:grid-cols-[1fr_420px]' : 'grid-cols-1')}>
+          <div className="space-y-3 min-w-0">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-sm font-medium text-muted-foreground">
+                {loading ? 'Cargando…' : `${total} pedido${total !== 1 ? 's' : ''}`}
+              </span>
+              {hasActiveFilters && <Badge variant="secondary" className="rounded-full text-xs">Filtrado</Badge>}
+            </div>
+
+            {loading ? <OrderListSkeleton /> : orders.length === 0 ? (
+              <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed bg-muted/20 text-center">
+                <PackageSearch className="h-10 w-10 text-muted-foreground/30" />
+                <p className="mt-3 font-semibold">Sin pedidos</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {hasActiveFilters ? 'Ningún pedido coincide con los filtros.' : 'Crea el primer pedido para comenzar.'}
+                </p>
+                {hasActiveFilters && (
+                  <Button variant="outline" size="sm" className="mt-4 rounded-xl" onClick={clearFilters}>Limpiar filtros</Button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {orders.map((order) => (
+                  <OrderRow key={order.id} order={order}
+                    selected={selectedOrder?.id === order.id}
+                    updating={updatingId === order.id}
+                    searchQuery={search}
+                    onClick={() => handleSelectOrder(order)}
+                    onAdvanceStatus={(s) => void updateStatus(order, s)} />
+                ))}
+              </div>
+            )}
+
+            {!loading && totalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="gap-1.5 rounded-xl">
+                  <ChevronLeft className="h-4 w-4" /> Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">Página <strong>{page}</strong> de <strong>{totalPages}</strong></span>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="gap-1.5 rounded-xl">
+                  Siguiente <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
 
-          {loading ? <OrderListSkeleton /> : orders.length === 0 ? (
-            <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed bg-muted/20 text-center">
-              <PackageSearch className="h-10 w-10 text-muted-foreground/30" />
-              <p className="mt-3 font-semibold">Sin pedidos</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {hasActiveFilters ? 'Ningún pedido coincide con los filtros.' : 'Crea el primer pedido para comenzar.'}
-              </p>
-              {hasActiveFilters && (
-                <Button variant="outline" size="sm" className="mt-4 rounded-xl" onClick={clearFilters}>Limpiar filtros</Button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {orders.map((order) => (
-                <OrderRow key={order.id} order={order}
-                  selected={selectedOrder?.id === order.id}
-                  updating={updatingId === order.id}
-                  onClick={() => handleSelectOrder(order)}
-                  onAdvanceStatus={(s) => void updateStatus(order, s)} />
-              ))}
-            </div>
-          )}
-
-          {!loading && totalPages > 1 && (
-            <div className="flex items-center justify-between pt-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="gap-1.5 rounded-xl">
-                <ChevronLeft className="h-4 w-4" /> Anterior
-              </Button>
-              <span className="text-sm text-muted-foreground">Página <strong>{page}</strong> de <strong>{totalPages}</strong></span>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="gap-1.5 rounded-xl">
-                Siguiente <ChevronRight className="h-4 w-4" />
-              </Button>
+          {/* Detail panel — desktop sticky */}
+          {selectedOrder && (
+            <div className="hidden lg:block">
+              <div className="sticky top-4 overflow-hidden rounded-2xl border bg-card shadow-lg" style={{ maxHeight: 'calc(100vh - 7rem)' }}>
+                <OrderDetailPanel
+                  order={selectedOrder} updating={updatingId === selectedOrder.id}
+                  cancelConfirmId={cancelConfirmId?.startsWith(selectedOrder.id) || cancelConfirmId === selectedOrder.id ? cancelConfirmId : null}
+                  onClose={() => setSelectedOrder(null)}
+                  onStatusChange={(s) => void updateStatus(selectedOrder, s)}
+                  onPaymentChange={(s) => void updatePayment(selectedOrder, s)}
+                  onOrderUpdate={(patch) => void updateOrderFields(selectedOrder, patch)}
+                  onCancelConfirm={() => void updateStatus(selectedOrder, 'CANCELLED')}
+                  onCancelDismiss={() => setCancelConfirmId(null)} />
+              </div>
             </div>
           )}
         </div>
-
-        {/* Detail panel — desktop sticky */}
-        {selectedOrder && (
-          <div className="hidden lg:block">
-            <div className="sticky top-4 overflow-hidden rounded-2xl border bg-card shadow-lg" style={{ maxHeight: 'calc(100vh - 7rem)' }}>
-              <OrderDetailPanel
-                order={selectedOrder} updating={updatingId === selectedOrder.id}
-                cancelConfirmId={cancelConfirmId?.startsWith(selectedOrder.id) || cancelConfirmId === selectedOrder.id ? cancelConfirmId : null}
-                onClose={() => setSelectedOrder(null)}
-                onStatusChange={(s) => void updateStatus(selectedOrder, s)}
-                onPaymentChange={(s) => void updatePayment(selectedOrder, s)}
-                onCancelConfirm={() => void updateStatus(selectedOrder, 'CANCELLED')}
-                onCancelDismiss={() => setCancelConfirmId(null)} />
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Detail panel — mobile overlay */}
       {selectedOrder && (
@@ -764,6 +989,7 @@ export function OrdersDashboard() {
               onClose={() => setSelectedOrder(null)}
               onStatusChange={(s) => void updateStatus(selectedOrder, s)}
               onPaymentChange={(s) => void updatePayment(selectedOrder, s)}
+              onOrderUpdate={(patch) => void updateOrderFields(selectedOrder, patch)}
               onCancelConfirm={() => void updateStatus(selectedOrder, 'CANCELLED')}
               onCancelDismiss={() => setCancelConfirmId(null)} />
           </div>

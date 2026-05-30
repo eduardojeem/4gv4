@@ -664,13 +664,20 @@ export class SupplierIntegrationFactory {
 // Manager principal de proveedores
 export class SupplierManager {
   private integrations: Map<string, SupplierIntegration> = new Map()
-  private supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  // Lazy-initialize the client only when needed to avoid multiple GoTrueClient instances
+  private _supabase: ReturnType<typeof createClient> | null = null
+  private get supabase() {
+    if (!this._supabase) {
+      this._supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+    }
+    return this._supabase
+  }
 
   async initialize(): Promise<void> {
-    const { data: configs } = await this.supabase
+    const { data: configs, error } = await this.supabase
       .from('supplier_configs')
       .select(`
         *,
@@ -678,8 +685,10 @@ export class SupplierManager {
       `)
       .eq('isActive', true)
 
-    if (configs) {
-      for (const config of configs) {
+    // Table may not exist yet — skip silently
+    if (error || !configs) return
+
+    for (const config of configs) {
         try {
           const integration = SupplierIntegrationFactory.create(config, config.supplier)
           const authenticated = await integration.authenticate()
@@ -691,7 +700,6 @@ export class SupplierManager {
           console.error(`Failed to initialize supplier ${config.supplierId}:`, error)
         }
       }
-    }
   }
 
   async syncAllSuppliers(): Promise<Record<string, { products: SyncResult; inventory: SyncResult }>> {
@@ -873,7 +881,8 @@ export class SupplierManager {
 
 // Hook de React para usar el sistema de proveedores
 export function useSupplierSystem() {
-  const [manager] = React.useState(() => new SupplierManager())
+  // useMemo instead of useState to avoid creating a new SupplierManager (and GoTrueClient) on every render
+  const manager = React.useMemo(() => new SupplierManager(), [])
   const [loading, setLoading] = React.useState(true)
   const [suppliers, setSuppliers] = React.useState<string[]>([])
 
