@@ -80,7 +80,7 @@ export interface OrganizationSubscriptionState {
   payments: SubscriptionPayment[]
 }
 
-const DEFAULT_LIMITS: Record<PlanCode, Record<string, number | null>> = {
+export const DEFAULT_LIMITS: Record<PlanCode, Record<string, number | null>> = {
   FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null },
   BASIC: { users: 10, branches: 2, cashRegisters: 3, products: 500, categories: null },
   PRO: { users: 25, branches: 5, cashRegisters: 10, products: 5000, categories: null },
