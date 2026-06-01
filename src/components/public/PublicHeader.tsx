@@ -58,12 +58,12 @@ export function PublicHeader() {
   const isWholesaleUser = hasPermission(WHOLESALE_PRICE_PERMISSION)
   const pathSegments = pathname.split('/').filter(Boolean)
   const pathTenantSlug =
-    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente'].includes(pathSegments[1])
+    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil'].includes(pathSegments[1])
       ? pathSegments[0]
       : ''
   const tenantPrefix = pathTenantSlug ? `/${pathTenantSlug}` : ''
   const withTenantPrefix = (href: string) => {
-    if (!tenantPrefix || !['/inicio', '/productos', '/mis-reparaciones', '/track', '/carrito'].some((path) => href === path || href.startsWith(`${path}/`) || href.startsWith(`${path}#`))) {
+    if (!tenantPrefix || !['/inicio', '/productos', '/mis-reparaciones', '/track', '/carrito', '/perfil'].some((path) => href === path || href.startsWith(`${path}/`) || href.startsWith(`${path}#`))) {
       return href
     }
 
@@ -152,7 +152,7 @@ export function PublicHeader() {
 
   const isActive = (href: string) => {
     if (href.endsWith('/inicio')) return pathname === href || pathname === '/'
-    if (href === '/perfil') return pathname === '/perfil' || pathname.startsWith('/perfil/')
+    if (href.endsWith('/perfil')) return pathname === href || pathname.startsWith(`${href}/`)
     return pathname === href || pathname.startsWith(`${href}/`)
   }
 
@@ -160,31 +160,48 @@ export function PublicHeader() {
     <header
       className={`sticky top-0 z-50 w-full transition-all duration-300 ${
         scrolled
-          ? 'bg-background/95 backdrop-blur-lg shadow-sm border-b border-border/50'
-          : 'bg-background/80 backdrop-blur-md border-b border-transparent'
+          ? 'shadow-lg shadow-gray-200/20 dark:shadow-black/10 py-1 border-b border-border/40'
+          : 'py-2 border-b border-transparent'
+      } ${
+        companyInfo?.headerStyle === 'accent'
+          ? 'bg-primary text-primary-foreground'
+          : companyInfo?.headerStyle === 'dark'
+          ? 'bg-slate-950 text-white border-slate-900'
+          : companyInfo?.headerStyle === 'solid'
+          ? 'bg-background text-foreground border-border/80'
+          : 'bg-background/80 backdrop-blur-lg border-b border-border/40'
       }`}
     >
       {/* Top bar */}
       {showTopBar && (
-        <div className="hidden border-b border-border/40 bg-muted/30 md:block">
-          <div className="container flex h-9 items-center justify-between text-xs text-muted-foreground">
-            <div className="flex items-center gap-5">
+        <div className={`hidden border-b md:block py-1.5 transition-colors ${
+          companyInfo?.headerStyle === 'accent'
+            ? 'border-white/10 bg-white/5 text-primary-foreground/90'
+            : companyInfo?.headerStyle === 'dark'
+            ? 'border-slate-900 bg-slate-900/30 text-slate-400'
+            : 'border-border/30 bg-muted/40 text-muted-foreground'
+        }`}>
+          <div className="container flex h-auto items-center justify-between text-xs font-medium">
+            <div className="flex items-center gap-6">
               <a
                 href={phoneClean ? `tel:${phoneClean}` : undefined}
-                className="flex items-center gap-1.5 transition-colors hover:text-foreground"
+                className="flex items-center gap-1.5 transition-colors hover:opacity-80"
                 aria-label="Llamar al local"
               >
-                <Phone className="h-3 w-3" />
+                <Phone className={`h-3.5 w-3.5 ${companyInfo?.headerStyle === 'accent' ? 'text-white' : 'text-primary'}`} />
                 <span>{phoneDisplay || '(sin telefono)'}</span>
               </a>
               <span className="flex items-center gap-1.5">
-                <Clock className="h-3 w-3" />
+                <Clock className={`h-3.5 w-3.5 ${companyInfo?.headerStyle === 'accent' ? 'text-white' : 'text-primary'}`} />
                 {companyInfo?.hours?.weekdays || 'Lun - Vie: 8:00 - 18:00'}
-                {companyInfo?.hours?.saturday ? ` | Sab: ${companyInfo.hours.saturday}` : ''}
+                {companyInfo?.hours?.saturday ? ` | Sáb: ${companyInfo.hours.saturday}` : ''}
               </span>
             </div>
-            <Link href={customerLoginHref} className="flex items-center gap-1.5 transition-colors hover:text-foreground">
-              <User className="h-3 w-3" />
+            <Link
+              href={customerLoginHref}
+              className="flex items-center gap-1.5 transition-colors hover:opacity-80"
+            >
+              <User className={`h-3.5 w-3.5 ${companyInfo?.headerStyle === 'accent' ? 'text-white' : 'text-primary'}`} />
               Portal cliente
             </Link>
           </div>
@@ -195,15 +212,21 @@ export function PublicHeader() {
       <div className="container flex h-16 items-center justify-between gap-4">
         {/* Logo */}
         <Link href={withTenantPrefix('/inicio')} className="group flex items-center gap-3 shrink-0" aria-label="Ir a inicio">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm transition-transform group-hover:scale-105">
-            <Wrench className="h-5 w-5" />
+          <div className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-md shadow-primary/10 transition-all duration-300 group-hover:scale-105 group-hover:rotate-3 ${
+            companyInfo?.headerStyle === 'accent'
+              ? 'bg-white text-primary'
+              : 'bg-primary text-primary-foreground'
+          }`}>
+            <Wrench className="h-5.5 w-5.5" />
           </div>
           <div className="hidden sm:block">
-            <span className="block text-base font-bold leading-tight tracking-tight text-foreground">
+            <span className="block text-base font-extrabold leading-tight tracking-tight">
               {companyInfo?.name || '4G Celulares'}
             </span>
-            <span className="block text-[11px] font-medium text-muted-foreground leading-tight">
-              {'Reparacion y Service'}
+            <span className={`block text-[10px] font-medium leading-tight ${
+              companyInfo?.headerStyle === 'accent' ? 'text-white/80' : 'text-muted-foreground'
+            }`}>
+              {'Reparación y Service'}
             </span>
           </div>
         </Link>
@@ -212,38 +235,44 @@ export function PublicHeader() {
         <nav className="hidden items-center gap-1 md:flex" aria-label="Navegacion principal">
           {navLinks.map((link) => {
             const active = isActive(link.href)
+            const LinkIcon = link.icon
             return (
               <Link
                 key={link.href}
                 href={link.href}
                 aria-current={active ? 'page' : undefined}
-                className={`relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
+                className={`relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
                   active
-                    ? 'text-foreground bg-accent'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                    ? companyInfo?.headerStyle === 'accent'
+                      ? 'text-primary bg-white shadow-sm'
+                      : 'text-foreground bg-accent'
+                    : companyInfo?.headerStyle === 'accent'
+                    ? 'text-white/80 hover:text-white hover:bg-white/10'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
                 }`}
               >
-                {link.icon && <link.icon className="h-4 w-4" />}
+                {LinkIcon && <LinkIcon className="h-4 w-4 shrink-0" />}
                 {link.label}
-                {active && (
-                  <span className="absolute bottom-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full bg-primary" />
-                )}
               </Link>
             )
           })}
           {mounted && !user && (
             <Link
               href={customerLoginHref}
-              className="relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              className={`relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                companyInfo?.headerStyle === 'accent'
+                  ? 'text-white/80 hover:text-white hover:bg-white/10'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
+              }`}
             >
-              <User className="h-4 w-4" />
-              Login cliente
+              <User className="h-4 w-4 shrink-0" />
+              Ingresar
             </Link>
           )}
         </nav>
 
         {/* Right side: Theme toggle + CTA + User */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <PublicCartButton />
 
           {/* Theme toggle - visible on all screens */}
@@ -299,7 +328,7 @@ export function PublicHeader() {
                 )}
                 {canAccessDashboard && <DropdownMenuSeparator />}
                 <DropdownMenuItem asChild>
-                  <Link href="/perfil" className="flex items-center gap-2.5 cursor-pointer">
+                  <Link href={withTenantPrefix('/perfil')} className="flex items-center gap-2.5 cursor-pointer">
                     <User className="h-4 w-4 text-muted-foreground" />
                     Mi Perfil
                   </Link>
@@ -311,7 +340,7 @@ export function PublicHeader() {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/perfil/autorizados" className="flex items-center gap-2.5 cursor-pointer">
+                  <Link href={withTenantPrefix('/perfil/autorizados')} className="flex items-center gap-2.5 cursor-pointer">
                     <Shield className="h-4 w-4 text-muted-foreground" />
                     Personas Autorizadas
                   </Link>
@@ -409,14 +438,14 @@ export function PublicHeader() {
                   </Link>
                 )}
                 <Link
-                  href="/perfil"
+                  href={withTenantPrefix('/perfil')}
                   className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
                 >
                   <User className="h-4 w-4" />
                   Mi Perfil
                 </Link>
                 <Link
-                  href="/perfil/autorizados"
+                  href={withTenantPrefix('/perfil/autorizados')}
                   className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
                 >
                   <Shield className="h-4 w-4" />

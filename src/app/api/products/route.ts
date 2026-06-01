@@ -6,6 +6,7 @@ import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
 import type { AppRole } from '@/lib/auth/role-utils'
 import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
+import { canCreateResource } from '@/lib/saas/subscription-service'
 
 // GET /api/products - Get products with variants
 export const GET = withTenantAuth({ permission: 'inventory.products.read', module: 'inventory' }, async (request, { user, organization }) => {
@@ -129,6 +130,22 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
     }
     
     const validated = validationResult.data
+    const planGate = await canCreateResource(organization.id, 'products')
+
+    if (!planGate.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Tu plan ${planGate.plan.name} permite hasta ${planGate.limit} productos. Actualiza el plan para crear mas.`,
+          code: 'PLAN_LIMIT_REACHED',
+          resource: 'products',
+          current: planGate.current,
+          limit: planGate.limit,
+        },
+        { status: 402 }
+      )
+    }
+
     const requestedStock = Number(validated.stock_quantity || 0)
     const branchScopedCreate = Boolean(branchScope.branchId)
     const shouldZeroGlobalStock = Boolean(

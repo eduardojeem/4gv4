@@ -9,6 +9,17 @@ function toProfileStatus(value: unknown) {
     : 'active'
 }
 
+function getDeliveryLocation(preferences: unknown) {
+  if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)) {
+    return null
+  }
+
+  const deliveryLocation = (preferences as Record<string, unknown>).delivery_location
+  return deliveryLocation && typeof deliveryLocation === 'object' && !Array.isArray(deliveryLocation)
+    ? deliveryLocation
+    : null
+}
+
 export async function GET() {
   try {
     const supabase = await createServerSupabase()
@@ -31,7 +42,7 @@ export async function GET() {
         .maybeSingle(),
       admin
         .from('profiles')
-        .select('full_name, avatar_url, phone, status, role')
+        .select('full_name, avatar_url, phone, location, preferences, status, role')
         .eq('id', user.id)
         .maybeSingle(),
       admin
@@ -45,6 +56,8 @@ export async function GET() {
       full_name?: string | null
       avatar_url?: string | null
       phone?: string | null
+      location?: string | null
+      preferences?: unknown
       status?: string | null
       role?: string | null
     } | null
@@ -62,6 +75,8 @@ export async function GET() {
         name: profileRow?.full_name || '',
         avatar_url: profileRow?.avatar_url || '',
         phone: profileRow?.phone || '',
+        location: profileRow?.location || '',
+        delivery_location: getDeliveryLocation(profileRow?.preferences),
       },
       permissions: permissionRows
         .filter((row) => row.is_active !== false)

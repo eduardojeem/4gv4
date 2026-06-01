@@ -13,7 +13,7 @@ type SubscriptionRow = {
   plan: string | null
   status: string | null
   trial_ends_at: string | null
-  current_period_end: string | null
+  current_period_ends_at: string | null
   organizations:
     | { name: string; slug: string }
     | Array<{ name: string; slug: string }>
@@ -24,7 +24,7 @@ export default async function SuperAdminBillingPage() {
   const admin = createAdminSupabase()
   const { data, error } = await admin
     .from('subscriptions')
-    .select('id, organization_id, plan, status, trial_ends_at, current_period_end, organizations(name, slug)')
+    .select('id, organization_id, plan, status, trial_ends_at, current_period_ends_at, organizations(name, slug)')
     .order('created_at', { ascending: false })
     .limit(100)
 
@@ -132,7 +132,7 @@ export default async function SuperAdminBillingPage() {
                         <Badge variant="outline">{subscription.status ?? 'unknown'}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(subscription.trial_ends_at)}</TableCell>
-                      <TableCell className="text-muted-foreground">{formatDate(subscription.current_period_end)}</TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(subscription.current_period_ends_at)}</TableCell>
                     </TableRow>
                   )
                 })}

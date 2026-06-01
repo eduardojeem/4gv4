@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { logger } from '@/lib/logger'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { canTransitionOrderStatus, normalizeOrderStatus } from '@/lib/orders/flow'
 import { normalizeOrder } from '@/lib/orders/helpers'
+import { releaseReservedStock } from '@/lib/orders/stock'
+import type { OrderStatus } from '@/lib/orders/types'
 
 const statusSchema = z.object({
   status: z.enum(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED', 'CANCELLED']),
@@ -34,18 +38,44 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
       .select('status')
       .eq('id', id)
       .eq('organization_id', organization.id)
-      .single()
+      .maybeSingle()
 
     if (currentError) throw currentError
+    if (!current) return NextResponse.json({ success: false, error: 'Pedido no encontrado.' }, { status: 404 })
 
     const status = validation.data.status
+    const currentStatus = normalizeOrderStatus(current.status)
+
+    if (!canTransitionOrderStatus(currentStatus, status)) {
+      return NextResponse.json({
+        success: false,
+        error: `Transicion invalida de ${currentStatus} a ${status}.`,
+      }, { status: 409 })
+    }
+
+    let shouldReleaseStock = false
+    if (status === 'CANCELLED' && currentStatus !== 'CANCELLED') {
+      const { data: stockData, error: stockError } = await supabase
+        .from('customer_orders')
+        .select('stock_reserved, order_items:customer_order_items(product_id, product_name, quantity)')
+        .eq('id', id)
+        .eq('organization_id', organization.id)
+        .maybeSingle()
+
+      if (stockError) {
+        logger.warn('Order stock reservation lookup failed during cancellation', { error: stockError, orderId: id })
+      } else if (stockData?.stock_reserved) {
+        await releaseReservedStock(createAdminSupabase(), organization.id, stockData.order_items ?? [])
+        shouldReleaseStock = true
+      }
+    }
+
     const now = new Date().toISOString()
-    // Only set terminal dates when transitioning INTO that status, never clear them
     const terminalDates: Record<string, string | null> = {}
-    if (status === 'DELIVERED' && current.status !== 'DELIVERED') {
+    if (status === 'DELIVERED' && currentStatus !== 'DELIVERED') {
       terminalDates.delivered_at = now
     }
-    if (status === 'CANCELLED' && current.status !== 'CANCELLED') {
+    if (status === 'CANCELLED' && currentStatus !== 'CANCELLED') {
       terminalDates.cancelled_at = now
     }
 
@@ -54,6 +84,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
       .update({
         status,
         ...terminalDates,
+        ...(shouldReleaseStock ? { stock_reserved: false } : {}),
         updated_at: now,
       })
       .eq('id', id)
@@ -63,14 +94,17 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
 
     if (error) throw error
 
-    await supabase.from('customer_order_status_history').insert({
+    const { error: historyError } = await supabase.from('customer_order_status_history').insert({
       organization_id: organization.id,
       order_id: id,
-      from_status: current.status,
+      from_status: currentStatus,
       to_status: status,
       note: validation.data.note || null,
       changed_by: user.id,
     })
+    if (historyError) {
+      logger.warn('Order status history insert failed', { error: historyError, orderId: id, fromStatus: currentStatus, toStatus: status })
+    }
 
     return NextResponse.json({ success: true, data: normalizeOrder(data) })
   } catch (error) {

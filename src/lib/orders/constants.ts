@@ -11,9 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { OrderStatus, PaymentMethod, PaymentStatus } from './types'
-
-export const ORDER_FLOW: OrderStatus[] = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED']
-export const TERMINAL_ORDER_STATUSES: OrderStatus[] = ['DELIVERED', 'CANCELLED']
+export { ORDER_FLOW, TERMINAL_ORDER_STATUSES } from './flow'
 
 export const ORDER_STATUS_META: Record<OrderStatus, { label: string; description: string; icon: LucideIcon; className: string }> = {
   PENDING: {

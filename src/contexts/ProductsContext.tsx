@@ -404,7 +404,9 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
     }, [fetchProducts])
 
     // Supabase realtime subscription
+    // Use a ref to track the active channel and avoid double-subscription in React Strict Mode
     useEffect(() => {
+        let active = true
         const channel = supabase
             .channel('products_changes')
             .on(
@@ -483,6 +485,7 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
             .subscribe()
 
         return () => {
+            active = false
             supabase.removeChannel(channel)
         }
     }, [supabase])

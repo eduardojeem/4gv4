@@ -32,6 +32,7 @@ type Props = {
   subscription: SuperAdminSubscription | null
   editForm: EditForm | null
   isSaving: boolean
+  planOptions: string[]
   saveError: string | null
   onClose: () => void
   onEditFormChange: (form: EditForm) => void
@@ -54,6 +55,7 @@ export function SubscriptionDetailDialog({
   subscription: sub,
   editForm,
   isSaving,
+  planOptions,
   saveError,
   onClose,
   onEditFormChange,
@@ -206,7 +208,7 @@ export function SubscriptionDetailDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {['FREE', 'BASIC', 'PRO', 'ENTERPRISE'].map((opt) => (
+                      {planOptions.map((opt) => (
                         <SelectItem key={opt} value={opt}>
                           {opt}
                         </SelectItem>
@@ -226,7 +228,7 @@ export function SubscriptionDetailDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {['trialing', 'active', 'past_due', 'canceled', 'unpaid'].map((opt) => (
+                      {['trialing', 'active', 'past_due', 'suspended', 'cancelled', 'expired', 'unpaid'].map((opt) => (
                         <SelectItem key={opt} value={opt}>
                           {opt.replace(/_/g, ' ')}
                         </SelectItem>

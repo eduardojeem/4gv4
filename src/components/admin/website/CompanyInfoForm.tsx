@@ -258,78 +258,101 @@ export function CompanyInfoForm() {
       </Card>
 
       {/* Personalización Visual */}
-      <Card className="border-none shadow-lg hover:shadow-xl transition-shadow duration-300">
-        <CardHeader className="bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-950/20 dark:to-rose-950/20 p-4 md:p-6">
+      <Card className="border-none shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-pink-50 via-rose-50 to-amber-50 dark:from-pink-950/20 dark:via-rose-950/20 dark:to-amber-950/20 p-4 md:p-6 border-b border-rose-100/30">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-pink-100 text-pink-600 dark:bg-pink-900 dark:text-pink-400 shrink-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-pink-500 to-rose-500 text-white shadow-md shadow-pink-500/20 shrink-0">
               <Sparkles className="h-5 w-5" />
             </div>
             <div>
-              <CardTitle className="text-lg md:text-xl">Personalización Visual</CardTitle>
-              <CardDescription className="text-xs md:text-sm">Colores de marca y estilo del sitio</CardDescription>
+              <CardTitle className="text-lg md:text-xl font-bold tracking-tight">Personalización Visual</CardTitle>
+              <CardDescription className="text-xs md:text-sm text-muted-foreground">Configura la identidad de marca, los colores y la experiencia del portal</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-6">
-          <div className="grid gap-8 md:grid-cols-2">
-            {/* Gama de Colores */}
-            <div className="space-y-4">
-              <Label className="text-sm font-medium">Color de Marca Principal</Label>
-              <div className="grid grid-cols-6 gap-3 sm:grid-cols-8 md:grid-cols-6 lg:grid-cols-12">
-                {[
-                  'blue','green','purple','orange','red','indigo','teal',
-                  'rose','amber','emerald','cyan','sky'
-                ].map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => handleChange('brandColor', c)}
-                    className={`h-9 w-9 rounded-full border-2 transition-transform hover:scale-110 active:scale-95 ${
-                      (formData.brandColor || 'blue') === c ? 'ring-2 ring-offset-2 ring-pink-500 border-white' : 'border-transparent'
-                    } ${
-                      c === 'blue' ? 'bg-blue-500' :
-                      c === 'green' ? 'bg-green-500' :
-                      c === 'purple' ? 'bg-purple-500' :
-                      c === 'orange' ? 'bg-orange-500' :
-                      c === 'red' ? 'bg-red-500' :
-                      c === 'indigo' ? 'bg-indigo-500' :
-                      c === 'teal' ? 'bg-teal-500' :
-                      c === 'rose' ? 'bg-rose-500' :
-                      c === 'amber' ? 'bg-amber-500' :
-                      c === 'emerald' ? 'bg-emerald-500' :
-                      c === 'cyan' ? 'bg-cyan-500' :
-                      'bg-sky-500'
-                    }`}
-                    title={c}
-                  />
-                ))}
+          <div className="grid gap-8 lg:grid-cols-12">
+            
+            {/* Columna Izquierda: Configuración (7 cols) */}
+            <div className="space-y-6 lg:col-span-7">
+              {/* Gama de Colores */}
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300">Color de Marca Principal</Label>
+                <p className="text-xs text-muted-foreground mb-3">Define el color de acento principal para botones, enlaces y estados destacados</p>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
+                  {[
+                    { key: 'blue', color: 'bg-blue-500', name: 'Azul' },
+                    { key: 'green', color: 'bg-green-500', name: 'Verde' },
+                    { key: 'purple', color: 'bg-purple-500', name: 'Morado' },
+                    { key: 'orange', color: 'bg-orange-500', name: 'Naranja' },
+                    { key: 'red', color: 'bg-red-500', name: 'Rojo' },
+                    { key: 'indigo', color: 'bg-indigo-500', name: 'Índigo' },
+                    { key: 'teal', color: 'bg-teal-500', name: 'Teal' },
+                    { key: 'rose', color: 'bg-rose-500', name: 'Rosa' },
+                    { key: 'amber', color: 'bg-amber-500', name: 'Ámbar' },
+                    { key: 'emerald', color: 'bg-emerald-500', name: 'Esmeralda' },
+                    { key: 'cyan', color: 'bg-cyan-500', name: 'Cian' },
+                    { key: 'sky', color: 'bg-sky-500', name: 'Cielo' }
+                  ].map((c) => {
+                    const isSelected = (formData.brandColor || 'blue') === c.key
+                    return (
+                      <button
+                        key={c.key}
+                        type="button"
+                        onClick={() => handleChange('brandColor', c.key)}
+                        className={`group relative flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all duration-300 hover:scale-105 active:scale-95 ${
+                          isSelected
+                            ? 'border-pink-500 bg-pink-50/20 dark:bg-pink-950/10 shadow-sm shadow-pink-500/10 ring-2 ring-pink-500/20'
+                            : 'border-gray-100 hover:border-gray-300 dark:border-gray-800'
+                        }`}
+                      >
+                        <span className={`h-6 w-6 rounded-full shadow-inner ${c.color} transition-transform group-hover:scale-110`} />
+                        <span className={`mt-1.5 text-2xs font-medium ${isSelected ? 'text-pink-600 dark:text-pink-400 font-bold' : 'text-muted-foreground'}`}>
+                          {c.name}
+                        </span>
+                        {isSelected && (
+                          <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-pink-500 text-white text-3xs font-bold scale-100 animate-in zoom-in-50 duration-200">
+                            ✓
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
 
-            {/* Estilo de Header */}
-            <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
+              {/* Estilo de Header y Barra Superior */}
+              <div className="grid gap-4 sm:grid-cols-2 pt-2">
                 <div className="space-y-2">
-                  <Label htmlFor="headerStyle" className="text-sm font-medium">Estilo del Header</Label>
+                  <Label htmlFor="headerStyle" className="text-sm font-semibold text-gray-700 dark:text-gray-300">Estilo del Header</Label>
                   <Select 
                     value={formData.headerStyle || 'glass'} 
                     onValueChange={(v) => handleChange('headerStyle', v)}
                   >
-                    <SelectTrigger id="headerStyle" className="h-11">
+                    <SelectTrigger id="headerStyle" className="h-11 rounded-xl border-gray-200 focus:ring-pink-500 focus:border-pink-500">
                       <SelectValue placeholder="Seleccionar estilo" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="glass">Cristal (Moderno)</SelectItem>
-                      <SelectItem value="solid">Sólido Blanco</SelectItem>
-                      <SelectItem value="accent">Color de Marca</SelectItem>
-                      <SelectItem value="dark">Negro Elegante</SelectItem>
+                    <SelectContent className="rounded-xl">
+                      <SelectItem value="glass" className="focus:bg-pink-50 focus:text-pink-700">Cristal (Efecto translúcido)</SelectItem>
+                      <SelectItem value="solid" className="focus:bg-pink-50 focus:text-pink-700">Sólido Blanco</SelectItem>
+                      <SelectItem value="accent" className="focus:bg-pink-50 focus:text-pink-700">Color de Marca</SelectItem>
+                      <SelectItem value="dark" className="focus:bg-pink-50 focus:text-pink-700">Negro Elegante</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-3xs text-muted-foreground leading-relaxed mt-1">
+                    {formData.headerStyle === 'solid' ? 'Header de fondo blanco minimalista ideal para logos oscuros.' :
+                     formData.headerStyle === 'accent' ? 'Fondo con el color de marca seleccionado. Diseño llamativo.' :
+                     formData.headerStyle === 'dark' ? 'Header oscuro premium. Contraste de alta gama.' :
+                     'Efecto cristal translúcido con desenfoque de fondo (glassmorphism) de última tendencia.'}
+                  </p>
                 </div>
 
-                <div className="flex flex-col justify-center space-y-2">
-                  <Label htmlFor="showTopBar" className="text-sm font-medium">Barra superior</Label>
-                  <div className="flex items-center space-x-2 h-11">
+                <div className="flex flex-col justify-between p-3.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/40 dark:bg-gray-900/10">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="showTopBar" className="text-sm font-semibold text-gray-700 dark:text-gray-300">Barra Superior</Label>
+                      <p className="text-3xs text-muted-foreground pr-2 mt-0.5">Muestra datos de contacto rápidos arriba del menú</p>
+                    </div>
                     <Switch
                       id="showTopBar"
                       checked={formData.showTopBar !== false}
@@ -339,14 +362,152 @@ export function CompanyInfoForm() {
                           showTopBar: checked
                         }))
                       }}
+                      className="data-[state=checked]:bg-pink-500"
                     />
-                    <span className="text-sm text-muted-foreground">
-                      {formData.showTopBar !== false ? 'Visible' : 'Oculta'}
+                  </div>
+                  <div className="mt-3 flex items-center gap-1.5">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-3xs font-medium ${
+                      formData.showTopBar !== false ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800'
+                    }`}>
+                      {formData.showTopBar !== false ? 'Activo' : 'Inactivo'}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Columna Derecha: Vista Previa Interactiva en Tiempo Real (5 cols) */}
+            <div className="lg:col-span-5 flex flex-col justify-between border border-gray-100 dark:border-gray-800 rounded-2xl p-4 bg-gradient-to-b from-gray-50/50 via-white to-gray-50/30 dark:from-gray-950/10 dark:via-gray-900/5 dark:to-gray-950/10 shadow-inner">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-gray-100/50 pb-2">
+                  <span className="text-2xs font-bold uppercase tracking-wider text-gray-400">Previsualizador en Vivo</span>
+                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                </div>
+                
+                {/* Contenedor del Header Miniatura Simulador */}
+                <div className="relative h-44 rounded-xl border border-gray-200/60 dark:border-gray-800 overflow-hidden bg-gray-900 shadow-lg">
+                  {/* Fondo del Header (Imagen abstracta de simulador) */}
+                  <div className="absolute inset-0 bg-cover bg-center opacity-30 select-none pointer-events-none" style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80")' }} />
+                  
+                  {/* Top Bar Simulador */}
+                  {formData.showTopBar !== false && (
+                    <div className="relative z-10 flex items-center justify-between px-3 py-1 bg-black/40 backdrop-blur-2xs text-3xs text-white/90 border-b border-white/5 select-none font-medium">
+                      <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-0.5">📞 {formData.phone || '+595...'}</span>
+                        <span className="hidden sm:inline">| ✉️ {formData.email || 'info@...'}</span>
+                      </div>
+                      <span>🕒 {formData.hours?.weekdays || '8:00 - 18:00'}</span>
+                    </div>
+                  )}
+
+                  {/* Menú Principal Header Simulador */}
+                  <div className={`relative z-10 flex items-center justify-between px-3 py-2 border-b select-none transition-all duration-300 ${
+                    formData.headerStyle === 'accent' 
+                      ? `${
+                          formData.brandColor === 'green' ? 'bg-green-600 text-white border-green-500' :
+                          formData.brandColor === 'purple' ? 'bg-purple-600 text-white border-purple-500' :
+                          formData.brandColor === 'orange' ? 'bg-orange-600 text-white border-orange-500' :
+                          formData.brandColor === 'red' ? 'bg-red-600 text-white border-red-500' :
+                          formData.brandColor === 'indigo' ? 'bg-indigo-600 text-white border-indigo-500' :
+                          formData.brandColor === 'teal' ? 'bg-teal-600 text-white border-teal-500' :
+                          formData.brandColor === 'rose' ? 'bg-rose-600 text-white border-rose-500' :
+                          formData.brandColor === 'amber' ? 'bg-amber-600 text-white border-amber-500' :
+                          formData.brandColor === 'emerald' ? 'bg-emerald-600 text-white border-emerald-500' :
+                          formData.brandColor === 'cyan' ? 'bg-cyan-600 text-white border-cyan-500' :
+                          formData.brandColor === 'sky' ? 'bg-sky-600 text-white border-sky-500' :
+                          'bg-blue-600 text-white border-blue-500'
+                        }`
+                      : formData.headerStyle === 'dark'
+                      ? 'bg-gray-950 text-white border-gray-900'
+                      : formData.headerStyle === 'solid'
+                      ? 'bg-white text-gray-800 border-gray-100 shadow-sm'
+                      : 'bg-white/10 text-white border-white/10 backdrop-blur-md'
+                  }`}>
+                    {/* Logo */}
+                    <div className="flex items-center gap-1">
+                      {formData.logoUrl ? (
+                        <img src={formData.logoUrl} alt="Logo" className="h-5 w-5 object-contain" />
+                      ) : (
+                        <span className="flex h-5 w-5 items-center justify-center rounded bg-white/20 text-3xs font-extrabold text-white">4G</span>
+                      )}
+                      <span className="text-2xs font-extrabold tracking-tight">{formData.name || 'Empresa'}</span>
+                    </div>
+
+                    {/* Menú Enlaces de Navegación */}
+                    <div className="hidden sm:flex items-center gap-2.5 text-4xs font-bold uppercase tracking-wider opacity-90">
+                      <span>Inicio</span>
+                      <span>Productos</span>
+                      <span>Servicios</span>
+                    </div>
+
+                    {/* Botón de CTA */}
+                    <button 
+                      type="button" 
+                      className={`px-2.5 py-1 rounded-md text-3xs font-bold transition-all shadow-sm ${
+                        formData.headerStyle === 'accent'
+                          ? 'bg-white text-gray-800 hover:bg-gray-50'
+                          : `${
+                              formData.brandColor === 'green' ? 'bg-green-600 hover:bg-green-700 text-white' :
+                              formData.brandColor === 'purple' ? 'bg-purple-600 hover:bg-purple-700 text-white' :
+                              formData.brandColor === 'orange' ? 'bg-orange-600 hover:bg-orange-700 text-white' :
+                              formData.brandColor === 'red' ? 'bg-red-600 hover:bg-red-700 text-white' :
+                              formData.brandColor === 'indigo' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' :
+                              formData.brandColor === 'teal' ? 'bg-teal-600 hover:bg-teal-700 text-white' :
+                              formData.brandColor === 'rose' ? 'bg-rose-600 hover:bg-rose-700 text-white' :
+                              formData.brandColor === 'amber' ? 'bg-amber-600 hover:bg-amber-700 text-white' :
+                              formData.brandColor === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' :
+                              formData.brandColor === 'cyan' ? 'bg-cyan-600 hover:bg-cyan-700 text-white' :
+                              formData.brandColor === 'sky' ? 'bg-sky-600 hover:bg-sky-700 text-white' :
+                              'bg-blue-600 hover:bg-blue-700 text-white'
+                            }`
+                      }`}
+                    >
+                      Contacto
+                    </button>
+                  </div>
+
+                  {/* Cuerpo Principal del Simulador */}
+                  <div className="absolute bottom-2 left-3 right-3 z-10 p-3 rounded-lg bg-black/60 backdrop-blur-2xs border border-white/5 select-none">
+                    <h4 className="text-3xs font-extrabold text-white tracking-wide uppercase">Contenido Destacado</h4>
+                    <p className="text-4xs text-white/70 leading-relaxed mt-0.5">El color de marca se aplicará a botones, enlaces, tarjetas de servicios y estados de tus reparaciones públicas.</p>
+                    <div className="mt-2 flex gap-1.5">
+                      <span className={`h-1.5 w-1.5 rounded-full ${
+                        formData.brandColor === 'green' ? 'bg-green-500' :
+                        formData.brandColor === 'purple' ? 'bg-purple-500' :
+                        formData.brandColor === 'orange' ? 'bg-orange-500' :
+                        formData.brandColor === 'red' ? 'bg-red-500' :
+                        formData.brandColor === 'indigo' ? 'bg-indigo-500' :
+                        formData.brandColor === 'teal' ? 'bg-teal-500' :
+                        formData.brandColor === 'rose' ? 'bg-rose-500' :
+                        formData.brandColor === 'amber' ? 'bg-amber-500' :
+                        formData.brandColor === 'emerald' ? 'bg-emerald-500' :
+                        formData.brandColor === 'cyan' ? 'bg-cyan-500' :
+                        formData.brandColor === 'sky' ? 'bg-sky-500' :
+                        'bg-blue-500'
+                      }`} />
+                      <span className={`h-1.5 w-8 rounded-full ${
+                        formData.brandColor === 'green' ? 'bg-green-500' :
+                        formData.brandColor === 'purple' ? 'bg-purple-500' :
+                        formData.brandColor === 'orange' ? 'bg-orange-500' :
+                        formData.brandColor === 'red' ? 'bg-red-500' :
+                        formData.brandColor === 'indigo' ? 'bg-indigo-500' :
+                        formData.brandColor === 'teal' ? 'bg-teal-500' :
+                        formData.brandColor === 'rose' ? 'bg-rose-500' :
+                        formData.brandColor === 'amber' ? 'bg-amber-500' :
+                        formData.brandColor === 'emerald' ? 'bg-emerald-500' :
+                        formData.brandColor === 'cyan' ? 'bg-cyan-500' :
+                        formData.brandColor === 'sky' ? 'bg-sky-500' :
+                        'bg-blue-500'
+                      }`} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="text-3xs text-center text-muted-foreground mt-3 italic">
+                * La previsualización representa el estilo del Header responsivo del sitio web público.
+              </div>
+            </div>
+
           </div>
         </CardContent>
       </Card>

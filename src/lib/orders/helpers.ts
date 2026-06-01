@@ -1,5 +1,6 @@
 import type { CustomerOrder, CustomerOrderItem, OrderStatus } from './types'
-import { ORDER_FLOW } from './constants'
+import { ORDER_FLOW, normalizeOrderStatus } from './flow'
+import { normalizePaymentStatus } from './payment-flow'
 
 type RawOrderItem = Record<string, unknown>
 type RawOrder = Record<string, unknown> & {
@@ -41,10 +42,10 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
     organization_id: String(order.organization_id ?? ''),
     customer_id: order.customer_id ? String(order.customer_id) : null,
     order_number: String(order.order_number ?? ''),
-    status: String(order.status ?? 'PENDING') as CustomerOrder['status'],
-    payment_status: String(order.payment_status ?? 'PENDING') as CustomerOrder['payment_status'],
-    payment_method: String(order.payment_method ?? 'CASH') as CustomerOrder['payment_method'],
-    fulfillment_type: String(order.fulfillment_type ?? 'PICKUP') as CustomerOrder['fulfillment_type'],
+    status: normalizeOrderStatus(order.status),
+    payment_status: normalizePaymentStatus(order.payment_status),
+    payment_method: String(order.payment_method ?? 'CASH').toUpperCase() as CustomerOrder['payment_method'],
+    fulfillment_type: String(order.fulfillment_type ?? 'PICKUP').toUpperCase() as CustomerOrder['fulfillment_type'],
     customer_name: String(order.customer_name ?? ''),
     customer_email: order.customer_email ? String(order.customer_email) : null,
     customer_phone: order.customer_phone ? String(order.customer_phone) : null,
@@ -60,6 +61,7 @@ export function normalizeOrder(order: RawOrder): CustomerOrder {
     estimated_delivery_date: order.estimated_delivery_date ? String(order.estimated_delivery_date) : null,
     delivered_at: order.delivered_at ? String(order.delivered_at) : null,
     cancelled_at: order.cancelled_at ? String(order.cancelled_at) : null,
+    stock_reserved: Boolean(order.stock_reserved),
     order_items: items.map(normalizeOrderItem),
   }
 }

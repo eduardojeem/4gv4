@@ -2,11 +2,16 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { logger } from '@/lib/logger'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { getOrderStatusDbValues, normalizeOrderStatus } from '@/lib/orders/flow'
 import { generateOrderNumber, normalizeOrder, sanitizeOrderSearch } from '@/lib/orders/helpers'
+import { releaseReservedStock, reserveOrderStock, type OrderStockItem } from '@/lib/orders/stock'
 import type { FulfillmentType, PaymentMethod } from '@/lib/orders/types'
 
 const STAT_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const
+const STATUS_FILTERS = new Set<string>(STAT_STATUSES)
+const PAYMENT_STATUS_FILTERS = new Set(['PENDING', 'PAID', 'PARTIAL', 'REFUNDED', 'FAILED'])
 
 const orderItemSchema = z.object({
   productId: z.string().uuid(),
@@ -35,8 +40,11 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
     const { searchParams } = new URL(request.url)
     const page = Math.max(1, Number(searchParams.get('page') || 1))
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit') || 20)))
-    const status = searchParams.get('status')
-    const paymentStatus = searchParams.get('payment_status')
+    const requestedStatus = searchParams.get('status')
+    const status = requestedStatus && requestedStatus !== 'ALL'
+      ? normalizeOrderStatus(requestedStatus)
+      : requestedStatus?.toUpperCase()
+    const paymentStatus = searchParams.get('payment_status')?.toUpperCase()
     const fulfillmentType = searchParams.get('fulfillment_type')
     const search = sanitizeOrderSearch(searchParams.get('search') || '')
     const dateFrom = searchParams.get('date_from')
@@ -51,11 +59,11 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
       .select('*, order_items:customer_order_items(*)', { count: 'exact' })
       .eq('organization_id', organization.id)
 
-    if (status && status !== 'ALL') {
-      query = query.eq('status', status)
+    if (status && status !== 'ALL' && STATUS_FILTERS.has(status)) {
+      query = query.in('status', getOrderStatusDbValues(status as typeof STAT_STATUSES[number]))
     }
-    if (paymentStatus && paymentStatus !== 'ALL') {
-      query = query.eq('payment_status', paymentStatus)
+    if (paymentStatus && paymentStatus !== 'ALL' && PAYMENT_STATUS_FILTERS.has(paymentStatus)) {
+      query = query.ilike('payment_status', paymentStatus)
     }
     if (fulfillmentType && fulfillmentType !== 'ALL') {
       query = query.eq('fulfillment_type', fulfillmentType)
@@ -92,7 +100,7 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
             .from('customer_orders')
             .select('*', { count: 'exact', head: true })
             .eq('organization_id', organization.id)
-            .eq('status', s)
+            .in('status', getOrderStatusDbValues(s))
         )
       )
       stats = Object.fromEntries(STAT_STATUSES.map((s, i) => [s, statsResults[i].count ?? 0]))
@@ -218,8 +226,23 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
     const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0)
     const total = Math.max(0, subtotal + input.shippingCost - input.discountAmount)
     const now = new Date().toISOString()
+    const stockClient = createAdminSupabase()
+    let reservedItems: OrderStockItem[] = []
+    let createdOrderId: string | null = null
 
-    const { data: order, error: orderError } = await supabase
+    const stockReservation = await reserveOrderStock(stockClient, organization.id, orderItems)
+    if (!stockReservation.success) {
+      return NextResponse.json({ success: false, error: stockReservation.error }, { status: 409 })
+    }
+
+    reservedItems = stockReservation.reserved.map((item) => ({
+      product_id: item.productId,
+      product_name: item.productName,
+      quantity: item.quantity,
+    }))
+
+    try {
+      const { data: order, error: orderError } = await supabase
       .from('customer_orders')
       .insert({
         organization_id: organization.id,
@@ -239,6 +262,7 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
         discount_amount: input.discountAmount,
         total,
         notes: input.notes || null,
+        stock_reserved: true,
         created_by: user.id,
         created_at: now,
         updated_at: now,
@@ -246,9 +270,10 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
       .select('*')
       .single()
 
-    if (orderError) throw orderError
+      if (orderError) throw orderError
+      createdOrderId = order.id
 
-    const { error: itemsError } = await supabase
+      const { error: itemsError } = await supabase
       .from('customer_order_items')
       .insert(orderItems.map((item) => ({
         ...item,
@@ -256,24 +281,38 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
         order_id: order.id,
       })))
 
-    if (itemsError) throw itemsError
+      if (itemsError) throw itemsError
 
-    await supabase.from('customer_order_status_history').insert({
+      const { error: historyError } = await supabase.from('customer_order_status_history').insert({
       organization_id: organization.id,
       order_id: order.id,
       to_status: 'PENDING',
       note: 'Pedido creado desde el dashboard.',
       changed_by: user.id,
-    })
+      })
+      if (historyError) throw historyError
 
-    const { data: fullOrder } = await supabase
+      const { data: fullOrder } = await supabase
       .from('customer_orders')
       .select('*, order_items:customer_order_items(*)')
       .eq('id', order.id)
       .eq('organization_id', organization.id)
       .single()
 
-    return NextResponse.json({ success: true, data: normalizeOrder(fullOrder ?? order) }, { status: 201 })
+      return NextResponse.json({ success: true, data: normalizeOrder(fullOrder ?? order) }, { status: 201 })
+    } catch (error) {
+      if (createdOrderId) {
+        await supabase
+          .from('customer_orders')
+          .delete()
+          .eq('id', createdOrderId)
+          .eq('organization_id', organization.id)
+      }
+      if (reservedItems.length > 0) {
+        await releaseReservedStock(stockClient, organization.id, reservedItems)
+      }
+      throw error
+    }
   } catch (error) {
     logger.error('Orders API POST error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo crear el pedido.' }, { status: 500 })

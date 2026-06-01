@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabase/server'
 import { normalizeOrder } from '@/lib/orders/helpers'
 
 const updateOrderSchema = z.object({
-  payment_status: z.enum(['PENDING', 'PAID', 'PARTIAL', 'REFUNDED', 'FAILED']).optional(),
   payment_method: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']).optional(),
   fulfillment_type: z.enum(['PICKUP', 'DELIVERY']).optional(),
   customer_name: z.string().trim().min(1).max(200).optional(),
@@ -95,8 +94,9 @@ export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
 
     if (error) throw error
     return NextResponse.json({ success: true, data: normalizeOrder(data) })
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Orders API update error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo actualizar el pedido.' }, { status: 500 })
+    const msg = error?.message || 'No se pudo actualizar el pedido.'
+    return NextResponse.json({ success: false, error: msg, details: error }, { status: 500 })
   }
 })

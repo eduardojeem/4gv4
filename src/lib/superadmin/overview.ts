@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { getCommercialPlanPrices, normalizePlanCode } from '@/lib/saas/subscription-service'
 
 type TableCount = {
   key: string
@@ -73,13 +74,6 @@ type OrganizationLookupRow = {
   slug: string
 }
 
-const ESTIMATED_MONTHLY_PRICES: Record<string, number> = {
-  FREE: 0,
-  BASIC: 29,
-  PRO: 79,
-  ENTERPRISE: 199,
-}
-
 function daysUntil(value: string | null) {
   if (!value) return null
   const today = new Date()
@@ -103,6 +97,7 @@ function getAttentionReason(subscription: SubscriptionRow) {
 
 export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
   const admin = createAdminSupabase()
+  const commercialPlanPricesPromise = getCommercialPlanPrices()
 
   const countsPromise = Promise.all(
     PLATFORM_COUNTS.map(async (item) => {
@@ -138,11 +133,13 @@ export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
     { data: recentOrganizations },
     { data: organizationsForPlans },
     { data: subscriptionsData },
+    commercialPlanPrices,
   ] = await Promise.all([
     countsPromise,
     recentOrganizationsPromise,
     organizationsForPlansPromise,
     subscriptionsPromise,
+    commercialPlanPricesPromise,
   ])
 
   const planCounts = new Map<string, number>()
@@ -158,7 +155,7 @@ export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
   const active = subscriptions.filter((subscription) => subscription.status === 'active').length
   const trialing = subscriptions.filter((subscription) => subscription.status === 'trialing').length
   const atRisk = subscriptions.filter((subscription) => subscription.status === 'past_due' || subscription.status === 'unpaid').length
-  const canceled = subscriptions.filter((subscription) => subscription.status === 'canceled').length
+  const canceled = subscriptions.filter((subscription) => subscription.status === 'canceled' || subscription.status === 'cancelled').length
   const canceling = subscriptions.filter((subscription) => subscription.cancel_at_period_end).length
   const renewalsSoon = subscriptions.filter((subscription) => {
     const renewalDays = daysUntil(subscription.current_period_ends_at)
@@ -166,7 +163,7 @@ export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
   }).length
   const estimatedMrr = subscriptions
     .filter((subscription) => subscription.status === 'active' || subscription.status === 'trialing')
-    .reduce((sum, subscription) => sum + (ESTIMATED_MONTHLY_PRICES[(subscription.plan || 'FREE').toUpperCase()] ?? 0), 0)
+    .reduce((sum, subscription) => sum + (commercialPlanPrices[normalizePlanCode(subscription.plan)] ?? 0), 0)
 
   const attentionItems = subscriptions
     .filter((subscription) => {

@@ -10,6 +10,13 @@ import { logAuthEventClient } from '@/lib/auth-event-client'
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
 
+export type DeliveryLocation = {
+  city?: string
+  address?: string
+  reference?: string
+  full_address?: string
+}
+
 // Tipos para el contexto de autenticación
 export interface AuthUser extends SupabaseUser {
   role?: UserRole
@@ -21,6 +28,7 @@ export interface AuthUser extends SupabaseUser {
     department?: string
     phone?: string
     location?: string
+    delivery_location?: DeliveryLocation
   }
 }
 
@@ -49,6 +57,7 @@ type SignUpMetadata = {
   department?: string
   phone?: string
   location?: string
+  delivery_location?: DeliveryLocation
   [key: string]: unknown
 }
 
@@ -66,6 +75,10 @@ const toProfileStatus = (value: unknown): ProfileStatus => {
     return value
   }
   return 'active'
+}
+
+const isDeliveryLocation = (value: unknown): value is DeliveryLocation => {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 const AUTH_SESSION_TIMEOUT_MS = 5000
@@ -114,6 +127,7 @@ const isDefaultAuthProfile = (profile: Partial<AuthUser>): boolean => {
     && !profileFields.department
     && !profileFields.phone
     && !profileFields.location
+    && !profileFields.delivery_location
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
@@ -189,6 +203,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name?: unknown
           avatar_url?: unknown
           phone?: unknown
+          location?: unknown
+          delivery_location?: unknown
         }
         permissions?: unknown
       }
@@ -206,7 +222,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile: {
           name: typeof profileData.name === 'string' ? profileData.name : '',
           avatar_url: typeof profileData.avatar_url === 'string' ? profileData.avatar_url : '',
-          phone: typeof profileData.phone === 'string' ? profileData.phone : ''
+          phone: typeof profileData.phone === 'string' ? profileData.phone : '',
+          location: typeof profileData.location === 'string' ? profileData.location : '',
+          delivery_location: isDeliveryLocation(profileData.delivery_location) ? profileData.delivery_location : undefined,
         },
         permissions: Array.from(new Set(directPermissions))
       }

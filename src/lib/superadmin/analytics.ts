@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { getCommercialPlanPrices, normalizePlanCode } from '@/lib/saas/subscription-service'
 
 export interface GrowthDataPoint {
   month: string
@@ -37,15 +38,6 @@ export interface SuperAdminAnalyticsData {
   generatedAt: string
 }
 
-const PLAN_PRICES: Record<string, number> = {
-  FREE: 0,
-  BASIC: 29,
-  STARTER: 29,
-  PRO: 79,
-  PROFESSIONAL: 79,
-  ENTERPRISE: 199,
-}
-
 function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
@@ -66,20 +58,24 @@ function lastMonths(count: number) {
 }
 
 function normalizePlan(plan: string | null | undefined) {
-  return (plan || 'FREE').toUpperCase()
+  return normalizePlanCode(plan)
 }
 
 export async function getSuperAdminAnalytics(): Promise<SuperAdminAnalyticsData> {
   const admin = createAdminSupabase()
   const months = lastMonths(6)
+  const commercialPlanPricesPromise = getCommercialPlanPrices()
 
   const { data: organizations } = await admin
     .from('organizations')
     .select('id, name, plan, created_at')
 
-  const { data: members } = await admin
-    .from('organization_members')
-    .select('organization_id, status, created_at')
+  const [{ data: members }, commercialPlanPrices] = await Promise.all([
+    admin
+      .from('organization_members')
+      .select('organization_id, status, created_at'),
+    commercialPlanPricesPromise,
+  ])
 
   const orgRows = organizations ?? []
   const memberRows = members ?? []
@@ -112,7 +108,7 @@ export async function getSuperAdminAnalytics(): Promise<SuperAdminAnalyticsData>
     .map((org) => normalizePlan(org.plan))
     .filter((plan) => plan !== 'FREE')
 
-  const mrr = activePaidPlans.reduce((sum, plan) => sum + (PLAN_PRICES[plan] ?? 0), 0)
+  const mrr = activePaidPlans.reduce((sum, plan) => sum + (commercialPlanPrices[plan] ?? 0), 0)
   const activeSubscriptions = activePaidPlans.length
 
   const usersByOrg = new Map<string, number>()

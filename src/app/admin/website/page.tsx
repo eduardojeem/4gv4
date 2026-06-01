@@ -6,15 +6,17 @@ import { CompanyInfoForm } from '@/components/admin/website/CompanyInfoForm'
 import { HeroEditor } from '@/components/admin/website/HeroEditor'
 import { ServicesManager } from '@/components/admin/website/ServicesManager'
 import { ProcessStepsEditor } from '@/components/admin/website/ProcessStepsEditor'
-import { Building2, Briefcase, Eye, Footprints, Globe, Sparkles } from 'lucide-react'
+import { CheckoutSettingsEditor } from '@/components/admin/website/CheckoutSettingsEditor'
+import { Building2, Briefcase, Eye, Footprints, Globe, ShoppingCart, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
 const TABS = [
-  { value: 'company',  label: 'Empresa',   icon: Building2 },
-  { value: 'hero',     label: 'Hero',      icon: Sparkles  },
-  { value: 'services', label: 'Servicios', icon: Briefcase },
-  { value: 'process',  label: 'Proceso',   icon: Footprints },
+  { value: 'company',  label: 'Empresa',   icon: Building2   },
+  { value: 'hero',     label: 'Hero',      icon: Sparkles    },
+  { value: 'services', label: 'Servicios', icon: Briefcase   },
+  { value: 'process',  label: 'Proceso',   icon: Footprints  },
+  { value: 'checkout', label: 'Checkout',  icon: ShoppingCart },
 ]
 
 export default function WebsiteAdminPage() {
@@ -71,6 +73,7 @@ export default function WebsiteAdminPage() {
         <TabsContent value="hero"     className="mt-0"><HeroEditor /></TabsContent>
         <TabsContent value="services" className="mt-0"><ServicesManager /></TabsContent>
         <TabsContent value="process"  className="mt-0"><ProcessStepsEditor /></TabsContent>
+        <TabsContent value="checkout" className="mt-0"><CheckoutSettingsEditor /></TabsContent>
       </Tabs>
     </div>
   )

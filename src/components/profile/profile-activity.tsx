@@ -28,6 +28,7 @@ interface Repair {
 
 interface ProfileActivityProps {
   repairs: Repair[]
+  tenantPrefix?: string
 }
 
 function formatDate(dateString: string) {
@@ -42,7 +43,9 @@ function formatDate(dateString: string) {
   }
 }
 
-export function ProfileActivity({ repairs }: ProfileActivityProps) {
+export function ProfileActivity({ repairs, tenantPrefix = '' }: ProfileActivityProps) {
+  const repairsHref = tenantPrefix ? `${tenantPrefix}/mis-reparaciones` : '/mis-reparaciones'
+
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm">
       <div className="flex items-center gap-2 border-b border-border px-5 py-4">
@@ -60,7 +63,7 @@ export function ProfileActivity({ repairs }: ProfileActivityProps) {
             return (
               <Link
                 key={repair.id}
-                href={`/mis-reparaciones?search=${repair.id}`}
+                href={`${repairsHref}?search=${repair.id}`}
                 className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50"
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
@@ -100,7 +103,7 @@ export function ProfileActivity({ repairs }: ProfileActivityProps) {
       {repairs.length > 0 && (
         <div className="border-t border-border p-2">
           <Button asChild variant="ghost" size="sm" className="w-full text-xs">
-            <Link href="/mis-reparaciones">
+            <Link href={repairsHref}>
               Ver todo el historial <ChevronRight className="ml-1 h-3 w-3" />
             </Link>
           </Button>

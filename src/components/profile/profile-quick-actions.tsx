@@ -6,17 +6,20 @@ import Link from 'next/link'
 
 interface ProfileQuickActionsProps {
   role: string
+  tenantPrefix?: string
 }
 
-export function ProfileQuickActions({ role }: ProfileQuickActionsProps) {
+export function ProfileQuickActions({ role, tenantPrefix = '' }: ProfileQuickActionsProps) {
   const isStaff = role === 'admin' || role === 'vendedor' || role === 'tecnico'
+  const repairsHref = tenantPrefix ? `${tenantPrefix}/mis-reparaciones` : '/mis-reparaciones'
+  const authorizedHref = tenantPrefix ? `${tenantPrefix}/perfil/autorizados` : '/perfil/autorizados'
 
   return (
     <div className="flex flex-col gap-3">
       {/* Main actions */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
-          href="/mis-reparaciones"
+          href={repairsHref}
           className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -30,7 +33,7 @@ export function ProfileQuickActions({ role }: ProfileQuickActionsProps) {
         </Link>
 
         <Link
-          href="/perfil/autorizados"
+          href={authorizedHref}
           className="group flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-info/10 text-info">

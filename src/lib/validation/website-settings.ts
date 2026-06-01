@@ -164,6 +164,63 @@ export const MaintenanceModeSchema = z.object({
     .optional()
 })
 
+// Esquema para un paso del proceso individual
+export const ProcessStepSchema = z.object({
+  id: z.string(),
+  number: z.number().int(),
+  title: z.string()
+    .min(2, 'Título debe tener al menos 2 caracteres')
+    .max(100, 'Título no puede exceder 100 caracteres'),
+  description: z.string()
+    .min(5, 'Descripción debe tener al menos 5 caracteres')
+    .max(300, 'Descripción no puede exceder 300 caracteres'),
+})
+
+// Esquema para array de pasos del proceso
+export const ProcessStepsSchema = z.array(ProcessStepSchema)
+  .min(1, 'Debe haber al menos 1 paso')
+  .max(8, 'Máximo 8 pasos permitidos')
+
+// Esquema para configuración de un método de pago
+const PaymentMethodConfigSchema = z.object({
+  enabled: z.boolean(),
+  label: z.string().max(60).optional(),
+  instructions: z.string().max(500).optional(),
+  bankAlias: z.string().max(100).optional(),
+  bankCbu: z.string().max(50).optional(),
+  bankName: z.string().max(100).optional(),
+  walletAlias: z.string().max(100).optional(),
+  qrImageUrl: z.string().max(500).optional().or(z.literal('')),
+}).passthrough()
+
+const DeliveryConfigSchema = z.object({
+  enabled: z.boolean(),
+  defaultCost: z.number().min(0).max(9_999_999),
+  freeThreshold: z.number().min(0).max(999_999_999),
+  estimatedTime: z.string().max(60),
+  zones: z.string().max(300).optional(),
+  instructions: z.string().max(500).optional(),
+}).passthrough()
+
+const PickupConfigSchema = z.object({
+  enabled: z.boolean(),
+  estimatedTime: z.string().max(60),
+  instructions: z.string().max(500).optional(),
+}).passthrough()
+
+export const CheckoutSettingsSchema = z.object({
+  payment: z.object({
+    cash:           PaymentMethodConfigSchema,
+    card:           PaymentMethodConfigSchema,
+    transfer:       PaymentMethodConfigSchema,
+    digital_wallet: PaymentMethodConfigSchema,
+  }).passthrough(),
+  delivery: DeliveryConfigSchema,
+  pickup:   PickupConfigSchema,
+  minOrderAmount:       z.number().min(0).max(999_999_999),
+  confirmationMessage:  z.string().max(500).optional(),
+}).passthrough()
+
 // Esquema completo de configuración del sitio web
 export const WebsiteSettingsSchema = z.object({
   company_info: CompanyInfoSchema,
@@ -171,6 +228,7 @@ export const WebsiteSettingsSchema = z.object({
   hero_stats: HeroStatsSchema,
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
+  process_steps: ProcessStepsSchema,
   maintenance_mode: MaintenanceModeSchema,
 })
 
@@ -184,7 +242,9 @@ export const SETTING_SCHEMAS = {
   hero_stats: HeroStatsSchema,
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
+  process_steps: ProcessStepsSchema,
   maintenance_mode: MaintenanceModeSchema,
+  checkout: CheckoutSettingsSchema,
 } as const
 
 /**

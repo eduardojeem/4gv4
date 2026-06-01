@@ -70,6 +70,47 @@ export interface MaintenanceMode {
   estimatedEnd?: string
 }
 
+export interface PaymentMethodConfig {
+  enabled: boolean
+  label?: string
+  instructions?: string
+  // Transfer-specific
+  bankAlias?: string
+  bankCbu?: string
+  bankName?: string
+  // Digital wallet-specific
+  walletAlias?: string
+  qrImageUrl?: string
+}
+
+export interface DeliveryConfig {
+  enabled: boolean
+  defaultCost: number           // Gs. shown in cart by default
+  freeThreshold: number         // 0 = always paid; >0 = free above this amount
+  estimatedTime: string         // e.g. "30–60 min"
+  zones?: string                // free-text description of zones covered
+  instructions?: string         // extra info shown to customer
+}
+
+export interface PickupConfig {
+  enabled: boolean
+  estimatedTime: string         // e.g. "20–30 min"
+  instructions?: string
+}
+
+export interface CheckoutSettings {
+  payment: {
+    cash: PaymentMethodConfig
+    card: PaymentMethodConfig
+    transfer: PaymentMethodConfig
+    digital_wallet: PaymentMethodConfig
+  }
+  delivery: DeliveryConfig
+  pickup: PickupConfig
+  minOrderAmount: number        // 0 = no minimum
+  confirmationMessage?: string  // shown on success screen
+}
+
 export interface WebsiteSettings {
   company_info: CompanyInfo
   hero_stats: HeroStats
@@ -78,6 +119,7 @@ export interface WebsiteSettings {
   testimonials: Testimonial[]
   process_steps: ProcessStep[]
   maintenance_mode: MaintenanceMode
+  checkout: CheckoutSettings
 }
 
 export type WebsiteSettingKey = keyof WebsiteSettings

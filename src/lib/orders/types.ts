@@ -37,5 +37,6 @@ export type CustomerOrder = {
   estimated_delivery_date: string | null
   delivered_at: string | null
   cancelled_at: string | null
+  stock_reserved: boolean
   order_items: CustomerOrderItem[]
 }

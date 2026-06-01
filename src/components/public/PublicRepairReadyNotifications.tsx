@@ -92,7 +92,7 @@ export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNoti
   const pathname = usePathname()
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantPrefix =
-    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones'].includes(pathSegments[1])
+    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente'].includes(pathSegments[1])
       ? `/${pathSegments[0]}`
       : ''
   const repairsHref = `${tenantPrefix}/mis-reparaciones`

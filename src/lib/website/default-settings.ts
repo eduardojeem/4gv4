@@ -37,6 +37,29 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       title: 'Sitio en Mantenimiento',
       message: 'Estamos realizando mejoras en nuestro sitio. Volveremos pronto.',
       estimatedEnd: ''
+    },
+    checkout: {
+      payment: {
+        cash:           { enabled: true,  label: 'Efectivo',          instructions: 'Pagás al retirar en el local o al recibir el delivery.' },
+        card:           { enabled: true,  label: 'Tarjeta',           instructions: 'Posnet inalámbrico disponible en el local o a domicilio.' },
+        transfer:       { enabled: true,  label: 'Transferencia',     instructions: 'Te enviaremos los datos bancarios por WhatsApp o email.' },
+        digital_wallet: { enabled: true,  label: 'Billetera digital', instructions: 'Te enviaremos el QR o link de pago tras confirmar el pedido.' },
+      },
+      delivery: {
+        enabled: true,
+        defaultCost: 0,
+        freeThreshold: 0,
+        estimatedTime: '30–60 min',
+        zones: '',
+        instructions: '',
+      },
+      pickup: {
+        enabled: true,
+        estimatedTime: '20–30 min',
+        instructions: '',
+      },
+      minOrderAmount: 0,
+      confirmationMessage: '',
     }
   }
 }
@@ -75,6 +98,20 @@ export function applyWebsiteSettingsDefaults(
     maintenance_mode: {
       ...defaults.maintenance_mode,
       ...maintenanceMode
+    },
+    checkout: {
+      ...defaults.checkout,
+      ...(settings.checkout ?? {}),
+      payment: {
+        ...defaults.checkout.payment,
+        ...(settings.checkout?.payment ?? {}),
+        cash:           { ...defaults.checkout.payment.cash,           ...(settings.checkout?.payment?.cash ?? {}) },
+        card:           { ...defaults.checkout.payment.card,           ...(settings.checkout?.payment?.card ?? {}) },
+        transfer:       { ...defaults.checkout.payment.transfer,       ...(settings.checkout?.payment?.transfer ?? {}) },
+        digital_wallet: { ...defaults.checkout.payment.digital_wallet, ...(settings.checkout?.payment?.digital_wallet ?? {}) },
+      },
+      delivery: { ...defaults.checkout.delivery, ...(settings.checkout?.delivery ?? {}) },
+      pickup:   { ...defaults.checkout.pickup,   ...(settings.checkout?.pickup   ?? {}) },
     }
   }
 }

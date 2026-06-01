@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth, AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { canCreateResource } from '@/lib/saas/subscription-service'
 
 type BranchPayload = {
   organization_id?: unknown
@@ -288,6 +289,21 @@ async function postHandler(request: NextRequest, ctx: AdminAuthContext) {
       return NextResponse.json(
         { error: 'Selecciona una organizacion valida para crear la sucursal.' },
         { status: 400 }
+      )
+    }
+
+    const planGate = await canCreateResource(organizationId, 'branches')
+
+    if (!planGate.allowed) {
+      return NextResponse.json(
+        {
+          error: `Tu plan ${planGate.plan.name} permite hasta ${planGate.limit} sucursales. Actualiza el plan para crear mas.`,
+          code: 'PLAN_LIMIT_REACHED',
+          resource: 'branches',
+          current: planGate.current,
+          limit: planGate.limit,
+        },
+        { status: 402 }
       )
     }
 

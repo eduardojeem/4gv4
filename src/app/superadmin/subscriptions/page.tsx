@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { normalizePlanCode } from '@/lib/saas/subscription-service'
 import {
   SubscriptionsDashboard,
   type SuperAdminSubscription,
@@ -42,10 +43,17 @@ type PlanRow = {
   is_active: boolean | null
 }
 
+type CommercialPlanRow = {
+  tier: string
+  name: string
+  price: number | null
+  is_active: boolean | null
+}
+
 export default async function SuperAdminSubscriptionsPage() {
   const admin = createAdminSupabase()
 
-  const [{ data, error }, { data: plansData }] = await Promise.all([
+  const [{ data, error }, { data: plansData }, { data: commercialPlansData }] = await Promise.all([
     admin
       .from('subscriptions')
       .select(
@@ -57,6 +65,10 @@ export default async function SuperAdminSubscriptionsPage() {
       .from('plans')
       .select('code, name, limits, modules, is_active')
       .order('code', { ascending: true }),
+    admin
+      .from('subscription_plans')
+      .select('tier, name, price, is_active')
+      .order('price', { ascending: true }),
   ])
 
   const subscriptions = error ? [] : ((data ?? []) as SubscriptionRow[])
@@ -82,12 +94,17 @@ export default async function SuperAdminSubscriptionsPage() {
   const organizationsById = new Map(organizations.map((organization) => [organization.id, organization]))
   const profilesById = new Map(((profilesData ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]))
   const plansByCode = new Map(((plansData ?? []) as PlanRow[]).map((plan) => [plan.code, plan]))
+  const commercialPlansByCode = new Map(
+    ((commercialPlansData ?? []) as CommercialPlanRow[]).map((plan) => [normalizePlanCode(plan.tier), plan])
+  )
+  const planOptions = Array.from(commercialPlansByCode.keys()).sort()
 
   const dashboardSubscriptions: SuperAdminSubscription[] = subscriptions.map((subscription) => {
     const organization = organizationsById.get(subscription.organization_id)
     const owner = organization?.owner_id ? profilesById.get(organization.owner_id) : null
     const plan = subscription.plan || organization?.plan || 'FREE'
     const planDetails = plansByCode.get(plan)
+    const commercialPlan = commercialPlansByCode.get(normalizePlanCode(plan))
 
     return {
       id: subscription.id,
@@ -102,10 +119,12 @@ export default async function SuperAdminSubscriptionsPage() {
       plan_details: planDetails
         ? {
             code: planDetails.code,
-            name: planDetails.name,
+            name: commercialPlan?.name || planDetails.name,
+            price_monthly: Number(commercialPlan?.price || 0),
+            currency: 'USD',
             limits: planDetails.limits || {},
             modules: planDetails.modules || [],
-            is_active: planDetails.is_active !== false,
+            is_active: planDetails.is_active !== false && commercialPlan?.is_active !== false,
           }
         : null,
       status: subscription.status || 'sin_estado',
@@ -124,6 +143,7 @@ export default async function SuperAdminSubscriptionsPage() {
   return (
     <SubscriptionsDashboard
       subscriptions={dashboardSubscriptions}
+      planOptions={planOptions}
       loadError={
         error
           ? 'No se pudo cargar subscriptions. Verifica que la migracion SaaS este aplicada y que el esquema tenga current_period_ends_at.'

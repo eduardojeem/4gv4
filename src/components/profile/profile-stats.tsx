@@ -1,29 +1,32 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import { Award, TrendingUp, Wrench } from 'lucide-react'
+import { Award, ShoppingBag, TrendingUp, Wrench } from 'lucide-react'
 
 interface ProfileStatsProps {
   totalRepairs: number
   activeRepairs: number
   completedRepairs: number
+  totalOrders?: number
 }
 
 const stats = [
   { key: 'total', label: 'Total reparaciones', icon: Wrench, colorClass: 'text-primary bg-primary/10' },
   { key: 'active', label: 'En proceso', icon: TrendingUp, colorClass: 'text-warning bg-warning/10' },
   { key: 'completed', label: 'Entregados', icon: Award, colorClass: 'text-success bg-success/10' },
+  { key: 'orders', label: 'Pedidos', icon: ShoppingBag, colorClass: 'text-info bg-info/10' },
 ] as const
 
-export function ProfileStats({ totalRepairs, activeRepairs, completedRepairs }: ProfileStatsProps) {
+export function ProfileStats({ totalRepairs, activeRepairs, completedRepairs, totalOrders = 0 }: ProfileStatsProps) {
   const values: Record<string, number> = {
     total: totalRepairs,
     active: activeRepairs,
     completed: completedRepairs,
+    orders: totalOrders,
   }
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {stats.map(({ key, label, icon: Icon, colorClass }) => (
         <div
           key={key}

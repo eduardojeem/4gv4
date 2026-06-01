@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { normalizePlanCode } from '@/lib/saas/subscription-service'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 
-const VALID_PLANS = new Set(['FREE', 'BASIC', 'PRO', 'ENTERPRISE'])
-const VALID_STATUSES = new Set(['trialing', 'active', 'past_due', 'canceled', 'unpaid'])
+const VALID_STATUSES = new Set(['trialing', 'active', 'past_due', 'suspended', 'cancelled', 'canceled', 'expired', 'unpaid'])
 
 type UpdateSubscriptionBody = {
   plan?: unknown
@@ -40,16 +40,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const plan = typeof body.plan === 'string' ? body.plan.toUpperCase() : undefined
+  const plan = typeof body.plan === 'string' ? normalizePlanCode(body.plan) : undefined
   const status = typeof body.status === 'string' ? body.status : undefined
   const trialEndsAt = normalizeDate(body.trial_ends_at)
   const periodStartsAt = normalizeDate(body.current_period_starts_at)
   const periodEndsAt = normalizeDate(body.current_period_ends_at)
   const cancelAtPeriodEnd = typeof body.cancel_at_period_end === 'boolean' ? body.cancel_at_period_end : undefined
-
-  if (!plan || !VALID_PLANS.has(plan)) {
-    return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
-  }
 
   if (!status || !VALID_STATUSES.has(status)) {
     return NextResponse.json({ error: 'Invalid subscription status' }, { status: 400 })
@@ -64,6 +60,21 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const admin = createAdminSupabase()
+  const { data: activePlan, error: activePlanError } = await admin
+    .from('subscription_plans')
+    .select('tier')
+    .eq('tier', plan.toLowerCase())
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (activePlanError) {
+    return NextResponse.json({ error: 'Failed to validate plan' }, { status: 500 })
+  }
+
+  if (!activePlan) {
+    return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
+  }
+
   const { data: previous, error: previousError } = await admin
     .from('subscriptions')
     .select('id, organization_id, plan, status, trial_ends_at, current_period_starts_at, current_period_ends_at, cancel_at_period_end')

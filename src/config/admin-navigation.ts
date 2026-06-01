@@ -9,6 +9,7 @@ import {
     Globe,
     Monitor,
     Building2,
+    CreditCard,
     type LucideIcon
 } from 'lucide-react'
 
@@ -111,6 +112,14 @@ export const adminNavCategories: NavCategory[] = [
                 href: '/admin/branches',
                 description: 'Gestión multi sucursal y cobertura operativa',
                 permissions: ['settings.read']
+            },
+            {
+                key: 'subscriptions',
+                label: 'Suscripcion',
+                icon: CreditCard,
+                href: '/admin/subscriptions',
+                description: 'Plan, pagos, limites y facturacion',
+                permissions: ['billing.manage']
             },
             {
                 key: 'website',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withAdminAuth } from '@/lib/api/withAdminAuth'
+import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebsiteSettings } from '@/types/website-settings'
 import { applyWebsiteSettingsDefaults, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 
@@ -10,22 +11,35 @@ import { applyWebsiteSettingsDefaults, getWebsiteSettingsDefaults } from '@/lib/
  */
 async function handler(
   _request: NextRequest,
-  context: { user: { id: string; email?: string; role: string } }
+  context: AdminAuthContext
 ) {
   try {
     console.log('Fetching website settings', { requestedBy: context.user.id })
 
-    const supabase = await createClient()
+    // Use admin client so RLS doesn't block reading settings that still have
+    // organization_id = 'default' (common before the org backfill migration runs).
+    const adminSupabase = createAdminSupabase()
+    const userSupabase  = await createClient()
+
+    // Resolve the org_id so we can filter correctly
+    const orgId = context.organizationId
 
     // Load website_settings + org data in parallel for fallback hydration
+    let settingsQuery = adminSupabase.from('website_settings').select('key, value')
+    if (orgId) {
+      // Return rows for this org OR legacy rows with NULL / default org_id
+      // (legacy rows are still valid until the backfill migration runs)
+      settingsQuery = settingsQuery.or(`organization_id.eq.${orgId},organization_id.is.null`)
+    }
+
     const [
       { data: settings, error },
       { data: orgSettings },
       { data: branch },
     ] = await Promise.all([
-      supabase.from('website_settings').select('key, value'),
-      supabase.from('organization_settings').select('display_name').maybeSingle(),
-      supabase.from('branches').select('phone, email, address, city').eq('is_default', true).maybeSingle(),
+      settingsQuery,
+      userSupabase.from('organization_settings').select('display_name').maybeSingle(),
+      userSupabase.from('branches').select('phone, email, address, city').eq('is_default', true).maybeSingle(),
     ])
 
     if (error) {
@@ -82,7 +96,7 @@ export const GET = withAdminAuth(handler)
  */
 async function initHandler(
   _request: NextRequest,
-  context: { user: { id: string; email?: string; role: string } }
+  context: AdminAuthContext
 ) {
   try {
     const supabase = await createClient()

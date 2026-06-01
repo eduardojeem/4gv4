@@ -83,7 +83,7 @@ export function useWebsiteSettings() {
   const pathname = usePathname()
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantSlug =
-    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'cliente'].includes(pathSegments[1])
+    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil'].includes(pathSegments[1])
       ? pathSegments[0]
       : ''
   const cacheKey = tenantSlug ? `${WEBSITE_SETTINGS_CACHE_KEY}?org=${encodeURIComponent(tenantSlug)}` : WEBSITE_SETTINGS_CACHE_KEY

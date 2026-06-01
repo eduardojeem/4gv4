@@ -19,7 +19,6 @@ import type { EditForm, SuperAdminSubscription, SortValue, TabValue } from './ty
 import {
   csvCell,
   daysUntil,
-  ESTIMATED_MONTHLY_PRICES,
   getRecommendation,
   isAttention,
   periodLabel,
@@ -37,6 +36,7 @@ export type { SuperAdminSubscription }
 
 type Props = {
   subscriptions: SuperAdminSubscription[]
+  planOptions: string[]
   loadError: string | null
 }
 
@@ -51,7 +51,7 @@ function toEditForm(sub: SuperAdminSubscription): EditForm {
   }
 }
 
-export function SubscriptionsDashboard({ subscriptions, loadError }: Props) {
+export function SubscriptionsDashboard({ subscriptions, planOptions: configuredPlanOptions, loadError }: Props) {
   const router = useRouter()
 
   // Filters
@@ -70,8 +70,8 @@ export function SubscriptionsDashboard({ subscriptions, loadError }: Props) {
 
   // Derived filter options
   const planOptions = useMemo(
-    () => Array.from(new Set(subscriptions.map((s) => s.plan.toUpperCase()))).sort(),
-    [subscriptions]
+    () => Array.from(new Set([...configuredPlanOptions, ...subscriptions.map((s) => s.plan.toUpperCase())])).sort(),
+    [configuredPlanOptions, subscriptions]
   )
   const statusOptions = useMemo(
     () => Array.from(new Set(subscriptions.map((s) => s.status))).sort(),
@@ -154,7 +154,7 @@ export function SubscriptionsDashboard({ subscriptions, loadError }: Props) {
     const renewingSoon = tabCounts.renewals
     const estimatedMrr = subscriptions
       .filter((s) => ['active', 'trialing'].includes(s.status))
-      .reduce((sum, s) => sum + (ESTIMATED_MONTHLY_PRICES[s.plan.toUpperCase()] ?? 0), 0)
+      .reduce((sum, s) => sum + (s.plan_details?.price_monthly ?? 0), 0)
     const conversionBase = active + trialing
     const activeRate = conversionBase ? Math.round((active / conversionBase) * 100) : 0
 
@@ -436,6 +436,7 @@ export function SubscriptionsDashboard({ subscriptions, loadError }: Props) {
         subscription={selected}
         editForm={editForm}
         isSaving={isSaving}
+        planOptions={planOptions}
         saveError={saveError}
         onClose={closeDetail}
         onEditFormChange={setEditForm}

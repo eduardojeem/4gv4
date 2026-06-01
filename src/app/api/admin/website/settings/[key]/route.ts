@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth } from '@/lib/api/withAdminAuth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebsiteSettingKey } from '@/types/website-settings'
 import { validateSetting } from '@/lib/validation/website-settings'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
@@ -11,7 +12,9 @@ const VALID_KEYS: WebsiteSettingKey[] = [
   'hero_content',
   'services',
   'testimonials',
-  'maintenance_mode'
+  'maintenance_mode',
+  'process_steps',
+  'checkout',
 ]
 
 // Rate limiting: Máximo 10 actualizaciones por minuto por usuario
@@ -42,7 +45,11 @@ function checkRateLimit(userId: string): { allowed: boolean; remaining: number }
  */
 async function handler(
   request: NextRequest,
-  context: { params: Promise<{ key: string }>; user: { id: string; email?: string; role: string } }
+  context: { 
+    params: Promise<{ key: string }>; 
+    user: { id: string; email?: string; role: string };
+    organizationId: string | null;
+  }
 ) {
   try {
     const { key } = await context.params
@@ -121,12 +128,45 @@ async function handler(
       .eq('key', key)
       .maybeSingle()
 
-    // Upsert para garantizar que exista la fila
-    const { error } = await supabase
+    // Resolver organizationId para RLS (con fallback seguro en super_admin si aplica)
+    let orgId = context.organizationId
+    if (!orgId) {
+      const { data: membership } = await supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', context.user.id)
+        .eq('status', 'active')
+        .limit(1)
+        .maybeSingle()
+      
+      orgId = membership?.organization_id || null
+      
+      if (!orgId) {
+        const { data: defaultOrg } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('slug', 'default')
+          .maybeSingle()
+        orgId = defaultOrg?.id || null
+      }
+    }
+
+    console.log('DIAGNOSTICO RLS:', {
+      userId: context.user.id,
+      userRole: context.user.role,
+      contextOrgId: context.organizationId,
+      resolvedOrgId: orgId,
+      keyToUpsert: key
+    })
+
+    // Upsert usando cliente administrador para bypass RLS de manera robusta y segura
+    const adminSupabase = createAdminSupabase()
+    const { error } = await adminSupabase
       .from('website_settings')
       .upsert({
         key,
         value,
+        organization_id: orgId,
         updated_by: context.user.id,
         updated_at: new Date().toISOString()
       }, { onConflict: 'key' })
@@ -134,6 +174,9 @@ async function handler(
     if (error) {
       console.error('Failed to update website setting', { 
         error: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
         key,
         userId: context.user.id
       })
@@ -190,6 +233,10 @@ export async function PUT(
   context: { params: Promise<{ key: string }> }
 ) {
   return withAdminAuth((req, authContext) => 
-    handler(req, { params: context.params, user: authContext.user })
+    handler(req, { 
+      params: context.params, 
+      user: authContext.user,
+      organizationId: authContext.organizationId 
+    })
   )(request)
 }

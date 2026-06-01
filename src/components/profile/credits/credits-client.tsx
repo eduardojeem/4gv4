@@ -44,7 +44,7 @@ export interface CreditPayment {
   notes?: string
 }
 
-export function CreditsClient() {
+export function CreditsClient({ organizationSlug = '' }: { organizationSlug?: string }) {
   const [loading, setLoading] = useState(true)
   const [credits, setCredits] = useState<CreditItem[]>([])
   const [payments, setPayments] = useState<CreditPayment[]>([])
@@ -68,16 +68,34 @@ export function CreditsClient() {
         
         if (!session?.user) {
           // Redirigir al login en lugar de lanzar error
-          router.push('/login?redirect=/perfil/creditos')
+          const creditPath = organizationSlug ? `/${organizationSlug}/perfil/creditos` : '/perfil/creditos'
+          const loginPath = organizationSlug ? `/${organizationSlug}/cliente/login` : '/login'
+          router.push(`${loginPath}?next=${encodeURIComponent(creditPath)}`)
           return
         }
 
-        // 2. Buscar customer asoaciado a este perfil
-        const { data: customerData, error: customerError } = await supabase
+        let organizationId: string | null = null
+        if (organizationSlug) {
+          const { data: organization } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('slug', organizationSlug)
+            .maybeSingle()
+          organizationId = organization?.id ?? null
+        }
+
+        // 2. Buscar customer asociado a este perfil
+        let customerQuery = supabase
           .from('customers')
           .select('id')
           .eq('profile_id', session.user.id)
-          .single()
+          .limit(1)
+
+        if (organizationId) {
+          customerQuery = customerQuery.eq('organization_id', organizationId)
+        }
+
+        const { data: customerData, error: customerError } = await customerQuery.maybeSingle()
 
         if (customerError && customerError.code !== 'PGRST116') {
           console.error('Customer fetch error:', customerError)
@@ -184,7 +202,7 @@ export function CreditsClient() {
     }
 
     fetchData()
-  }, [supabase, router])
+  }, [supabase, router, organizationSlug])
 
   if (loading) {
     return (

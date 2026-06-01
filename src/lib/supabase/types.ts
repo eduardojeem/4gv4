@@ -186,6 +186,7 @@ export interface Database {
           phone: string | null
           relationship: string | null
           is_active: boolean | null
+          organization_id: string | null
           created_at: string | null
           updated_at: string | null
         }
@@ -197,6 +198,7 @@ export interface Database {
           phone?: string | null
           relationship?: string | null
           is_active?: boolean | null
+          organization_id?: string | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -208,6 +210,7 @@ export interface Database {
           phone?: string | null
           relationship?: string | null
           is_active?: boolean | null
+          organization_id?: string | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -1053,6 +1056,45 @@ export interface Database {
         }
         Relationships: []
       }
+      customer_order_payment_history: {
+        Row: {
+          id: string
+          organization_id: string
+          order_id: string
+          from_status: string | null
+          to_status: string
+          payment_method: string | null
+          amount: number | null
+          note: string | null
+          changed_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          order_id: string
+          from_status?: string | null
+          to_status: string
+          payment_method?: string | null
+          amount?: number | null
+          note?: string | null
+          changed_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          order_id?: string
+          from_status?: string | null
+          to_status?: string
+          payment_method?: string | null
+          amount?: number | null
+          note?: string | null
+          changed_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       customer_orders: {
         Row: {
           id: string
@@ -1079,6 +1121,7 @@ export interface Database {
           estimated_delivery_date: string | null
           delivered_at: string | null
           cancelled_at: string | null
+          stock_reserved: boolean
         }
         Insert: {
           id?: string
@@ -1105,6 +1148,7 @@ export interface Database {
           estimated_delivery_date?: string | null
           delivered_at?: string | null
           cancelled_at?: string | null
+          stock_reserved?: boolean
         }
         Update: {
           id?: string
@@ -1131,6 +1175,7 @@ export interface Database {
           estimated_delivery_date?: string | null
           delivered_at?: string | null
           cancelled_at?: string | null
+          stock_reserved?: boolean
         }
         Relationships: []
       }

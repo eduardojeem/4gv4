@@ -33,15 +33,18 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 }
 
-export default function PublicLayout({
+export default async function PublicLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const settings = await fetchWebsiteSettings()
+  const brandColor = settings?.company_info?.brandColor || 'blue'
+
   return (
     <MaintenanceGuard>
       <CartProviderWithDrawer>
-        <div className="flex min-h-screen flex-col">
+        <div className="flex min-h-screen flex-col" data-color-scheme={brandColor}>
           <SkipToContentLink />
           <PublicHeader />
           <main id="main-content" className="flex-1">{children}</main>

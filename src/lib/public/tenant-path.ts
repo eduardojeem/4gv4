@@ -9,7 +9,7 @@ export async function getPublicTenantPathPrefix() {
 
 export function prefixPublicTenantPath(prefix: string, href: string) {
   if (!prefix) return href
-  if (!['/inicio', '/productos', '/mis-reparaciones', '/track', '/carrito'].some((path) => href === path || href.startsWith(`${path}/`) || href.startsWith(`${path}?`) || href.startsWith(`${path}#`))) {
+  if (!['/inicio', '/productos', '/mis-reparaciones', '/track', '/carrito', '/perfil'].some((path) => href === path || href.startsWith(`${path}/`) || href.startsWith(`${path}?`) || href.startsWith(`${path}#`))) {
     return href
   }
 

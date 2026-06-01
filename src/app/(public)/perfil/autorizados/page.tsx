@@ -27,6 +27,7 @@ import Link from 'next/link'
 import { z } from 'zod'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
 
 // Schema de validación para persona autorizada
 const authorizedPersonSchema = z.object({
@@ -42,6 +43,7 @@ export default function AuthorizedPersonsPage() {
   const { user, loading: loadingAuth } = useAuth()
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
+  const { tenantSlug, tenantPrefix } = usePublicTenantPrefix()
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -59,12 +61,39 @@ export default function AuthorizedPersonsPage() {
   const loadAuthorizedPersons = useCallback(async () => {
     if (!user) return
     try {
-      const { data, error } = await supabase
+      let organizationId: string | null = null
+      if (tenantSlug) {
+        const { data: organization } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('slug', tenantSlug)
+          .maybeSingle()
+        organizationId = organization?.id ?? null
+      }
+
+      let query = supabase
         .from('authorized_persons')
         .select('*')
         .eq('profile_id', user.id)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
+
+      if (organizationId) {
+        query = query.eq('organization_id', organizationId)
+      }
+
+      let { data, error } = await query
+
+      if (error && organizationId && error.message?.includes('organization_id')) {
+        const fallback = await supabase
+          .from('authorized_persons')
+          .select('*')
+          .eq('profile_id', user.id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+        data = fallback.data
+        error = fallback.error
+      }
 
       if (error) throw error
       setAuthorizedPersons(data || [])
@@ -74,17 +103,19 @@ export default function AuthorizedPersonsPage() {
     } finally {
       setLoading(false)
     }
-  }, [user, supabase])
+  }, [user, supabase, tenantSlug])
 
   useEffect(() => {
     if (!loadingAuth) {
       if (!user) {
-        router.push('/login')
+        const authorizedPath = tenantPrefix ? `${tenantPrefix}/perfil/autorizados` : '/perfil/autorizados'
+        const loginPath = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
+        router.push(`${loginPath}?next=${encodeURIComponent(authorizedPath)}`)
       } else {
         loadAuthorizedPersons()
       }
     }
-  }, [user, loadingAuth, router, loadAuthorizedPersons])
+  }, [user, loadingAuth, router, loadAuthorizedPersons, tenantPrefix])
 
   const handleAddPerson = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,14 +138,37 @@ export default function AuthorizedPersonsPage() {
 
     setSubmitting(true)
     try {
-      const { data, error } = await supabase
+      let organizationId: string | null = null
+      if (tenantSlug) {
+        const { data: organization } = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('slug', tenantSlug)
+          .maybeSingle()
+        organizationId = organization?.id ?? null
+      }
+
+      const insertPayload = {
+        ...formData,
+        profile_id: user.id,
+        ...(organizationId ? { organization_id: organizationId } : {}),
+      }
+
+      let { data, error } = await supabase
         .from('authorized_persons')
-        .insert([{
-          ...formData,
-          profile_id: user.id
-        }])
+        .insert([insertPayload])
         .select()
         .single()
+
+      if (error && organizationId && error.message?.includes('organization_id')) {
+        const fallback = await supabase
+          .from('authorized_persons')
+          .insert([{ ...formData, profile_id: user.id }])
+          .select()
+          .single()
+        data = fallback.data
+        error = fallback.error
+      }
 
       if (error) throw error
 
@@ -132,11 +186,13 @@ export default function AuthorizedPersonsPage() {
 
   const handleDeletePerson = async (id: string) => {
     try {
-      const { error } = await supabase
+      let query = supabase
         .from('authorized_persons')
         .delete()
         .eq('id', id)
         .eq('profile_id', user?.id)
+
+      const { error } = await query
 
       if (error) throw error
 
@@ -167,7 +223,7 @@ export default function AuthorizedPersonsPage() {
       <main className="container max-w-4xl py-12 px-4 relative z-10 pt-24 lg:pt-32 flex-1">
         <div className="mb-8">
           <Button asChild variant="ghost" size="sm" className="-ml-2 mb-4 group hover:bg-white/50 dark:hover:bg-slate-900/50 backdrop-blur-sm">
-            <Link href="/perfil">
+            <Link href={tenantPrefix ? `${tenantPrefix}/perfil` : '/perfil'}>
               <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
               Volver al perfil
             </Link>
@@ -389,4 +445,3 @@ export default function AuthorizedPersonsPage() {
     </div>
   )
 }
-

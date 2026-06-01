@@ -11,6 +11,8 @@ export type SuperAdminSubscription = {
   plan_details: {
     code: string
     name: string
+    price_monthly: number
+    currency: string
     limits: Record<string, unknown>
     modules: string[]
     is_active: boolean

@@ -38,14 +38,52 @@ function optionalJson(value: unknown) {
   return undefined
 }
 
-function deriveModules(features: unknown) {
-  if (!Array.isArray(features)) return undefined
+function canonicalPlanCode(tier: unknown) {
+  const normalized = typeof tier === 'string' ? tier.toLowerCase().trim() : ''
+  if (normalized === 'basic' || normalized === 'starter') return 'BASIC'
+  if (normalized === 'pro' || normalized === 'profesional' || normalized === 'professional') return 'PRO'
+  if (normalized === 'enterprise') return 'ENTERPRISE'
+  return 'FREE'
+}
 
-  return features
-    .filter((feature): feature is { label?: unknown; value?: unknown } => Boolean(feature) && typeof feature === 'object')
-    .filter((feature) => feature.value === true || (typeof feature.value === 'string' && feature.value.trim().length > 0))
-    .map((feature) => String(feature.label || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''))
-    .filter(Boolean)
+function parseLimit(limits: unknown, key: string, fallback: number | null) {
+  if (!limits || typeof limits !== 'object') return fallback
+  const value = (limits as Record<string, unknown>)[key]
+  if (value === null) return null
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    if (value.toLowerCase().startsWith('ilimit')) return null
+    const parsed = Number(value.replace(/[^\d]/g, ''))
+    return Number.isFinite(parsed) ? parsed : fallback
+  }
+  return fallback
+}
+
+function technicalLimits(plan: { tier?: unknown; limits?: unknown }) {
+  const code = canonicalPlanCode(plan.tier)
+  const defaults: Record<string, Record<string, number | null>> = {
+    FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null },
+    BASIC: { users: 5, branches: 2, cashRegisters: 3, products: 500, categories: null },
+    PRO: { users: 15, branches: 5, cashRegisters: 10, products: 5000, categories: null },
+    ENTERPRISE: { users: null, branches: null, cashRegisters: null, products: null, categories: null },
+  }
+  const fallback = defaults[code] ?? defaults.FREE
+
+  return {
+    users: parseLimit(plan.limits, 'users', fallback.users),
+    branches: parseLimit(plan.limits, 'branches', fallback.branches),
+    cashRegisters: parseLimit(plan.limits, 'cashRegisters', fallback.cashRegisters),
+    products: parseLimit(plan.limits, 'products', fallback.products),
+    categories: parseLimit(plan.limits, 'categories', fallback.categories),
+  }
+}
+
+function technicalModules(tier: unknown) {
+  const code = canonicalPlanCode(tier)
+  if (code === 'FREE') return ['inventory', 'pos', 'crm']
+  if (code === 'BASIC') return ['inventory', 'pos', 'crm', 'ecommerce']
+  if (code === 'PRO') return ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'whatsapp', 'analytics']
+  return ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'whatsapp', 'analytics']
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -111,21 +149,18 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
   }
 
-  const canonicalCode = typeof plan.tier === 'string' ? plan.tier.toUpperCase() : null
+  const canonicalCode = canonicalPlanCode(plan.tier)
   if (canonicalCode) {
-    const modules = deriveModules(plan.features)
     const canonicalPatch: Record<string, unknown> = {
       name: plan.name,
-      limits: plan.limits || {},
+      limits: technicalLimits(plan),
       is_active: plan.is_active !== false,
+      modules: technicalModules(plan.tier),
     }
-
-    if (modules?.length) canonicalPatch.modules = modules
 
     await admin
       .from('plans')
-      .update(canonicalPatch)
-      .eq('code', canonicalCode)
+      .upsert({ code: canonicalCode, ...canonicalPatch }, { onConflict: 'code' })
   }
 
   await admin.from('tenant_audit_log').insert({

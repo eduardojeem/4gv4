@@ -3,10 +3,10 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { generateOrderNumber, normalizeOrder } from '@/lib/orders/helpers'
+import { releaseReservedStock, reserveOrderStock, type OrderStockItem } from '@/lib/orders/stock'
 import { resolvePublicOrganization } from '@/lib/saas/public-tenant'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 
-// 5 pedidos por IP cada 10 minutos — amplio para uso legítimo, eficaz contra bots
 const ORDER_RATE_LIMIT = 5
 const ORDER_RATE_WINDOW_MS = 10 * 60 * 1000
 
@@ -23,11 +23,11 @@ const publicOrderSchema = z.object({
   })).min(1),
   fulfillmentType: z.enum(['PICKUP', 'DELIVERY']).default('PICKUP'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']).default('CASH'),
+  shippingCost: z.number().min(0).max(9_999_999).default(0),
   notes: z.string().trim().max(1000).optional().nullable(),
 })
 
 export async function POST(request: NextRequest) {
-  // ── Rate limiting ────────────────────────────────────────────────────────
   const clientIp = getClientIp(request)
   const allowed = rateLimiter.check(clientIp, ORDER_RATE_LIMIT, ORDER_RATE_WINDOW_MS)
   if (!allowed) {
@@ -35,21 +35,23 @@ export async function POST(request: NextRequest) {
     logger.warn('[orders] Rate limit exceeded', { clientIp })
     return NextResponse.json(
       { success: false, error: 'Demasiados pedidos. Intenta de nuevo en unos minutos.' },
-      {
-        status: 429,
-        headers: { 'Retry-After': String(retryAfter) },
-      }
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
     )
   }
 
+  let supabase: ReturnType<typeof createAdminSupabase> | null = null
+  let reservedItems: OrderStockItem[] = []
+  let reservedOrganizationId: string | null = null
+  let createdOrderId: string | null = null
+
   try {
+    supabase = createAdminSupabase()
     const validation = publicOrderSchema.safeParse(await request.json())
     if (!validation.success) {
       return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
     }
 
     const input = validation.data
-    const supabase = createAdminSupabase()
     const organization = await resolvePublicOrganization(request, supabase)
 
     if (!organization) {
@@ -80,9 +82,6 @@ export async function POST(request: NextRequest) {
       }
 
       const quantity = Math.min(item.quantity, stock)
-
-      // Use offer_price only when the offer flag is explicitly enabled and
-      // the offer price is lower than the regular sale price.
       const salePrice = Number(product.sale_price || 0)
       const hasOffer =
         Boolean(product.has_offer) &&
@@ -100,12 +99,23 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    const stockReservation = await reserveOrderStock(supabase, organization.id, orderItems)
+    if (!stockReservation.success) {
+      return NextResponse.json({ success: false, error: stockReservation.error }, { status: 409 })
+    }
+    reservedOrganizationId = organization.id
+    reservedItems = stockReservation.reserved.map((item) => ({
+      product_id: item.productId,
+      product_name: item.productName,
+      quantity: item.quantity,
+    }))
+
     const now = new Date().toISOString()
     const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0)
-
-    let customerId: string | null = null
+    const shippingCost = input.fulfillmentType === 'PICKUP' ? 0 : Math.max(0, input.shippingCost)
     const normalizedEmail = input.customer.email?.trim().toLowerCase() || null
     const normalizedPhone = input.customer.phone?.trim() || ''
+    let customerId: string | null = null
 
     if (normalizedEmail || normalizedPhone) {
       let customerQuery = supabase
@@ -158,11 +168,12 @@ export async function POST(request: NextRequest) {
         customer_phone: normalizedPhone || null,
         customer_address: input.customer.address || null,
         subtotal,
-        shipping_cost: 0,
+        shipping_cost: shippingCost,
         discount_amount: 0,
         tax_amount: 0,
-        total: subtotal,
+        total: subtotal + shippingCost,
         notes: input.notes || null,
+        stock_reserved: true,
         created_at: now,
         updated_at: now,
       })
@@ -170,6 +181,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (orderError) throw orderError
+    createdOrderId = order.id
 
     const { error: itemsError } = await supabase
       .from('customer_order_items')
@@ -181,46 +193,13 @@ export async function POST(request: NextRequest) {
 
     if (itemsError) throw itemsError
 
-    // ── Atomically decrement stock for each item ─────────────────────────────
-    // Uses a DB function with SELECT FOR UPDATE so two simultaneous orders
-    // cannot both pass the stock check for the same unit.
-    const decrementResults = await Promise.all(
-      orderItems.map(async (item) => {
-        const { data: ok, error: decrementError } = await supabase.rpc(
-          'decrement_product_stock',
-          {
-            p_product_id:      item.product_id,
-            p_organization_id: organization.id,
-            p_quantity:        item.quantity,
-          }
-        )
-        if (decrementError) {
-          logger.warn('[orders] Stock decrement error', {
-            productId: item.product_id,
-            quantity:  item.quantity,
-            error:     decrementError.message,
-          })
-        }
-        return { productId: item.product_id, quantity: item.quantity, ok: Boolean(ok) }
-      })
-    )
-
-    const failedDecrements = decrementResults.filter((r) => !r.ok)
-    if (failedDecrements.length > 0) {
-      logger.warn('[orders] Stock depleted by concurrent order', {
-        orderId:  order.id,
-        failures: failedDecrements,
-      })
-      // Order is still valid — the business owner is notified via the log.
-      // Rare race condition: both orders arrived before either decremented.
-    }
-
-    await supabase.from('customer_order_status_history').insert({
+    const { error: historyError } = await supabase.from('customer_order_status_history').insert({
       organization_id: organization.id,
       order_id: order.id,
       to_status: 'PENDING',
       note: 'Pedido creado desde la tienda publica.',
     })
+    if (historyError) throw historyError
 
     const { data: fullOrder } = await supabase
       .from('customer_orders')
@@ -229,8 +208,24 @@ export async function POST(request: NextRequest) {
       .eq('organization_id', organization.id)
       .single()
 
+    reservedItems = []
     return NextResponse.json({ success: true, data: normalizeOrder(fullOrder ?? order) }, { status: 201 })
   } catch (error) {
+    if (supabase && reservedItems.length > 0 && reservedOrganizationId) {
+      try {
+        if (createdOrderId) {
+          await supabase
+            .from('customer_orders')
+            .delete()
+            .eq('id', createdOrderId)
+            .eq('organization_id', reservedOrganizationId)
+        }
+        await releaseReservedStock(supabase, reservedOrganizationId, reservedItems)
+      } catch (releaseError) {
+        logger.error('Public order stock rollback error', { error: releaseError })
+      }
+    }
+
     logger.error('Public order creation error', { error })
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'No se pudo crear el pedido.' },
