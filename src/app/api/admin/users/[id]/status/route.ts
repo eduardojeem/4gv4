@@ -125,6 +125,7 @@ async function handler(
     }
 
     const nowIso = new Date().toISOString()
+    const deactivating = nextStatus !== 'active'
     const updateOperations = [
       supabaseAdmin
         .from('profiles')
@@ -167,6 +168,13 @@ async function handler(
       await Promise.all([
         ...updateOperations,
       ])
+
+    // Revoke all active sessions immediately when deactivating so JWTs can't be reused
+    if (deactivating && !profileUpdateError && !roleUpdateError) {
+      await supabaseAdmin.auth.admin.signOut(id, 'global').catch((err) => {
+        logger.error('Failed to revoke sessions for suspended user', { userId: id, error: err?.message })
+      })
+    }
 
     if (profileUpdateError) {
       logger.error('Failed to update profile status', {

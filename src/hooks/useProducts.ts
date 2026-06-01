@@ -16,7 +16,7 @@ import type {
 } from '@/types/products'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
-import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
+import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, type BranchInventoryClient } from '@/lib/branches/inventory'
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([])
@@ -34,7 +34,7 @@ export function useProducts() {
     }
 
     const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
-      supabase,
+      supabase as unknown as BranchInventoryClient,
       selectedBranchId,
       items.map((item) => item.id)
     )

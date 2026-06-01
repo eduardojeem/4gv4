@@ -665,7 +665,9 @@ export class SupplierIntegrationFactory {
 export class SupplierManager {
   private integrations: Map<string, SupplierIntegration> = new Map()
   // Lazy-initialize the client only when needed to avoid multiple GoTrueClient instances
-  private _supabase: ReturnType<typeof createClient> | null = null
+  // Typed as any: queries use tables/relations not in the generated schema types
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _supabase: any = null
   private get supabase() {
     if (!this._supabase) {
       this._supabase = createClient(

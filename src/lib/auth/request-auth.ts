@@ -55,6 +55,8 @@ async function loadRoleRow(
       .maybeSingle()
 
     if (!roleOnlyError) {
+      // Column doesn't exist yet (old schema) — assume active for backward compat.
+      // Once the is_active column migration is applied, this fallback won't be reached.
       return roleOnly ? { role: roleOnly.role, is_active: true } : null
     }
   }

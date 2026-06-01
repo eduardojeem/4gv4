@@ -26,7 +26,7 @@ function formatNumber(value: number) {
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat('es-PY', {
-    currency: 'USD',
+    currency: 'PYG',
     maximumFractionDigits: 0,
     style: 'currency',
   }).format(value)

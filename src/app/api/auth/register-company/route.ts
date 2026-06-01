@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
     const { data: subscriptionPlan, error: planError } = await admin
       .from('subscription_plans')
-      .select('tier, name, is_active')
+      .select('tier, name, is_active, trial_days')
       .eq('tier', selectedPlanTier)
       .eq('is_active', true)
       .maybeSingle()
@@ -200,7 +200,9 @@ export async function POST(request: Request) {
           organization_id: organization.id,
           plan: selectedPlan,
           status: 'trialing',
-          trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          trial_ends_at: new Date(
+            Date.now() + (subscriptionPlan.trial_days ?? 14) * 24 * 60 * 60 * 1000
+          ).toISOString(),
           cancel_at_period_end: false,
         },
         { onConflict: 'organization_id' }

@@ -27,6 +27,7 @@ import { OrganizationSwitcher } from '@/components/saas/organization-switcher'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { cn } from '@/lib/utils'
+import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 
 const GlobalSearch = dynamic(() => import('@/components/ui/global-search').then(mod => mod.GlobalSearch), { 
   ssr: false,
@@ -228,6 +229,9 @@ export const Header = memo(function Header() {
         {/* Right side */}
         <div className="flex items-center gap-2">
 
+          <div className="hidden sm:block">
+            <SubscriptionChip variant="header" />
+          </div>
 
           <div className="hidden md:block">
             <OrganizationSwitcher compact={isCompact} />

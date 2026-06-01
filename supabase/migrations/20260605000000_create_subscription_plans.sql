@@ -92,7 +92,7 @@ values
 (
   'basic',
   'BASIC',
-  29,
+  70000,
   'por mes',
   'Para negocios pequeños que necesitan POS, inventario y clientes.',
   false,
@@ -123,7 +123,7 @@ values
 (
   'pro',
   'PRO',
-  79,
+  150000,
   'por mes',
   'La mejor opción para negocios en crecimiento con ecommerce y analytics.',
   true,
@@ -154,7 +154,7 @@ values
 (
   'enterprise',
   'ENTERPRISE',
-  199,
+  300000,
   'por mes',
   'Para grandes empresas con múltiples sucursales y soporte dedicado.',
   false,

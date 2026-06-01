@@ -54,6 +54,10 @@ type SuperAdminSectionPageProps = {
   tableTitle: string
   tableDescription: string
   tableItems: TableItem[]
+  onRefresh?: () => void
+  onExport?: () => void
+  searchValue?: string
+  onSearch?: (value: string) => void
 }
 
 const toneClasses = {
@@ -128,6 +132,10 @@ export function SuperAdminSectionPage({
   tableTitle,
   tableDescription,
   tableItems,
+  onRefresh,
+  onExport,
+  searchValue,
+  onSearch,
 }: SuperAdminSectionPageProps) {
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
@@ -144,14 +152,18 @@ export function SuperAdminSectionPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Actualizar
-          </Button>
-          <Button variant="outline" className="gap-2">
-            <Download className="h-4 w-4" />
-            Exportar
-          </Button>
+          {onRefresh && (
+            <Button variant="outline" className="gap-2" onClick={onRefresh}>
+              <RefreshCw className="h-4 w-4" />
+              Actualizar
+            </Button>
+          )}
+          {onExport && (
+            <Button variant="outline" className="gap-2" onClick={onExport}>
+              <Download className="h-4 w-4" />
+              Exportar
+            </Button>
+          )}
           {primaryActionHref && primaryActionLabel && (
             <Button asChild className="gap-2">
               <Link href={primaryActionHref}>
@@ -182,10 +194,17 @@ export function SuperAdminSectionPage({
               <CardTitle className="text-lg">{tableTitle}</CardTitle>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{tableDescription}</p>
             </div>
-            <div className="relative w-full lg:w-80">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input placeholder="Buscar en esta vista" className="h-11 rounded-xl pl-10" />
-            </div>
+            {onSearch !== undefined && (
+              <div className="relative w-full lg:w-80">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  placeholder="Buscar en esta vista"
+                  className="h-11 rounded-xl pl-10"
+                  value={searchValue ?? ''}
+                  onChange={(e) => onSearch(e.target.value)}
+                />
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">

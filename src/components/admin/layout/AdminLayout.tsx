@@ -11,6 +11,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { BranchSelector } from '@/components/branches/branch-selector'
 import { OrganizationSwitcher } from '@/components/saas/organization-switcher'
 import { ChevronDown, ChevronRight, ArrowLeft, Search, Crown, LayoutDashboard, User, Settings, LogOut, Shield } from 'lucide-react'
+import { SubscriptionChip } from '@/components/admin/SubscriptionChip'
 import { useAuth } from '@/contexts/auth-context'
 import { useAdminLayout } from '@/contexts/AdminLayoutContext'
 import { adminNavCategories, filterCategoriesByPermissions, getNavItemByKey } from '@/config/admin-navigation'
@@ -220,6 +221,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
                 {/* Footer Actions */}
                 <div className="space-y-2 border-t border-border bg-muted/20 p-4">
+                    <SubscriptionChip variant="sidebar" />
                     <Link
                         href="/dashboard"
                         className={cn(

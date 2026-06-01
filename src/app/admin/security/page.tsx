@@ -1,23 +1,31 @@
-﻿import { Suspense } from 'react'
+import { Suspense } from 'react'
+import { Activity, Loader2, Shield } from 'lucide-react'
 import { SecurityPanel } from '@/components/admin/system/security-panel'
-import { Shield, Loader2 } from 'lucide-react'
 
 export default function SecurityPage() {
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border bg-card p-5">
-        <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-red-100 p-2 text-red-700 dark:bg-red-950/50 dark:text-red-300">
-            <Shield className="h-5 w-5" />
+      <section className="overflow-hidden rounded-lg border bg-card">
+        <div className="flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between lg:p-6">
+          <div className="flex items-start gap-4">
+            <div className="rounded-md border bg-background p-3 text-red-600 dark:text-red-400">
+              <Shield className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-normal">Seguridad</h1>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                Monitorea accesos, cambios sensibles y acciones administrativas de tu organización.
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-semibold">Seguridad</h1>
-            <p className="text-sm text-muted-foreground">Auditoría, alertas y trazabilidad de accesos.</p>
+          <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            <Activity className="h-4 w-4" />
+            Auditoría en tiempo real
           </div>
         </div>
-      </div>
+      </section>
       <Suspense fallback={
-        <div className="rounded-xl border bg-card p-8">
+        <div className="rounded-lg border bg-card p-8">
           <div className="flex items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" />
             Cargando panel de seguridad...
@@ -29,4 +37,3 @@ export default function SecurityPage() {
     </div>
   )
 }
-
