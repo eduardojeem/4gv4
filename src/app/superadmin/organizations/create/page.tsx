@@ -25,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { getSubscriptionPlans, type SubscriptionPlan } from '@/services/subscription-plans'
 
 // ---------------------------------------------------------------------------
 // Plan data
@@ -57,6 +58,48 @@ const PLANS = [
     features: ['Ilimitados', 'Ilimitadas', 'Ilimitados', 'Todo incluido'],
   },
 ]
+
+const PLAN_STYLE: Record<string, { color: string; badge: string }> = {
+  FREE: {
+    color: 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800',
+    badge: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  },
+  BASIC: {
+    color: 'border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/20',
+    badge: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-300',
+  },
+  PRO: {
+    color: 'border-violet-200 bg-violet-50 dark:border-violet-900/60 dark:bg-violet-950/20',
+    badge: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/20 dark:text-violet-300',
+  },
+  ENTERPRISE: {
+    color: 'border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/20',
+    badge: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300',
+  },
+}
+
+function normalizePlanCode(tier: string) {
+  return tier.toUpperCase()
+}
+
+function formatPlanPrice(plan: SubscriptionPlan) {
+  if (plan.price <= 0) return 'Gratis'
+  return new Intl.NumberFormat('es-PY', {
+    style: 'currency',
+    currency: 'PYG',
+    maximumFractionDigits: 0,
+  }).format(plan.price)
+}
+
+function formatPlanFeatures(plan: SubscriptionPlan) {
+  if (plan.highlights?.length) return plan.highlights.slice(0, 4)
+  const limits = plan.limits || {}
+  return [
+    limits.users != null ? `${String(limits.users)} usuarios` : 'Usuarios ilimitados',
+    limits.branches != null ? `${String(limits.branches)} sucursales` : 'Sucursales ilimitadas',
+    limits.products != null ? `${String(limits.products)} productos` : 'Productos ilimitados',
+  ]
+}
 
 const TIMEZONES = [
   { value: 'America/Asuncion', label: 'Paraguay (UTC-4)' },
@@ -134,6 +177,8 @@ export default function SuperAdminCreateOrganizationPage() {
   const [timezone, setTimezone] = useState('America/Asuncion')
   const [ownerEmail, setOwnerEmail] = useState('')
   const [ownerName, setOwnerName] = useState('')
+  const [planOptions, setPlanOptions] = useState<SubscriptionPlan[]>([])
+  const [plansLoading, setPlansLoading] = useState(true)
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -141,6 +186,37 @@ export default function SuperAdminCreateOrganizationPage() {
   const [result, setResult] = useState<{ orgName: string; orgSlug: string; ownerCreated: boolean; ownerError: string | null } | null>(null)
 
   const slugStatus = useSlugCheck(slug)
+  const selectedPlanOption = planOptions.find((item) => normalizePlanCode(item.tier) === plan)
+  const selectedTrialDays = typeof selectedPlanOption?.trial_days === 'number' ? selectedPlanOption.trial_days : null
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPlanOptions() {
+      setPlansLoading(true)
+      try {
+        const plans = await getSubscriptionPlans()
+        if (cancelled) return
+        const activePlans = plans.filter((item) => item.is_active !== false)
+        setPlanOptions(activePlans)
+        if (activePlans.length > 0) {
+          setPlan((currentPlan) => (
+            activePlans.some((item) => normalizePlanCode(item.tier) === currentPlan)
+              ? currentPlan
+              : normalizePlanCode(activePlans[0].tier)
+          ))
+        }
+      } finally {
+        if (!cancelled) setPlansLoading(false)
+      }
+    }
+
+    void loadPlanOptions()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Auto-generate slug from name
   useEffect(() => {
@@ -162,6 +238,7 @@ export default function SuperAdminCreateOrganizationPage() {
     if (slug && !/^[a-z0-9-]+$/.test(slug)) errs.slug = 'Solo letras minúsculas, números y guiones.'
     if (slugStatus === 'taken') errs.slug = `El slug "${slug}" ya está en uso.`
     if (ownerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) errs.ownerEmail = 'Email inválido.'
+    if (!planOptions.some((item) => normalizePlanCode(item.tier) === plan)) errs.plan = 'Selecciona un plan activo.'
     return errs
   }
 
@@ -422,7 +499,7 @@ export default function SuperAdminCreateOrganizationPage() {
             )}
 
             <div className="flex gap-3">
-              <Button type="submit" disabled={isSubmitting || slugStatus === 'taken' || slugStatus === 'checking'} className="gap-2">
+              <Button type="submit" disabled={isSubmitting || slugStatus === 'taken' || slugStatus === 'checking' || plansLoading || planOptions.length === 0} className="gap-2">
                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {isSubmitting ? 'Creando organización...' : 'Crear organización'}
               </Button>
@@ -442,44 +519,63 @@ export default function SuperAdminCreateOrganizationPage() {
             </div>
 
             <div className="space-y-2">
-              {PLANS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPlan(p.id)}
-                  className={cn(
-                    'relative w-full rounded-xl border p-4 text-left transition-all',
-                    p.color,
-                    plan === p.id ? 'ring-2 ring-indigo-400 dark:ring-indigo-500' : 'hover:shadow-sm'
-                  )}
-                >
-                  {p.popular && (
-                    <span className="absolute -top-2.5 right-3 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
-                      Popular
-                    </span>
-                  )}
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      {plan === p.id && <CheckCircle2 className="h-4 w-4 shrink-0 text-indigo-500" />}
-                      <div>
+              {plansLoading ? (
+                <div className="flex items-center gap-2 rounded-xl border border-dashed p-4 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando planes activos...
+                </div>
+              ) : planOptions.length === 0 ? (
+                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  No hay planes activos disponibles para crear organizaciones.
+                </div>
+              ) : (
+                planOptions.map((p) => {
+                  const code = normalizePlanCode(p.tier)
+                  const style = PLAN_STYLE[code] ?? PLAN_STYLE.FREE
+                  const features = formatPlanFeatures(p)
+
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPlan(code)}
+                      className={cn(
+                        'relative w-full rounded-xl border p-4 text-left transition-all',
+                        style.color,
+                        plan === code ? 'ring-2 ring-indigo-400 dark:ring-indigo-500' : 'hover:shadow-sm'
+                      )}
+                    >
+                      {p.is_popular && (
+                        <span className="absolute -top-2.5 right-3 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
+                          Popular
+                        </span>
+                      )}
+                      <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-900 dark:text-slate-50">{p.name}</span>
-                          <Badge variant="outline" className={cn('rounded-full text-[10px]', p.badge)}>{p.id}</Badge>
+                          {plan === code && <CheckCircle2 className="h-4 w-4 shrink-0 text-indigo-500" />}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-900 dark:text-slate-50">{p.name}</span>
+                              <Badge variant="outline" className={cn('rounded-full text-[10px]', style.badge)}>{code}</Badge>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{formatPlanPrice(p)}/mes</p>
+                          </div>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{p.price}/mes</p>
                       </div>
-                    </div>
-                  </div>
-                  <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-                    {p.features.map((f) => (
-                      <li key={f} className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-                        <span className="h-1 w-1 rounded-full bg-slate-300" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                </button>
-              ))}
+                      <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                        {features.map((f, idx) => (
+                          <li key={`${p.id}-${idx}`} className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                            <span className="h-1 w-1 rounded-full bg-slate-300" />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                    </button>
+                  )
+                })
+              )}
+              {errors.plan && <p className="text-xs text-red-500">{errors.plan}</p>}
             </div>
 
             {/* Preview */}
@@ -492,7 +588,7 @@ export default function SuperAdminCreateOrganizationPage() {
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                  Suscripción trialing (14 días)
+                  Suscripcion trialing ({selectedTrialDays ?? 'segun plan'} dias)
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />

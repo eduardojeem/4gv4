@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/superadmin/auth'
 
@@ -13,6 +12,14 @@ function slugify(value: string) {
     .slice(0, 60)
 }
 
+function normalizePlanCode(value: string) {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'basic' || normalized === 'starter') return 'BASIC'
+  if (normalized === 'pro' || normalized === 'profesional' || normalized === 'professional') return 'PRO'
+  if (normalized === 'enterprise') return 'ENTERPRISE'
+  return 'FREE'
+}
+
 export async function POST(request: NextRequest) {
   const superAdmin = await requireSuperAdmin()
   if (!superAdmin) {
@@ -22,7 +29,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}))
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   const slug = typeof body.slug === 'string' ? body.slug.trim() : slugify(name)
-  const plan = typeof body.plan === 'string' ? body.plan.toUpperCase() : 'FREE'
+  const plan = normalizePlanCode(typeof body.plan === 'string' ? body.plan : 'FREE')
   const currency = typeof body.currency === 'string' ? body.currency : 'PYG'
   const timezone = typeof body.timezone === 'string' ? body.timezone : 'America/Asuncion'
   const ownerEmail = typeof body.owner_email === 'string' ? body.owner_email.trim() : ''
@@ -33,6 +40,21 @@ export async function POST(request: NextRequest) {
   if (!/^[a-z0-9-]+$/.test(slug)) return NextResponse.json({ error: 'El slug solo puede contener letras, números y guiones.' }, { status: 400 })
 
   const admin = createAdminSupabase()
+
+  const { data: subscriptionPlan, error: planError } = await admin
+    .from('subscription_plans')
+    .select('tier, name, is_active, trial_days')
+    .eq('tier', plan.toLowerCase())
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (planError) {
+    return NextResponse.json({ error: 'No se pudo validar el plan seleccionado.' }, { status: 500 })
+  }
+
+  if (!subscriptionPlan) {
+    return NextResponse.json({ error: 'El plan seleccionado no esta disponible.' }, { status: 400 })
+  }
 
   // Check slug uniqueness
   const { data: existing } = await admin.from('organizations').select('id').eq('slug', slug).maybeSingle()
@@ -50,7 +72,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Setup in parallel: settings + branch + subscription
-  const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+  const trialDays = typeof subscriptionPlan.trial_days === 'number' && Number.isFinite(subscriptionPlan.trial_days)
+    ? Math.max(0, subscriptionPlan.trial_days)
+    : 14
+  const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString()
   const now = new Date().toISOString()
 
   await Promise.allSettled([
