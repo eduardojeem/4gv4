@@ -1,87 +1,81 @@
-import { Card, CardContent } from "@/components/ui/card"
-import {
-    TrendingUp,
-    ShoppingCart,
-    CreditCard,
-    DollarSign
-} from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { ArrowUpRight, CreditCard, ShoppingCart, TrendingUp, DollarSign } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
-import { PosStats } from "../hooks/usePosStats"
+import { cn } from '@/lib/utils'
+import type { PosStats } from '../hooks/usePosStats'
+
+type Tone = 'emerald' | 'indigo' | 'violet' | 'amber'
+
+const toneClasses: Record<Tone, { wrap: string; iconBg: string }> = {
+  emerald: { wrap: 'from-emerald-500/10 to-transparent border-emerald-200/50 dark:border-emerald-900/50', iconBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' },
+  indigo:  { wrap: 'from-indigo-500/10 to-transparent border-indigo-200/50 dark:border-indigo-900/50',     iconBg: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400' },
+  violet:  { wrap: 'from-violet-500/10 to-transparent border-violet-200/50 dark:border-violet-900/50',    iconBg: 'bg-violet-500/15 text-violet-600 dark:text-violet-400' },
+  amber:   { wrap: 'from-amber-500/10 to-transparent border-amber-200/50 dark:border-amber-900/50',       iconBg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
+}
+
+function MetricCard({
+  label, value, sub, icon: Icon, tone,
+}: {
+  label: string
+  value: string
+  sub: string
+  icon: React.ComponentType<{ className?: string }>
+  tone: Tone
+}) {
+  const t = toneClasses[tone]
+  return (
+    <Card className={cn('overflow-hidden border bg-gradient-to-br shadow-sm transition-shadow hover:shadow-md', t.wrap)}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50 truncate">{value}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 truncate" title={sub}>{sub}</p>
+          </div>
+          <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', t.iconBg)}>
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 interface PosStatsGridProps {
-    stats: PosStats
+  stats: PosStats
 }
 
 export function PosStatsGrid({ stats }: PosStatsGridProps) {
-    return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="border border-emerald-200/80 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50/50 to-transparent dark:from-emerald-950/20 shadow-sm hover:shadow-md transition-shadow">
-                <CardContent className="p-5">
-                    <div className="flex items-start justify-between mb-2">
-                        <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/40">
-                            <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                        </div>
-                    </div>
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Ventas Totales</p>
-                    <p className="text-2xl font-bold tracking-tight tabular-nums text-emerald-700 dark:text-emerald-400">
-                        {formatCurrency(stats.totalSales)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                        En el periodo seleccionado
-                    </p>
-                </CardContent>
-            </Card>
-
-            <Card className="border border-blue-200/80 dark:border-blue-800/60 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20 shadow-sm hover:shadow-md transition-shadow">
-                <CardContent className="p-5">
-                    <div className="flex items-start justify-between mb-2">
-                        <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/40">
-                            <ShoppingCart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                        </div>
-                    </div>
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Transacciones</p>
-                    <p className="text-2xl font-bold tracking-tight tabular-nums text-blue-700 dark:text-blue-400">
-                        {stats.totalTransactions}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                        Tickets generados
-                    </p>
-                </CardContent>
-            </Card>
-
-            <Card className="border border-violet-200/80 dark:border-violet-800/60 bg-gradient-to-br from-violet-50/50 to-transparent dark:from-violet-950/20 shadow-sm hover:shadow-md transition-shadow">
-                <CardContent className="p-5">
-                    <div className="flex items-start justify-between mb-2">
-                        <div className="p-2.5 rounded-xl bg-violet-100 dark:bg-violet-900/40">
-                            <CreditCard className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                        </div>
-                    </div>
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Ticket Promedio</p>
-                    <p className="text-2xl font-bold tracking-tight tabular-nums text-violet-700 dark:text-violet-400">
-                        {formatCurrency(stats.averageTicket)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                        Promedio por venta
-                    </p>
-                </CardContent>
-            </Card>
-
-            <Card className="border border-amber-200/80 dark:border-amber-800/60 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20 shadow-sm hover:shadow-md transition-shadow">
-                <CardContent className="p-5">
-                    <div className="flex items-start justify-between mb-2">
-                        <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40">
-                            <TrendingUp className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                        </div>
-                    </div>
-                    <p className="text-[11px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">Producto Top</p>
-                    <p className="text-2xl font-bold tracking-tight tabular-nums text-amber-700 dark:text-amber-400">
-                        {stats.topProduct.sales} <span className="text-base font-medium opacity-70">unidades</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1 truncate" title={stats.topProduct.name}>
-                        {stats.topProduct.name || "Sin datos"}
-                    </p>
-                </CardContent>
-            </Card>
-        </div>
-    )
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <MetricCard
+        label="Ventas totales"
+        value={formatCurrency(stats.totalSales)}
+        sub="en el período seleccionado"
+        icon={DollarSign}
+        tone="emerald"
+      />
+      <MetricCard
+        label="Transacciones"
+        value={stats.totalTransactions.toString()}
+        sub="tickets generados"
+        icon={ShoppingCart}
+        tone="indigo"
+      />
+      <MetricCard
+        label="Ticket promedio"
+        value={formatCurrency(stats.averageTicket)}
+        sub="valor promedio por venta"
+        icon={CreditCard}
+        tone="violet"
+      />
+      <MetricCard
+        label="Producto top"
+        value={`${stats.topProduct.sales} ${stats.topProduct.sales === 1 ? 'unidad' : 'unidades'}`}
+        sub={stats.topProduct.name || 'Sin datos'}
+        icon={TrendingUp}
+        tone="amber"
+      />
+    </div>
+  )
 }
