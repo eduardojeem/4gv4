@@ -2211,20 +2211,21 @@ function POSPageContent() {
   >
             {/* Branding */}
             <div className="flex items-center gap-3">
-              <div className="bg-primary/10 p-2 rounded-lg">
-                <div className="font-bold text-xl text-primary tracking-tight">4G</div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-md shadow-indigo-500/20">
+                <ShoppingCart className="h-5 w-5 text-white" />
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-foreground leading-none">Punto de Venta</h1>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="outline" className="text-[10px] px-1.5 h-4 border-muted-foreground/30 text-muted-foreground font-normal">
-                    v4.0
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                    <div className={`w-1.5 h-1.5 rounded-full ${registerState[activeRegisterId]?.isOpen ? 'bg-green-500' : 'bg-red-500'}`} />
-                    {registerState[activeRegisterId]?.isOpen ? 'Caja Abierta' : 'Caja Cerrada'}
+              <div className="min-w-0">
+                <h1 className="text-base font-bold leading-none tracking-tight text-foreground">Punto de Venta</h1>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    registerState[activeRegisterId]?.isOpen
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                      : 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${registerState[activeRegisterId]?.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                    {registerState[activeRegisterId]?.isOpen ? 'Caja abierta' : 'Caja cerrada'}
                   </span>
-                  <div className="w-px h-3 bg-border/40 mx-1" />
+                  <div className="h-3 w-px bg-border/40" />
                   <SupabaseStatus mode="minimal" />
                 </div>
               </div>
@@ -2256,10 +2257,13 @@ function POSPageContent() {
     mobileCompact
   >
             <div className="flex items-center gap-2">
-              <div className="bg-primary/10 p-1 rounded">
-                <div className="font-bold text-base text-primary">4G</div>
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-sm">
+                <ShoppingCart className="h-3.5 w-3.5 text-white" />
               </div>
-              <span className="text-sm font-semibold">POS</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-bold">POS</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${registerState[activeRegisterId]?.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+              </div>
             </div>
           </POSHeader>
 
