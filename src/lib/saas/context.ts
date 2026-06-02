@@ -19,37 +19,31 @@ export async function getCurrentOrganizationContext(userId: string): Promise<Org
   const activeOrganizationId = headerStore.get('x-organization-id')
   const supabase = await createClient()
 
-  let query = supabase
-    .from('organization_members')
-    .select('role, organizations!inner(id, name, slug, plan, logo_url)')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .limit(1)
-
-  if (requestedSlug) {
-    query = query.eq('organizations.slug', requestedSlug)
-  } else if (activeOrganizationId) {
-    query = query.eq('organization_id', activeOrganizationId)
-  }
-
-  let { data, error } = await query.maybeSingle()
-
-  if (error || !data) {
-    const admin = createAdminSupabase()
-    let fallbackQuery = admin
+  // Build the query — if no org hint from headers, fetch the first active membership
+  const buildQuery = (client: ReturnType<typeof createClient> | ReturnType<typeof createAdminSupabase>) => {
+    let q = (client as ReturnType<typeof createAdminSupabase>)
       .from('organization_members')
       .select('role, organizations!inner(id, name, slug, plan, logo_url)')
       .eq('user_id', userId)
       .eq('status', 'active')
+      .order('created_at', { ascending: true })
       .limit(1)
 
     if (requestedSlug) {
-      fallbackQuery = fallbackQuery.eq('organizations.slug', requestedSlug)
+      q = q.eq('organizations.slug', requestedSlug)
     } else if (activeOrganizationId) {
-      fallbackQuery = fallbackQuery.eq('organization_id', activeOrganizationId)
+      q = q.eq('organization_id', activeOrganizationId)
     }
+    // No filter = first active org (correct for single-tenant users)
+    return q
+  }
 
-    const fallback = await fallbackQuery.maybeSingle()
+  let { data, error } = await buildQuery(supabase).maybeSingle()
+
+  // If auth client fails (e.g. no cookie session on API routes), retry with admin client
+  if (error || !data) {
+    const admin = createAdminSupabase()
+    const fallback = await buildQuery(admin).maybeSingle()
     data = fallback.data
     error = fallback.error
   }
