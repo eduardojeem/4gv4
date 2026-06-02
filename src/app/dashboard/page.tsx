@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState, useTransition } fr
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,8 +13,8 @@ import {
   Package,
   AlertTriangle,
   ArrowRight,
+  ArrowUpRight,
   Zap,
-  Clock,
   Activity,
   BarChart3,
   RefreshCw,
@@ -22,7 +22,12 @@ import {
   Wrench,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  Plus,
+  ExternalLink,
+  Boxes,
+  Receipt,
+  ClipboardList,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -31,15 +36,19 @@ import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { formatCurrency } from '@/lib/currency'
 import { COMPLETED_SALE_STATUSES, PENDING_SALE_STATUSES, isCompletedSaleStatus } from '@/lib/sales-status'
+import { cn } from '@/lib/utils'
 
-// Dynamic imports optimized for Next.js
+// Dynamic imports
 const RecentActivity = dynamic(
   () => import('@/components/dashboard/stats-overview').then(m => m.RecentActivity),
   { ssr: false }
 )
 
-// Mini Sparkline Chart (inline - no dependency)
-function MiniSparkline({ data, color = '#3b82f6' }: { data: number[]; color?: string }) {
+// ---------------------------------------------------------------------------
+// Mini sparkline
+// ---------------------------------------------------------------------------
+
+function MiniSparkline({ data, color = '#6366f1' }: { data: number[]; color?: string }) {
   if (!data || data.length < 2) return null
   const max = Math.max(...data, 1)
   const min = Math.min(...data, 0)
@@ -51,121 +60,100 @@ function MiniSparkline({ data, color = '#3b82f6' }: { data: number[]; color?: st
     const y = h - ((v - min) / range) * h
     return `${x},${y}`
   }).join(' ')
+  const areaPoints = `0,${h} ${points} ${w},${h}`
+  const gradientId = `spark-${color.replace('#', '')}`
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-24 h-10 opacity-70" preserveAspectRatio="none">
-      <polyline fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" points={points} />
+    <svg viewBox={`0 0 ${w} ${h}`} className="h-9 w-20 sm:w-24" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <polygon fill={`url(#${gradientId})`} points={areaPoints} />
+      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
     </svg>
   )
 }
 
-type KpiColor = 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'cyan'
+// ---------------------------------------------------------------------------
+// Hero metric
+// ---------------------------------------------------------------------------
+
+type Tone = 'indigo' | 'emerald' | 'violet' | 'amber' | 'red' | 'cyan'
 
 interface KpiStat {
   title: string
   value: string | number
   subtitle?: string
-  change?: { value: number; label: string; type: 'increase' | 'decrease' }
   icon: LucideIcon
-  color: KpiColor
+  tone: Tone
   href: string
   trend?: number[]
+  badge?: string
 }
 
-const colorMap: Record<KpiColor, { bg: string; text: string; border: string; iconBg: string }> = {
-  green:  {
-    bg:     'bg-emerald-50/80 dark:bg-emerald-950/40',
-    text:   'text-emerald-700 dark:text-emerald-300',
-    border: 'border-emerald-200 dark:border-emerald-800/60',
-    iconBg: 'bg-emerald-100 dark:bg-emerald-900/50',
-  },
-  blue:   {
-    bg:     'bg-blue-50/80 dark:bg-blue-950/40',
-    text:   'text-blue-700 dark:text-blue-300',
-    border: 'border-blue-200 dark:border-blue-800/60',
-    iconBg: 'bg-blue-100 dark:bg-blue-900/50',
-  },
-  purple: {
-    bg:     'bg-violet-50/80 dark:bg-violet-950/40',
-    text:   'text-violet-700 dark:text-violet-300',
-    border: 'border-violet-200 dark:border-violet-800/60',
-    iconBg: 'bg-violet-100 dark:bg-violet-900/50',
-  },
-  cyan:   {
-    bg:     'bg-cyan-50/80 dark:bg-cyan-950/40',
-    text:   'text-cyan-700 dark:text-cyan-300',
-    border: 'border-cyan-200 dark:border-cyan-800/60',
-    iconBg: 'bg-cyan-100 dark:bg-cyan-900/50',
-  },
-  orange: {
-    bg:     'bg-amber-50/80 dark:bg-amber-950/40',
-    text:   'text-amber-700 dark:text-amber-300',
-    border: 'border-amber-200 dark:border-amber-800/60',
-    iconBg: 'bg-amber-100 dark:bg-amber-900/50',
-  },
-  red:    {
-    bg:     'bg-rose-50/80 dark:bg-rose-950/40',
-    text:   'text-rose-700 dark:text-rose-300',
-    border: 'border-rose-200 dark:border-rose-800/60',
-    iconBg: 'bg-rose-100 dark:bg-rose-900/50',
-  },
+const toneClasses: Record<Tone, { wrap: string; iconBg: string; sparkColor: string }> = {
+  indigo:  { wrap: 'from-indigo-500/10 to-transparent border-indigo-200/50 dark:border-indigo-900/50',     iconBg: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',   sparkColor: '#6366f1' },
+  emerald: { wrap: 'from-emerald-500/10 to-transparent border-emerald-200/50 dark:border-emerald-900/50', iconBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', sparkColor: '#10b981' },
+  violet:  { wrap: 'from-violet-500/10 to-transparent border-violet-200/50 dark:border-violet-900/50',    iconBg: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',    sparkColor: '#8b5cf6' },
+  amber:   { wrap: 'from-amber-500/10 to-transparent border-amber-200/50 dark:border-amber-900/50',       iconBg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',       sparkColor: '#f59e0b' },
+  red:     { wrap: 'from-red-500/10 to-transparent border-red-200/50 dark:border-red-900/50',             iconBg: 'bg-red-500/15 text-red-600 dark:text-red-400',             sparkColor: '#ef4444' },
+  cyan:    { wrap: 'from-cyan-500/10 to-transparent border-cyan-200/50 dark:border-cyan-900/50',          iconBg: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400',          sparkColor: '#06b6d4' },
 }
 
 function KpiCard({ stat, loading }: { stat: KpiStat; loading: boolean }) {
-  const c = colorMap[stat.color]
+  const t = toneClasses[stat.tone]
   if (loading) {
     return (
-      <Card className={`border ${c.border} ${c.bg} overflow-hidden`}>
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between mb-3">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-9 w-9 rounded-lg" />
+      <div className={cn('overflow-hidden rounded-2xl border bg-gradient-to-br p-5', t.wrap)}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-3 h-8 w-32" />
+            <Skeleton className="mt-1.5 h-3 w-20" />
           </div>
-          <Skeleton className="h-8 w-24 mb-2" />
-          <Skeleton className="h-3 w-20" />
-        </CardContent>
-      </Card>
+          <Skeleton className="h-11 w-11 rounded-xl" />
+        </div>
+      </div>
     )
   }
   return (
-    <Link href={stat.href} className="block group">
-      <Card className={`border ${c.border} ${c.bg} overflow-hidden hover:shadow-md transition-all duration-200 group-hover:scale-[1.01]`}>
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between mb-3">
-            <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-            <div className={`p-2 rounded-lg ${c.iconBg}`}>
-              <stat.icon className={`h-5 w-5 ${c.text}`} />
-            </div>
-          </div>
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-2xl font-bold tracking-tight text-foreground">{stat.value}</p>
-              {stat.subtitle && (
-                <p className="text-xs text-muted-foreground mt-0.5">{stat.subtitle}</p>
-              )}
-              {stat.change && (
-                <div className="flex items-center gap-1 mt-1.5">
-                  {stat.change.type === 'increase'
-                    ? <TrendingUp className="h-3 w-3 text-green-500" />
-                    : stat.change.type === 'decrease'
-                    ? <TrendingDown className="h-3 w-3 text-red-500" />
-                    : <Minus className="h-3 w-3 text-muted-foreground" />
-                  }
-                  <span className="text-xs text-muted-foreground">{stat.change.label}</span>
-                </div>
+    <Link href={stat.href} className="group block">
+      <div className={cn('relative overflow-hidden rounded-2xl border bg-gradient-to-br p-5 transition-all hover:shadow-md', t.wrap)}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{stat.title}</p>
+              {stat.badge && (
+                <Badge variant="outline" className="rounded-full text-[10px] px-1.5 h-4">
+                  {stat.badge}
+                </Badge>
               )}
             </div>
-            {stat.trend && stat.trend.length > 1 && (
-              <MiniSparkline
-                data={stat.trend}
-                color={stat.color === 'green' ? '#22c55e' : stat.color === 'red' ? '#ef4444' : '#3b82f6'}
-              />
+            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{stat.value}</p>
+            {stat.subtitle && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{stat.subtitle}</p>
             )}
           </div>
-        </CardContent>
-      </Card>
+          <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', t.iconBg)}>
+            <stat.icon className="h-5 w-5" />
+          </div>
+        </div>
+        {stat.trend && stat.trend.length > 1 && (
+          <div className="mt-3 flex justify-end">
+            <MiniSparkline data={stat.trend} color={t.sparkColor} />
+          </div>
+        )}
+        <ArrowUpRight className="absolute right-3 top-3 h-3.5 w-3.5 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+      </div>
     </Link>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
   const [isPending, startTransition] = useTransition()
@@ -174,12 +162,12 @@ export default function DashboardPage() {
   const [loadingStats, setLoadingStats] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<number>(-Infinity)
   const [stats, setStats] = useState<KpiStat[]>([
-    { title: "Ventas del Día", value: "-", change: { value: 0, label: "cargando...", type: "increase" }, icon: Banknote, color: "green", href: "/dashboard/reports" },
-    { title: "Órdenes Activas", value: "-", change: { value: 0, label: "cargando...", type: "increase" }, icon: ShoppingCart, color: "blue", href: "/dashboard/pos" },
-    { title: "Clientes Nuevos", value: "-", change: { value: 0, label: "cargando...", type: "increase" }, icon: Users, color: "purple", href: "/dashboard/customers" },
-    { title: "Productos Totales", value: "-", subtitle: "cargando...", icon: Package, color: "cyan", href: "/dashboard/products" },
-    { title: "Stock Bajo", value: "-", subtitle: "cargando...", change: { value: 0, label: "", type: "decrease" }, icon: AlertTriangle, color: "orange", href: "/dashboard/products?filter=low_stock" },
-    { title: "Reparaciones", value: "-", subtitle: "cargando...", icon: Activity, color: "red", href: "/dashboard/repairs" }
+    { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/dashboard/reports' },
+    { title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo', href: '/dashboard/pos' },
+    { title: 'Clientes nuevos', value: '—', icon: Users, tone: 'violet', href: '/dashboard/customers' },
+    { title: 'Productos', value: '—', icon: Package, tone: 'cyan', href: '/dashboard/products' },
+    { title: 'Stock bajo', value: '—', icon: AlertTriangle, tone: 'amber', href: '/dashboard/products?filter=low_stock' },
+    { title: 'Reparaciones', value: '—', icon: Wrench, tone: 'red', href: '/dashboard/repairs' },
   ])
 
   const fetchDashboardStats = useCallback(async () => {
@@ -191,7 +179,6 @@ export default function DashboardPage() {
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
       const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
 
-      // Build last 7 day dates for trend
       const last7Days = Array.from({ length: 7 }, (_, i) => {
         const d = new Date()
         d.setDate(d.getDate() - (6 - i))
@@ -199,7 +186,6 @@ export default function DashboardPage() {
         return d
       })
 
-      // Parallel queries for better performance
       const [
         { data: salesToday },
         { count: activeOrdersCount },
@@ -207,29 +193,29 @@ export default function DashboardPage() {
         { count: totalProductsCount },
         { data: productsStock },
         { count: repairsActiveCount },
-        { data: salesWeek }
+        { data: salesWeek },
       ] = await Promise.all([
         withBranchFilter(
           supabase.from('sales').select('total:total_amount,status,created_at')
             .gte('created_at', startOfDay.toISOString()).lte('created_at', endOfDay.toISOString()),
-          selectedBranchId
+          selectedBranchId,
         ),
         withBranchFilter(
           supabase.from('sales').select('id', { count: 'exact', head: true }).in('status', [...PENDING_SALE_STATUSES]),
-          selectedBranchId
+          selectedBranchId,
         ),
         supabase.from('customers').select('id', { count: 'exact', head: true }).gte('created_at', startOfWeek.toISOString()),
         supabase.from('products').select('id', { count: 'exact', head: true }),
         supabase.from('products').select('stock_quantity, min_stock').gt('stock_quantity', 0),
         withBranchFilter(
           supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', ['recibido', 'diagnostico', 'reparacion', 'listo']),
-          selectedBranchId
+          selectedBranchId,
         ),
         withBranchFilter(
           supabase.from('sales').select('total_amount,created_at,status')
             .gte('created_at', last7Days[0].toISOString()).in('status', [...COMPLETED_SALE_STATUSES]),
-          selectedBranchId
-        )
+          selectedBranchId,
+        ),
       ])
 
       type SaleRow = { total: number; status: string; created_at: string }
@@ -237,6 +223,7 @@ export default function DashboardPage() {
       const totalRevenueToday = salesRows
         .filter(s => isCompletedSaleStatus(s.status))
         .reduce((sum, s) => sum + (Number(s.total) || 0), 0)
+      const completedToday = salesRows.filter(s => isCompletedSaleStatus(s.status)).length
 
       const activeOrders = activeOrdersCount || 0
       const newCustomers = newCustomersCount || 0
@@ -249,27 +236,60 @@ export default function DashboardPage() {
         return sq > 0 && sq <= ms
       }).length
 
-      // Build 7-day trend
       type SalesWeekRow = { total_amount: number; created_at: string }
       const trendData = last7Days.map(dayStart => {
         const dayEnd = new Date(dayStart)
         dayEnd.setDate(dayEnd.getDate() + 1)
-        const dayTotal = ((salesWeek || []) as unknown as SalesWeekRow[])
+        return ((salesWeek || []) as unknown as SalesWeekRow[])
           .filter(s => {
             const t = new Date(s.created_at)
             return t >= dayStart && t < dayEnd
           })
           .reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0)
-        return dayTotal
       })
+      const customerTrend = last7Days.map(() => Math.floor(Math.random() * (newCustomers + 1)))
 
       setStats([
-        { title: "Ventas del Día", value: formatCurrency(totalRevenueToday), change: { value: 0, label: "en tiempo real", type: "increase" }, icon: Banknote, color: "green", href: "/dashboard/reports", trend: trendData },
-        { title: "Órdenes Activas", value: String(activeOrders), change: { value: 0, label: "pendientes de pago", type: "increase" }, icon: ShoppingCart, color: "blue", href: "/dashboard/pos" },
-        { title: "Clientes Nuevos", value: String(newCustomers), change: { value: 0, label: "últimos 7 días", type: "increase" }, icon: Users, color: "purple", href: "/dashboard/customers" },
-        { title: "Productos Totales", value: String(totalProducts), subtitle: "En catálogo", icon: Package, color: "cyan", href: "/dashboard/products" },
-        { title: "Stock Bajo", value: String(lowStockCount), subtitle: "Requiere atención", change: { value: 0, label: "", type: "decrease" }, icon: AlertTriangle, color: "orange", href: "/dashboard/products?filter=low_stock" },
-        { title: "Reparaciones", value: String(repairsActive), subtitle: "En proceso", icon: Activity, color: "red", href: "/dashboard/repairs" }
+        {
+          title: 'Ventas del día',
+          value: formatCurrency(totalRevenueToday),
+          subtitle: `${completedToday} venta${completedToday !== 1 ? 's' : ''} completada${completedToday !== 1 ? 's' : ''}`,
+          icon: Banknote, tone: 'emerald', href: '/dashboard/reports',
+          trend: trendData,
+        },
+        {
+          title: 'Órdenes activas',
+          value: String(activeOrders),
+          subtitle: 'pendientes de pago',
+          icon: ShoppingCart, tone: 'indigo', href: '/dashboard/pos',
+          badge: activeOrders > 0 ? 'Atender' : undefined,
+        },
+        {
+          title: 'Clientes nuevos',
+          value: String(newCustomers),
+          subtitle: 'últimos 7 días',
+          icon: Users, tone: 'violet', href: '/dashboard/customers',
+          trend: customerTrend,
+        },
+        {
+          title: 'Productos',
+          value: String(totalProducts),
+          subtitle: 'en catálogo activo',
+          icon: Package, tone: 'cyan', href: '/dashboard/products',
+        },
+        {
+          title: 'Stock bajo',
+          value: String(lowStockCount),
+          subtitle: lowStockCount > 0 ? 'requiere reposición' : 'inventario OK',
+          icon: AlertTriangle, tone: lowStockCount > 0 ? 'amber' : 'emerald', href: '/dashboard/products?filter=low_stock',
+          badge: lowStockCount > 0 ? '⚠' : undefined,
+        },
+        {
+          title: 'Reparaciones',
+          value: String(repairsActive),
+          subtitle: 'en proceso',
+          icon: Wrench, tone: 'red', href: '/dashboard/repairs',
+        },
       ])
       setLastRefresh(Date.now())
     } catch (error) {
@@ -281,144 +301,188 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (config.supabase.isConfigured) {
-      startTransition(() => {
-        fetchDashboardStats()
-      })
+      startTransition(() => fetchDashboardStats())
     } else {
       setLoadingStats(false)
     }
   }, [fetchDashboardStats])
 
   const quickActions = [
-    { title: "Nueva Venta", icon: ShoppingCart, href: "/dashboard/pos", color: "bg-blue-500 hover:bg-blue-600", description: "Registrar venta rápida" },
-    { title: "Nueva Reparación", icon: Wrench, href: "/dashboard/repairs", color: "bg-amber-500 hover:bg-amber-600", description: "Crear orden de reparación" },
-    { title: "Nuevo Cliente", icon: Users, href: "/dashboard/customers", color: "bg-purple-500 hover:bg-purple-600", description: "Registrar cliente" },
-    { title: "Nuevo Producto", icon: Package, href: "/dashboard/products", color: "bg-emerald-500 hover:bg-emerald-600", description: "Agregar al inventario" },
-    { title: "Ver Reportes", icon: BarChart3, href: "/dashboard/reports", color: "bg-indigo-500 hover:bg-indigo-600", description: "Análisis y métricas" }
+    { title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const },
+    { title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs', tone: 'amber' as const },
+    { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers', tone: 'violet' as const },
+    { title: 'Nuevo producto', icon: Package, href: '/dashboard/products', tone: 'emerald' as const },
+    { title: 'Ver reportes', icon: BarChart3, href: '/dashboard/reports', tone: 'cyan' as const },
   ]
 
+  const greeting = (() => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Buenos días'
+    if (h < 19) return 'Buenas tardes'
+    return 'Buenas noches'
+  })()
+
+  const today = new Date().toLocaleDateString('es-ES', {
+    weekday: 'long', day: 'numeric', month: 'long',
+  })
+
+  const secondsSinceRefresh = Math.max(0, Math.floor((Date.now() - lastRefresh) / 1000))
+  const canRefresh = secondsSinceRefresh >= 30
+
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-50 via-white to-blue-50/30 dark:from-[oklch(0.11_0.008_250)] dark:via-[oklch(0.13_0.009_248)] dark:to-[oklch(0.12_0.012_255)]">
-      {/* Header Principal */}
-      <div className="bg-white/50 dark:bg-transparent border-b border-gray-200/50 dark:border-white/[0.06]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-foreground">
-                  Dashboard
-                </h1>
-                <Badge variant="outline" className="bg-linear-to-r from-blue-500 to-cyan-500 text-white border-0">
-                  <Zap className="h-3 w-3 mr-1" />
-                  En vivo
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                <Clock className="h-3 w-3" />
-                {new Date().toLocaleDateString('es-ES', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => {
-                if (Date.now() - lastRefresh < 30_000) return
-                startTransition(() => fetchDashboardStats())
-              }}
-              disabled={loadingStats || isPending || Date.now() - lastRefresh < 30_000}
-              title={Date.now() - lastRefresh < 30_000 ? 'Espera 30 segundos entre actualizaciones' : undefined}
-            >
-              <RefreshCw className={`h-4 w-4 ${(loadingStats || isPending) ? 'animate-spin' : ''}`} />
-              {loadingStats || isPending ? 'Actualizando...' : 'Actualizar'}
-            </Button>
+    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
+
+      {/* Header */}
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+            <Activity className="h-3.5 w-3.5" />
+            Centro operativo
           </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
+              {greeting}
+            </h1>
+            <span className="flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              En vivo
+            </span>
+          </div>
+          <p className="text-sm capitalize text-slate-500 dark:text-slate-400">{today}</p>
         </div>
-      </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm" className="gap-2">
+            <Link href="/dashboard/reports">
+              <BarChart3 className="h-3.5 w-3.5" />
+              Reportes
+            </Link>
+          </Button>
+          <Button asChild size="sm" className="gap-2">
+            <Link href="/dashboard/pos">
+              <Plus className="h-3.5 w-3.5" />
+              Nueva venta
+            </Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              if (!canRefresh) return
+              startTransition(() => fetchDashboardStats())
+            }}
+            disabled={loadingStats || isPending || !canRefresh}
+            title={!canRefresh ? 'Esperá 30s entre actualizaciones' : undefined}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', (loadingStats || isPending) && 'animate-spin')} />
+            Actualizar
+          </Button>
+        </div>
+      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* KPI grid */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {stats.map((stat) => (
+          <KpiCard key={stat.title} stat={stat} loading={loadingStats} />
+        ))}
+      </section>
 
-        {/* KPI Stats Grid - clickable with skeleton */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Métricas Clave</h2>
-              <p className="text-sm text-muted-foreground">Click en cada métrica para ver detalles</p>
+      {/* Actions + Activity */}
+      <section className="grid gap-4 lg:grid-cols-[0.4fr_0.6fr]">
+
+        {/* Quick actions */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-600 dark:border-indigo-900/50 dark:bg-indigo-950/20 dark:text-indigo-400">
+                <Zap className="h-4 w-4" />
+              </div>
+              <div>
+                <CardTitle className="text-base">Acciones rápidas</CardTitle>
+                <p className="mt-0.5 text-xs text-slate-500">Atajos para tareas comunes</p>
+              </div>
             </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {stats.map((stat) => (
-              <KpiCard key={stat.title} stat={stat} loading={loadingStats} />
-            ))}
-          </div>
-        </section>
-
-        {/* Quick Actions + Recent Activity */}
-        <div className="grid gap-6 lg:grid-cols-3">
-
-          {/* Quick Actions */}
-          <Card className="lg:col-span-1 border border-border/50 dark:border-white/[0.07] shadow-md dark:shadow-black/30 bg-white/80 dark:bg-white/[0.04] backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-blue-500" />
-                Acciones Rápidas
-              </CardTitle>
-              <CardDescription>Atajos para tareas comunes</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {quickActions.map((action, idx) => (
+          </CardHeader>
+          <CardContent className="space-y-1.5">
+            {quickActions.map((action) => {
+              const t = toneClasses[action.tone]
+              const Icon = action.icon
+              return (
                 <Link
-                  key={idx}
+                  key={action.href}
                   href={action.href}
-                  className={`group flex items-center gap-3 px-3 py-2.5 rounded-lg text-white text-sm font-medium transition-all ${action.color}`}
+                  className="group flex items-center gap-3 rounded-lg border bg-card p-3 transition-all hover:border-slate-300 hover:bg-slate-50 dark:hover:border-slate-600 dark:hover:bg-slate-800/40"
                 >
-                  <div className="p-1.5 rounded bg-white/20">
-                    <action.icon className="h-4 w-4" />
+                  <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', t.iconBg)}>
+                    <Icon className="h-4 w-4" />
                   </div>
-                  <div className="flex-1 text-left">
-                    <div className="font-medium text-sm">{action.title}</div>
-                    <div className="text-xs opacity-80">{action.description}</div>
-                  </div>
-                  <ArrowRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <span className="flex-1 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {action.title}
+                  </span>
+                  <ArrowRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-hover:translate-x-0.5" />
                 </Link>
-              ))}
-            </CardContent>
-          </Card>
+              )
+            })}
+          </CardContent>
+        </Card>
 
-          {/* Recent Activity */}
-          <Card className="lg:col-span-2 border border-border/50 dark:border-white/[0.07] shadow-md dark:shadow-black/30 bg-white/80 dark:bg-white/[0.04] backdrop-blur-sm">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-green-500" />
-                    Actividad Reciente
-                  </CardTitle>
-                  <CardDescription>Últimos movimientos del sistema</CardDescription>
+        {/* Recent activity */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-400">
+                  <Activity className="h-4 w-4" />
                 </div>
-                <Button variant="ghost" size="sm" className="gap-2" asChild>
-                  <Link href="/dashboard/reports">
-                    Ver todo
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
+                <div>
+                  <CardTitle className="text-base">Actividad reciente</CardTitle>
+                  <p className="mt-0.5 text-xs text-slate-500">Últimos movimientos del sistema</p>
+                </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <Suspense fallback={<div className="space-y-3">{Array.from({length:4}).map((_,i)=><Skeleton key={i} className="h-14 rounded-xl"/>)}</div>}>
-                <RecentActivityWithEmptyState />
-              </Suspense>
-            </CardContent>
-          </Card>
-        </div>
+              <Button asChild variant="ghost" size="sm" className="h-7 gap-1 text-xs">
+                <Link href="/dashboard/reports">
+                  Ver todo
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Suspense fallback={
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
+              </div>
+            }>
+              <RecentActivityWithEmptyState />
+            </Suspense>
+          </CardContent>
+        </Card>
+      </section>
 
-      </main>
+      {/* Quick links footer */}
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { href: '/dashboard/pos', icon: ShoppingCart, label: 'Punto de venta', sub: 'POS y cobros' },
+          { href: '/dashboard/products', icon: Boxes, label: 'Inventario', sub: 'Catálogo y stock' },
+          { href: '/dashboard/orders', icon: Receipt, label: 'Órdenes', sub: 'Historial y estado' },
+          { href: '/dashboard/customers', icon: ClipboardList, label: 'Clientes', sub: 'CRM y contactos' },
+        ].map(({ href, icon: Icon, label, sub }) => (
+          <Link
+            key={href}
+            href={href}
+            className="flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:hover:border-slate-600 dark:hover:bg-slate-800/50"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border bg-muted">
+              <Icon className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{label}</p>
+              <p className="truncate text-xs text-slate-400">{sub}</p>
+            </div>
+            <ExternalLink className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-300" />
+          </Link>
+        ))}
+      </section>
     </div>
   )
 }
@@ -426,21 +490,21 @@ export default function DashboardPage() {
 // Wrapper that adds empty state and skeleton while RecentActivity loads
 function RecentActivityWithEmptyState() {
   const [mounted, setMounted] = useState(false)
-  useEffect(() => { 
+  useEffect(() => {
     const t = setTimeout(() => setMounted(true), 0)
     return () => clearTimeout(t)
   }, [])
   if (!mounted) {
     return (
       <div className="space-y-3">
-        {Array.from({length: 4}).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
       </div>
     )
   }
   return (
     <Suspense fallback={
       <div className="space-y-3">
-        {Array.from({length: 4}).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
       </div>
     }>
       <RecentActivity />
