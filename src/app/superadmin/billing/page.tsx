@@ -1,158 +1,135 @@
-import Link from 'next/link'
-import { CalendarClock, CreditCard, FileText, RefreshCw, Search } from 'lucide-react'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { FinancialDashboard, type FinancialData } from '@/components/superadmin/FinancialDashboard'
 
-type SubscriptionRow = {
-  id: string
-  organization_id: string
-  plan: string | null
-  status: string | null
-  trial_ends_at: string | null
-  current_period_ends_at: string | null
-  organizations:
-    | { name: string; slug: string }
-    | Array<{ name: string; slug: string }>
-    | null
+async function getFinancialData(): Promise<FinancialData> {
+  const admin = createAdminSupabase()
+
+  const [{ data: plans }, { data: subs }, { data: payments }] = await Promise.all([
+    admin.from('subscription_plans').select('tier, name, price, is_active').eq('is_active', true),
+    admin.from('subscriptions').select('id, organization_id, plan, status, trial_ends_at, current_period_ends_at, cancel_at_period_end, created_at, updated_at'),
+    admin.from('subscription_payments').select('amount, currency, status, paid_at, created_at, provider, plan_id'),
+  ])
+
+  // Price lookup by plan tier
+  const priceByTier = new Map<string, number>()
+  ;((plans ?? []) as Array<{ tier: string; price: number }>).forEach((p) => {
+    priceByTier.set(p.tier.toUpperCase(), Number(p.price) || 0)
+  })
+
+  const subscriptions = (subs ?? []) as Array<{
+    id: string; organization_id: string; plan: string | null; status: string | null
+    trial_ends_at: string | null; current_period_ends_at: string | null
+    cancel_at_period_end: boolean | null; created_at: string | null; updated_at: string | null
+  }>
+
+  // MRR / ARR — sumar precios de subs active
+  const activeSubs = subscriptions.filter((s) => s.status === 'active')
+  const trialingSubs = subscriptions.filter((s) => s.status === 'trialing')
+  const pastDueSubs = subscriptions.filter((s) => s.status === 'past_due' || s.status === 'unpaid')
+  const suspendedSubs = subscriptions.filter((s) => s.status === 'suspended')
+  const canceledSubs = subscriptions.filter((s) => s.status === 'canceled' || s.status === 'cancelled')
+  const cancelingSoon = subscriptions.filter((s) => s.cancel_at_period_end)
+
+  const mrr = activeSubs.reduce((sum, s) => sum + (priceByTier.get((s.plan ?? 'FREE').toUpperCase()) ?? 0), 0)
+  const arr = mrr * 12
+
+  // MRR potencial (trials que pasarán a active si pagan)
+  const potentialMrr = trialingSubs.reduce((sum, s) => sum + (priceByTier.get((s.plan ?? 'FREE').toUpperCase()) ?? 0), 0)
+
+  // MRR perdido (suscripciones canceladas o suspendidas en últimos 30d)
+  const monthAgo = Date.now() - 30 * 86400000
+  const lostThisMonth = [...canceledSubs, ...suspendedSubs].filter((s) => {
+    const updated = s.updated_at ? new Date(s.updated_at).getTime() : 0
+    return updated >= monthAgo
+  })
+  const churnedMrr = lostThisMonth.reduce((sum, s) => sum + (priceByTier.get((s.plan ?? 'FREE').toUpperCase()) ?? 0), 0)
+
+  // Churn rate (canceled+suspended últimos 30d / total active de hace 30d)
+  // Aproximación: churn = lostThisMonth / (active + lostThisMonth)
+  const churnRate = (activeSubs.length + lostThisMonth.length) > 0
+    ? Math.round((lostThisMonth.length / (activeSubs.length + lostThisMonth.length)) * 1000) / 10
+    : 0
+
+  // Renewals soon (próximos 14 días)
+  const fortnightFromNow = Date.now() + 14 * 86400000
+  const renewalsSoon = activeSubs.filter((s) => {
+    if (!s.current_period_ends_at) return false
+    const ends = new Date(s.current_period_ends_at).getTime()
+    return ends >= Date.now() && ends <= fortnightFromNow
+  })
+
+  // Revenue real (de subscription_payments)
+  const paidPayments = ((payments ?? []) as Array<{
+    amount: number; currency: string; status: string; paid_at: string | null; created_at: string | null; provider: string | null; plan_id: string | null
+  }>).filter((p) => p.status === 'paid')
+
+  const totalRevenue = paidPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+  const monthlyRevenue = paidPayments
+    .filter((p) => (p.paid_at ? new Date(p.paid_at).getTime() : 0) >= monthAgo)
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+
+  // Revenue por plan
+  const revenueByPlan = new Map<string, number>()
+  paidPayments.forEach((p) => {
+    const tier = (p.plan_id ?? 'unknown').toUpperCase()
+    revenueByPlan.set(tier, (revenueByPlan.get(tier) ?? 0) + Number(p.amount))
+  })
+
+  // Subscripciones por plan
+  const subsByPlan = new Map<string, { total: number; active: number; trialing: number; mrr: number }>()
+  subscriptions.forEach((s) => {
+    const tier = (s.plan ?? 'FREE').toUpperCase()
+    const entry = subsByPlan.get(tier) ?? { total: 0, active: 0, trialing: 0, mrr: 0 }
+    entry.total++
+    if (s.status === 'active') {
+      entry.active++
+      entry.mrr += priceByTier.get(tier) ?? 0
+    }
+    if (s.status === 'trialing') entry.trialing++
+    subsByPlan.set(tier, entry)
+  })
+
+  // Growth: comparar suscripciones nuevas últimos 30d vs 30d previos
+  const twoMonthsAgo = Date.now() - 60 * 86400000
+  const newLast30 = subscriptions.filter((s) => {
+    const created = s.created_at ? new Date(s.created_at).getTime() : 0
+    return created >= monthAgo
+  }).length
+  const newPrev30 = subscriptions.filter((s) => {
+    const created = s.created_at ? new Date(s.created_at).getTime() : 0
+    return created >= twoMonthsAgo && created < monthAgo
+  }).length
+  const growthPercent = newPrev30 > 0
+    ? Math.round(((newLast30 - newPrev30) / newPrev30) * 100)
+    : (newLast30 > 0 ? 100 : 0)
+
+  return {
+    mrr, arr, potentialMrr, churnedMrr, churnRate,
+    totalRevenue, monthlyRevenue,
+    counts: {
+      total: subscriptions.length,
+      active: activeSubs.length,
+      trialing: trialingSubs.length,
+      pastDue: pastDueSubs.length,
+      suspended: suspendedSubs.length,
+      canceled: canceledSubs.length,
+      cancelingSoon: cancelingSoon.length,
+      renewalsSoon: renewalsSoon.length,
+      newLast30,
+      growthPercent,
+    },
+    subsByPlan: Array.from(subsByPlan.entries())
+      .map(([tier, v]) => ({ tier, ...v, planName: plans?.find((p: { tier: string; name: string }) => p.tier.toUpperCase() === tier)?.name ?? tier }))
+      .sort((a, b) => b.mrr - a.mrr),
+    revenueByPlan: Array.from(revenueByPlan.entries())
+      .map(([tier, revenue]) => ({ tier, revenue }))
+      .sort((a, b) => b.revenue - a.revenue),
+    paymentCount: paidPayments.length,
+    fetchedAt: new Date().toISOString(),
+  }
 }
 
 export default async function SuperAdminBillingPage() {
-  const admin = createAdminSupabase()
-  const { data, error } = await admin
-    .from('subscriptions')
-    .select('id, organization_id, plan, status, trial_ends_at, current_period_ends_at, organizations(name, slug)')
-    .order('created_at', { ascending: false })
-    .limit(100)
-
-  const subscriptions = error ? [] : (data ?? []) as SubscriptionRow[]
-  const activeSubscriptions = subscriptions.filter((subscription) => subscription.status === 'active').length
-
-  return (
-    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Superadmin</div>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">Facturacion</h1>
-          <p className="max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-            Centro financiero preparado para Stripe, Pagopar y Bancard con suscripciones, facturas y renovaciones.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Actualizar
-          </Button>
-          <Button asChild className="gap-2">
-            <Link href="/superadmin/invoices">
-              <FileText className="h-4 w-4" />
-              Ver facturas
-            </Link>
-          </Button>
-        </div>
-      </header>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="rounded-2xl">
-          <CardContent className="p-5">
-            <CreditCard className="h-5 w-5 text-blue-600" />
-            <div className="mt-3 text-3xl font-semibold">{subscriptions.length}</div>
-            <div className="mt-1 text-sm text-slate-500">Suscripciones listadas</div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl">
-          <CardContent className="p-5">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Activas</div>
-            <div className="mt-3 text-3xl font-semibold">{activeSubscriptions}</div>
-            <div className="mt-1 text-sm text-slate-500">Con cobro vigente</div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl">
-          <CardContent className="p-5">
-            <CalendarClock className="h-5 w-5 text-violet-600" />
-            <div className="mt-3 text-3xl font-semibold">Trials</div>
-            <div className="mt-1 text-sm text-slate-500">Seguimiento de prueba</div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl">
-          <CardContent className="p-5">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Pasarelas</div>
-            <div className="mt-3 text-3xl font-semibold">3</div>
-            <div className="mt-1 text-sm text-slate-500">Stripe, Pagopar, Bancard</div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <Card className="overflow-hidden rounded-3xl border-slate-200/80 dark:border-slate-800">
-        <CardHeader className="space-y-4 border-b border-slate-100 p-5 dark:border-slate-800 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-          <CardTitle>Suscripciones</CardTitle>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {error ? 'La tabla subscriptions aun no esta disponible o no coincide con el esquema esperado.' : 'Suscripciones recientes por tenant.'}
-              </p>
-            </div>
-            <div className="relative w-full lg:w-80">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input placeholder="Buscar empresa o plan" className="h-11 rounded-xl pl-10" />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Empresa</TableHead>
-                  <TableHead>Plan</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Trial</TableHead>
-                  <TableHead>Periodo</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {subscriptions.map((subscription) => {
-                  const organization = Array.isArray(subscription.organizations)
-                    ? subscription.organizations[0]
-                    : subscription.organizations
-
-                  return (
-                    <TableRow key={subscription.id}>
-                      <TableCell>
-                        <div className="font-medium">{organization?.name ?? subscription.organization_id}</div>
-                        {organization?.slug && <div className="text-xs text-muted-foreground">{organization.slug}</div>}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{subscription.plan ?? 'FREE'}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{subscription.status ?? 'unknown'}</Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">{formatDate(subscription.trial_ends_at)}</TableCell>
-                      <TableCell className="text-muted-foreground">{formatDate(subscription.current_period_ends_at)}</TableCell>
-                    </TableRow>
-                  )
-                })}
-                {subscriptions.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                      No hay suscripciones para mostrar.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function formatDate(value: string | null) {
-  if (!value) return 'Sin fecha'
-  return new Intl.DateTimeFormat('es-PY', { dateStyle: 'medium' }).format(new Date(value))
+  const data = await getFinancialData()
+  return <FinancialDashboard data={data} />
 }
