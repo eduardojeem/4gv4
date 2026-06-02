@@ -29,10 +29,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { getSubscriptionPlans, SubscriptionPlan } from '@/services/subscription-plans'
+import { getSubscriptionPlans, SubscriptionPlan, getSubscriptionPlanStats, type SubscriptionPlanStats } from '@/services/subscription-plans'
 import { PlanEditSheet } from './plan-edit-sheet'
 import { PlanDetailsSheet } from './plan-details-sheet'
+import { PlanCreateSheet } from './plan-create-sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -101,7 +103,12 @@ function FeatureValue({ val }: { val: boolean | string }) {
   return <span className="text-center text-xs text-slate-600 dark:text-slate-400">{val}</span>
 }
 
-function PlanCard({ plan, onEdit, onView }: { plan: SubscriptionPlan, onEdit: (p: SubscriptionPlan) => void, onView: (p: SubscriptionPlan) => void }) {
+function formatPYG(amount: number) {
+  if (amount === 0) return 'Gratis'
+  return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(amount)
+}
+
+function PlanCard({ plan, orgCount, onEdit, onView }: { plan: SubscriptionPlan, orgCount: number, onEdit: (p: SubscriptionPlan) => void, onView: (p: SubscriptionPlan) => void }) {
   const Icon = tierIcons[plan.tier] || Package
 
   return (
@@ -146,14 +153,26 @@ function PlanCard({ plan, onEdit, onView }: { plan: SubscriptionPlan, onEdit: (p
 
       {/* Price */}
       <div>
-        <div className="flex items-baseline gap-1">
-          <span className={cn('text-4xl font-bold tracking-tight', plan.color_config?.accent)}>${plan.price}</span>
-          <span className="text-sm text-slate-500 dark:text-slate-400">/{plan.price_note === 'Siempre gratis' ? '' : 'mes'}</span>
+        <div className="flex items-baseline gap-1.5">
+          <span className={cn('text-3xl font-bold tracking-tight', plan.color_config?.accent)}>
+            {formatPYG(plan.price)}
+          </span>
+          {plan.price > 0 && (
+            <span className="text-sm text-slate-500 dark:text-slate-400">/mes</span>
+          )}
         </div>
-        {plan.price_note === 'Siempre gratis' ? (
-          <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Siempre gratis</span>
-        ) : null}
+        {plan.trial_days != null && plan.trial_days > 0 && (
+          <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-cyan-600 dark:text-cyan-400">
+            <Star className="h-3 w-3" /> Trial {plan.trial_days} días
+          </span>
+        )}
         <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{plan.description}</p>
+      </div>
+
+      {/* Orgs usando este plan */}
+      <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Organizaciones</span>
+        <span className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-50">{orgCount}</span>
       </div>
 
       {/* Limits grid */}
@@ -244,19 +263,24 @@ const availableFeatures = [
 export function PlansPageContent() {
   const [activeTab, setActiveTab] = useState<'cards' | 'table'>('cards')
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
+  const [stats, setStats] = useState<SubscriptionPlanStats | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Edit / View state
+  // Edit / View / Create state
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null)
   const [viewingPlan, setViewingPlan] = useState<SubscriptionPlan | null>(null)
-  
+  const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [viewOpen, setViewOpen] = useState(false)
 
   const loadPlans = async () => {
     setLoading(true)
-    const data = await getSubscriptionPlans()
+    const [data, statsData] = await Promise.all([
+      getSubscriptionPlans(),
+      getSubscriptionPlanStats(),
+    ])
     setPlans(data || [])
+    setStats(statsData)
     setLoading(false)
   }
 
@@ -265,15 +289,55 @@ export function PlansPageContent() {
     loadPlans()
   }, [])
 
+  function exportJson() {
+    if (!plans.length) {
+      toast.error('No hay planes para exportar')
+      return
+    }
+    const blob = new Blob([JSON.stringify(plans, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `subscription-plans-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+    toast.success(`Exportados ${plans.length} planes`)
+  }
+
   // Dynamic stats
   const activeCount = plans.filter(p => p.is_active).length
   const popularPlan = plans.find(p => p.is_popular)
-  
-  const stats = [
-    { label: 'Planes activos', value: loading ? '...' : activeCount.toString(), helper: plans.map(p => p.name).join(' · '), icon: CreditCard, tone: 'blue' as const },
-    { label: 'Plan más popular', value: loading ? '...' : popularPlan?.name || '-', helper: '~75% de tenants comerciales', icon: Star, tone: 'violet' as const },
-    { label: 'MRR estimado', value: '...', helper: 'Promedio por suscripción activa', icon: TrendingUp, tone: 'emerald' as const },
-    { label: 'Límites escalables', value: 'Ilimitado', helper: 'En plan ENTERPRISE', icon: Building2, tone: 'amber' as const },
+  const mrrFormatted = stats
+    ? new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(stats.mrr)
+    : '...'
+  const mostUsedPlanName = stats?.mostUsedPlan
+    ? plans.find((p) => p.tier.toUpperCase() === stats.mostUsedPlan)?.name ?? stats.mostUsedPlan
+    : '-'
+
+  const headerStats = [
+    {
+      label: 'Planes activos',
+      value: loading ? '...' : activeCount.toString(),
+      helper: plans.map(p => p.name).join(' · ') || 'Sin planes',
+      icon: CreditCard, tone: 'blue' as const,
+    },
+    {
+      label: 'Plan más usado',
+      value: loading ? '...' : mostUsedPlanName,
+      helper: stats ? `${stats.mostUsedPercent}% de ${stats.totalOrgs} orgs` : (popularPlan ? `Marcado popular: ${popularPlan.name}` : 'Calculando'),
+      icon: Star, tone: 'violet' as const,
+    },
+    {
+      label: 'MRR estimado',
+      value: loading ? '...' : mrrFormatted,
+      helper: stats ? `${stats.activeSubs} suscripciones activas` : '—',
+      icon: TrendingUp, tone: 'emerald' as const,
+    },
+    {
+      label: 'Trials activos',
+      value: loading ? '...' : String(stats?.trialingSubs ?? 0),
+      helper: 'organizaciones en período de prueba',
+      icon: Building2, tone: 'amber' as const,
+    },
   ]
 
   return (
@@ -300,11 +364,11 @@ export function PlansPageContent() {
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             Actualizar
           </Button>
-          <Button variant="outline" size="sm" className="h-9 gap-2 rounded-xl">
+          <Button variant="outline" size="sm" className="h-9 gap-2 rounded-xl" onClick={exportJson} disabled={loading || plans.length === 0}>
             <Download className="h-4 w-4" />
             Exportar JSON
           </Button>
-          <Button size="sm" className="h-9 gap-2 rounded-xl" disabled>
+          <Button size="sm" className="h-9 gap-2 rounded-xl" onClick={() => setCreateOpen(true)}>
             <Sparkles className="h-4 w-4" />
             Nuevo plan
           </Button>
@@ -313,7 +377,7 @@ export function PlansPageContent() {
 
       {/* ── Stats ── */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map((s) => (
+        {headerStats.map((s) => (
           <StatCard key={s.label} stat={s} />
         ))}
       </section>
@@ -363,9 +427,10 @@ export function PlansPageContent() {
             </div>
           ) : (
             plans.map((plan) => (
-              <PlanCard 
-                key={plan.tier} 
-                plan={plan} 
+              <PlanCard
+                key={plan.tier}
+                plan={plan}
+                orgCount={stats?.orgsByPlan?.[plan.tier.toUpperCase()] ?? 0}
                 onEdit={(p) => {
                   setEditingPlan(p)
                   setEditOpen(true)
@@ -456,10 +521,17 @@ export function PlansPageContent() {
       )}
 
       {/* Sheets */}
-      <PlanEditSheet 
-        open={editOpen} 
-        onOpenChange={setEditOpen} 
-        plan={editingPlan} 
+      <PlanCreateSheet
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSuccess={() => loadPlans()}
+        existingTiers={plans.map((p) => p.tier)}
+      />
+
+      <PlanEditSheet
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        plan={editingPlan}
         onSuccess={() => loadPlans()}
       />
       

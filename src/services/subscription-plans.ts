@@ -9,6 +9,7 @@ export type SubscriptionPlan = {
   description: string | null
   is_popular: boolean
   is_active: boolean
+  trial_days?: number | null
   limits: Record<string, unknown>
   highlights: string[]
   features: Array<{ label?: string; iconName?: string; value?: boolean | string }>
@@ -48,4 +49,38 @@ export async function updateSubscriptionPlan(id: string, updates: Partial<Subscr
   }
 
   return payload.plan
+}
+
+export type SubscriptionPlanStats = {
+  orgsByPlan: Record<string, number>
+  activeByPlan: Record<string, number>
+  mrr: number
+  activeSubs: number
+  trialingSubs: number
+  totalOrgs: number
+  mostUsedPlan: string | null
+  mostUsedPercent: number
+}
+
+export async function getSubscriptionPlanStats(): Promise<SubscriptionPlanStats | null> {
+  try {
+    const res = await fetch('/api/superadmin/subscription-plans')
+    if (!res.ok) return null
+    return await res.json() as SubscriptionPlanStats
+  } catch {
+    return null
+  }
+}
+
+export async function createSubscriptionPlan(payload: Partial<SubscriptionPlan> & { tier: string; name: string; price: number }) {
+  const response = await fetch('/api/superadmin/subscription-plans', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await response.json().catch(() => null) as { plan?: SubscriptionPlan; error?: string } | null
+  if (!response.ok || !data?.plan) {
+    throw new Error(data?.error || 'No se pudo crear el plan')
+  }
+  return data.plan
 }

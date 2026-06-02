@@ -9,6 +9,7 @@ type UpdatePlanBody = {
   description?: unknown
   is_popular?: unknown
   is_active?: unknown
+  trial_days?: unknown
   limits?: unknown
   highlights?: unknown
   features?: unknown
@@ -63,8 +64,8 @@ function technicalLimits(plan: { tier?: unknown; limits?: unknown }) {
   const code = canonicalPlanCode(plan.tier)
   const defaults: Record<string, Record<string, number | null>> = {
     FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null },
-    BASIC: { users: 5, branches: 2, cashRegisters: 3, products: 500, categories: null },
-    PRO: { users: 15, branches: 5, cashRegisters: 10, products: 5000, categories: null },
+    BASIC: { users: 10, branches: 2, cashRegisters: 3, products: 500, categories: null },
+    PRO: { users: 25, branches: 5, cashRegisters: 10, products: 5000, categories: null },
     ENTERPRISE: { users: null, branches: null, cashRegisters: null, products: null, categories: null },
   }
   const fallback = defaults[code] ?? defaults.FREE
@@ -124,6 +125,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   if ('description' in body) patch.description = optionalText(body.description)
   if ('is_popular' in body) patch.is_popular = Boolean(body.is_popular)
   if ('is_active' in body) patch.is_active = Boolean(body.is_active)
+  if ('trial_days' in body) {
+    const td = optionalNumber(body.trial_days)
+    if (td === undefined || td < 0 || td > 365) {
+      return NextResponse.json({ error: 'trial_days debe estar entre 0 y 365' }, { status: 400 })
+    }
+    patch.trial_days = Math.floor(td)
+  }
 
   for (const key of ['limits', 'highlights', 'features', 'color_config'] as const) {
     if (key in body) {
@@ -134,6 +142,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const admin = createAdminSupabase()
+
+  // Si se marca como popular, destildar los demás primero (solo uno puede ser popular)
+  if (patch.is_popular === true) {
+    await admin.from('subscription_plans').update({ is_popular: false }).neq('id', id)
+  }
+
   const { data: plan, error } = await admin
     .from('subscription_plans')
     .update(patch)
