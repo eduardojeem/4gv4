@@ -417,47 +417,60 @@ export default function TechnicianSchedulePage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setWeekStart(addDays(weekStart, -7))}
-            aria-label="Semana anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setWeekStart(addDays(weekStart, 7))}
-            aria-label="Semana siguiente"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+    <div className="mx-auto flex max-w-[1480px] flex-col gap-5">
+      {/* Page header */}
+      <header className="space-y-2">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+          <CalendarDays className="h-3.5 w-3.5" />
+          Panel técnico
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Mi agenda</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Arrastrá las reparaciones a los slots del calendario para planificar tu semana.
+        </p>
+      </header>
+
+      {/* Calendar toolbar */}
+      <div className="flex flex-col items-start justify-between gap-3 rounded-xl border bg-card p-3 sm:flex-row sm:items-center">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setWeekStart(addDays(weekStart, -7))}
+              aria-label="Semana anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setWeekStart(addDays(weekStart, 7))}
+              aria-label="Semana siguiente"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
           {!isCurrentWeek && (
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
               onClick={() => setWeekStart(today)}
-              className="gap-1.5"
+              className="h-8 gap-1.5"
             >
               <CalendarCheck className="h-3.5 w-3.5" />
               Hoy
             </Button>
           )}
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300 ml-1">
+          <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
             {weekStart.toLocaleDateString('es', { day: 'numeric', month: 'short' })}
-            {' - '}
-            {addDays(weekStart, 6).toLocaleDateString('es', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
+            {' – '}
+            {addDays(weekStart, 6).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}
           </span>
           {isCurrentWeek && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="outline" className="rounded-full border-indigo-200 bg-indigo-50 text-[10px] text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300">
               Esta semana
             </Badge>
           )}

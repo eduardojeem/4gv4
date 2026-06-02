@@ -21,29 +21,33 @@ import {
   Pencil, Save, X, Wrench, Star
 } from 'lucide-react'
 
-// ─── Stats Card ───────────────────────────────────────────────────────────────
+// ─── Stats Card (Hero metric estilo proyecto) ────────────────────────────────
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  accent,
-}: {
-  icon: React.ElementType
-  label: string
-  value: string | number
-  accent: string
+type ProfileTone = 'indigo' | 'emerald' | 'violet' | 'amber'
+
+const profileToneClasses: Record<ProfileTone, { wrap: string; iconBg: string }> = {
+  indigo:  { wrap: 'from-indigo-500/10 to-transparent border-indigo-200/50 dark:border-indigo-900/50',     iconBg: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400' },
+  emerald: { wrap: 'from-emerald-500/10 to-transparent border-emerald-200/50 dark:border-emerald-900/50', iconBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' },
+  violet:  { wrap: 'from-violet-500/10 to-transparent border-violet-200/50 dark:border-violet-900/50',    iconBg: 'bg-violet-500/15 text-violet-600 dark:text-violet-400' },
+  amber:   { wrap: 'from-amber-500/10 to-transparent border-amber-200/50 dark:border-amber-900/50',       iconBg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
+}
+
+function StatCard({ icon: Icon, label, value, tone = 'indigo' }: {
+  icon: React.ElementType; label: string; value: string | number; tone?: ProfileTone
 }) {
+  const t = profileToneClasses[tone]
   return (
-    <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-      <div className={cn('p-2 rounded-lg', accent)}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0">
-        <div className="text-lg font-bold text-gray-900 dark:text-gray-50 tabular-nums leading-tight">
-          {value}
+    <div className={cn('overflow-hidden rounded-2xl border bg-gradient-to-br p-4', t.wrap)}>
+      <div className="flex items-center gap-3">
+        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', t.iconBg)}>
+          <Icon className="h-4 w-4" />
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{label}</div>
+        <div className="min-w-0">
+          <div className="text-lg font-bold tabular-nums leading-tight text-slate-900 dark:text-slate-50">
+            {value}
+          </div>
+          <div className="truncate text-xs text-slate-500 dark:text-slate-400">{label}</div>
+        </div>
       </div>
     </div>
   )
@@ -175,71 +179,53 @@ export default function TechnicianProfilePage() {
     : 'Desconocido'
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
       {/* ── Profile Header ── */}
-      <Card className="border border-gray-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="h-24 bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700" />
-        <CardContent className="relative pt-0 pb-5 px-5">
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 -mt-10">
-            <Avatar className="h-20 w-20 border-4 border-white dark:border-slate-900 shadow-lg">
+      <Card className="overflow-hidden border-0 shadow-sm">
+        <div className="h-28 bg-gradient-to-r from-indigo-600 via-violet-600 to-blue-700 dark:from-indigo-700 dark:via-violet-700 dark:to-blue-800" />
+        <CardContent className="relative px-6 pt-0 pb-6">
+          <div className="-mt-12 flex flex-col items-start gap-4 sm:flex-row sm:items-end">
+            <Avatar className="h-24 w-24 border-4 border-background shadow-xl">
               <AvatarImage src={user.profile?.avatar_url} />
-              <AvatarFallback className="text-xl font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+              <AvatarFallback className="bg-indigo-100 text-2xl font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
                 {initials}
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1 min-w-0 pb-1">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50 truncate">
+            <div className="min-w-0 flex-1 pb-1">
+              <h1 className="truncate text-2xl font-bold text-slate-900 dark:text-slate-50">
                 {user.profile?.name || 'Técnico'}
               </h1>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Badge variant="secondary" className="text-xs font-medium">
-                  <Wrench className="h-3 w-3 mr-1" />
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className="rounded-full border-indigo-200 bg-indigo-50 text-xs text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300"
+                >
+                  <Wrench className="mr-1 h-3 w-3" />
                   {user.role === 'admin' ? 'Administrador' : 'Técnico'}
                 </Badge>
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  {user.email}
-                </span>
+                <span className="text-sm text-slate-500 dark:text-slate-400">{user.email}</span>
               </div>
+              <p className="mt-1 text-xs text-slate-400">Miembro desde {memberSince}</p>
             </div>
             <Button
-              variant={isEditing ? 'secondary' : 'outline'}
+              variant={isEditing ? 'outline' : 'default'}
               size="sm"
               onClick={() => isEditing ? handleCancelEdit() : setIsEditing(true)}
               className="gap-1.5 self-start sm:self-auto"
             >
               {isEditing ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
-              {isEditing ? 'Cancelar' : 'Editar'}
+              {isEditing ? 'Cancelar' : 'Editar perfil'}
             </Button>
           </div>
         </CardContent>
       </Card>
 
       {/* ── Stats Grid ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard
-          icon={CheckCircle2}
-          label="Completadas"
-          value={stats.completed}
-          accent="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"
-        />
-        <StatCard
-          icon={Activity}
-          label="En proceso"
-          value={stats.active}
-          accent="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
-        />
-        <StatCard
-          icon={Star}
-          label="Calificación"
-          value={stats.rating > 0 ? `${stats.rating}/5` : '—'}
-          accent="bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400"
-        />
-        <StatCard
-          icon={Clock}
-          label="Tiempo promedio"
-          value={stats.avgTime > 0 ? `${stats.avgTime}d` : '—'}
-          accent="bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400"
-        />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard icon={CheckCircle2} label="Completadas" value={stats.completed} tone="emerald" />
+        <StatCard icon={Activity} label="En proceso" value={stats.active} tone="indigo" />
+        <StatCard icon={Star} label="Calificación" value={stats.rating > 0 ? `${stats.rating}/5` : '—'} tone="amber" />
+        <StatCard icon={Clock} label="Tiempo promedio" value={stats.avgTime > 0 ? `${stats.avgTime}d` : '—'} tone="violet" />
       </div>
 
       {/* ── Settings Tabs ── */}

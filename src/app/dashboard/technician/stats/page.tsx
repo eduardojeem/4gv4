@@ -64,38 +64,35 @@ function buildMonthlyData(repairs: Repair[]) {
     .slice(-6)
 }
 
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
+// ─── KPI Card (Hero metric con tone system) ────────────────────────────────────
 
-function KpiCard({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
-  accent,
-}: {
-  title: string
-  value: string | number
-  subtitle: string
-  icon: React.ElementType
-  accent: string
+type Tone = 'indigo' | 'emerald' | 'violet' | 'amber' | 'red'
+
+const toneClasses: Record<Tone, { wrap: string; iconBg: string }> = {
+  indigo:  { wrap: 'from-indigo-500/10 to-transparent border-indigo-200/50 dark:border-indigo-900/50',     iconBg: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400' },
+  emerald: { wrap: 'from-emerald-500/10 to-transparent border-emerald-200/50 dark:border-emerald-900/50', iconBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' },
+  violet:  { wrap: 'from-violet-500/10 to-transparent border-violet-200/50 dark:border-violet-900/50',    iconBg: 'bg-violet-500/15 text-violet-600 dark:text-violet-400' },
+  amber:   { wrap: 'from-amber-500/10 to-transparent border-amber-200/50 dark:border-amber-900/50',       iconBg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
+  red:     { wrap: 'from-red-500/10 to-transparent border-red-200/50 dark:border-red-900/50',             iconBg: 'bg-red-500/15 text-red-600 dark:text-red-400' },
+}
+
+function KpiCard({ title, value, subtitle, icon: Icon, tone = 'indigo' }: {
+  title: string; value: string | number; subtitle: string; icon: React.ElementType; tone?: Tone
 }) {
+  const t = toneClasses[tone]
   return (
-    <Card className={cn('border-l-4 shadow-sm', accent)}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-          {title}
-        </CardTitle>
-        <Icon className="h-4 w-4 text-gray-400 dark:text-gray-500" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold text-gray-900 dark:text-gray-50 tabular-nums">
-          {value}
+    <div className={cn('overflow-hidden rounded-2xl border bg-gradient-to-br p-5', t.wrap)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{title}</p>
+          <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50 truncate">{value}</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 truncate" title={subtitle}>{subtitle}</p>
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          {subtitle}
-        </p>
-      </CardContent>
-    </Card>
+        <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', t.iconBg)}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -198,21 +195,25 @@ export default function TechnicianStatsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
-            Estadísticas
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+            <BarChart3 className="h-3.5 w-3.5" />
+            Panel técnico
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
+            Mis estadísticas
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-            Rendimiento — {periodLabel[period]}
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Tu rendimiento durante los {periodLabel[period]}.
           </p>
         </div>
         <Select value={period} onValueChange={v => setPeriod(v as Period)}>
-          <SelectTrigger className="w-[170px] h-9 text-sm">
+          <SelectTrigger className="w-[180px] h-9 text-sm">
             <CalendarRange className="mr-2 h-3.5 w-3.5" />
-            <SelectValue placeholder="Periodo" />
+            <SelectValue placeholder="Período" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="7d">Últimos 7 días</SelectItem>
@@ -221,37 +222,37 @@ export default function TechnicianStatsPage() {
             <SelectItem value="year">Este año</SelectItem>
           </SelectContent>
         </Select>
-      </div>
+      </header>
 
       {/* KPI Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
-          title="Total Reparaciones"
+          title="Total reparaciones"
           value={kpis.total}
-          subtitle="En el período"
+          subtitle="en el período"
           icon={TrendingUp}
-          accent="border-l-blue-500"
+          tone="indigo"
         />
         <KpiCard
-          title="Ingresos Generados"
+          title="Ingresos generados"
           value={formatCurrency(kpis.revenue)}
-          subtitle="Reparaciones entregadas"
+          subtitle="reparaciones entregadas"
           icon={Banknote}
-          accent="border-l-emerald-500"
+          tone="emerald"
         />
         <KpiCard
-          title="Tiempo Promedio"
+          title="Tiempo promedio"
           value={kpis.avgTime > 0 ? `${kpis.avgTime} días` : '—'}
-          subtitle="De creación a entrega"
+          subtitle="de creación a entrega"
           icon={Clock}
-          accent="border-l-violet-500"
+          tone="violet"
         />
         <KpiCard
-          title="Tasa de Éxito"
+          title="Tasa de éxito"
           value={`${kpis.completionRate}%`}
           subtitle={`${kpis.completed} de ${kpis.total} completadas`}
           icon={CheckCircle2}
-          accent="border-l-amber-500"
+          tone="amber"
         />
       </div>
 
