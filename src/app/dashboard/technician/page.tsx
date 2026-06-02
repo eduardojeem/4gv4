@@ -5,16 +5,15 @@ import { logger } from '@/lib/logger'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { StatsCard } from '@/components/shared'
 import {
+  Activity,
+  AlertCircle,
+  CheckCircle2,
+  LayoutGrid,
+  List as ListIcon,
   Plus,
   RefreshCw,
   Wrench,
-  CheckCircle2,
-  AlertCircle,
-  Activity,
-  LayoutGrid,
-  List as ListIcon,
 } from 'lucide-react'
 import { useTechnicianBoardV2 as useTechnicianBoard } from '@/hooks/use-technician-board-v2'
 import { useTechnicians } from '@/hooks/use-technicians'
@@ -26,6 +25,7 @@ import type { RepairFormData as PersistRepairFormData } from '@/contexts/Repairs
 import type { Repair } from '@/types/repairs'
 import { RepairList } from '@/components/dashboard/repairs/RepairList'
 import { RepairDetailDialog } from '@/components/dashboard/repairs/RepairDetailDialog'
+import { cn } from '@/lib/utils'
 
 type TechnicianRepairUpdatePayload = Omit<Partial<Repair>, 'images' | 'parts' | 'notes'> & {
   customer_id?: string
@@ -34,6 +34,49 @@ type TechnicianRepairUpdatePayload = Omit<Partial<Repair>, 'images' | 'parts' | 
   parts?: RepairFormData['parts']
   notes?: RepairFormData['notes']
 }
+
+// ---------------------------------------------------------------------------
+// Hero metric
+// ---------------------------------------------------------------------------
+
+type Tone = 'indigo' | 'amber' | 'emerald' | 'red'
+
+const toneClasses: Record<Tone, { wrap: string; iconBg: string }> = {
+  indigo:  { wrap: 'from-indigo-500/10 to-transparent border-indigo-200/50 dark:border-indigo-900/50',  iconBg: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400' },
+  amber:   { wrap: 'from-amber-500/10 to-transparent border-amber-200/50 dark:border-amber-900/50',     iconBg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
+  emerald: { wrap: 'from-emerald-500/10 to-transparent border-emerald-200/50 dark:border-emerald-900/50', iconBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' },
+  red:     { wrap: 'from-red-500/10 to-transparent border-red-200/50 dark:border-red-900/50',           iconBg: 'bg-red-500/15 text-red-600 dark:text-red-400' },
+}
+
+function MetricCard({
+  label, value, sub, icon: Icon, tone,
+}: {
+  label: string
+  value: number | string
+  sub: string
+  icon: React.ComponentType<{ className?: string }>
+  tone: Tone
+}) {
+  const t = toneClasses[tone]
+  return (
+    <div className={cn('overflow-hidden rounded-2xl border bg-gradient-to-br p-5', t.wrap)}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
+          <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{value}</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{sub}</p>
+        </div>
+        <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', t.iconBg)}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function TechnicianPanel() {
   const {
@@ -267,75 +310,87 @@ export default function TechnicianPanel() {
     : undefined
 
   return (
-    <div className="space-y-6">
-      <section>
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">Metricas de Reparaciones</h2>
-            <p className="text-sm text-muted-foreground">
-              {showMyRepairsOnly ? 'Estado actual de tus reparaciones' : 'Estado actual del tablero tecnico'}
-            </p>
+    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
+
+      {/* Header */}
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+            <Wrench className="h-3.5 w-3.5" />
+            Panel técnico
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={refreshRepairs}
-              disabled={isLoading}
-              className="gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              Actualizar
-            </Button>
-            <Button
-              onClick={() => {
-                setDialogMode('add')
-                setSelectedRepair(undefined)
-                setIsDialogOpen(true)
-              }}
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Nueva Reparacion
-            </Button>
-          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
+            {showMyRepairsOnly ? 'Mis reparaciones' : 'Tablero de reparaciones'}
+          </h1>
+          <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+            {showMyRepairsOnly
+              ? 'Reparaciones asignadas a tu cuenta. Arrastrá para cambiar el estado.'
+              : 'Vista global del estado de todas las reparaciones del equipo.'}
+          </p>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <StatsCard
-            title="Total Reparaciones"
-            value={stats.total}
-            subtitle="En el sistema"
-            icon={Wrench}
-            color="blue"
-          />
-          <StatsCard
-            title="En Proceso"
-            value={stats.inProgress}
-            subtitle="Trabajando ahora"
-            icon={Activity}
-            color="orange"
-          />
-          <StatsCard
-            title="Completadas"
-            value={stats.completed}
-            subtitle="Listas para entregar"
-            icon={CheckCircle2}
-            color="green"
-          />
-          <StatsCard
-            title="Urgentes"
-            value={stats.urgent}
-            subtitle="Requieren atencion"
-            icon={AlertCircle}
-            color="red"
-          />
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={refreshRepairs}
+            disabled={isLoading}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
+            Actualizar
+          </Button>
+          <Button
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              setDialogMode('add')
+              setSelectedRepair(undefined)
+              setIsDialogOpen(true)
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nueva reparación
+          </Button>
         </div>
+      </header>
+
+      {/* Stats */}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Total"
+          value={stats.total}
+          sub="reparaciones en el sistema"
+          icon={Wrench}
+          tone="indigo"
+        />
+        <MetricCard
+          label="En proceso"
+          value={stats.inProgress}
+          sub="trabajando ahora"
+          icon={Activity}
+          tone="amber"
+        />
+        <MetricCard
+          label="Completadas"
+          value={stats.completed}
+          sub="listas para entregar"
+          icon={CheckCircle2}
+          tone="emerald"
+        />
+        <MetricCard
+          label="Urgentes"
+          value={stats.urgent}
+          sub={stats.urgent > 0 ? 'requieren atención' : 'sin urgencias'}
+          icon={AlertCircle}
+          tone={stats.urgent > 0 ? 'red' : 'emerald'}
+        />
       </section>
 
-      <section>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+      {/* Toolbar */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-center">
+            <div className="w-full lg:flex-1">
               <TechnicianFilters
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
@@ -345,31 +400,40 @@ export default function TechnicianPanel() {
                 onRefresh={refreshRepairs}
                 isLoading={isLoading}
               />
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={viewMode === 'kanban' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('kanban')}
-                  className="gap-2"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                  Kanban
-                </Button>
-                <Button
-                  variant={viewMode === 'list' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('list')}
-                  className="gap-2"
-                >
-                  <ListIcon className="h-4 w-4" />
-                  Lista
-                </Button>
-              </div>
             </div>
-          </CardContent>
-        </Card>
-      </section>
+            <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode('kanban')}
+                className={cn(
+                  'flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors',
+                  viewMode === 'kanban'
+                    ? 'bg-background shadow-sm text-slate-900 dark:text-slate-50'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                )}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Kanban
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  'flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors',
+                  viewMode === 'list'
+                    ? 'bg-background shadow-sm text-slate-900 dark:text-slate-50'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                )}
+              >
+                <ListIcon className="h-3.5 w-3.5" />
+                Lista
+              </button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
+      {/* Board */}
       <section>
         {viewMode === 'kanban' ? (
           <TechnicianKanban
