@@ -1,29 +1,58 @@
-import { CreditCard, FileCheck2, FileClock, Receipt } from 'lucide-react'
-import { SuperAdminSectionPage } from '@/components/superadmin/superadmin-section-page'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { InvoicesDashboard, type InvoiceRow } from '@/components/superadmin/InvoicesDashboard'
 
-export default function SuperAdminInvoicesPage() {
-  return (
-    <SuperAdminSectionPage
-      title="Facturas"
-      description="Historial de facturacion preparado para Stripe, Pagopar y Bancard con estados, vencimientos y reintentos."
-      stats={[
-        { label: 'Emitidas', value: '0', helper: 'Pendiente de provider', icon: Receipt, tone: 'blue' },
-        { label: 'Pagadas', value: '0', helper: 'Pagos confirmados', icon: FileCheck2, tone: 'emerald' },
-        { label: 'Pendientes', value: '0', helper: 'Esperando cobro', icon: FileClock, tone: 'amber' },
-        { label: 'Pasarelas', value: '3', helper: 'Stripe, Pagopar, Bancard', icon: CreditCard, tone: 'violet' },
-      ]}
-      actions={[
-        { title: 'Stripe', description: 'Preparado para invoices, checkout sessions y webhooks de suscripcion.', status: 'Arquitectura' },
-        { title: 'Pagopar', description: 'Preparado para cobros locales y conciliacion de facturas.', status: 'Arquitectura' },
-        { title: 'Bancard', description: 'Preparado para pagos con tarjetas y estados asincronos.', status: 'Arquitectura' },
-      ]}
-      tableTitle="Facturas recientes"
-      tableDescription="Vista operacional lista para conectar billing_invoices."
-      tableItems={[
-        { title: 'Factura mensual', description: 'Registro por periodo de suscripcion tenant.', status: 'Pendiente de datos', meta: 'billing_invoices' },
-        { title: 'Pago fallido', description: 'Reintentos y bloqueo gradual por limite de plan.', status: 'Pendiente de datos', meta: 'webhooks' },
-        { title: 'Comprobante local', description: 'Integracion local Pagopar/Bancard.', status: 'Pendiente de datos', meta: 'providers' },
-      ]}
-    />
+async function getInvoicesData() {
+  const admin = createAdminSupabase()
+
+  const { data: paymentsData } = await admin
+    .from('subscription_payments')
+    .select('id, organization_id, subscription_id, plan_id, amount, currency, status, payment_method, provider, provider_payment_id, external_reference, receipt_url, paid_at, created_at')
+    .order('created_at', { ascending: false })
+    .limit(500)
+
+  const payments = (paymentsData ?? []) as Array<{
+    id: string; organization_id: string; subscription_id: string | null; plan_id: string | null
+    amount: number; currency: string; status: string; payment_method: string | null
+    provider: string | null; provider_payment_id: string | null; external_reference: string | null
+    receipt_url: string | null; paid_at: string | null; created_at: string | null
+  }>
+
+  const orgIds = Array.from(new Set(payments.map((p) => p.organization_id).filter(Boolean)))
+
+  const { data: orgsData } = orgIds.length
+    ? await admin.from('organizations').select('id, name, slug, plan').in('id', orgIds)
+    : { data: [] }
+
+  const orgsById = new Map(
+    (orgsData ?? []).map((o: { id: string; name: string; slug: string; plan: string | null }) => [o.id, o])
   )
+
+  const rows: InvoiceRow[] = payments.map((p) => {
+    const org = orgsById.get(p.organization_id)
+    return {
+      id: p.id,
+      organizationId: p.organization_id,
+      organizationName: org?.name ?? null,
+      organizationSlug: org?.slug ?? null,
+      organizationPlan: org?.plan ?? null,
+      planId: p.plan_id,
+      amount: Number(p.amount) || 0,
+      currency: p.currency || 'PYG',
+      status: p.status,
+      paymentMethod: p.payment_method,
+      provider: p.provider,
+      providerPaymentId: p.provider_payment_id,
+      externalReference: p.external_reference,
+      receiptUrl: p.receipt_url,
+      paidAt: p.paid_at,
+      createdAt: p.created_at,
+    }
+  })
+
+  return rows
+}
+
+export default async function SuperAdminInvoicesPage() {
+  const rows = await getInvoicesData()
+  return <InvoicesDashboard rows={rows} />
 }
