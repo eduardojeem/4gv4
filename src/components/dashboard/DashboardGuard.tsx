@@ -27,8 +27,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
   const canRequireOnboarding = Boolean(
     user &&
     !isInactiveUser &&
-    user.role !== 'cliente' &&
-    user.role !== 'super_admin' &&
+    user.role === 'admin' &&
     !pathname.startsWith('/dashboard/onboarding')
   )
 

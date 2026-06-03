@@ -43,6 +43,21 @@ export default async function DashboardOnboardingPage() {
 
   const admin = createAdminSupabase()
 
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('role, status')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  const role = typeof profile?.role === 'string' ? profile.role : null
+  const status = typeof profile?.status === 'string' ? profile.status : null
+  const isActiveUser = status !== 'inactive' && status !== 'suspended'
+  const canAccessOnboarding = Boolean(isActiveUser && (role === 'admin' || role === 'super_admin'))
+
+  if (!canAccessOnboarding) {
+    redirect('/dashboard')
+  }
+
   const { data: membership } = await admin
     .from('organization_members')
     .select('organization_id, role, organizations!inner(id, name, slug, plan)')

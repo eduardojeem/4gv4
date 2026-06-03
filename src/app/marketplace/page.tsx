@@ -11,10 +11,14 @@ import { getMarketplaceOrganizations, getMarketplaceProducts, getMarketplaceBran
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'
+import { getPlatformBranding } from '@/lib/platform/branding'
 
-export const metadata: Metadata = {
-  title: 'Marketplace | MiPOS',
-  description: 'Descubre productos y empresas publicadas en el marketplace de MiPOS.',
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getPlatformBranding()
+  return {
+    title: `${branding.marketplaceName} | ${branding.platformName}`,
+    description: branding.seoDescription,
+  }
 }
 
 export const dynamic = 'force-dynamic'

@@ -18,6 +18,19 @@ export async function getSuperAdminUser(): Promise<SuperAdminUser | null> {
 
   const admin = createAdminSupabase()
 
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('role, status')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  const status = typeof profile?.status === 'string' ? profile.status : null
+  const isActiveUser = status !== 'inactive' && status !== 'suspended'
+
+  if (!isActiveUser) {
+    return null
+  }
+
   const { data: userRole } = await admin
     .from('user_roles')
     .select('role, is_active')
@@ -32,13 +45,7 @@ export async function getSuperAdminUser(): Promise<SuperAdminUser | null> {
     }
   }
 
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('role, status')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (profile?.role === 'super_admin' && profile?.status !== 'inactive' && profile?.status !== 'suspended') {
+  if (profile?.role === 'super_admin') {
     return {
       id: user.id,
       email: user.email ?? null,

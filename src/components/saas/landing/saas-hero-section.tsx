@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { ArrowRight, Boxes, ExternalLink, ShieldCheck, ShoppingCart, Wrench } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { type PlatformBranding } from '@/lib/platform/branding'
 import { trustItems } from './saas-landing-data'
 
 const quickModules = [
@@ -10,7 +11,7 @@ const quickModules = [
   { label: 'Atiende', value: 'Reparaciones', icon: Wrench },
 ]
 
-export function SaaSHeroSection() {
+export function SaaSHeroSection({ branding }: { branding: PlatformBranding }) {
   return (
     <section className="relative overflow-hidden border-b border-slate-200 bg-slate-950 text-white dark:border-slate-800">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_60%_-10%,rgba(6,182,212,0.12),transparent)]" />
@@ -31,14 +32,14 @@ export function SaaSHeroSection() {
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg" className="gap-2 bg-white text-slate-950 hover:bg-slate-100">
-              <Link href="/register">
-                Empezar ahora
+              <Link href={branding.primaryCtaHref}>
+                {branding.primaryCtaLabel}
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="gap-2 border-white/25 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-              <Link href="/marketplace">
-                Ver marketplace
+              <Link href={branding.secondaryCtaHref}>
+                {branding.secondaryCtaLabel}
                 <ExternalLink className="h-4 w-4" />
               </Link>
             </Button>

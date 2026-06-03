@@ -62,6 +62,26 @@ function redirectWithCookies(request: NextRequest, source: NextResponse, pathnam
   )
 }
 
+function sanitizeLocalRedirect(value: string | null, fallback: string): string {
+  if (!value) return fallback
+  if (!value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return fallback
+
+  const firstSlash = value.indexOf('/', 1)
+  const segment = firstSlash > 0 ? value.slice(0, firstSlash) : value
+  if (segment.includes(':')) return fallback
+
+  return value
+}
+
+function redirectToLogin(request: NextRequest, source: NextResponse): NextResponse {
+  const loginUrl = request.nextUrl.clone()
+  loginUrl.pathname = '/login'
+  loginUrl.search = ''
+  loginUrl.searchParams.set('redirect', `${request.nextUrl.pathname}${request.nextUrl.search}`)
+
+  return applyResponseCookies(NextResponse.redirect(loginUrl), source)
+}
+
 function rewriteForbiddenResponse(
   request: NextRequest,
   source: NextResponse,
@@ -217,7 +237,7 @@ export async function proxy(request: NextRequest) {
   // Rutas protegidas (dashboard) - requieren autenticacion y rol no-cliente
   if (isProtectedRoute) {
     if (!user) {
-      return redirectWithCookies(request, supabaseResponse, '/login')
+      return redirectToLogin(request, supabaseResponse)
     }
 
     if (isClientOrViewer) {
@@ -228,7 +248,7 @@ export async function proxy(request: NextRequest) {
   // Rutas admin - requieren autenticacion y rol admin/super_admin
   if (isAdminRoute) {
     if (!user) {
-      return redirectWithCookies(request, supabaseResponse, '/login')
+      return redirectToLogin(request, supabaseResponse)
     }
     if (!isAdmin) {
       return rewriteForbiddenResponse(request, supabaseResponse, 'admin')
@@ -237,7 +257,7 @@ export async function proxy(request: NextRequest) {
 
   if (isSuperAdminRoute || isInternalOpsRoute) {
     if (!user) {
-      return redirectWithCookies(request, supabaseResponse, '/login')
+      return redirectToLogin(request, supabaseResponse)
     }
     if (!isSuperAdmin) {
       return rewriteForbiddenResponse(request, supabaseResponse, 'admin')
@@ -246,7 +266,8 @@ export async function proxy(request: NextRequest) {
 
   // Si ya autenticado y en ruta de auth, redirigir segun rol
   if (isAuthRoute && user) {
-    const target = isClientOrViewer ? `/${DEFAULT_PUBLIC_ORG_SLUG}/inicio` : '/dashboard'
+    const requestedRedirect = sanitizeLocalRedirect(request.nextUrl.searchParams.get('redirect'), '/dashboard')
+    const target = isClientOrViewer ? `/${DEFAULT_PUBLIC_ORG_SLUG}/inicio` : requestedRedirect
     return redirectWithCookies(request, supabaseResponse, target)
   }
 

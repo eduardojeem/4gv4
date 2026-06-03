@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { ArrowRight, Building2, Menu, Store, X, LogIn, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
+import { usePlatformBranding } from '@/hooks/use-platform-branding'
 
 const navLinks = [
   { label: 'Marketplace', href: '/marketplace' },
@@ -14,11 +15,17 @@ const navLinks = [
   { label: 'Planes', href: '/saas/planes' },
 ]
 
-export function SaaSPublicNav() {
+interface SaaSPublicNavProps {
+  variant?: 'default' | 'dark'
+}
+
+export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const pathname = usePathname()
   const { user } = useAuth()
+  const isDark = variant === 'dark'
+  const { branding } = usePlatformBranding()
 
   useEffect(() => {
     setMounted(true)
@@ -30,15 +37,25 @@ export function SaaSPublicNav() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90">
+    <header className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
+      isDark
+        ? 'border-slate-800/80 bg-slate-950/85'
+        : 'border-slate-200/70 bg-white/90 dark:border-slate-800 dark:bg-slate-950/90'
+    }`}>
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/saas" className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-950 text-white dark:bg-white dark:text-slate-950">
-            <Building2 className="h-5 w-5" />
+          <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+            isDark ? 'bg-blue-600 text-white' : 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
+          }`}>
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.platformName} className="h-6 w-6 object-contain" />
+            ) : (
+              <Building2 className="h-5 w-5" />
+            )}
           </div>
           <div>
-            <div className="text-sm font-semibold leading-none text-slate-950 dark:text-slate-50">MiPOS SaaS</div>
-            <div className="mt-1 text-xs text-slate-500">POS, inventario y marketplace</div>
+            <div className={`text-sm font-semibold leading-none ${isDark ? 'text-white' : 'text-slate-950 dark:text-slate-50'}`}>{branding.platformName}</div>
+            <div className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{branding.platformTagline}</div>
           </div>
         </Link>
 
@@ -46,11 +63,15 @@ export function SaaSPublicNav() {
           {navLinks.map((link) => (
             <Link
               key={link.href}
-              href={link.href}
-              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                isActive(link.href)
-                  ? 'bg-slate-100 text-slate-950 dark:bg-slate-900 dark:text-white'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white'
+                href={link.href}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                isDark
+                  ? isActive(link.href)
+                    ? 'bg-slate-800 text-white'
+                    : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                  : isActive(link.href)
+                    ? 'bg-slate-100 text-slate-950 dark:bg-slate-900 dark:text-white'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-white'
               }`}
             >
               {link.label}
@@ -59,10 +80,12 @@ export function SaaSPublicNav() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <Button asChild variant="outline" size="sm" className="hidden gap-2 sm:inline-flex">
-            <Link href="/marketplace">
+          <Button asChild variant="outline" size="sm" className={`hidden gap-2 sm:inline-flex ${
+            isDark ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white' : ''
+          }`}>
+            <Link href={branding.secondaryCtaHref}>
               <Store className="h-4 w-4" />
-              Ver tiendas
+              {branding.secondaryCtaLabel}
             </Link>
           </Button>
 
@@ -76,7 +99,11 @@ export function SaaSPublicNav() {
           ) : (
             <>
               {mounted && (
-                <Button asChild variant="ghost" size="sm" className="hidden gap-2 md:inline-flex text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white font-medium">
+                <Button asChild variant="ghost" size="sm" className={`hidden gap-2 md:inline-flex font-medium ${
+                  isDark
+                    ? 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                    : 'text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white'
+                }`}>
                   <Link href="/login">
                     <LogIn className="h-4 w-4" />
                     Ingresar
@@ -84,8 +111,8 @@ export function SaaSPublicNav() {
                 </Button>
               )}
               <Button asChild size="sm" className="hidden gap-2 md:inline-flex">
-                <Link href="/register">
-                  Crear empresa
+                <Link href={branding.primaryCtaHref}>
+                  {branding.primaryCtaLabel}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -93,7 +120,11 @@ export function SaaSPublicNav() {
           )}
           <button
             onClick={() => setMobileOpen((v) => !v)}
-            className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900 md:hidden"
+            className={`flex h-9 w-9 items-center justify-center rounded-md border transition md:hidden ${
+              isDark
+                ? 'border-slate-700 text-slate-300 hover:bg-slate-900 hover:text-white'
+                : 'border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900'
+            }`}
             aria-label={mobileOpen ? 'Cerrar menu' : 'Abrir menu'}
           >
             {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -102,7 +133,9 @@ export function SaaSPublicNav() {
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950 md:hidden">
+        <div className={`border-t px-4 py-3 md:hidden ${
+          isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950'
+        }`}>
           <nav className="flex flex-col gap-1">
             {navLinks.map((link) => (
               <Link
@@ -111,19 +144,25 @@ export function SaaSPublicNav() {
                 onClick={() => setMobileOpen(false)}
                 className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive(link.href)
-                    ? 'bg-slate-100 text-slate-950 dark:bg-slate-900 dark:text-white'
-                    : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900'
+                    ? isDark
+                      ? 'bg-slate-800 text-white'
+                      : 'bg-slate-100 text-slate-950 dark:bg-slate-900 dark:text-white'
+                    : isDark
+                      ? 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                      : 'text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900'
                 }`}
               >
                 {link.label}
               </Link>
             ))}
           </nav>
-          <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-            <Button asChild variant="outline" size="sm" className="w-full gap-2">
-              <Link href="/marketplace" onClick={() => setMobileOpen(false)}>
+          <div className={`mt-3 flex flex-col gap-2 border-t pt-3 ${isDark ? 'border-slate-800' : 'border-slate-100 dark:border-slate-800'}`}>
+            <Button asChild variant="outline" size="sm" className={`w-full gap-2 ${
+              isDark ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white' : ''
+            }`}>
+              <Link href={branding.secondaryCtaHref} onClick={() => setMobileOpen(false)}>
                 <Store className="h-4 w-4" />
-                Ver tiendas
+                {branding.secondaryCtaLabel}
               </Link>
             </Button>
 
@@ -137,7 +176,9 @@ export function SaaSPublicNav() {
             ) : (
               <>
                 {mounted && (
-                  <Button asChild variant="outline" size="sm" className="w-full gap-2">
+                  <Button asChild variant="outline" size="sm" className={`w-full gap-2 ${
+                    isDark ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white' : ''
+                  }`}>
                     <Link href="/login" onClick={() => setMobileOpen(false)}>
                       <LogIn className="h-4 w-4" />
                       Ingresar
@@ -145,8 +186,8 @@ export function SaaSPublicNav() {
                   </Button>
                 )}
                 <Button asChild size="sm" className="w-full gap-2">
-                  <Link href="/register" onClick={() => setMobileOpen(false)}>
-                    Crear empresa
+                  <Link href={branding.primaryCtaHref} onClick={() => setMobileOpen(false)}>
+                    {branding.primaryCtaLabel}
                     <ArrowRight className="h-4 w-4" />
                   </Link>
                 </Button>

@@ -54,7 +54,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionRequirement> = {
     requireAll: false
   },
   '/dashboard/categories': {
-    permissions: ['products.manage'],
+    permissions: ['products.read'],
     requireAll: true
   },
   '/dashboard/brands': {

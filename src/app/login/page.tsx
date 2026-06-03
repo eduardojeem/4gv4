@@ -8,25 +8,24 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Switch } from '@/components/ui/switch'
 import { Loader2, Eye, EyeOff, ArrowRight, ArrowLeft, Cpu, Shield, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { config } from '@/lib/config'
 import { sanitizeRedirectPath, isValidEmail } from '@/lib/auth/password-validation'
 import { logAuthEventClient } from '@/lib/auth-event-client'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
+import { usePlatformBranding } from '@/hooks/use-platform-branding'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [resetOpen, setResetOpen] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
   const [unconfirmed, setUnconfirmed] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
 
@@ -34,16 +33,39 @@ export default function LoginPage() {
   const searchParams = useSearchParams()
   const supabase = createClient()
   const reduceMotion = useReducedMotion()
+  const { branding } = usePlatformBranding()
   const registeredCompany = searchParams.get('registered') === '1' ? searchParams.get('company') : null
+  const callbackError = searchParams.get('error') === 'auth_callback_error'
+    ? 'No se pudo completar la verificacion del enlace. Solicita uno nuevo o inicia sesion nuevamente.'
+    : ''
+  const visibleError = error || callbackError
+
+  const initializeActiveOrganization = async () => {
+    try {
+      const response = await fetch('/api/organizations', {
+        method: 'GET',
+        cache: 'no-store',
+      })
+
+      if (!response.ok && response.status !== 404) {
+        console.warn('No se pudo inicializar la organizacion activa:', response.status)
+      }
+    } catch (organizationError) {
+      console.warn('No se pudo inicializar la organizacion activa:', organizationError)
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setUnconfirmed(false)
+
+    const normalizedEmail = email.trim().toLowerCase()
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: normalizedEmail,
         password,
       })
 
@@ -76,6 +98,7 @@ export default function LoginPage() {
         }
 
         toast.success('Bienvenido de nuevo')
+        await initializeActiveOrganization()
         const redirectTo = sanitizeRedirectPath(searchParams.get('redirect'))
         router.push(redirectTo)
         router.refresh()
@@ -121,13 +144,19 @@ export default function LoginPage() {
   }
 
   const handleResetPassword = async () => {
-    if (!resetEmail) return
+    const targetEmail = resetEmail.trim().toLowerCase()
+    if (!targetEmail) return
+    if (!isValidEmail(targetEmail)) {
+      toast.error('Correo invalido')
+      return
+    }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      setResetLoading(true)
+      const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
         redirectTo:
           typeof window !== 'undefined'
-            ? `${window.location.origin}/auth/callback?next=/dashboard/profile`
+            ? `${window.location.origin}/auth/callback?next=/auth/reset-password`
             : undefined,
       })
 
@@ -139,31 +168,38 @@ export default function LoginPage() {
       }
     } catch {
       toast.error('No se pudo enviar el correo de reseteo')
+    } finally {
+      setResetLoading(false)
     }
   }
 
   return (
     <div className="relative flex flex-col min-h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <SaaSPublicNav />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_20%,rgba(6,182,212,0.16),transparent_40%),radial-gradient(circle_at_90%_80%,rgba(59,130,246,0.14),transparent_40%)] pointer-events-none" />
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(14,165,233,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(14,165,233,0.06)_1px,transparent_1px)] bg-[size:42px_42px] opacity-40 pointer-events-none" />
+      <SaaSPublicNav variant="dark" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(14,165,233,0.13),transparent_34%),radial-gradient(circle_at_86%_82%,rgba(37,99,235,0.12),transparent_36%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:48px_48px] opacity-35 pointer-events-none" />
 
-      <main className="relative z-10 flex-1 flex items-center justify-center p-4 sm:p-6">
+      <main className="relative z-10 flex-1 flex items-start justify-center px-4 pb-6 pt-10 sm:px-6 sm:pt-14 lg:items-center lg:pt-6">
         <motion.div
           initial={reduceMotion ? false : { opacity: 0, y: 12 }}
           animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
           className="w-full max-w-md"
         >
-          <Card className="border-slate-800/80 bg-slate-900/80 shadow-2xl backdrop-blur-xl">
+          <Card className="border-slate-800/90 bg-slate-900/88 shadow-[0_24px_90px_rgba(2,6,23,0.55)] backdrop-blur-xl">
             <CardHeader className="space-y-4 pb-5">
-            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-900/30">
-                    <Cpu className="h-5 w-5 text-white" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 shadow-lg shadow-blue-950/30">
+                    {branding.logoUrl ? (
+                      <img src={branding.logoUrl} alt={branding.platformName} className="h-6 w-6 object-contain" />
+                    ) : (
+                      <Cpu className="h-5 w-5 text-white" />
+                    )}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-200">{config.company.name}</p>
+                    <p className="text-sm font-semibold text-slate-100">{branding.platformName}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{branding.loginEyebrow}</p>
                   </div>
                 </div>
                 <Link
@@ -177,7 +213,7 @@ export default function LoginPage() {
               <div>
                 <CardTitle className="text-2xl font-bold text-white">Iniciar sesion</CardTitle>
                 <CardDescription className="mt-1 text-slate-400">
-                  Acceso al sistema interno
+                  {branding.loginSubtitle}
                 </CardDescription>
               </div>
             </CardHeader>
@@ -223,7 +259,7 @@ export default function LoginPage() {
                     </Label>
                     <button
                       type="button"
-                      className="text-xs font-medium text-cyan-400 hover:text-cyan-300 hover:underline"
+                      className="text-xs font-medium text-slate-400 transition-colors hover:text-cyan-300 hover:underline"
                       onClick={() => setResetOpen(true)}
                     >
                       Olvide mi contrasena
@@ -252,20 +288,8 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 py-1">
-                  <Switch
-                    id="remember"
-                    checked={rememberMe}
-                    onCheckedChange={setRememberMe}
-                    className="data-[state=checked]:bg-cyan-600"
-                  />
-                  <Label htmlFor="remember" className="cursor-pointer text-sm text-slate-400">
-                    Mantener sesion iniciada
-                  </Label>
-                </div>
-
                 <AnimatePresence>
-                  {error && (
+                  {visibleError && (
                     <motion.div
                       initial={reduceMotion ? false : { opacity: 0, y: -8 }}
                       animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
@@ -275,7 +299,7 @@ export default function LoginPage() {
                       aria-live="assertive"
                     >
                       <Shield className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>{error}</span>
+                      <span>{visibleError}</span>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -307,7 +331,7 @@ export default function LoginPage() {
 
                 <Button
                   type="submit"
-                  className="h-11 w-full bg-gradient-to-r from-cyan-600 to-blue-600 font-semibold text-white hover:from-cyan-500 hover:to-blue-500"
+                  className="h-11 w-full bg-blue-600 font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
                   disabled={loading}
                 >
                   {loading ? (
@@ -327,7 +351,7 @@ export default function LoginPage() {
               <div className="pt-1 text-center">
                 <p className="text-sm text-slate-400">
                   No tienes cuenta?{' '}
-                  <Link href="/register" className="font-semibold text-cyan-400 hover:text-cyan-300 hover:underline">
+                  <Link href="/register" className="font-semibold text-cyan-300 hover:text-cyan-200 hover:underline">
                     Registrate
                   </Link>
                 </p>
@@ -351,17 +375,25 @@ export default function LoginPage() {
                 placeholder="nombre@empresa.com"
                 value={resetEmail}
                 onChange={(e) => setResetEmail(e.target.value)}
+                disabled={resetLoading}
               />
               <p className="text-xs text-muted-foreground">
                 Te enviaremos un enlace para crear una nueva contrasena.
               </p>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setResetOpen(false)}>
+              <Button variant="ghost" onClick={() => setResetOpen(false)} disabled={resetLoading}>
                 Cancelar
               </Button>
-              <Button onClick={handleResetPassword} disabled={!resetEmail}>
-                Enviar enlace
+              <Button onClick={handleResetPassword} disabled={!resetEmail.trim() || resetLoading}>
+                {resetLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  'Enviar enlace'
+                )}
               </Button>
             </div>
           </div>

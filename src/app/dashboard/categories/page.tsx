@@ -15,7 +15,6 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { RouteGuard } from '@/components/auth/permission-guard'
-import { usePermissions } from '@/hooks/use-permissions'
 import { cn } from '@/lib/utils'
 
 // Hooks & Utils
@@ -51,11 +50,9 @@ import {
 type QuickFilter = 'all' | 'active' | 'inactive' | 'root' | 'sub'
 
 export default function CategoriesPage() {
-  const { hasPermission } = usePermissions()
-  const canManage = hasPermission('products.manage')
-
   const {
     categories,
+    capabilities,
     loading,
     error,
     filters,
@@ -65,6 +62,11 @@ export default function CategoriesPage() {
     updateCategory,
     deleteCategory
   } = useCategories()
+
+  const canCreate = capabilities.canCreate
+  const canUpdate = capabilities.canUpdate
+  const canDelete = capabilities.canDelete
+  const canBulkSelect = canUpdate || canDelete
 
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'tree'>('grid')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -117,24 +119,24 @@ export default function CategoriesPage() {
 
   // Handlers
   const handleEdit = (category: Category) => {
-    if (!canManage) return
+    if (!canUpdate) return
     setEditingCategory(category)
     setInitialParentId(null)
     setIsModalOpen(true)
   }
 
   const handleDeleteClick = (id: string) => {
-    if (!canManage) return
+    if (!canDelete) return
     setDeleteDialog({ isOpen: true, id, isBulk: false })
   }
 
   const handleBulkDelete = () => {
-    if (!canManage) return
+    if (!canDelete) return
     setDeleteDialog({ isOpen: true, id: null, isBulk: true })
   }
 
   const handleConfirmDelete = async () => {
-    if (!canManage) return
+    if (!canDelete) return
     setDeleteDialog(prev => ({ ...prev, isOpen: false }))
 
     if (deleteDialog.isBulk) {
@@ -157,7 +159,7 @@ export default function CategoriesPage() {
   }
 
   const handleToggleActive = async (id: string, isActive: boolean) => {
-    if (!canManage) return
+    if (!canUpdate) return
     const res = await updateCategory(id, { is_active: !isActive })
     if (res.success) {
       toast.success(`Categoría ${!isActive ? 'activada' : 'desactivada'}`)
@@ -167,7 +169,7 @@ export default function CategoriesPage() {
   }
 
   const handleBulkToggle = async (active: boolean) => {
-    if (!canManage) return
+    if (!canUpdate) return
     let successCount = 0, failCount = 0
     for (const id of selectedIds) {
       const res = await updateCategory(id, { is_active: active })
@@ -178,7 +180,7 @@ export default function CategoriesPage() {
   }
 
   const handleModalSubmit = async (data: any) => {
-    if (!canManage) return Promise.reject()
+    if ((editingCategory && !canUpdate) || (!editingCategory && !canCreate)) return Promise.reject()
     if (editingCategory) {
       const res = await updateCategory(editingCategory.id, data)
       if (res.success) { toast.success('Categoría actualizada'); return }
@@ -196,6 +198,7 @@ export default function CategoriesPage() {
   }, [categories])
 
   const openCreateModal = () => {
+    if (!canCreate) return
     setEditingCategory(undefined)
     setInitialParentId(null)
     setIsModalOpen(true)
@@ -250,7 +253,7 @@ export default function CategoriesPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {canManage && (
+                {canCreate && (
                   <Button
                     onClick={openCreateModal}
                     className="bg-white text-purple-700 hover:bg-white/90 gap-2 font-semibold shadow-lg"
@@ -316,7 +319,7 @@ export default function CategoriesPage() {
 
             {/* Right controls */}
             <div className="flex items-center gap-2">
-              {selectedIds.length > 0 && canManage && (
+              {selectedIds.length > 0 && canBulkSelect && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="gap-1.5">
@@ -325,16 +328,22 @@ export default function CategoriesPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleBulkToggle(true)}>
-                      <CheckCircle className="mr-2 h-4 w-4" /> Activar
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkToggle(false)}>
-                      <XCircle className="mr-2 h-4 w-4" /> Desactivar
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleBulkDelete} className="text-red-600">
-                      <Trash2 className="mr-2 h-4 w-4" /> Eliminar
-                    </DropdownMenuItem>
+                    {canUpdate && (
+                      <>
+                        <DropdownMenuItem onClick={() => handleBulkToggle(true)}>
+                          <CheckCircle className="mr-2 h-4 w-4" /> Activar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleBulkToggle(false)}>
+                          <XCircle className="mr-2 h-4 w-4" /> Desactivar
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {canUpdate && canDelete && <DropdownMenuSeparator />}
+                    {canDelete && (
+                      <DropdownMenuItem onClick={handleBulkDelete} className="text-red-600">
+                        <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -448,7 +457,7 @@ export default function CategoriesPage() {
                     <XCircle className="h-4 w-4 mr-2" />
                     Limpiar filtros
                   </Button>
-                  {canManage && (
+                  {canCreate && (
                     <Button size="sm" onClick={openCreateModal}>
                       <Plus className="h-4 w-4 mr-2" />
                       Crear categoría
@@ -467,16 +476,16 @@ export default function CategoriesPage() {
                 <TabsContent value="grid" className="mt-0">
                   <CategoryGrid
                     categories={filteredCategories}
-                    onEdit={canManage ? handleEdit : undefined}
-                    onDelete={canManage ? handleDeleteClick : undefined}
-                    onToggleActive={canManage ? handleToggleActive : undefined}
-                    onAddChild={canManage ? (parentId) => {
+                    onEdit={canUpdate ? handleEdit : undefined}
+                    onDelete={canDelete ? handleDeleteClick : undefined}
+                    onToggleActive={canUpdate ? handleToggleActive : undefined}
+                    onAddChild={canCreate ? (parentId) => {
                       setEditingCategory(undefined)
                       setInitialParentId(parentId)
                       setIsModalOpen(true)
                     } : undefined}
-                    selectedIds={canManage ? selectedIds : []}
-                    onSelectionChange={canManage ? setSelectedIds : undefined}
+                    selectedIds={canBulkSelect ? selectedIds : []}
+                    onSelectionChange={canBulkSelect ? setSelectedIds : undefined}
                     getCategoryName={(id) => categories.find(c => c.id === id)?.name || 'Desconocida'}
                   />
                 </TabsContent>
@@ -484,13 +493,13 @@ export default function CategoriesPage() {
                 <TabsContent value="list" className="mt-0">
                   <CategoryListView
                     categories={filteredCategories}
-                    onEdit={canManage ? handleEdit : undefined}
-                    onDelete={canManage ? handleDeleteClick : undefined}
-                    onToggleActive={canManage ? handleToggleActive : undefined}
-                    selectedIds={canManage ? selectedIds : []}
-                    onSelectionChange={canManage ? setSelectedIds : undefined}
+                    onEdit={canUpdate ? handleEdit : undefined}
+                    onDelete={canDelete ? handleDeleteClick : undefined}
+                    onToggleActive={canUpdate ? handleToggleActive : undefined}
+                    selectedIds={canBulkSelect ? selectedIds : []}
+                    onSelectionChange={canBulkSelect ? setSelectedIds : undefined}
                     getCategoryName={(id) => categories.find(c => c.id === id)?.name || 'Desconocida'}
-                    onAddChild={canManage ? (parentId) => {
+                    onAddChild={canCreate ? (parentId) => {
                       setEditingCategory(undefined)
                       setInitialParentId(parentId)
                       setIsModalOpen(true)
@@ -501,12 +510,12 @@ export default function CategoriesPage() {
                 <TabsContent value="tree" className="mt-0">
                   <CategoryTreeViewImproved
                     categories={filteredCategories}
-                    onEdit={canManage ? handleEdit : undefined}
-                    onDelete={canManage ? handleDeleteClick : undefined}
-                    onToggleActive={canManage ? handleToggleActive : undefined}
-                    selectedIds={canManage ? selectedIds : []}
-                    onSelectionChange={canManage ? setSelectedIds : undefined}
-                    onAddChild={canManage ? (parentId) => {
+                    onEdit={canUpdate ? handleEdit : undefined}
+                    onDelete={canDelete ? handleDeleteClick : undefined}
+                    onToggleActive={canUpdate ? handleToggleActive : undefined}
+                    selectedIds={canBulkSelect ? selectedIds : []}
+                    onSelectionChange={canBulkSelect ? setSelectedIds : undefined}
+                    onAddChild={canCreate ? (parentId) => {
                       setEditingCategory(undefined)
                       setInitialParentId(parentId)
                       setIsModalOpen(true)

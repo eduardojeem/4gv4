@@ -21,6 +21,12 @@ interface CategoryFilters {
   isActive?: boolean
 }
 
+export interface CategoryCapabilities {
+  canCreate: boolean
+  canUpdate: boolean
+  canDelete: boolean
+}
+
 export function validateCategoryInput(input: Pick<CategoryInsert, 'name' | 'description'>) {
   const errors: Record<string, string> = {}
   const name = (input.name || '').trim()
@@ -51,6 +57,7 @@ export function useCategories() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filters, setFilters] = useState<CategoryFilters>({ isActive: undefined, search: '' })
+  const [capabilities, setCapabilities] = useState<CategoryCapabilities>({ canCreate: false, canUpdate: false, canDelete: false })
 
   const fetchCategories = useCallback(async (override?: CategoryFilters) => {
     const active = override ?? filters
@@ -69,9 +76,18 @@ export function useCategories() {
       }
 
       const result = await readJsonResponse(await fetch(`/api/categories?${params.toString()}`))
+      if (result.permissions) {
+        setCapabilities({
+          canCreate: Boolean(result.permissions.canCreate),
+          canUpdate: Boolean(result.permissions.canUpdate),
+          canDelete: Boolean(result.permissions.canDelete),
+        })
+      }
+
       const mergedData = (result.data ?? []).map((cat: Category) => {
+        const productCount = Number(cat.products_count ?? cat.stats?.product_count ?? 0)
         const stats = {
-          product_count: 0,
+          product_count: productCount,
           total_stock_value: 0,
           avg_margin_percentage: 0,
         }
@@ -79,7 +95,7 @@ export function useCategories() {
         return {
           ...cat,
           stats,
-          products_count: 0,
+          products_count: productCount,
         }
       })
 
@@ -110,6 +126,7 @@ export function useCategories() {
         name: normalizedName,
         description: (payload.description || '').trim(),
         parent_id: payload.parent_id ?? null,
+        global_category_id: payload.global_category_id ?? null,
         is_active: payload.is_active ?? true,
         created_at: payload.created_at ?? now,
         updated_at: now,
@@ -165,9 +182,14 @@ export function useCategories() {
   const deleteCategory = useCallback(async (id: string) => {
     try {
       const childCount = categories.filter((category) => category.parent_id === id).length
+      const productCount = Number(categories.find((category) => category.id === id)?.products_count ?? 0)
 
       if (childCount > 0) {
         return { success: false as const, error: 'No se puede eliminar: Esta categoria tiene subcategorias.' }
+      }
+
+      if (productCount > 0) {
+        return { success: false as const, error: 'No se puede eliminar: Esta categoria tiene productos asociados.' }
       }
 
       await readJsonResponse(await fetch(`/api/categories?id=${encodeURIComponent(id)}`, { method: 'DELETE' }))
@@ -183,7 +205,7 @@ export function useCategories() {
     fetchCategories()
   }, [fetchCategories])
 
-  const memo = useMemo(() => ({ categories, loading, error }), [categories, loading, error])
+  const memo = useMemo(() => ({ categories, loading, error, capabilities }), [categories, loading, error, capabilities])
 
   return {
     ...memo,

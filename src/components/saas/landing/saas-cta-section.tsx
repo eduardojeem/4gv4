@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { type PlatformBranding } from '@/lib/platform/branding'
 
-export function SaaSCTASection() {
+export function SaaSCTASection({ branding }: { branding: PlatformBranding }) {
   return (
     <section className="border-t border-slate-200 bg-slate-950 py-14 text-white dark:border-slate-800">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -15,13 +16,13 @@ export function SaaSCTASection() {
 
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button asChild size="lg" className="gap-2 bg-white text-slate-950 hover:bg-slate-100">
-            <Link href="/register">
-              Crear empresa
+            <Link href={branding.primaryCtaHref}>
+              {branding.primaryCtaLabel}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="border-white/25 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-            <Link href="/marketplace">Explorar marketplace</Link>
+            <Link href={branding.secondaryCtaHref}>{branding.secondaryCtaLabel}</Link>
           </Button>
         </div>
       </div>

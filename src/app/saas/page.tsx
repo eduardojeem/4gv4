@@ -6,14 +6,21 @@ import { SaaSFeaturesSection } from '@/components/saas/landing/saas-features-sec
 import { SaaSHeroSection } from '@/components/saas/landing/saas-hero-section'
 import { SaaSPlansSection } from '@/components/saas/landing/saas-plans-section'
 import { createClient } from '@/lib/supabase/server'
+import { getPlatformBranding } from '@/lib/platform/branding'
 
-export const metadata: Metadata = {
-  title: 'MiPOS SaaS para tiendas, service y marketplace',
-  description: 'Sistema SaaS multiempresa para POS, inventario, ecommerce, reparaciones, delivery y marketplace.',
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getPlatformBranding()
+  return {
+    title: branding.seoTitle,
+    description: branding.seoDescription,
+  }
 }
 
 export default async function SaaSLandingPage() {
-  const supabase = await createClient()
+  const [supabase, branding] = await Promise.all([
+    createClient(),
+    getPlatformBranding(),
+  ])
   
   // Obtenemos los planes desde la DB, solo los activos, ordenados por precio
   const { data: plans } = await supabase
@@ -27,11 +34,11 @@ export default async function SaaSLandingPage() {
       <SaaSPublicNav />
 
       <main>
-        <SaaSHeroSection />
+        <SaaSHeroSection branding={branding} />
         <SaaSFeaturesSection />
         <SaaSBusinessSection />
         <SaaSPlansSection initialPlans={plans || []} />
-        <SaaSCTASection />
+        <SaaSCTASection branding={branding} />
       </main>
     </div>
   )

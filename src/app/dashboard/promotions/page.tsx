@@ -17,7 +17,8 @@ import {
   Plus,
   Download,
   Trash2,
-  Sparkles
+  Sparkles,
+  Tag,
 } from 'lucide-react'
 import { usePromotions } from '@/hooks/use-promotions'
 import type { Promotion } from '@/types/promotion'
@@ -33,9 +34,23 @@ import { RouteGuard } from '@/components/auth/permission-guard'
 import { usePermissions } from '@/hooks/use-permissions'
 
 // Dynamic import to avoid SSR issues with Calendar component
+// Includes loading state to prevent blank screen while chunk downloads
 const PromotionDialog = dynamic(
   () => import('@/components/dashboard/promotions/PromotionDialog').then(mod => ({ default: mod.PromotionDialog })),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="flex items-center gap-3 rounded-2xl border bg-card px-6 py-5 shadow-xl">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-r-transparent" />
+          <div>
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Cargando editor...</p>
+            <p className="text-xs text-slate-500">Preparando el formulario</p>
+          </div>
+        </div>
+      </div>
+    ),
+  }
 )
 
 export default function PromotionsPage() {
@@ -47,6 +62,7 @@ export default function PromotionsPage() {
 
   const {
     promotions,
+    allPromotions,
     loading,
     stats,
     filters,
@@ -64,17 +80,19 @@ export default function PromotionsPage() {
     exportPromotions,
     cleanupExpiredPromotions,
     validatePromotionCode,
-    calculateEffectiveness
+    getUsagePerDay,
+    getQuotaPercent,
   } = usePromotions()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null)
   const [deletingPromotion, setDeletingPromotion] = useState<Promotion | null>(null)
 
-  // Get alerts data
-  const expiringSoon = promotions.filter(p => isPromotionExpiringSoon(p))
+  // Get alerts data — derivado de allPromotions (no filtradas)
+  // para que las alertas no se oculten cuando el user aplica filtros
+  const expiringSoon = allPromotions.filter(p => isPromotionExpiringSoon(p))
   const unused = getUnusedPromotions()
-  const expiredActive = promotions.filter(p => {
+  const expiredActive = allPromotions.filter(p => {
     const status = getPromotionStatus(p)
     return status === 'expired' && p.is_active
   })
@@ -115,13 +133,17 @@ export default function PromotionsPage() {
 
   return (
     <RouteGuard route="/dashboard/promotions">
-      <div className="space-y-6 p-6">
+      <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
         {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Promociones</h1>
-            <p className="text-muted-foreground">
-              Gestiona descuentos, cupones y ofertas especiales.
+        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+              <Tag className="h-3.5 w-3.5" />
+              Marketing
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Promociones</h1>
+            <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+              Gestioná descuentos, cupones y ofertas especiales aplicables en el POS y el marketplace.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -131,8 +153,8 @@ export default function PromotionsPage() {
               onClick={() => handleExport('json')}
               className="gap-2"
             >
-              <Download className="h-4 w-4" />
-              Exportar JSON
+              <Download className="h-3.5 w-3.5" />
+              JSON
             </Button>
             <Button
               variant="outline"
@@ -140,32 +162,32 @@ export default function PromotionsPage() {
               onClick={() => handleExport('csv')}
               className="gap-2"
             >
-              <Download className="h-4 w-4" />
-              Exportar CSV
+              <Download className="h-3.5 w-3.5" />
+              CSV
             </Button>
             {expiredActive.length > 0 && canManage && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleCleanupExpired}
-                className="gap-2 border-red-300 text-red-600 hover:bg-red-50"
+                className="gap-2 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/20"
               >
-                <Sparkles className="h-4 w-4" />
-                Limpiar Expiradas
+                <Sparkles className="h-3.5 w-3.5" />
+                Limpiar {expiredActive.length} expirada{expiredActive.length !== 1 ? 's' : ''}
               </Button>
             )}
             {canCreate && (
-            <Button onClick={handleCreate} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nueva Promoción
-            </Button>
+              <Button onClick={handleCreate} size="sm" className="gap-2">
+                <Plus className="h-3.5 w-3.5" />
+                Nueva promoción
+              </Button>
             )}
           </div>
-        </div>
+        </header>
 
-        {/* Alerts */}
+        {/* Alerts — usa allPromotions para no ocultarse con filtros */}
         <PromotionAlerts
-          promotions={promotions}
+          promotions={allPromotions}
           expiringSoon={expiringSoon}
           unused={unused}
           expiredActive={expiredActive}
@@ -187,7 +209,8 @@ export default function PromotionsPage() {
         <PromotionAnalytics
           topPerformers={getTopPerformingPromotions()}
           unused={unused}
-          calculateEffectiveness={calculateEffectiveness}
+          getUsagePerDay={getUsagePerDay}
+          getQuotaPercent={getQuotaPercent}
         />
 
         {/* Promotions List */}

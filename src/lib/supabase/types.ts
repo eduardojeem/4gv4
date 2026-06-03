@@ -710,6 +710,7 @@ export interface Database {
           id: string
           name: string
           description: string | null
+          global_category_id: string | null
           parent_id: string | null
           is_active: boolean | null
           created_at: string | null
@@ -720,6 +721,7 @@ export interface Database {
           id?: string
           name: string
           description?: string | null
+          global_category_id?: string | null
           parent_id?: string | null
           is_active?: boolean | null
           created_at?: string | null
@@ -730,6 +732,7 @@ export interface Database {
           id?: string
           name?: string
           description?: string | null
+          global_category_id?: string | null
           parent_id?: string | null
           is_active?: boolean | null
           created_at?: string | null

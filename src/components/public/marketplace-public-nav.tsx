@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { usePlatformBranding } from '@/hooks/use-platform-branding'
 
 const navItems = [
   { href: '/marketplace', label: 'Inicio', icon: Store, exact: true },
@@ -30,6 +31,7 @@ export function MarketplacePublicNav() {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { branding } = usePlatformBranding()
   const canAccessDashboard = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'
   const userInitials = user?.profile?.name
     ? user.profile.name
@@ -57,11 +59,15 @@ export function MarketplacePublicNav() {
         {/* Logo */}
         <Link href="/marketplace" className="flex items-center gap-3 shrink-0">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-600 text-white shadow-sm">
-            <LayoutGrid className="h-5 w-5" />
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.marketplaceName} className="h-6 w-6 object-contain" />
+            ) : (
+              <LayoutGrid className="h-5 w-5" />
+            )}
           </div>
           <div className="hidden sm:block">
-            <div className="text-sm font-bold leading-none text-slate-900 dark:text-slate-50">Marketplace</div>
-            <div className="mt-0.5 text-[11px] text-slate-400">Empresas y productos</div>
+            <div className="text-sm font-bold leading-none text-slate-900 dark:text-slate-50">{branding.marketplaceName}</div>
+            <div className="mt-0.5 text-[11px] text-slate-400">{branding.marketplaceTagline}</div>
           </div>
         </Link>
 

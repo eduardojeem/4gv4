@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth } from '@/lib/api/withAdminAuth'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import {
   SystemSettingsPartialSchema,
   mapSettingsToDB
@@ -52,7 +52,7 @@ async function handler(
     }
 
     const dbData = mapSettingsToDB(validation.data)
-    const supabase = await createClient()
+    const supabase = createAdminSupabase()
 
     const { data, error } = await supabase
       .from('system_settings')

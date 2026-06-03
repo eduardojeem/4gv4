@@ -2,11 +2,9 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Download, LayoutGrid, List, Trash2, CheckCircle, XCircle, Clock, RefreshCw, FileUp, FileDown, X, Scale } from 'lucide-react'
+import { Plus, Download, LayoutGrid, List, Trash2, CheckCircle, XCircle, Clock, RefreshCw, FileDown, X, Scale, Truck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SupplierModal } from '@/components/dashboard/supplier-modal'
-import { HeroHeader } from '@/components/suppliers/HeroHeader'
-import { StatsGrid } from '@/components/suppliers/StatsCards'
 import { SearchBar } from '@/components/suppliers/SearchBar'
 import { FilterTags, type FilterTag } from '@/components/suppliers/FilterTags'
 import { SupplierGrid } from '@/components/suppliers/SupplierGrid'
@@ -29,8 +27,63 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+} from '@/components/ui/alert-dialog'
 import { Building2, TrendingUp, Package, DollarSign } from 'lucide-react'
+import { formatCurrency } from '@/lib/currency'
+import { cn } from '@/lib/utils'
+
+// ---------------------------------------------------------------------------
+// Hero metric
+// ---------------------------------------------------------------------------
+
+type Tone = 'indigo' | 'emerald' | 'violet' | 'amber'
+
+const toneClasses: Record<Tone, { wrap: string; iconBg: string }> = {
+  indigo:  { wrap: 'from-indigo-500/10 to-transparent border-indigo-200/50 dark:border-indigo-900/50',     iconBg: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400' },
+  emerald: { wrap: 'from-emerald-500/10 to-transparent border-emerald-200/50 dark:border-emerald-900/50', iconBg: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' },
+  violet:  { wrap: 'from-violet-500/10 to-transparent border-violet-200/50 dark:border-violet-900/50',    iconBg: 'bg-violet-500/15 text-violet-600 dark:text-violet-400' },
+  amber:   { wrap: 'from-amber-500/10 to-transparent border-amber-200/50 dark:border-amber-900/50',       iconBg: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
+}
+
+function MetricCard({
+  label, value, sub, icon: Icon, tone, onClick, loading,
+}: {
+  label: string
+  value: string | number
+  sub: string
+  icon: React.ComponentType<{ className?: string }>
+  tone: Tone
+  onClick?: () => void
+  loading?: boolean
+}) {
+  const t = toneClasses[tone]
+  const Wrapper = onClick ? 'button' : 'div'
+  return (
+    <Wrapper
+      onClick={onClick}
+      className={cn(
+        'overflow-hidden rounded-2xl border bg-gradient-to-br p-5 text-left transition-all',
+        t.wrap,
+        onClick && 'hover:shadow-md cursor-pointer'
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+          ) : (
+            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50 truncate">{value}</p>
+          )}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 truncate">{sub}</p>
+        </div>
+        <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', t.iconBg)}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </Wrapper>
+  )
+}
 
 export default function SuppliersPage() {
   const router = useRouter()
@@ -288,99 +341,95 @@ export default function SuppliersPage() {
   const hasFilters = filterTags.length > 0
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Hero Header */}
-      <HeroHeader
-        title="Gestión de Proveedores"
-        subtitle="Optimiza tus relaciones comerciales y maximiza la eficiencia"
-        stats={{
-          total: stats.total_suppliers,
-          active: stats.active_suppliers,
-          totalOrders: stats.total_orders,
-          totalAmount: stats.total_amount
-        }}
-        actions={
-          <>
-            {!sysLoading && availableIntegrations.length > 0 && (
-              <Button
-                onClick={async () => {
-                  await syncAllSuppliers()
-                  toast.success('Sincronización completada')
-                }}
-                variant="secondary"
-                size="lg"
-                className="bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-sm"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Sincronizar
-              </Button>
-            )}
+    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
+      {/* Header */}
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+            <Truck className="h-3.5 w-3.5" />
+            Inventario
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Proveedores</h1>
+          <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+            Gestión de proveedores, órdenes de compra, integraciones y comparación de precios.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {!sysLoading && availableIntegrations.length > 0 && (
             <Button
-              onClick={() => router.push('/dashboard/suppliers/compare')}
-              variant="secondary"
-              size="lg"
-              className="bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-sm"
+              onClick={async () => {
+                await syncAllSuppliers()
+                toast.success('Sincronización completada')
+              }}
+              variant="outline"
+              size="sm"
+              className="gap-2"
             >
-              <Scale className="h-4 w-4 mr-2" />
-              Comparar Precios
+              <RefreshCw className="h-3.5 w-3.5" />
+              Sincronizar
             </Button>
-            <Button
-              onClick={handleExport}
-              variant="secondary"
-              size="lg"
-              className="bg-white/20 hover:bg-white/30 text-white border-white/30 backdrop-blur-sm"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Exportar
-            </Button>
-            <Button
-              onClick={handleAddSupplier}
-              size="lg"
-              className="bg-white text-purple-600 hover:bg-gray-100 font-semibold shadow-lg hover:shadow-xl transition-all"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Proveedor
-            </Button>
-          </>
-        }
-      />
+          )}
+          <Button
+            onClick={() => router.push('/dashboard/suppliers/compare')}
+            variant="outline"
+            size="sm"
+            className="gap-2"
+          >
+            <Scale className="h-3.5 w-3.5" />
+            Comparar precios
+          </Button>
+          <Button onClick={handleExport} variant="outline" size="sm" className="gap-2">
+            <Download className="h-3.5 w-3.5" />
+            Exportar
+          </Button>
+          <Button onClick={handleAddSupplier} size="sm" className="gap-2">
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo proveedor
+          </Button>
+        </div>
+      </header>
 
       {/* Stats Grid */}
-      <StatsGrid
-        loading={statsLoading}
-        stats={[
-          {
-            icon: Building2,
-            label: 'Total Proveedores',
-            value: stats?.total_suppliers || 0,
-            color: 'blue',
-            onClick: () => setStatusFilter('all')
-          },
-          {
-            icon: TrendingUp,
-            label: 'Proveedores Activos',
-            value: stats?.active_suppliers || 0,
-            color: 'green',
-            onClick: () => setStatusFilter('active')
-          },
-          {
-            icon: Package,
-            label: 'Total Órdenes',
-            value: stats?.total_orders || 0,
-            color: 'purple'
-          },
-          {
-            icon: DollarSign,
-            label: 'Monto Total',
-            value: `$${(stats?.total_amount || 0).toLocaleString()}`,
-            color: 'amber'
-          }
-        ]}
-      />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Total proveedores"
+          value={stats?.total_suppliers || 0}
+          sub="en el sistema"
+          icon={Building2}
+          tone="indigo"
+          onClick={() => setStatusFilter('all')}
+          loading={statsLoading}
+        />
+        <MetricCard
+          label="Activos"
+          value={stats?.active_suppliers || 0}
+          sub="con operaciones recientes"
+          icon={TrendingUp}
+          tone="emerald"
+          onClick={() => setStatusFilter('active')}
+          loading={statsLoading}
+        />
+        <MetricCard
+          label="Órdenes de compra"
+          value={stats?.total_orders || 0}
+          sub="histórico total"
+          icon={Package}
+          tone="violet"
+          loading={statsLoading}
+        />
+        <MetricCard
+          label="Monto total"
+          value={formatCurrency(stats?.total_amount || 0)}
+          sub="facturado a proveedores"
+          icon={DollarSign}
+          tone="amber"
+          loading={statsLoading}
+        />
+      </div>
 
       {/* Search and Filters */}
       <div className="space-y-4">
-        <div className="flex flex-col lg:flex-row gap-4">
+        <div className="flex flex-col gap-4 lg:flex-row">
           <div className="flex-1">
             <SearchBar
               value={searchInput}
@@ -391,26 +440,34 @@ export default function SuppliersPage() {
             />
           </div>
 
-          {/* View Toggle */}
-          <div className="flex gap-2">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'outline'}
-              size="lg"
+          {/* View Toggle como segmented control */}
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+            <button
+              type="button"
               onClick={() => setViewMode('grid')}
-              className="gap-2"
+              className={cn(
+                'flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors',
+                viewMode === 'grid'
+                  ? 'bg-background shadow-sm text-slate-900 dark:text-slate-50'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              )}
             >
               <LayoutGrid className="h-4 w-4" />
               <span className="hidden sm:inline">Cards</span>
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'outline'}
-              size="lg"
+            </button>
+            <button
+              type="button"
               onClick={() => setViewMode('list')}
-              className="gap-2"
+              className={cn(
+                'flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors',
+                viewMode === 'list'
+                  ? 'bg-background shadow-sm text-slate-900 dark:text-slate-50'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              )}
             >
               <List className="h-4 w-4" />
               <span className="hidden sm:inline">Lista</span>
-            </Button>
+            </button>
           </div>
         </div>
 
@@ -438,55 +495,59 @@ export default function SuppliersPage() {
 
       {/* Bulk Actions Toolbar */}
       {selectedIds.length > 0 && (
-        <Card className="p-4 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <span className="font-medium text-blue-900 dark:text-blue-100">
-                {selectedIds.length} proveedor{selectedIds.length > 1 ? 'es' : ''} seleccionado{selectedIds.length > 1 ? 's' : ''}
+        <Card className="border-indigo-200 bg-indigo-50/60 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/20">
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-indigo-500 text-[10px] text-white">
+                  {selectedIds.length}
+                </span>
+                seleccionado{selectedIds.length > 1 ? 's' : ''}
               </span>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={() => setSelectedIds([])}
-                className="text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                className="h-7 text-xs text-slate-500 hover:text-slate-700"
               >
-                Deseleccionar
+                Limpiar
               </Button>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handleBulkStatusChange('active')}
-                className="text-green-700 dark:text-green-300 border-green-300 dark:border-green-700 hover:bg-green-50 dark:hover:bg-green-900/30"
+                className="h-8 gap-1.5 text-xs"
               >
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Marcar Activos
+                <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                Activos
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handleBulkStatusChange('inactive')}
-                className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/30"
+                className="h-8 gap-1.5 text-xs"
               >
-                <XCircle className="h-4 w-4 mr-2" />
-                Marcar Inactivos
+                <XCircle className="h-3.5 w-3.5 text-slate-500" />
+                Inactivos
               </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => handleBulkStatusChange('pending')}
-                className="text-yellow-700 dark:text-yellow-300 border-yellow-300 dark:border-yellow-700 hover:bg-yellow-50 dark:hover:bg-yellow-900/30"
+                className="h-8 gap-1.5 text-xs"
               >
-                <Clock className="h-4 w-4 mr-2" />
-                Marcar Pendientes
+                <Clock className="h-3.5 w-3.5 text-amber-600" />
+                Pendientes
               </Button>
               <Button
                 variant="destructive"
                 size="sm"
                 onClick={handleBulkDelete}
+                className="h-8 gap-1.5 text-xs"
               >
-                <Trash2 className="h-4 w-4 mr-2" />
+                <Trash2 className="h-3.5 w-3.5" />
                 Eliminar
               </Button>
             </div>
@@ -497,7 +558,10 @@ export default function SuppliersPage() {
       {/* Suppliers Display */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <div className="flex items-center gap-3 text-slate-400">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-500 border-r-transparent" />
+            <span className="text-sm">Cargando proveedores...</span>
+          </div>
         </div>
       ) : filteredSuppliers.length === 0 ? (
         hasFilters ? (

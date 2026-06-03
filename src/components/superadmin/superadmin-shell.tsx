@@ -100,6 +100,7 @@ const navItems: NavItem[] = [
     title: 'Contenido web', href: '/superadmin/web-content', icon: Globe, description: 'Páginas públicas del sistema SaaS', section: 'content',
     children: [
       { title: 'Contenido general', href: '/superadmin/web-content',            icon: Globe },
+      { title: 'Marca SaaS',        href: '/superadmin/web-content/brand',      icon: Sparkles },
       { title: 'Landing',           href: '/superadmin/web-content/landing',    icon: LayoutTemplate },
       { title: 'Marketplace',       href: '/superadmin/web-content/marketplace', icon: Store },
     ],
@@ -162,33 +163,34 @@ function getInitials(name: string) {
 // Individual child link
 // ---------------------------------------------------------------------------
 
-function ChildLink({ child, pathname, isLast }: { child: NavChild; pathname: string; isLast: boolean }) {
+function ChildLink({
+  child,
+  pathname,
+  onNavigate,
+}: {
+  child: NavChild
+  pathname: string
+  onNavigate: (href: string) => void
+}) {
   const ChildIcon = child.icon
   const active = isItemActive(pathname, child)
 
   return (
-    <div className="relative flex items-stretch">
-      {/* Tree line: vertical stem + horizontal branch */}
-      <div className="relative mr-3 flex w-3 shrink-0 flex-col items-center">
-        <div className="w-px flex-1 bg-white/10" />
-        {isLast && <div className="w-px flex-1" />}
-        <div className="absolute top-[14px] h-px w-3 bg-white/10" />
-      </div>
-
-      <Link
-        href={child.href}
-        className={cn(
-          'group my-0.5 flex h-8 flex-1 items-center gap-2 rounded-md px-2.5 text-[13px] transition-all duration-150',
-          active
-            ? 'bg-white/10 font-semibold text-white ring-1 ring-white/10'
-            : 'font-normal text-slate-500 hover:bg-white/5 hover:text-slate-200'
-        )}
-      >
-        <ChildIcon className={cn('h-3.5 w-3.5 shrink-0 transition-colors', active ? 'text-white' : 'text-slate-600 group-hover:text-slate-300')} />
-        <span className="truncate">{child.title}</span>
-        {active && <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-white/60" />}
-      </Link>
-    </div>
+    <Link
+      href={child.href}
+      onClick={() => onNavigate(child.href)}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'group flex h-9 items-center gap-2 rounded-md pl-7 pr-2 text-[13px] transition-colors',
+        active
+          ? 'bg-white/10 font-semibold text-white ring-1 ring-white/10'
+          : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'
+      )}
+    >
+      <span className={cn('h-1.5 w-1.5 rounded-full', active ? 'bg-white/60' : 'bg-white/20 group-hover:bg-white/40')} />
+      <ChildIcon className={cn('h-3.5 w-3.5 shrink-0 transition-colors', active ? 'text-white' : 'text-slate-600 group-hover:text-slate-300')} />
+      <span className="truncate">{child.title}</span>
+    </Link>
   )
 }
 
@@ -204,6 +206,7 @@ function NavItemRow({
   sectionColor,
   pathname,
   onToggleExpanded,
+  onNavigate,
 }: {
   item: NavItem
   collapsed: boolean
@@ -212,9 +215,11 @@ function NavItemRow({
   sectionColor: string
   pathname: string
   onToggleExpanded: (title: string) => void
+  onNavigate: (href: string) => void
 }) {
   const Icon = item.icon
   const hasChildren = Boolean(item.children?.length)
+  const isCurrent = isItemActive(pathname, item)
 
   // ── Collapsed mode: icon-only with tooltip ──────────────────────────────
   if (collapsed) {
@@ -223,6 +228,9 @@ function NavItemRow({
         <TooltipTrigger asChild>
           <Link
             href={item.href}
+            onClick={() => onNavigate(item.href)}
+            aria-label={item.title}
+            aria-current={isCurrent ? 'page' : undefined}
             className={cn(
               'relative flex h-9 w-full items-center justify-center rounded-lg transition-all duration-150',
               isActive ? 'bg-white/10 text-white' : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'
@@ -249,6 +257,8 @@ function NavItemRow({
         {isActive && !hasChildren && <span className="absolute -left-3 h-6 w-0.5 rounded-r bg-white/40" />}
         <Link
           href={item.href}
+          onClick={() => onNavigate(item.href)}
+          aria-current={isCurrent ? 'page' : undefined}
           className={cn(
             'group flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-all duration-150',
             isActive && !hasChildren
@@ -283,9 +293,10 @@ function NavItemRow({
           <button
             type="button"
             aria-label={isExpanded ? 'Colapsar sección' : 'Expandir sección'}
+            aria-expanded={isExpanded}
             onClick={() => onToggleExpanded(item.title)}
             className={cn(
-              'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-300'
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-300'
             )}
           >
             <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-250', isExpanded && 'rotate-180')} />
@@ -295,13 +306,13 @@ function NavItemRow({
 
       {/* Children tree */}
       {hasChildren && isExpanded && (
-        <div className="ml-2 mt-1">
-          {item.children!.map((child, idx) => (
+        <div className="ml-3 mt-1 space-y-1 border-l border-white/10 pl-2">
+          {item.children!.map((child) => (
             <ChildLink
               key={child.href}
               child={child}
               pathname={pathname}
-              isLast={idx === item.children!.length - 1}
+              onNavigate={onNavigate}
             />
           ))}
         </div>
@@ -347,7 +358,7 @@ function SidebarContent({
     <div className="flex h-full flex-col bg-slate-900">
       {/* Brand */}
       <div className={cn('flex h-16 shrink-0 items-center border-b border-white/10', collapsed ? 'justify-center px-3' : 'justify-between px-4')}>
-        <Link href="/superadmin" className={cn('flex min-w-0 items-center gap-3', collapsed && 'mx-auto')}>
+        <Link href="/superadmin" onClick={() => onNavigate('/superadmin')} className={cn('flex min-w-0 items-center gap-3', collapsed && 'mx-auto')}>
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500 shadow-lg shadow-indigo-500/30">
             <Crown className="h-4 w-4 text-white" />
           </div>
@@ -429,6 +440,7 @@ function SidebarContent({
                         sectionColor={color}
                         pathname={pathname}
                         onToggleExpanded={onToggleExpanded}
+                        onNavigate={onNavigate}
                       />
                     )
                   })}
@@ -731,14 +743,18 @@ export function SuperAdminShell({
               {/* User chip */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex cursor-default items-center gap-2 rounded-lg px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
+                  <button
+                    type="button"
+                    aria-label="Super Admin"
+                    className="flex cursor-default items-center gap-2 rounded-lg px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
                       {getInitials(userDisplayName)}
                     </div>
                     <span className="hidden max-w-[110px] truncate text-xs font-medium text-slate-700 dark:text-slate-300 sm:block">
                       {userDisplayName}
                     </span>
-                  </div>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
                   <p className="font-semibold">{userDisplayName}</p>

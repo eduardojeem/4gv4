@@ -4,13 +4,16 @@ import { useState } from 'react'
 import type { ElementType } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Building2, CheckCircle2, ChevronDown, ExternalLink, Globe, Loader2, Mail, MapPin, MessageCircle, Package, Phone, Settings, ShoppingCart, Store, Users } from 'lucide-react'
+import { ArrowRight, Building2, CheckCircle2, ChevronDown, ExternalLink, Globe, Loader2, Mail, MapPin, MessageCircle, Package, Phone, Settings, ShieldAlert, ShoppingCart, Store, Users } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
 import { toast } from 'sonner'
+import { useAuth } from '@/contexts/auth-context'
 
 type OnboardingStep = {
   title: string
@@ -69,7 +72,7 @@ function buildSteps(slug: string): OnboardingStep[] {
     {
       title: 'Configura tu negocio',
       description: 'Revisa datos publicos, moneda, zona horaria y datos visibles para clientes.',
-      href: '/admin/settings',
+      href: '/dashboard/onboarding#company-info',
       icon: Building2,
       accent: 'bg-cyan-50 text-cyan-700 ring-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-200 dark:ring-cyan-800',
       doneKey: 'hasCompanyInfo',
@@ -146,6 +149,7 @@ function formatTrialDate(value: string | null) {
 
 export function OnboardingClient({ organization, subscription, completedAt, stepProgress, initialCompanyInfo }: OnboardingClientProps) {
   const router = useRouter()
+  const { isAdmin } = useAuth()
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<CompanyInfoForm>(initialCompanyInfo)
   const [error, setError] = useState('')
@@ -162,8 +166,10 @@ export function OnboardingClient({ organization, subscription, completedAt, step
 
   const publicUrl = `/${organization.slug}/inicio`
   const trackUrl = `/${organization.slug}/track`
-  const steps = buildSteps(organization.slug)
+  const steps = buildSteps(organization.slug).filter((step) => step.doneKey !== 'hasTeam' || isAdmin)
   const stepsCompleted = steps.filter(s => stepProgress[s.doneKey]).length
+  const progressValue = steps.length ? Math.round((stepsCompleted / steps.length) * 100) : 0
+  const nextStep = steps.find((step) => !stepProgress[step.doneKey]) ?? null
   const isRevisit = Boolean(completedAt)
 
   const updateField = (field: keyof CompanyInfoForm, value: string) => {
@@ -172,6 +178,11 @@ export function OnboardingClient({ organization, subscription, completedAt, step
   }
 
   const completeOnboarding = async () => {
+    if (!isAdmin) {
+      toast.error('Solo administradores pueden finalizar el onboarding')
+      return
+    }
+
     const requiredFields: Array<[keyof CompanyInfoForm, string]> = [
       ['displayName', 'Nombre publico'],
       ['phone', 'Telefono'],
@@ -223,6 +234,15 @@ export function OnboardingClient({ organization, subscription, completedAt, step
                 : <Badge variant="secondary">{stepsCompleted}/{steps.length} pasos listos</Badge>
               }
             </div>
+            {!completedAt && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Progreso</span>
+                  <span>{progressValue}%</span>
+                </div>
+                <Progress value={progressValue} className="h-2" />
+              </div>
+            )}
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white sm:text-4xl">
                 Bienvenido a {organization.name}
@@ -231,6 +251,15 @@ export function OnboardingClient({ organization, subscription, completedAt, step
                 Estos pasos dejan lista la empresa para vender, recibir pedidos desde la tienda publica y permitir que los clientes rastreen sus ordenes.
               </p>
             </div>
+            {isRevisit && (
+              <Alert className="border-slate-200 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/40">
+                <CheckCircle2 />
+                <AlertTitle>Configuracion completada</AlertTitle>
+                <AlertDescription>
+                  Podes actualizar los datos cuando quieras. Esto no reinicia la configuracion.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="flex flex-wrap gap-3">
               <Button asChild>
                 <Link href="/dashboard/products">
@@ -273,7 +302,7 @@ export function OnboardingClient({ organization, subscription, completedAt, step
         </div>
       </section>
 
-      <section className="grid gap-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950 lg:grid-cols-[1fr_0.8fr]">
+      <section id="company-info" className="grid gap-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950 lg:grid-cols-[1fr_0.8fr]">
         <div>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-200 dark:ring-cyan-800">
@@ -572,49 +601,100 @@ export function OnboardingClient({ organization, subscription, completedAt, step
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
-        {steps.map((step) => {
-          const Icon = step.icon
-          const done = stepProgress[step.doneKey]
-          const isExternal = step.href.startsWith('/')  && !step.href.startsWith('/admin') && !step.href.startsWith('/dashboard')
+      {!completedAt && nextStep && (
+        <Alert className="border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+          <ArrowRight />
+          <AlertTitle>Siguiente paso recomendado</AlertTitle>
+          <AlertDescription>
+            <p className="text-sm text-muted-foreground">{nextStep.title}</p>
+            <div className="mt-3">
+              <Button size="sm" asChild>
+                <Link
+                  href={nextStep.href}
+                  target={nextStep.href.startsWith('/') && !nextStep.href.startsWith('/admin') && !nextStep.href.startsWith('/dashboard') ? '_blank' : undefined}
+                  rel={nextStep.href.startsWith('/') && !nextStep.href.startsWith('/admin') && !nextStep.href.startsWith('/dashboard') ? 'noopener noreferrer' : undefined}
+                >
+                  Continuar
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
-          return (
-            <Link
-              key={step.title}
-              href={step.href}
-              target={isExternal ? '_blank' : undefined}
-              rel={isExternal ? 'noopener noreferrer' : undefined}
-              className="group block"
-            >
-              <Card className={`h-full transition-all hover:-translate-y-0.5 hover:shadow-md ${done ? 'border-emerald-200 dark:border-emerald-800' : ''}`}>
-                <CardContent className="flex h-full gap-4 p-5">
-                  <div className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ${step.accent}`}>
-                    <Icon className="h-5 w-5" />
-                    {done && (
-                      <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-950">
-                        <CheckCircle2 className="h-3 w-3 text-white" />
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h2 className={`font-semibold group-hover:text-cyan-700 dark:group-hover:text-cyan-300 ${done ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-950 dark:text-white'}`}>
-                        {step.title}
-                      </h2>
-                      {isExternal && <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950 dark:text-white">Pasos de configuracion</h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Completa cada paso para dejar lista la operacion.</p>
+          </div>
+          <Badge variant="secondary">{stepsCompleted}/{steps.length}</Badge>
+        </div>
+
+        <ol className="mt-5 space-y-3">
+          {steps.map((step, index) => {
+            const Icon = step.icon
+            const done = stepProgress[step.doneKey]
+            const isExternal = step.href.startsWith('/') && !step.href.startsWith('/admin') && !step.href.startsWith('/dashboard')
+
+            return (
+              <li key={step.title}>
+                <Card className={`${done ? 'border-emerald-200 dark:border-emerald-800' : 'border-slate-200 dark:border-slate-800'} shadow-none`}>
+                  <CardContent className="flex gap-4 p-5">
+                    <div className="flex flex-col items-center gap-2 pt-0.5">
+                      <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${done ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>
+                        {done ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+                      </div>
+                      <div className={`h-full w-px ${index === steps.length - 1 ? 'bg-transparent' : 'bg-slate-200 dark:bg-slate-800'}`} />
                     </div>
-                    <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
-                      {step.description}
-                    </p>
-                    {done && (
-                      <p className="mt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">Listo</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          )
-        })}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-3">
+                            <div className={`flex h-10 w-10 items-center justify-center rounded-xl ring-1 ${step.accent}`}>
+                              <Icon className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className={`truncate font-semibold ${done ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-950 dark:text-white'}`}>
+                                {step.title}
+                              </h3>
+                              <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
+                                {step.description}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {isExternal && <ExternalLink className="h-4 w-4 text-slate-400" />}
+                          {done ? (
+                            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-200">Listo</Badge>
+                          ) : (
+                            <Badge variant="outline">Pendiente</Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Button size="sm" variant={done ? 'outline' : 'default'} asChild>
+                          <Link
+                            href={step.href}
+                            target={isExternal ? '_blank' : undefined}
+                            rel={isExternal ? 'noopener noreferrer' : undefined}
+                          >
+                            {done ? 'Ver paso' : 'Ir al paso'}
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </li>
+            )
+          })}
+        </ol>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900/50">
@@ -631,11 +711,16 @@ export function OnboardingClient({ organization, subscription, completedAt, step
           <Button variant="outline" asChild>
             <Link href="/dashboard/orders">Ver pedidos</Link>
           </Button>
-          <Button onClick={completeOnboarding} disabled={saving} variant={isRevisit ? 'outline' : 'default'}>
+          <Button onClick={completeOnboarding} disabled={saving || !isAdmin} variant={isRevisit ? 'outline' : 'default'}>
             {saving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Guardando...
+              </>
+            ) : !isAdmin ? (
+              <>
+                <ShieldAlert className="mr-2 h-4 w-4" />
+                Solo administradores
               </>
             ) : isRevisit ? (
               <>

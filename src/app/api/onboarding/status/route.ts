@@ -69,7 +69,7 @@ export async function GET() {
     })
   }
 
-  const [{ data: settings, error: settingsError }, { data: branch, error: branchError }] = await Promise.all([
+  const [{ data: settings, error: settingsError }, { data: branch, error: branchError }, { data: companyInfoSetting, error: companyInfoError }] = await Promise.all([
     admin
       .from('organization_settings')
       .select('display_name, currency, timezone, modules')
@@ -81,20 +81,27 @@ export async function GET() {
       .eq('organization_id', organization.id)
       .eq('is_default', true)
       .maybeSingle(),
+    admin
+      .from('website_settings')
+      .select('value')
+      .eq('organization_id', organization.id)
+      .eq('key', 'company_info')
+      .maybeSingle(),
   ])
 
-  if (settingsError || branchError) {
+  if (settingsError || branchError || companyInfoError) {
     logger.error('Failed to load onboarding status settings', {
-      error: settingsError?.message ?? branchError?.message,
+      error: settingsError?.message ?? branchError?.message ?? companyInfoError?.message,
       organizationId: organization.id,
     })
     return NextResponse.json({ error: 'No se pudo cargar la configuracion.' }, { status: 500 })
   }
 
   const modules = (settings?.modules ?? {}) as SettingsModules
+  const companyInfo = (companyInfoSetting?.value ?? {}) as { phone?: string; address?: string }
   const isCompleted = modules.onboarding?.status === 'completed'
-  const hasCompanyBasics = Boolean(settings?.display_name && settings.currency && settings.timezone)
-  const hasContactBasics = Boolean(branch?.phone && branch.address && branch.city)
+  const hasCompanyBasics = Boolean((settings?.display_name || organization.name) && settings?.currency && settings?.timezone)
+  const hasContactBasics = Boolean((branch?.phone || companyInfo.phone) && (branch?.address || companyInfo.address) && branch?.city)
 
   return NextResponse.json({
     needsOnboarding: !isCompleted || !hasCompanyBasics || !hasContactBasics,

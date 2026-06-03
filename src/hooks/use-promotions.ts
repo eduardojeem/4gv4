@@ -77,43 +77,51 @@ export function usePromotions() {
     })
   }, [promotions, filters])
 
-  // Statistics
-  const stats = useMemo((): PromotionStats => {
+  // Statistics + arrays derivados (single pass para evitar N filters)
+  const { stats, expiringSoonArray, expiredActiveArray } = useMemo(() => {
     const now = new Date()
-    
-    const active = promotions.filter(p => {
+    let active = 0, scheduled = 0, expired = 0, inactive = 0
+    let totalUsage = 0
+    const expiringSoonArr: Promotion[] = []
+    const expiredActiveArr: Promotion[] = []
+
+    for (const p of promotions) {
       const start = p.start_date ? parseISO(p.start_date) : null
       const end = p.end_date ? parseISO(p.end_date) : null
-      return p.is_active && (!start || isBefore(start, now)) && (!end || isAfter(end, now))
-    }).length
+      const isExpired = end ? isBefore(end, now) : false
+      const isScheduled = start ? isAfter(start, now) : false
 
-    const scheduled = promotions.filter(p => {
-      const start = p.start_date ? parseISO(p.start_date) : null
-      return p.is_active && start && isAfter(start, now)
-    }).length
+      totalUsage += p.usage_count || 0
 
-    const expired = promotions.filter(p => {
-      const end = p.end_date ? parseISO(p.end_date) : null
-      return end && isBefore(end, now)
-    }).length
+      if (!p.is_active) {
+        inactive++
+      } else if (isScheduled) {
+        scheduled++
+      } else if (isExpired) {
+        expiredActiveArr.push(p)
+      } else {
+        active++
+        if (end) {
+          const daysLeft = differenceInDays(end, now)
+          if (daysLeft > 0 && daysLeft <= 7) expiringSoonArr.push(p)
+        }
+      }
 
-    const inactive = promotions.filter(p => !p.is_active).length
-    
-    const totalUsage = promotions.reduce((sum, p) => sum + (p.usage_count || 0), 0)
-    
-    const expiringSoon = promotions.filter(p => {
-      const end = p.end_date ? parseISO(p.end_date) : null
-      return p.is_active && end && differenceInDays(end, now) <= 7 && differenceInDays(end, now) > 0
-    }).length
+      if (isExpired) expired++
+    }
 
     return {
-      total: promotions.length,
-      active,
-      scheduled,
-      expired,
-      inactive,
-      totalUsage,
-      expiringSoon
+      stats: {
+        total: promotions.length,
+        active,
+        scheduled,
+        expired,
+        inactive,
+        totalUsage,
+        expiringSoon: expiringSoonArr.length,
+      } as PromotionStats,
+      expiringSoonArray: expiringSoonArr,
+      expiredActiveArray: expiredActiveArr,
     }
   }, [promotions])
 
@@ -224,72 +232,20 @@ export function usePromotions() {
     return daysRemaining <= days && daysRemaining > 0
   }, [])
 
-  // Calculate promotion effectiveness
-  const calculateEffectiveness = useCallback((promotion: Promotion) => {
-    if (!promotion.usage_count || promotion.usage_count === 0) return 0
-    
-    const now = new Date()
-    const startDate = promotion.start_date ? parseISO(promotion.start_date) : null
-    const daysActive = startDate ? differenceInDays(now, startDate) : 1
-    
-    // Usage per day
-    const usagePerDay = promotion.usage_count / Math.max(daysActive, 1)
-    
-    // Effectiveness score (0-100)
-    let score = 0
-    
-    // Base score from usage frequency
-    if (usagePerDay >= 10) score += 40
-    else if (usagePerDay >= 5) score += 30
-    else if (usagePerDay >= 1) score += 20
-    else score += 10
-    
-    // Bonus for high usage rate if limit exists
-    if (promotion.usage_limit) {
-      const usageRate = promotion.usage_count / promotion.usage_limit
-      if (usageRate >= 0.8) score += 30
-      else if (usageRate >= 0.5) score += 20
-      else if (usageRate >= 0.2) score += 10
-    } else {
-      score += 15 // Bonus for unlimited usage
-    }
-    
-    // Bonus for active status
-    if (promotion.is_active) score += 15
-    
-    // Penalty for expiring soon
-    if (isPromotionExpiringSoon(promotion)) score -= 10
-    
-    return Math.min(Math.max(score, 0), 100)
-  }, [isPromotionExpiringSoon])
+  // Métricas reales y accionables (no scores arbitrarios)
 
-  // Calculate ROI (simplified)
-  const calculateROI = useCallback((promotion: Promotion) => {
+  /** Promedio de usos por día desde que la promo está activa */
+  const getUsagePerDay = useCallback((promotion: Promotion): number => {
     if (!promotion.usage_count || promotion.usage_count === 0) return 0
-    
-    // Estimated average order value (this could be configurable)
-    const avgOrderValue = 150000 // 150k PYG
-    
-    // Calculate discount per use
-    let discountPerUse = 0
-    if (promotion.type === 'percentage') {
-      const estimatedDiscount = (avgOrderValue * promotion.value) / 100
-      discountPerUse = promotion.max_discount 
-        ? Math.min(estimatedDiscount, promotion.max_discount)
-        : estimatedDiscount
-    } else {
-      discountPerUse = promotion.value
-    }
-    
-    const totalDiscountGiven = discountPerUse * promotion.usage_count
-    const totalRevenue = avgOrderValue * promotion.usage_count
-    
-    // ROI = (Revenue - Discount) / Discount * 100
-    const roi = totalDiscountGiven > 0 
-      ? ((totalRevenue - totalDiscountGiven) / totalDiscountGiven) * 100
-      : 0
-    
-    return Math.round(roi)
+    const startDate = promotion.start_date ? parseISO(promotion.start_date) : null
+    const daysActive = startDate ? Math.max(differenceInDays(new Date(), startDate), 1) : 1
+    return Math.round((promotion.usage_count / daysActive) * 10) / 10
+  }, [])
+
+  /** Porcentaje de la cuota de usos consumida (null si no hay límite) */
+  const getQuotaPercent = useCallback((promotion: Promotion): number | null => {
+    if (!promotion.usage_limit || promotion.usage_limit === 0) return null
+    return Math.min(100, Math.round(((promotion.usage_count || 0) / promotion.usage_limit) * 100))
   }, [])
 
   // Advanced operations
@@ -337,33 +293,17 @@ export function usePromotions() {
     }
   }, [fetchPromotions])
 
-  const bulkDelete = useCallback(async (promotionIds: string[]) => {
-    try {
-      await Promise.all(promotionIds.map(async (id) => {
-        const response = await fetch(`/api/promotions/${id}`, { method: 'DELETE' })
-        const result = await response.json()
-        if (!response.ok) throw new Error(result.error || 'No se pudo eliminar una promocion')
-      }))
-      
-      toast.success(`${promotionIds.length} promociones eliminadas`)
-      await fetchPromotions()
-      return true
-    } catch (error) {
-      console.error('Error bulk deleting promotions:', error)
-      toast.error('Error al eliminar promociones')
-      return false
-    }
-  }, [fetchPromotions])
-
   // Validation functions
   const validatePromotionCode = useCallback(async (code: string, excludeId?: string) => {
     try {
-      const response = await fetch('/api/promotions?limit=100', { cache: 'no-store' })
-      const result = await response.json()
+      const params = new URLSearchParams({ code })
+      if (excludeId) params.set('exclude', excludeId)
+      const response = await fetch(`/api/promotions/check-code?${params.toString()}`, { cache: 'no-store' })
+      const result = await response.json() as { available?: boolean; error?: string }
 
-      if (!response.ok) throw new Error(result.error || 'No se pudo validar el codigo')
+      if (!response.ok) throw new Error(result.error || 'No se pudo validar el código')
 
-      return !(result.promotions || []).some((promotion: Promotion) => promotion.code === code && promotion.id !== excludeId)
+      return Boolean(result.available)
     } catch (error) {
       console.error('Error validating promotion code:', error)
       return false
@@ -381,57 +321,6 @@ export function usePromotions() {
     }
     return value >= 0
   }, [])
-
-  // Analytics and insights
-  const getPromotionInsights = useCallback((promotion: Promotion) => {
-    const now = new Date()
-    const startDate = promotion.start_date ? parseISO(promotion.start_date) : null
-    const endDate = promotion.end_date ? parseISO(promotion.end_date) : null
-    
-    const insights = {
-      status: getPromotionStatus(promotion),
-      daysRemaining: endDate ? differenceInDays(endDate, now) : null,
-      daysActive: startDate ? differenceInDays(now, startDate) : null,
-      usageRate: promotion.usage_limit ? (promotion.usage_count || 0) / promotion.usage_limit : null,
-      isExpiringSoon: isPromotionExpiringSoon(promotion),
-      canBeActivated: !promotion.is_active && (!startDate || isBefore(startDate, now)),
-      shouldBeDeactivated: promotion.is_active && endDate && isBefore(endDate, now),
-      effectiveness: calculateEffectiveness(promotion),
-      roi: calculateROI(promotion)
-    }
-    
-    return insights
-  }, [getPromotionStatus, isPromotionExpiringSoon, calculateEffectiveness, calculateROI])
-
-
-  // Get promotion performance metrics
-  const getPromotionMetrics = useCallback(() => {
-    const activePromotions = promotions.filter(p => p.is_active)
-    const totalUsage = promotions.reduce((sum, p) => sum + (p.usage_count || 0), 0)
-    
-    const topPerformers = [...promotions]
-      .filter(p => p.usage_count && p.usage_count > 0)
-      .sort((a, b) => (b.usage_count || 0) - (a.usage_count || 0))
-      .slice(0, 5)
-    
-    const underperformers = promotions.filter(p => p.is_active && (p.usage_count || 0) === 0)
-    
-    const metrics = {
-      totalPromotions: promotions.length,
-      activePromotions: activePromotions.length,
-      totalUsage,
-      avgUsagePerPromotion: promotions.length > 0 ? totalUsage / promotions.length : 0,
-      topPerformers,
-      underperformers,
-      effectivenessDistribution: {
-        high: promotions.filter(p => calculateEffectiveness(p) >= 70).length,
-        medium: promotions.filter(p => calculateEffectiveness(p) >= 40 && calculateEffectiveness(p) < 70).length,
-        low: promotions.filter(p => calculateEffectiveness(p) < 40).length
-      }
-    }
-    
-    return metrics
-  }, [promotions, calculateEffectiveness])
 
   const getTopPerformingPromotions = useCallback((limit: number = 5) => {
     return [...promotions]
@@ -527,41 +416,40 @@ export function usePromotions() {
     loading,
     stats,
     filters,
-    
+    expiringSoonArray,    // derivado del único pass de stats
+    expiredActiveArray,   // derivado del único pass de stats
+
     // Basic CRUD
     fetchPromotions,
     createPromotion,
     updatePromotion,
     deletePromotion,
     togglePromotionStatus,
-    
+
     // Advanced operations
     duplicatePromotion,
     bulkUpdateStatus,
-    bulkDelete,
-    
+
     // Validation
     validatePromotionCode,
     validatePromotionDates,
     validatePromotionValue,
-    
-    // Analytics
-    getPromotionInsights,
+
+    // Métricas reales y accionables
     getTopPerformingPromotions,
     getUnusedPromotions,
-    getPromotionMetrics,
-    calculateEffectiveness,
-    calculateROI,
-    
+    getUsagePerDay,
+    getQuotaPercent,
+
     // Filters
     updateFilters,
     clearFilters,
-    
+
     // Utilities
     getPromotionStatus,
     isPromotionExpiringSoon,
     exportPromotions,
     subscribeToPromotions,
-    cleanupExpiredPromotions
+    cleanupExpiredPromotions,
   }
 }

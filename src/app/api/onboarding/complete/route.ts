@@ -49,6 +49,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const admin = createAdminSupabase()
+
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('role, status')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    logger.error('Failed to load onboarding user profile', { error: profileError.message, userId: user.id })
+    return NextResponse.json({ error: 'No se pudo validar el usuario.' }, { status: 500 })
+  }
+
+  const role = typeof profile?.role === 'string' ? profile.role : null
+  const status = typeof profile?.status === 'string' ? profile.status : null
+  const isActiveUser = status !== 'inactive' && status !== 'suspended'
+  const isAdmin = Boolean(isActiveUser && (role === 'admin' || role === 'super_admin'))
+
+  if (!isAdmin) {
+    return NextResponse.json({ error: 'Solo administradores pueden finalizar el onboarding.' }, { status: 403 })
+  }
+
   const body = await request.json().catch(() => null)
   const validation = onboardingSchema.safeParse(body)
 
@@ -66,8 +88,6 @@ export async function POST(request: Request) {
   }
 
   const input = validation.data
-
-  const admin = createAdminSupabase()
 
   const { data: membership, error: membershipError } = await admin
     .from('organization_members')

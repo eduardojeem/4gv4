@@ -612,7 +612,7 @@ export function useRequireAuth() {
   useEffect(() => {
     if (!loading && !user) {
       // Redirigir a login si no está autenticado
-      window.location.href = '/auth/login'
+      window.location.href = '/login'
     }
   }, [user, loading])
 

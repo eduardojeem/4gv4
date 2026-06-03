@@ -19,7 +19,7 @@ import type { GlobalCategorySuggestion } from '@/hooks/useGlobalCategorySuggest'
 interface CategoryModalProps {
     isOpen: boolean
     onClose: () => void
-    onSubmit: (data: { name: string; description: string; parent_id: string | null; is_active: boolean }) => Promise<void>
+    onSubmit: (data: { name: string; description: string; parent_id: string | null; global_category_id: string | null; is_active: boolean }) => Promise<void>
     category?: Category
     categories: Category[]
     loading?: boolean
@@ -90,7 +90,6 @@ export function CategoryModal({
                 description: description.trim(),
                 parent_id: parentId === 'none' ? null : parentId,
                 is_active: isActive,
-                // @ts-expect-error — campo extendido para mapeo global
                 global_category_id: globalCategoryId ?? null,
             })
             onClose()

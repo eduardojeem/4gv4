@@ -3,6 +3,7 @@ import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { SaaSCTASection } from '@/components/saas/landing/saas-cta-section'
 import { SaaSPlansSection } from '@/components/saas/landing/saas-plans-section'
 import { createClient } from '@/lib/supabase/server'
+import { getPlatformBranding } from '@/lib/platform/branding'
 
 export const metadata: Metadata = {
   title: 'Planes | MiPOS SaaS',
@@ -10,7 +11,10 @@ export const metadata: Metadata = {
 }
 
 export default async function SaaSPlansPage() {
-  const supabase = await createClient()
+  const [supabase, branding] = await Promise.all([
+    createClient(),
+    getPlatformBranding(),
+  ])
   
   // Obtenemos los planes desde la DB, solo los activos, ordenados por precio
   const { data: plans } = await supabase
@@ -25,7 +29,7 @@ export default async function SaaSPlansPage() {
 
       <main>
         <SaaSPlansSection initialPlans={plans || []} />
-        <SaaSCTASection />
+        <SaaSCTASection branding={branding} />
       </main>
     </div>
   )
