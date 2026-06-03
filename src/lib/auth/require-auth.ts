@@ -29,7 +29,13 @@ export async function requireAuth(): Promise<AuthResult> {
 
     return {
       authenticated: false,
-      response: NextResponse.json({ error }, { status }),
+      response: NextResponse.json(
+        {
+          error,
+          code: result.reason === 'unauthenticated' ? 'AUTH_REQUIRED' : 'ACCOUNT_INACTIVE',
+        },
+        { status }
+      ),
     }
   }
 
@@ -56,7 +62,11 @@ export async function requireAdmin(): Promise<AuthResult> {
     return {
       authenticated: false,
       response: NextResponse.json(
-        { error: 'Permisos insuficientes. Se requiere rol de administrador.' },
+        {
+          error: 'Permisos insuficientes. Se requiere rol de administrador.',
+          code: 'ADMIN_ROLE_REQUIRED',
+          role: result.role,
+        },
         { status: 403 }
       ),
     }
@@ -79,7 +89,11 @@ export async function requireStaff(): Promise<AuthResult> {
     return {
       authenticated: false,
       response: NextResponse.json(
-        { error: 'Permisos insuficientes. Se requiere rol de personal.' },
+        {
+          error: 'Permisos insuficientes. Se requiere rol de personal.',
+          code: 'STAFF_ROLE_REQUIRED',
+          role: result.role,
+        },
         { status: 403 }
       ),
     }

@@ -8,6 +8,7 @@ import { BranchProvider } from "@/contexts/branch-context";
 import { SWRProvider } from "@/providers/swr-provider";
 import { Toaster } from "sonner";
 import { DEFAULT_SYSTEM_COLOR_SCHEME } from "@/lib/theme/color-schemes";
+import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from "@/lib/platform/branding";
 import "./globals.css";
 import { PredictivePrefetchInit } from "@/components/util/PredictivePrefetchInit";
 
@@ -22,13 +23,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "4G celulares - Sistema de Gestión",
-  description: "Sistema completo de gestión para reparación de celulares y punto de venta",
-  icons: {
-    icon: '/globe.svg',
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  let branding = DEFAULT_PLATFORM_BRANDING;
+
+  try {
+    branding = await getPlatformBranding();
+  } catch {
+    branding = DEFAULT_PLATFORM_BRANDING;
+  }
+
+  return {
+    title: branding.platformName,
+    description: branding.seoDescription,
+    icons: {
+      icon: branding.logoUrl || '/globe.svg',
+    },
+  };
+}
 
 export default function RootLayout({
   children,

@@ -47,6 +47,11 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackVa
   }
 }
 
+type SupabaseSingleResponse<T> = {
+  data: T | null
+  error: { message?: string } | null
+}
+
 function applyResponseCookies(target: NextResponse, source: NextResponse): NextResponse {
   source.cookies.getAll().forEach((cookie) => {
     target.cookies.set(cookie)
@@ -103,7 +108,15 @@ export async function middleware(request: NextRequest) {
   }
 
   const requestHeaders = new Headers(request.headers)
-  const tenantSlug = getTenantSlugFromRequest(request) ?? getTenantSlugFromPath(request.nextUrl.pathname)
+  const pathname = request.nextUrl.pathname
+
+  // Only inject tenant slug for public-facing routes, never for dashboard/admin/API
+  const isAppRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/admin') ||
+    pathname.startsWith('/superadmin') || pathname.startsWith('/api/')
+
+  const tenantSlug = isAppRoute
+    ? null
+    : (getTenantSlugFromRequest(request) ?? getTenantSlugFromPath(pathname))
 
   if (tenantSlug) {
     requestHeaders.set('x-tenant-slug', tenantSlug)
@@ -148,7 +161,6 @@ export async function middleware(request: NextRequest) {
   })
 
   // Clasificar la ruta
-  const pathname = request.nextUrl.pathname
   const isProtectedRoute = pathname.startsWith('/dashboard')
   const isAdminRoute = pathname.startsWith('/admin')
   const isSuperAdminRoute = pathname.startsWith('/superadmin')
@@ -181,32 +193,40 @@ export async function middleware(request: NextRequest) {
   let profileIsActive = true
   if (user) {
     try {
-      const { data: roleWithStatus, error: roleWithStatusError } = await withTimeout<any>(
-        Promise.resolve(supabase
+      const roleWithStatusQuery = Promise.resolve(
+        supabase
           .from('user_roles')
           .select('role,is_active')
           .eq('user_id', user.id)
-          .maybeSingle()),
+          .maybeSingle()
+      ) as unknown as Promise<SupabaseSingleResponse<{ role: string | null; is_active: boolean | null }>>
+
+      const { data: roleWithStatus, error: roleWithStatusError } = await withTimeout(
+        roleWithStatusQuery,
         PROXY_PROFILE_TIMEOUT_MS,
         { data: null, error: null }
       )
 
-      let rawRole = roleWithStatus?.role as string | undefined
+      let rawRole = roleWithStatus?.role ?? undefined
 
       if (!roleWithStatusError) {
         roleIsActive = roleWithStatus?.is_active !== false
       } else if (roleWithStatusError.message?.includes('is_active')) {
-        const { data: roleOnly } = await withTimeout<any>(
-          Promise.resolve(supabase
+        const roleOnlyQuery = Promise.resolve(
+          supabase
             .from('user_roles')
             .select('role')
             .eq('user_id', user.id)
-            .maybeSingle()),
+            .maybeSingle()
+        ) as unknown as Promise<SupabaseSingleResponse<{ role: string | null }>>
+
+        const { data: roleOnly } = await withTimeout(
+          roleOnlyQuery,
           PROXY_PROFILE_TIMEOUT_MS,
           { data: null, error: null }
         )
 
-        rawRole = roleOnly?.role as string | undefined
+        rawRole = roleOnly?.role ?? undefined
       }
 
       const profile = await withTimeout(

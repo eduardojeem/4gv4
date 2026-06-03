@@ -14,23 +14,35 @@ export function getTenantSlugFromHost(host: string, rootDomain = process.env.APP
     return null
   }
 
-  if (!rootDomain) {
-    const [subdomain] = normalizedHost.split('.')
-    return subdomain && subdomain !== 'www' ? subdomain : null
+  if (rootDomain) {
+    const normalizedRoot = stripPort(rootDomain)
+
+    // Exact root domain or www variant → not a tenant
+    if (normalizedHost === normalizedRoot || normalizedHost === `www.${normalizedRoot}`) {
+      return null
+    }
+
+    // Only treat as tenant if it's a genuine subdomain of the root
+    if (!normalizedHost.endsWith(`.${normalizedRoot}`)) {
+      return null
+    }
+
+    const slug = normalizedHost.slice(0, -(normalizedRoot.length + 1))
+    return slug && slug !== 'www' ? slug : null
   }
 
-  const normalizedRoot = stripPort(rootDomain)
-
-  if (normalizedHost === normalizedRoot || normalizedHost === `www.${normalizedRoot}`) {
+  // No APP_ROOT_DOMAIN configured:
+  // A host with exactly one dot (e.g. "4gcelulares.com") is a root domain, NOT a tenant.
+  // A host with two+ dots (e.g. "tenant.4gcelulares.com") could be a tenant subdomain.
+  const dots = (normalizedHost.match(/\./g) ?? []).length
+  if (dots < 2) {
+    // Root domain like "4gcelulares.com" — not a tenant
     return null
   }
 
-  if (!normalizedHost.endsWith(`.${normalizedRoot}`)) {
-    return null
-  }
-
-  const slug = normalizedHost.slice(0, -(normalizedRoot.length + 1))
-  return slug && slug !== 'www' ? slug : null
+  // Has subdomain: take the leftmost part
+  const [subdomain] = normalizedHost.split('.')
+  return subdomain && subdomain !== 'www' ? subdomain : null
 }
 
 export function getTenantSlugFromRequest(request: NextRequest) {

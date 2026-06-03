@@ -34,6 +34,17 @@ const FULL_REPAIR_SELECT = `
   notes:repair_notes(*)
 `
 
+function organizationRequiredResponse() {
+  return NextResponse.json(
+    {
+      error: 'No se pudo resolver la organizacion activa para cargar reparaciones.',
+      code: 'ACTIVE_ORGANIZATION_REQUIRED',
+      hint: 'Verifica que el usuario tenga una membresia activa en organization_members y que exista la cookie active_organization_id o una organizacion activa por defecto.',
+    },
+    { status: 403 }
+  )
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireStaff()
   const authResponse = getAuthResponse(auth)
@@ -42,7 +53,7 @@ export async function POST(request: NextRequest) {
   const organization = await getCurrentOrganizationContext(staffAuth.user.id)
 
   if (!organization) {
-    return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    return organizationRequiredResponse()
   }
 
   try {
@@ -110,7 +121,7 @@ export async function GET(request: NextRequest) {
   const organization = await getCurrentOrganizationContext(staffAuth.user.id)
 
   if (!organization) {
-    return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    return organizationRequiredResponse()
   }
 
   try {

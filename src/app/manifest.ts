@@ -1,10 +1,19 @@
 import { MetadataRoute } from 'next'
+import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from '@/lib/platform/branding'
 
-export default function manifest(): MetadataRoute.Manifest {
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  let branding = DEFAULT_PLATFORM_BRANDING
+
+  try {
+    branding = await getPlatformBranding()
+  } catch {
+    branding = DEFAULT_PLATFORM_BRANDING
+  }
+
   return {
-    name: '4G Celulares - Sistema de Gestión',
-    short_name: '4G Celulares',
-    description: 'Sistema completo de gestión para reparación de celulares y punto de venta',
+    name: branding.platformName,
+    short_name: branding.platformName.slice(0, 30),
+    description: branding.seoDescription,
     start_url: '/',
     display: 'standalone',
     background_color: '#ffffff',
