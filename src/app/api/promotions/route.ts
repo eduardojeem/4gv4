@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { PromotionType } from '@/types/promotion'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 
 type PromotionRow = {
@@ -56,8 +57,37 @@ function mapPromotionRow(row: PromotionRow) {
   }
 }
 
+function getDatabaseErrorMessage(error: unknown) {
+  if (!error || typeof error !== 'object') return null
+  const maybeError = error as { code?: unknown; message?: unknown }
+  const code = typeof maybeError.code === 'string' ? maybeError.code : ''
+  const message = typeof maybeError.message === 'string' ? maybeError.message : ''
+
+  if (code === '42501' || message.toLowerCase().includes('row-level security')) {
+    return 'No tenes permiso para crear promociones en esta organizacion.'
+  }
+
+  if (code === '42703' || code === 'PGRST204' || message.toLowerCase().includes('schema cache')) {
+    return 'La tabla de promociones no tiene todas las columnas requeridas. Aplica las migraciones pendientes.'
+  }
+
+  if (code === '23505') {
+    return 'Ya existe una promocion con ese codigo.'
+  }
+
+  if (code === '23502') {
+    return 'La tabla de promociones tiene una columna obligatoria incompatible con el formulario. Aplica las migraciones pendientes.'
+  }
+
+  if (process.env.NODE_ENV !== 'production' && (code || message)) {
+    return `Error de base de datos (${code || 'sin codigo'}): ${message || 'sin detalle'}`
+  }
+
+  return null
+}
+
 // GET - Obtener promociones con filtros
-export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request: NextRequest, { organization }) => {
+export const GET = withTenantAuth({ permission: 'promotions.read' }, async (request: NextRequest, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const active = searchParams.get('active')
@@ -133,12 +163,14 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
 })
 
 // POST - Crear nueva promoción (staff only)
-export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request: NextRequest, { organization }) => {
+export const POST = withTenantAuth({ permission: 'promotions.create' }, async (request: NextRequest, { organization }) => {
   try {
     const body = await request.json()
     const type = normalizePromotionType(body?.type)
+    const code = String(body?.code || '').trim().toUpperCase()
+    const name = String(body?.name || '').trim()
 
-    if (!body?.name || !body?.code || !type) {
+    if (!name || !code || !type) {
       return NextResponse.json(
         { error: 'Faltan campos requeridos: name, code, type (percentage|fixed)' },
         { status: 400 }
@@ -156,13 +188,13 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
       }
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminSupabase()
 
     const { data: existingByCode, error: existingError } = await supabase
       .from('promotions')
       .select('id')
       .eq('organization_id', organization.id)
-      .eq('code', String(body.code))
+      .eq('code', code)
       .maybeSingle()
 
     if (existingError) {
@@ -174,16 +206,30 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
       return NextResponse.json({ error: 'Ya existe una promoción con ese código' }, { status: 409 })
     }
 
+    let applicableProducts = Array.isArray(body.applicable_products) ? body.applicable_products as string[] : null
+
+    // BUG-3 fix: filter out product IDs that no longer exist in this org
+    // so copies of old promos don’t carry broken references.
+    if (applicableProducts && applicableProducts.length > 0) {
+      const { data: validProds } = await supabase
+        .from('products')
+        .select('id')
+        .eq('organization_id', organization.id)
+        .in('id', applicableProducts)
+      const validSet = new Set((validProds ?? []).map((p: { id: string }) => p.id))
+      applicableProducts = applicableProducts.filter(id => validSet.has(id))
+    }
+
     const insertPayload = {
       organization_id: organization.id,
-      code: String(body.code).trim(),
-      name: String(body.name).trim(),
+      code,
+      name,
       description: body.description ? String(body.description) : null,
       type,
       value: toSafeNumber(body.value, 0),
       min_purchase: body.min_purchase == null ? 0 : toSafeNumber(body.min_purchase, 0),
       max_discount: body.max_discount == null ? null : toSafeNumber(body.max_discount, 0),
-      applicable_products: Array.isArray(body.applicable_products) ? body.applicable_products : null,
+      applicable_products: applicableProducts,
       applicable_categories: Array.isArray(body.applicable_categories) ? body.applicable_categories : null,
       start_date: body.start_date || null,
       end_date: body.end_date || null,
@@ -206,12 +252,16 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
     return NextResponse.json(mapPromotionRow(created as PromotionRow), { status: 201 })
   } catch (error) {
     logger.error('Promotions POST API error', { error })
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+    const databaseErrorMessage = getDatabaseErrorMessage(error)
+    return NextResponse.json(
+      { error: databaseErrorMessage ?? 'Error interno del servidor' },
+      { status: databaseErrorMessage ? 400 : 500 }
+    )
   }
 })
 
 // PUT - Actualización masiva de promociones (staff only)
-export const PUT = withTenantAuth({ permission: 'ecommerce.orders.manage' }, async (request: NextRequest, { organization }) => {
+export const PUT = withTenantAuth({ permission: 'promotions.update' }, async (request: NextRequest, { organization }) => {
   try {
     const body = await request.json()
     const promotions = Array.isArray(body?.promotions) ? body.promotions : null
