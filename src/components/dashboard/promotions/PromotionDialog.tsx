@@ -135,6 +135,7 @@ export function PromotionDialog({
     const [validatingCode, setValidatingCode] = useState(false)
     // Status of the auto-check run when the dialog opens in duplicate mode
     const [codeStatus, setCodeStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+    const [autoCodeAttempts, setAutoCodeAttempts] = useState(0)
     const [applyToRepairs, setApplyToRepairs] = useState(false)
     const [products, setProducts] = useState<Array<{ id: string; name: string; sku: string; type: 'product' | 'service' }>>([])
     const [productSearch, setProductSearch] = useState('')
@@ -214,6 +215,7 @@ export function PromotionDialog({
         }
         setErrors({})
         setProductSearch('')
+        setAutoCodeAttempts(0)
         // Reset code status whenever the dialog (re)opens
         setCodeStatus(open && !promotion && !!duplicateFrom ? 'checking' : 'idle')
     }, [open, promotion, duplicateFrom])
@@ -232,6 +234,16 @@ export function PromotionDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [formData.code, isDuplicating])
 
+    useEffect(() => {
+        if (!isDuplicating) return
+        if (codeStatus !== 'taken') return
+        if (autoCodeAttempts >= 3) return
+
+        setAutoCodeAttempts(prev => prev + 1)
+        const next = randomPromoCode()
+        setFormData(prev => ({ ...prev, code: next }))
+    }, [autoCodeAttempts, codeStatus, isDuplicating])
+
     // Load products for selection
     useEffect(() => {
         if (!open) return
@@ -247,6 +259,16 @@ export function PromotionDialog({
             }
         })()
     }, [open])
+
+    useEffect(() => {
+        if (!open) return
+        if (selectedProductIds.length === 0) return
+        if (products.length === 0) return
+        const known = new Set(products.map(p => p.id))
+        const filtered = selectedProductIds.filter(id => known.has(id))
+        if (filtered.length === selectedProductIds.length) return
+        setSelectedProductIds(filtered)
+    }, [open, products, selectedProductIds])
 
     const generateCode = () => {
         const randomCode = `PROMO${Math.random().toString(36).substring(2, 8).toUpperCase()}`
@@ -416,6 +438,11 @@ export function PromotionDialog({
                                 <DialogDescription className="text-xs">
                                     {headerMeta.description}
                                 </DialogDescription>
+                                {isDuplicating && duplicateFrom && (
+                                    <p className="text-[11px] text-muted-foreground">
+                                        Copiando desde: <span className="font-medium text-foreground">{duplicateFrom.name}</span>
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -951,7 +978,7 @@ export function PromotionDialog({
                         </Button>
                         <Button
                             type="submit"
-                            disabled={saving || validatingCode}
+                            disabled={saving || validatingCode || (isDuplicating && codeStatus !== 'available')}
                             className={cn(
                                 'h-9 gap-2',
                                 modalVariant === 'create' && 'bg-emerald-600 hover:bg-emerald-700',

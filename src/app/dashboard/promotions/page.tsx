@@ -29,7 +29,6 @@ import {
   PromotionAlerts,
   PromotionAnalytics
 } from '@/components/dashboard/promotions'
-import { toast } from 'sonner'
 import { RouteGuard } from '@/components/auth/permission-guard'
 import { usePermissions } from '@/hooks/use-permissions'
 
@@ -55,22 +54,22 @@ const PromotionDialog = dynamic(
 
 export default function PromotionsPage() {
   const { hasPermission } = usePermissions()
-  const canManage = hasPermission('promotions.manage') || hasPermission('products.manage')
+  const canManage = hasPermission('promotions.manage')
   const canCreate = canManage || hasPermission('promotions.create')
   const canEdit = canManage || hasPermission('promotions.update')
   const canDelete = canManage || hasPermission('promotions.delete')
 
   const {
     promotions,
-    allPromotions,
     loading,
     stats,
     filters,
     createPromotion,
     updatePromotion,
     deletePromotion,
-    duplicatePromotion,
     togglePromotionStatus,
+    bulkUpdateStatus,
+    bulkDeletePromotions,
     updateFilters,
     clearFilters,
     getPromotionStatus,
@@ -82,27 +81,29 @@ export default function PromotionsPage() {
     validatePromotionCode,
     getUsagePerDay,
     getQuotaPercent,
+    expiringSoonArray,
+    expiredActiveArray,
   } = usePromotions()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null)
+  const [duplicatingPromotion, setDuplicatingPromotion] = useState<Promotion | null>(null)
   const [deletingPromotion, setDeletingPromotion] = useState<Promotion | null>(null)
 
   // Get alerts data — derivado de allPromotions (no filtradas)
   // para que las alertas no se oculten cuando el user aplica filtros
-  const expiringSoon = allPromotions.filter(p => isPromotionExpiringSoon(p))
+  const expiringSoon = expiringSoonArray
   const unused = getUnusedPromotions()
-  const expiredActive = allPromotions.filter(p => {
-    const status = getPromotionStatus(p)
-    return status === 'expired' && p.is_active
-  })
+  const expiredActive = expiredActiveArray
 
   const handleCreate = () => {
     setEditingPromotion(null)
+    setDuplicatingPromotion(null)
     setDialogOpen(true)
   }
 
   const handleEdit = (promotion: Promotion) => {
+    setDuplicatingPromotion(null)
     setEditingPromotion(promotion)
     setDialogOpen(true)
   }
@@ -115,8 +116,11 @@ export default function PromotionsPage() {
     }
   }
 
-  const handleDuplicate = async (promotion: Promotion) => {
-    await duplicatePromotion(promotion)
+  const handleDuplicate = (promotion: Promotion) => {
+    // Abrir el modal precargado con la copia para revisar/ajustar antes de crear.
+    setEditingPromotion(null)
+    setDuplicatingPromotion(promotion)
+    setDialogOpen(true)
   }
 
   const handleToggleStatus = async (promotion: Promotion) => {
@@ -185,14 +189,14 @@ export default function PromotionsPage() {
           </div>
         </header>
 
-        {/* Alerts — usa allPromotions para no ocultarse con filtros */}
+        {/* Alerts — derivadas de allPromotions para no ocultarse con filtros */}
         <PromotionAlerts
-          promotions={allPromotions}
           expiringSoon={expiringSoon}
           unused={unused}
           expiredActive={expiredActive}
           onCleanupExpired={canManage ? handleCleanupExpired : undefined}
           onEdit={canEdit ? handleEdit : undefined}
+          onViewAll={(alert) => updateFilters({ alert, status: 'all' })}
         />
 
         {/* Stats */}
@@ -223,13 +227,23 @@ export default function PromotionsPage() {
           onDelete={canDelete ? (promo) => setDeletingPromotion(promo) : undefined}
           onDuplicate={canCreate ? handleDuplicate : undefined}
           onToggleStatus={canEdit ? handleToggleStatus : undefined}
+          onBulkActivate={canEdit ? (ids) => bulkUpdateStatus(ids, true) : undefined}
+          onBulkDeactivate={canEdit ? (ids) => bulkUpdateStatus(ids, false) : undefined}
+          onBulkDelete={canDelete ? (ids) => bulkDeletePromotions(ids) : undefined}
         />
 
-        {/* Create/Edit Dialog */}
+        {/* Create / Edit / Duplicate Dialog */}
         <PromotionDialog
           open={dialogOpen}
-          onOpenChange={setDialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open)
+            if (!open) {
+              setEditingPromotion(null)
+              setDuplicatingPromotion(null)
+            }
+          }}
           promotion={editingPromotion}
+          duplicateFrom={duplicatingPromotion}
           onSave={createPromotion}
           onUpdate={updatePromotion}
           validateCode={validatePromotionCode}
