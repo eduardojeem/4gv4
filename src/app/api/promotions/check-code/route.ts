@@ -11,10 +11,10 @@ import { createClient } from '@/lib/supabase/server'
  * positions 101+).
  */
 export const GET = withTenantAuth(
-  { permission: 'ecommerce.orders.manage' },
+  { permission: ['promotions.create', 'promotions.update', 'promotions.manage'] },
   async (request: NextRequest, { organization }) => {
     const { searchParams } = new URL(request.url)
-    const code = (searchParams.get('code') || '').trim()
+    const code = (searchParams.get('code') || '').trim().toUpperCase()
     const excludeId = searchParams.get('exclude')?.trim() || null
 
     if (!code) {

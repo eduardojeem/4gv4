@@ -22,7 +22,7 @@ export interface TenantAuthContext {
 }
 
 export interface TenantGuardOptions {
-  permission?: Permission
+  permission?: Permission | Permission[]
   module?: SaaSModule
 }
 
@@ -60,12 +60,16 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
         )
       }
 
-      if (options.permission && !roleHasPermission(organization.role, options.permission)) {
+      const permissions = options.permission
+        ? (Array.isArray(options.permission) ? options.permission : [options.permission])
+        : null
+
+      if (permissions && !permissions.some((p) => roleHasPermission(organization.role, p))) {
         logger.warn('Tenant permission denied', {
           path: request.nextUrl.pathname,
           userId: auth.user.id,
           organizationId: organization.id,
-          permission: options.permission,
+          permission: permissions,
         })
 
         return NextResponse.json(
