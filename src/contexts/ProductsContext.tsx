@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { resolveProductImageUrl } from '@/lib/images'
@@ -88,6 +89,7 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
     const [products, setProducts] = useState<Product[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<Error | null>(null)
+    const pathname = usePathname()
 
     // Use ref to access latest products in callbacks without adding dependencies
     const productsRef = useRef(products)
@@ -406,6 +408,8 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
     // Supabase realtime subscription
     // Use a ref to track the active channel and avoid double-subscription in React Strict Mode
     useEffect(() => {
+        if (!pathname.startsWith('/dashboard/products')) return
+
         let active = true
         const channel = supabase
             .channel('products_changes')
@@ -486,9 +490,9 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
 
         return () => {
             active = false
-            supabase.removeChannel(channel)
+            void supabase.removeChannel(channel)
         }
-    }, [supabase])
+    }, [supabase, pathname])
 
     // Memoize context value to prevent unnecessary re-renders
     const value = useMemo<ProductsContextValue>(() => ({

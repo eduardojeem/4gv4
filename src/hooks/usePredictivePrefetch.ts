@@ -76,11 +76,6 @@ export function usePredictivePrefetch() {
           performance.mark(`prefetch-start:${href}`);
           metricsRef.current.push({ route: href, triggeredAt: Date.now(), method: "link" });
         }
-        // Warmup básico para assets/JSON (si existen endpoints API relacionados)
-        try {
-          fetch(href, { method: "GET", mode: "no-cors" }).catch(() => {});
-          metricsRef.current.push({ route: href, triggeredAt: Date.now(), method: "fetch" });
-        } catch {}
       }
     });
   }, [pathname]);
