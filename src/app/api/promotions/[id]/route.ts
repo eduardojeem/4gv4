@@ -181,6 +181,34 @@ export async function PUT(
       }
     }
 
+    // BUG-7 fix: validate code uniqueness on PUT, not just on POST.
+    // Without this, changing to an existing code produces a cryptic 500 from Postgres.
+    if (body.code) {
+      const codeUpper = String(body.code).trim().toUpperCase()
+      const { data: codeConflict, error: codeConflictError } = await supabase
+        .from('promotions')
+        .select('id')
+        .neq('id', id)
+        .eq('organization_id', organization.id)
+        .eq('code', codeUpper)
+        .maybeSingle()
+
+      if (codeConflictError) {
+        logger.error('Failed to validate promotion code uniqueness on update', {
+          promotionId: id,
+          error: codeConflictError.message,
+        })
+        throw codeConflictError
+      }
+
+      if (codeConflict) {
+        return NextResponse.json(
+          { error: 'Ya existe otra promoción con ese código' },
+          { status: 409 }
+        )
+      }
+    }
+
     const startDate = body.start_date ?? existing.start_date
     const endDate = body.end_date ?? existing.end_date
     if (startDate && endDate) {

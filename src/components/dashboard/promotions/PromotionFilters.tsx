@@ -26,28 +26,50 @@ export function PromotionFilters({
     onUpdateFilters,
     onClearFilters
 }: PromotionFiltersProps) {
-    const [isExpanded, setIsExpanded] = useState(true)
-
     const activeFilterCount = [
         filters.search !== '',
         filters.status !== 'all',
-        filters.type !== 'all'
+        filters.type !== 'all',
+        filters.alert !== 'all'
     ].filter(Boolean).length
+
+    const [isManuallyExpanded, setIsManuallyExpanded] = useState(false)
+    const [collapsedFilterSignature, setCollapsedFilterSignature] = useState<string | null>(null)
+    const activeFilterSignature = [
+        filters.search,
+        filters.status,
+        filters.type,
+        filters.alert,
+    ].join('|')
+    const isExpanded = activeFilterCount > 0
+        ? collapsedFilterSignature !== activeFilterSignature
+        : isManuallyExpanded
+
+    const handleToggleExpanded = () => {
+        if (activeFilterCount > 0) {
+            setCollapsedFilterSignature(isExpanded ? activeFilterSignature : null)
+            return
+        }
+
+        setIsManuallyExpanded((expanded) => !expanded)
+    }
 
     return (
         <Card>
             <CardHeader
                 className="cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={handleToggleExpanded}
             >
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <Filter className="h-4 w-4" />
                         <CardTitle className="text-base">Filtros</CardTitle>
-                        {activeFilterCount > 0 && (
-                            <Badge variant="secondary" className="ml-2">
-                                {activeFilterCount}
+                        {activeFilterCount > 0 ? (
+                            <Badge variant="secondary" className="ml-1">
+                                {activeFilterCount} activo{activeFilterCount > 1 ? 's' : ''}
                             </Badge>
+                        ) : (
+                            <span className="text-xs text-slate-400">sin filtros aplicados</span>
                         )}
                     </div>
                     {isExpanded ? (
@@ -60,7 +82,7 @@ export function PromotionFilters({
 
             {isExpanded && (
                 <CardContent className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                         {/* Search */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Búsqueda</label>
@@ -119,6 +141,25 @@ export function PromotionFilters({
                                     <SelectItem value="all">Todos</SelectItem>
                                     <SelectItem value="percentage">Porcentaje</SelectItem>
                                     <SelectItem value="fixed">Monto Fijo</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Alert Filter */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Alerta</label>
+                            <Select
+                                value={filters.alert}
+                                onValueChange={(value) => onUpdateFilters({ alert: value as Filters['alert'] })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todas</SelectItem>
+                                    <SelectItem value="expiring_soon">Por expirar</SelectItem>
+                                    <SelectItem value="unused">Sin uso</SelectItem>
+                                    <SelectItem value="expired_active">Expiradas activas</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

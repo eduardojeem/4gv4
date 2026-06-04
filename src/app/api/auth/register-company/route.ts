@@ -4,6 +4,36 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { registerCompanySchema } from '@/lib/validation/saas'
 import { logger } from '@/lib/logger'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
+import {
+  buildCompanyRegistrationRedirectUrl,
+  getProvisioningFailures,
+  isExistingConfirmedAuthUser,
+} from './provisioning'
+
+type RegisterAdminClient = ReturnType<typeof createAdminSupabase>
+type RegisteredAuthUser = {
+  id: string
+  identities?: unknown[] | null
+}
+
+async function cleanupNewAuthUser(
+  admin: RegisterAdminClient,
+  user: RegisteredAuthUser,
+  context: Record<string, unknown>
+) {
+  if (!Array.isArray(user.identities) || user.identities.length === 0) {
+    return
+  }
+
+  const { error } = await admin.auth.admin.deleteUser(user.id)
+  if (error) {
+    logger.error('Failed to cleanup newly created auth user after registration failure', {
+      ...context,
+      userId: user.id,
+      error: error.message,
+    })
+  }
+}
 
 export async function POST(request: Request) {
   // Rate limit: 3 registrations per IP per 10 minutes
@@ -110,13 +140,11 @@ export async function POST(request: Request) {
         persistSession: false,
       },
     })
-    const origin = request.headers.get('origin') ?? new URL(request.url).origin
-
     const { data: authData, error: authError } = await authClient.auth.signUp({
       email: input.email,
       password: input.password,
       options: {
-        emailRedirectTo: `${origin}/auth/callback?next=/dashboard/onboarding`,
+        emailRedirectTo: buildCompanyRegistrationRedirectUrl(request),
         data: {
           full_name: input.fullName,
           company_name: input.companyName,
@@ -136,6 +164,21 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: authError?.message || 'No se pudo crear el usuario.' },
         { status: 400 }
+      )
+    }
+
+    if (isExistingConfirmedAuthUser(authData.user)) {
+      logger.warn('Company owner signup attempted with an existing confirmed email', {
+        email: input.email,
+        slug: input.companySlug,
+      })
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Ya existe una cuenta con este correo. Inicia sesion para crear una empresa.',
+        },
+        { status: 409 }
       )
     }
 
@@ -159,16 +202,21 @@ export async function POST(request: Request) {
         slug: input.companySlug,
       })
 
+      await cleanupNewAuthUser(admin, authData.user, {
+        slug: input.companySlug,
+        stage: 'organization_creation',
+      })
+
       return NextResponse.json(
         {
           success: false,
-          error: 'La cuenta fue creada, pero no se pudo crear la empresa. Contacta soporte para completar el alta.',
+          error: 'No se pudo crear la empresa. Intenta nuevamente o contacta soporte.',
         },
         { status: 500 }
       )
     }
 
-    await Promise.allSettled([
+    const provisioningResults = await Promise.allSettled([
       admin.from('organization_members').upsert(
         {
           organization_id: organization.id,
@@ -224,12 +272,57 @@ export async function POST(request: Request) {
       ),
       admin.from('branches').insert({
         organization_id: organization.id,
+        code: 'principal',
         name: 'Sucursal principal',
         slug: 'principal',
         is_active: true,
         is_default: true,
       }),
     ])
+
+    const provisioningFailures = getProvisioningFailures([
+      { name: 'organization_members', result: provisioningResults[0] },
+      { name: 'organization_settings', result: provisioningResults[1] },
+      { name: 'subscriptions', result: provisioningResults[2] },
+      { name: 'profiles', result: provisioningResults[3] },
+      { name: 'user_roles', result: provisioningResults[4] },
+      { name: 'branches', result: provisioningResults[5] },
+    ])
+
+    if (provisioningFailures.length > 0) {
+      logger.error('Company provisioning failed after organization creation', {
+        userId,
+        organizationId: organization.id,
+        slug: organization.slug,
+        failures: provisioningFailures,
+      })
+
+      const cleanupResult = await admin
+        .from('organizations')
+        .delete()
+        .eq('id', organization.id)
+
+      if (cleanupResult.error) {
+        logger.error('Failed to cleanup partially provisioned organization', {
+          organizationId: organization.id,
+          error: cleanupResult.error.message,
+        })
+      }
+
+      await cleanupNewAuthUser(admin, authData.user, {
+        organizationId: organization.id,
+        slug: organization.slug,
+        stage: 'company_provisioning',
+      })
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No se pudo completar la configuracion de la empresa. Intenta nuevamente o contacta soporte.',
+        },
+        { status: 500 }
+      )
+    }
 
     logger.info('Company registered', {
       userId,

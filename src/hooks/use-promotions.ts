@@ -11,7 +11,8 @@ export function usePromotions() {
   const [filters, setFilters] = useState<PromotionFilters>({
     search: '',
     status: 'all',
-    type: 'all'
+    type: 'all',
+    alert: 'all'
   })
 
   // Fetch promotions with caching
@@ -72,8 +73,34 @@ export function usePromotions() {
 
       // Type filter
       const matchesType = filters.type === 'all' || promo.type === filters.type
+
+      // Alert filter
+      let matchesAlert = true
+      if (filters.alert !== 'all') {
+        const now = new Date()
+        const endDate = promo.end_date ? parseISO(promo.end_date) : null
+        const daysRemaining = endDate ? differenceInDays(endDate, now) : null
+
+        switch (filters.alert) {
+          case 'expiring_soon':
+            matchesAlert = Boolean(
+              promo.is_active &&
+              endDate &&
+              daysRemaining !== null &&
+              daysRemaining > 0 &&
+              daysRemaining <= 7
+            )
+            break
+          case 'unused':
+            matchesAlert = promo.is_active && (promo.usage_count || 0) === 0
+            break
+          case 'expired_active':
+            matchesAlert = Boolean(promo.is_active && endDate && isBefore(endDate, now))
+            break
+        }
+      }
       
-      return matchesSearch && matchesStatus && matchesType
+      return matchesSearch && matchesStatus && matchesType && matchesAlert
     })
   }, [promotions, filters])
 
@@ -140,14 +167,11 @@ export function usePromotions() {
       toast.success('Promoción creada exitosamente')
       await fetchPromotions()
       return true
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating promotion:', error)
-      if (error.code === '23505') {
-        toast.error('Ya existe una promoción con ese código')
-      } else {
-        toast.error('Error al crear la promoción')
-      }
+      // Surface the API message (e.g. "Ya existe una promoción con ese código")
+      // instead of always showing a generic error.
+      toast.error(error instanceof Error ? error.message : 'Error al crear la promoción')
       return false
     }
   }, [fetchPromotions])
@@ -166,14 +190,11 @@ export function usePromotions() {
       toast.success('Promoción actualizada exitosamente')
       await fetchPromotions()
       return true
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error updating promotion:', error)
-      if (error.code === '23505') {
-        toast.error('Ya existe una promoción con ese código')
-      } else {
-        toast.error('Error al actualizar la promoción')
-      }
+      // Surface the API message (e.g. "Ya existe otra promoción con ese nombre")
+      // instead of always showing a generic error.
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar la promoción')
       return false
     }
   }, [fetchPromotions])
@@ -208,7 +229,8 @@ export function usePromotions() {
     setFilters({
       search: '',
       status: 'all',
-      type: 'all'
+      type: 'all',
+      alert: 'all'
     })
   }, [])
 
@@ -249,25 +271,27 @@ export function usePromotions() {
   }, [])
 
   // Advanced operations
-  const duplicatePromotion = useCallback(async (promotion: Promotion) => {
+  // NOTE: duplicatePromotion is intentionally NOT exported.
+  // The real duplicate flow goes through PromotionDialog (handleDuplicate in page.tsx),
+  // which opens the modal so the user can review/edit before saving.
+  // Exporting this function would create a second, silent path that bypasses the modal.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _duplicatePromotion = useCallback(async (promotion: Promotion) => {
     const duplicatedData = {
       ...promotion,
       name: `${promotion.name} (Copia)`,
-      code: `${promotion.code}_COPY_${Date.now()}`,
+      code: `PROMO${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       is_active: false,
       usage_count: 0,
       start_date: null,
       end_date: null
     }
-    
-    // Remove fields that shouldn't be duplicated
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (duplicatedData as any).id
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (duplicatedData as any).created_at
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     delete (duplicatedData as any).updated_at
-    
     return createPromotion(duplicatedData)
   }, [createPromotion])
 
@@ -289,6 +313,27 @@ export function usePromotions() {
     } catch (error) {
       console.error('Error bulk updating promotions:', error)
       toast.error('Error al actualizar promociones')
+      return false
+    }
+  }, [fetchPromotions])
+
+  const bulkDeletePromotions = useCallback(async (promotionIds: string[]) => {
+    if (promotionIds.length === 0) return false
+    try {
+      await Promise.all(promotionIds.map(async (id) => {
+        const response = await fetch(`/api/promotions/${id}`, { method: 'DELETE' })
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}))
+          throw new Error(result.error || 'No se pudo eliminar una promocion')
+        }
+      }))
+
+      toast.success(`${promotionIds.length} promociones eliminadas`)
+      await fetchPromotions()
+      return true
+    } catch (error) {
+      console.error('Error bulk deleting promotions:', error)
+      toast.error('Error al eliminar promociones')
       return false
     }
   }, [fetchPromotions])
@@ -426,9 +471,9 @@ export function usePromotions() {
     deletePromotion,
     togglePromotionStatus,
 
-    // Advanced operations
-    duplicatePromotion,
+    // Advanced operations (duplicatePromotion is intentionally NOT exported — see above)
     bulkUpdateStatus,
+    bulkDeletePromotions,
 
     // Validation
     validatePromotionCode,

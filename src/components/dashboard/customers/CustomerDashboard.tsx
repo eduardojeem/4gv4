@@ -30,7 +30,9 @@ import {
   Activity,
   Bell,
   CreditCard,
-  MessageSquare
+  MessageSquare,
+  Plus,
+  RefreshCw
 } from 'lucide-react'
 import { ImprovedMetricCard } from './ImprovedMetricCard'
 // Componentes cargados dinámicamente para reducir el peso inicial
@@ -67,6 +69,15 @@ import { useCustomers } from '@/contexts/CustomerContext'
 
 // Tipos para la navegación
 type ViewState = 'list' | 'detail' | 'history' | 'edit'
+
+const dashboardTabs = [
+  { value: "customers", icon: <Users className="h-4 w-4" />, label: "Clientes" },
+  { value: "analytics", icon: <BarChart3 className="h-4 w-4" />, label: "Analíticas" },
+  { value: "segmentation", icon: <PieChart className="h-4 w-4" />, label: "Segmentos" },
+  { value: "communications", icon: <MessageSquare className="h-4 w-4" />, label: "Mensajes" },
+  { value: "metrics", icon: <Activity className="h-4 w-4" />, label: "Métricas" },
+  { value: "notifications", icon: <Bell className="h-4 w-4" />, label: "Alertas" },
+]
 
 export function CustomerDashboard() {
   const { 
@@ -120,8 +131,8 @@ export function CustomerDashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [compactMode, setCompactMode] = useState(true)
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
-  const [showExportDialog, setShowExportDialog] = useState(false)
-  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [, setShowExportDialog] = useState(false)
+  const [, setShowImportDialog] = useState(false)
   
   // Estados para navegación
   const [currentView, setCurrentView] = useState<ViewState>('list')
@@ -171,8 +182,8 @@ export function CustomerDashboard() {
         title: "Total Clientes",
         value: totalCustomers.toLocaleString(),
         icon: <Users className="h-5 w-5" />,
-        change: "+12%",
-        changeType: "positive" as const,
+        change: undefined,
+        changeType: "neutral" as const,
         gradient: "from-blue-500 to-cyan-500",
         description: `${activeCustomers} activos de ${totalCustomers} total`
       },
@@ -180,8 +191,8 @@ export function CustomerDashboard() {
         title: "Créditos Activos",
         value: creditMetrics.totalActiveCredits.toLocaleString(),
         icon: <CreditCard className="h-5 w-5" />,
-        change: "+18%",
-        changeType: "positive" as const,
+        change: undefined,
+        changeType: "neutral" as const,
         gradient: "from-green-500 to-emerald-500",
         description: `Créditos en estado activo`
       },
@@ -189,8 +200,8 @@ export function CustomerDashboard() {
         title: "Clientes con Crédito",
         value: creditMetrics.customersWithCredits.toLocaleString(),
         icon: <UserCheck className="h-5 w-5" />,
-        change: "+15%",
-        changeType: "positive" as const,
+        change: undefined,
+        changeType: "neutral" as const,
         gradient: "from-purple-500 to-violet-500",
         description: `${totalCustomers > 0 ? Math.round((creditMetrics.customersWithCredits / totalCustomers) * 100) : 0}% del total`
       },
@@ -198,7 +209,7 @@ export function CustomerDashboard() {
         title: "Saldo Pendiente",
         value: formatCurrency(creditMetrics.totalPendingAmount),
         icon: <TrendingUp className="h-5 w-5" />,
-        change: creditMetrics.overduePayments > 0 ? "-5%" : "+8%",
+        change: creditMetrics.overduePayments > 0 ? `${creditMetrics.overduePayments} vencidos` : undefined,
         changeType: creditMetrics.overduePayments > 0 ? "negative" as const : "positive" as const,
         gradient: creditMetrics.overduePayments > 0 ? "from-red-500 to-orange-500" : "from-orange-500 to-red-500",
         description: creditMetrics.overduePayments > 0 ? `${creditMetrics.overduePayments} pagos vencidos` : 'Pagos al día'
@@ -565,35 +576,43 @@ export function CustomerDashboard() {
   }, [selectedCustomer])
 
   return (
-    <div className="min-h-screen bg-gray-50/50 dark:bg-slate-950 p-3 sm:p-4 lg:p-6">
-      <div className="max-w-7xl mx-auto space-y-5 sm:space-y-6">
-        {/* Header — Clean and minimal */}
+    <div className="min-h-screen bg-slate-50 p-3 dark:bg-slate-950 sm:p-4 lg:p-6">
+      <div className="mx-auto max-w-7xl space-y-5 sm:space-y-6">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-600 dark:bg-blue-500 rounded-xl shadow-sm">
-              <Users className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
+              <Users className="h-4 w-4" />
+              CRM
             </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-gray-50 tracking-tight">
-                Clientes
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                {totalCustomers} registrados · {activeCustomers} activos
-              </p>
-            </div>
+            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950 dark:text-slate-50">
+              Clientes
+            </h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {totalCustomers} registrados · {activeCustomers} activos · {filteredCustomers.length} en vista
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-800 shadow-sm">
-              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Compacto</span>
-              <Switch 
-                checked={compactMode} 
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
+              <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Compacto</span>
+              <Switch
+                checked={compactMode}
                 onCheckedChange={setCompactMode}
-                className="data-[state=checked]:bg-blue-600 dark:data-[state=checked]:bg-blue-500"
+                aria-label="Alternar modo compacto"
               />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Actualizar
+              </Button>
+              <Button size="sm" onClick={handleAddCustomer}>
+                <Plus className="mr-2 h-4 w-4" />
+                Nuevo
+              </Button>
             </div>
           </div>
         </motion.div>
@@ -627,24 +646,16 @@ export function CustomerDashboard() {
           transition={{ delay: 0.1 }}
         >
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            {/* Tab Navigation — Clean pill style */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm p-1.5">
-              <TabsList className="grid w-full grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-1 bg-transparent h-auto p-0">
-                {[
-                  { value: "customers", icon: <Users className="h-4 w-4" />, label: "Clientes" },
-                  { value: "analytics", icon: <BarChart3 className="h-4 w-4" />, label: "Analíticas" },
-                  { value: "segmentation", icon: <PieChart className="h-4 w-4" />, label: "Segmentos" },
-                  { value: "communications", icon: <MessageSquare className="h-4 w-4" />, label: "Mensajes" },
-                  { value: "metrics", icon: <Activity className="h-4 w-4" />, label: "Métricas" },
-                  { value: "notifications", icon: <Bell className="h-4 w-4" />, label: "Alertas" },
-                ].map((tab) => (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+              <TabsList className="inline-flex h-auto min-w-max gap-1 bg-transparent p-0">
+                {dashboardTabs.map((tab) => (
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all duration-150 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-800"
+                    className="flex min-h-9 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition-colors data-[state=active]:bg-slate-950 data-[state=active]:text-white dark:text-slate-300 dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                   >
                     {tab.icon}
-                    <span className="hidden sm:inline">{tab.label}</span>
+                    <span>{tab.label}</span>
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -663,37 +674,40 @@ export function CustomerDashboard() {
                       transition={{ duration: 0.15 }}
                       className="space-y-4"
                     >
-                      <Card className="border border-gray-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+                      <Card className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                       <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
-                          <CreditCard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                          Créditos Activos
+                        <CardTitle className="flex items-center justify-between gap-3 text-base font-semibold text-slate-900 dark:text-slate-100">
+                          <span className="flex items-center gap-2">
+                            <CreditCard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            Créditos activos
+                          </span>
+                          <Badge variant="outline">{customersWithActiveCredits.length}</Badge>
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="flex flex-col lg:flex-row gap-2">
+                        <div className="flex flex-col gap-2 lg:flex-row">
                           <Input
                             placeholder="Buscar cliente"
                             value={creditSearchTerm}
                             onChange={(e) => setCreditSearchTerm(e.target.value)}
-                            className="lg:w-1/3 border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100"
+                            className="lg:w-1/3"
                           />
                           <Select value={selectedCreditCustomerId} onValueChange={setSelectedCreditCustomerId}>
-                            <SelectTrigger className="lg:w-1/3 border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100">
+                            <SelectTrigger className="lg:w-1/3">
                               <SelectValue placeholder="Seleccionar cliente" />
                             </SelectTrigger>
-                            <SelectContent className="max-h-[300px] bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-700">
+                            <SelectContent className="max-h-[300px]">
                               {customersWithActiveCredits.map(c => (
-                                <SelectItem key={c.id} value={c.id} className="text-gray-900 dark:text-slate-100 hover:bg-gray-100 dark:hover:bg-slate-800">
+                                <SelectItem key={c.id} value={c.id}>
                                   {c.name} • {c.email || c.phone || ""}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryCSV} className="border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800">Exportar CSV</Button>
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryExcel} className="border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800">Exportar Excel</Button>
-                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryPDF} className="border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-800">Exportar PDF</Button>
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryCSV}>CSV</Button>
+                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryExcel}>Excel</Button>
+                            <Button variant="outline" size="sm" disabled={!selectedCreditCustomerId} onClick={exportSelectedHistoryPDF}>PDF</Button>
                           </div>
                         </div>
                         {selectedCreditCustomerId && (
@@ -703,7 +717,7 @@ export function CustomerDashboard() {
                               onMarkPaid={(id, method, amount) => markInstallmentPaid(id, method, amount)}
                               creditById={{}}
                             />
-                            <Card className="border dark:border-slate-700 shadow-lg bg-gradient-to-br from-white to-gray-50/50 dark:from-slate-900 dark:to-slate-800/50">
+                            <Card className="rounded-lg border border-slate-200 shadow-sm dark:border-slate-800">
                               <CardHeader>
                                 <CardTitle className="flex items-center justify-between">
                                   <span>Historial Completo</span>

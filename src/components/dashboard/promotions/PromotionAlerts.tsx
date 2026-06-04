@@ -5,29 +5,51 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
     AlertTriangle,
-    Clock,
     TrendingDown,
     CheckCircle2,
     XCircle
 } from 'lucide-react'
-import type { Promotion } from '@/types/promotion'
+import type { Promotion, PromotionFilters } from '@/types/promotion'
+
+type AlertFilter = Exclude<PromotionFilters['alert'], 'all'>
 
 interface PromotionAlertsProps {
-    promotions: Promotion[]
     expiringSoon: Promotion[]
     unused: Promotion[]
     expiredActive: Promotion[]
     onCleanupExpired?: () => void
     onEdit?: (promotion: Promotion) => void
+    /** Aplica un filtro de estado en el listado para ver todas las de esa categoría */
+    onViewAll?: (alert: AlertFilter) => void
+}
+
+function ViewAllLink({ count, onClick }: { count: number; onClick?: () => void }) {
+    if (count <= 3) return null
+    if (!onClick) {
+        return (
+            <p className="pt-2 text-center text-xs text-muted-foreground">
+                Y {count - 3} más...
+            </p>
+        )
+    }
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className="w-full pt-2 text-center text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        >
+            Ver las {count - 3} restantes →
+        </button>
+    )
 }
 
 export function PromotionAlerts({
-    promotions,
     expiringSoon,
     unused,
     expiredActive,
     onCleanupExpired,
-    onEdit
+    onEdit,
+    onViewAll,
 }: PromotionAlertsProps) {
     const hasAlerts = expiringSoon.length > 0 || unused.length > 0 || expiredActive.length > 0
 
@@ -104,11 +126,7 @@ export function PromotionAlerts({
                                     )}
                                 </div>
                             ))}
-                            {expiredActive.length > 3 && (
-                                <p className="text-xs text-muted-foreground text-center pt-2">
-                                    Y {expiredActive.length - 3} más...
-                                </p>
-                            )}
+                            <ViewAllLink count={expiredActive.length} onClick={onViewAll ? () => onViewAll('expired_active') : undefined} />
                         </div>
                     </CardContent>
                 </Card>
@@ -153,11 +171,7 @@ export function PromotionAlerts({
                                     )}
                                 </div>
                             ))}
-                            {expiringSoon.length > 3 && (
-                                <p className="text-xs text-muted-foreground text-center pt-2">
-                                    Y {expiringSoon.length - 3} más...
-                                </p>
-                            )}
+                            <ViewAllLink count={expiringSoon.length} onClick={onViewAll ? () => onViewAll('expiring_soon') : undefined} />
                         </div>
                     </CardContent>
                 </Card>
@@ -202,11 +216,7 @@ export function PromotionAlerts({
                                     )}
                                 </div>
                             ))}
-                            {unused.length > 3 && (
-                                <p className="text-xs text-muted-foreground text-center pt-2">
-                                    Y {unused.length - 3} más...
-                                </p>
-                            )}
+                            <ViewAllLink count={unused.length} onClick={onViewAll ? () => onViewAll('unused') : undefined} />
                         </div>
                     </CardContent>
                 </Card>

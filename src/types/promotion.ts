@@ -56,6 +56,7 @@ export interface PromotionFilters {
   search: string
   status: 'all' | 'active' | 'scheduled' | 'expired' | 'inactive'
   type: 'all' | 'percentage' | 'fixed'
+  alert: 'all' | 'expiring_soon' | 'unused' | 'expired_active'
 }
 
 export interface PromotionStats {
