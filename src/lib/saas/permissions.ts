@@ -26,6 +26,11 @@ export type Permission =
   | 'repairs.orders.assign'
   | 'crm.customers.read'
   | 'crm.customers.manage'
+  | 'promotions.read'
+  | 'promotions.create'
+  | 'promotions.update'
+  | 'promotions.delete'
+  | 'promotions.manage'
   | 'ecommerce.orders.manage'
   | 'analytics.read'
 
@@ -49,6 +54,11 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'repairs.orders.assign',
     'crm.customers.read',
     'crm.customers.manage',
+    'promotions.read',
+    'promotions.create',
+    'promotions.update',
+    'promotions.delete',
+    'promotions.manage',
     'ecommerce.orders.manage',
     'analytics.read',
   ],
@@ -69,6 +79,11 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'repairs.orders.assign',
     'crm.customers.read',
     'crm.customers.manage',
+    'promotions.read',
+    'promotions.create',
+    'promotions.update',
+    'promotions.delete',
+    'promotions.manage',
     'ecommerce.orders.manage',
     'analytics.read',
   ],
@@ -86,12 +101,25 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'repairs.orders.assign',
     'crm.customers.read',
     'crm.customers.manage',
+    'promotions.read',
+    'promotions.create',
+    'promotions.update',
     'ecommerce.orders.manage',
     'analytics.read',
   ],
   cashier: ['inventory.products.read', 'pos.sales.read', 'pos.sales.create', 'pos.cash.manage', 'crm.customers.read'],
   technician: ['inventory.products.read', 'inventory.stock.manage', 'repairs.orders.read', 'repairs.orders.update'],
-  seller: ['inventory.products.read', 'pos.sales.read', 'pos.sales.create', 'crm.customers.read', 'crm.customers.manage', 'ecommerce.orders.manage'],
+  seller: [
+    'inventory.products.read',
+    'pos.sales.read',
+    'pos.sales.create',
+    'crm.customers.read',
+    'crm.customers.manage',
+    'promotions.read',
+    'promotions.create',
+    'promotions.update',
+    'ecommerce.orders.manage',
+  ],
   customer: ['repairs.orders.read'],
 }
 
@@ -101,8 +129,15 @@ export function roleHasPermission(role: OrganizationRole, permission: Permission
 
 export function mapLegacyRoleToOrganizationRole(role?: string): OrganizationRole {
   switch (role) {
-    case 'super_admin':
+    case 'owner':
     case 'admin':
+    case 'manager':
+    case 'cashier':
+    case 'technician':
+    case 'seller':
+    case 'customer':
+      return role
+    case 'super_admin':
       return 'admin'
     case 'vendedor':
       return 'seller'

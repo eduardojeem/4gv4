@@ -1,7 +1,7 @@
 import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import type { OrganizationRole } from './permissions'
+import { mapLegacyRoleToOrganizationRole, type OrganizationRole } from './permissions'
 import type { SaaSPlan } from './plans'
 
 export interface OrganizationContext {
@@ -64,6 +64,6 @@ export async function getCurrentOrganizationContext(userId: string): Promise<Org
     slug: organization.slug,
     plan: organization.plan as SaaSPlan,
     logoUrl: organization.logo_url,
-    role: data.role as OrganizationRole,
+    role: mapLegacyRoleToOrganizationRole(data.role),
   }
 }
