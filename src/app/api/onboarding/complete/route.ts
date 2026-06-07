@@ -150,7 +150,6 @@ export async function POST(request: Request) {
 
   const branchPayload = {
     organization_id: organizationId,
-    code: 'MAIN',
     name: 'Sucursal principal',
     slug: slugifyBranch(input.displayName),
     address: input.address,
@@ -191,7 +190,7 @@ export async function POST(request: Request) {
   const results = await Promise.allSettled([
     admin
       .from('organizations')
-      .update({ name: input.displayName })
+      .update({ name: input.displayName, marketplace_public: true })
       .eq('id', organizationId),
     admin
       .from('organization_settings')
@@ -208,7 +207,7 @@ export async function POST(request: Request) {
       ),
     defaultBranch?.id
       ? admin.from('branches').update(branchPayload).eq('id', defaultBranch.id)
-      : admin.from('branches').insert(branchPayload),
+      : admin.from('branches').insert({ ...branchPayload, code: 'principal' }),
     admin
       .from('website_settings')
       .upsert(
@@ -216,9 +215,8 @@ export async function POST(request: Request) {
           organization_id: organizationId,
           key: 'company_info',
           value: websiteCompanyInfo,
-          updated_by: user.id,
         },
-        { onConflict: 'organization_id,key' }
+        { onConflict: 'key' }
       ),
   ])
 
@@ -227,11 +225,20 @@ export async function POST(request: Request) {
   const updateError = failed?.status === 'fulfilled' ? failed.value.error : rejected?.status === 'rejected' ? rejected.reason : null
 
   if (updateError) {
+    // Log all individual results for debugging
+    const debugResults = results.map((r, i) => {
+      const labels = ['organizations.update', 'organization_settings.upsert', 'branches.upsert', 'website_settings.upsert']
+      if (r.status === 'rejected') return { step: labels[i], error: String(r.reason) }
+      if (r.value.error) return { step: labels[i], error: r.value.error.message }
+      return { step: labels[i], ok: true }
+    })
+    console.error('[ONBOARDING] Provisioning failures:', JSON.stringify(debugResults, null, 2))
+
     logger.error('Failed to complete onboarding', {
       error: updateError instanceof Error ? updateError.message : String(updateError?.message ?? updateError),
       organizationId,
     })
-    return NextResponse.json({ error: 'No se pudo finalizar el onboarding.' }, { status: 500 })
+    return NextResponse.json({ error: 'No se pudo finalizar el onboarding.', _debug: debugResults }, { status: 500 })
   }
 
   return NextResponse.json({ success: true, completedAt: now })

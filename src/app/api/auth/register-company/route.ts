@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import {
   buildCompanyRegistrationRedirectUrl,
+  cleanupPartialProvisioning,
   getProvisioningFailures,
   isExistingConfirmedAuthUser,
 } from './provisioning'
@@ -16,29 +17,15 @@ type RegisteredAuthUser = {
   identities?: unknown[] | null
 }
 
-async function cleanupNewAuthUser(
-  admin: RegisterAdminClient,
-  user: RegisteredAuthUser,
-  context: Record<string, unknown>
-) {
-  if (!Array.isArray(user.identities) || user.identities.length === 0) {
-    return
-  }
-
-  const { error } = await admin.auth.admin.deleteUser(user.id)
-  if (error) {
-    logger.error('Failed to cleanup newly created auth user after registration failure', {
-      ...context,
-      userId: user.id,
-      error: error.message,
-    })
-  }
-}
-
 export async function POST(request: Request) {
-  // Rate limit: 3 registrations per IP per 10 minutes
+  // Rate limit: 3 registrations per IP per 10 minutes.
+  // NOTE: This is a per-instance in-memory limit. On multi-instance serverless
+  // deployments (Vercel) each lambda has its own Map, so the effective limit is
+  // higher than 3. For a strict global cap, migrate to a shared store
+  // (e.g. Upstash Redis). Despite this, the limit still catches single-IP
+  // burst abuse hitting the same warm instance.
   const clientIp = getClientIp(request)
-  const allowed = rateLimiter.check(`register:${clientIp}`, 3, 10 * 60 * 1000)
+  const allowed = await rateLimiter.check(`register:${clientIp}`, 3, 10 * 60 * 1000)
   if (!allowed) {
     const retryAfter = rateLimiter.getResetTime(`register:${clientIp}`)
     return NextResponse.json(
@@ -55,14 +42,15 @@ export async function POST(request: Request) {
     const validation = registerCompanySchema.safeParse(body)
 
     if (!validation.success) {
+      const fieldErrors = validation.error.issues.map((issue) => ({
+        field: issue.path.join('.'),
+        message: issue.message,
+      }))
       return NextResponse.json(
         {
           success: false,
-          error: 'Validation failed',
-          details: validation.error.issues.map((issue) => ({
-            field: issue.path.join('.'),
-            message: issue.message,
-          })),
+          error: fieldErrors[0]?.message ?? 'Datos inválidos. Revisá el formulario.',
+          fieldErrors,
         },
         { status: 400 }
       )
@@ -202,10 +190,10 @@ export async function POST(request: Request) {
         slug: input.companySlug,
       })
 
-      await cleanupNewAuthUser(admin, authData.user, {
-        slug: input.companySlug,
-        stage: 'organization_creation',
-      })
+      // Only the auth user needs cleanup at this stage — org doesn't exist yet.
+      if (Array.isArray(authData.user.identities) && authData.user.identities.length > 0) {
+        await admin.auth.admin.deleteUser(userId)
+      }
 
       return NextResponse.json(
         {
@@ -260,7 +248,6 @@ export async function POST(request: Request) {
         email: input.email,
         full_name: input.fullName,
         role: 'admin',
-        status: 'active',
       }),
       admin.from('user_roles').upsert(
         {
@@ -270,14 +257,21 @@ export async function POST(request: Request) {
         },
         { onConflict: 'user_id' }
       ),
-      admin.from('branches').insert({
-        organization_id: organization.id,
-        code: 'principal',
-        name: 'Sucursal principal',
-        slug: 'principal',
-        is_active: true,
-        is_default: true,
-      }),
+      // Use upsert instead of insert so a retry after a partial failure (where
+      // the branch row already exists) doesn't treat the duplicate as a fatal
+      // provisioning error.
+      admin.from('branches').upsert(
+        {
+          organization_id: organization.id,
+          code: 'principal',
+          name: 'Sucursal principal',
+          slug: 'principal',
+          is_active: true,
+          is_default: true,
+          metadata: {},
+        },
+        { onConflict: 'organization_id,code', ignoreDuplicates: true }
+      ),
     ])
 
     const provisioningFailures = getProvisioningFailures([
@@ -297,23 +291,14 @@ export async function POST(request: Request) {
         failures: provisioningFailures,
       })
 
-      const cleanupResult = await admin
-        .from('organizations')
-        .delete()
-        .eq('id', organization.id)
-
-      if (cleanupResult.error) {
-        logger.error('Failed to cleanup partially provisioned organization', {
-          organizationId: organization.id,
-          error: cleanupResult.error.message,
-        })
-      }
-
-      await cleanupNewAuthUser(admin, authData.user, {
-        organizationId: organization.id,
-        slug: organization.slug,
-        stage: 'company_provisioning',
-      })
+      // Full rollback: removes all partially-created rows for this org + user.
+      await cleanupPartialProvisioning(
+        admin as RegisterAdminClient,
+        authData.user as RegisteredAuthUser,
+        organization.id,
+        { userId, organizationId: organization.id, slug: organization.slug, stage: 'company_provisioning' },
+        logger,
+      )
 
       return NextResponse.json(
         {

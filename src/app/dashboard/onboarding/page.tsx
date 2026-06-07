@@ -179,6 +179,7 @@ export default async function DashboardOnboardingPage() {
         facebook: companyInfo.facebook || '',
         tiktok: companyInfo.tiktok || '',
       }}
+      serverIsAdmin={canAccessOnboarding}
     />
   )
 }

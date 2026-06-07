@@ -4,7 +4,7 @@ import { useState } from 'react'
 import type { ElementType } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Building2, CheckCircle2, ChevronDown, ExternalLink, Globe, Loader2, Mail, MapPin, MessageCircle, Package, Phone, Settings, ShieldAlert, ShoppingCart, Store, Users } from 'lucide-react'
+import { ArrowRight, Building2, CheckCircle2, ChevronDown, ExternalLink, Globe, Loader2, Mail, MapPin, MessageCircle, Package, Phone, ShieldAlert, ShoppingCart, Store, Users } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -46,6 +46,8 @@ type OnboardingClientProps = {
   completedAt?: string | null
   stepProgress: StepProgress
   initialCompanyInfo: CompanyInfoForm
+  /** Server-verified admin status — avoids client-side race with useAuth(). */
+  serverIsAdmin?: boolean
 }
 
 type CompanyInfoForm = {
@@ -147,9 +149,11 @@ function formatTrialDate(value: string | null) {
   }
 }
 
-export function OnboardingClient({ organization, subscription, completedAt, stepProgress, initialCompanyInfo }: OnboardingClientProps) {
+export function OnboardingClient({ organization, subscription, completedAt, stepProgress, initialCompanyInfo, serverIsAdmin }: OnboardingClientProps) {
   const router = useRouter()
-  const { isAdmin } = useAuth()
+  const { isAdmin: clientIsAdmin } = useAuth()
+  // Trust server-side verification first (avoids race condition on fresh registrations)
+  const isAdmin = serverIsAdmin ?? clientIsAdmin
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<CompanyInfoForm>(initialCompanyInfo)
   const [error, setError] = useState('')
@@ -203,9 +207,13 @@ export function OnboardingClient({ organization, subscription, completedAt, step
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
-      const payload = await response.json().catch(() => null) as { error?: string } | null
+      const payload = await response.json().catch(() => null) as { error?: string; _debug?: unknown[] } | null
 
       if (!response.ok) {
+        // Show debug details in console for diagnostics
+        if (payload?._debug) {
+          console.error('[Onboarding] Server debug:', payload._debug)
+        }
         throw new Error(payload?.error || 'No se pudo finalizar el onboarding')
       }
 
@@ -697,43 +705,55 @@ export function OnboardingClient({ organization, subscription, completedAt, step
         </ol>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900/50">
-        <div className="flex gap-3">
-          <Settings className="mt-0.5 h-5 w-5 text-slate-500" />
-          <div>
-            <h2 className="font-semibold text-slate-950 dark:text-white">Ordenes y rastreo sincronizados</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
-              Los pedidos creados desde la tienda se gestionan en el dashboard y el cliente puede ver cambios en {trackUrl}.
-            </p>
+      {/* Sticky save bar */}
+      <section className="sticky bottom-4 z-20 rounded-2xl border border-cyan-200 bg-white/95 p-4 shadow-lg backdrop-blur-sm dark:border-cyan-800/60 dark:bg-slate-950/95">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-semibold text-slate-950 dark:text-white">
+                {isRevisit ? 'Guardar cambios del negocio' : 'Finalizar configuracion inicial'}
+              </p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Guarda los datos de tu empresa y activa la tienda publica.
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/orders">Ver pedidos</Link>
-          </Button>
-          <Button onClick={completeOnboarding} disabled={saving || !isAdmin} variant={isRevisit ? 'outline' : 'default'}>
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Guardando...
-              </>
-            ) : !isAdmin ? (
-              <>
-                <ShieldAlert className="mr-2 h-4 w-4" />
-                Solo administradores
-              </>
-            ) : isRevisit ? (
-              <>
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Actualizar datos
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Finalizar configuracion
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/dashboard/orders">Ver pedidos</Link>
+            </Button>
+            <Button
+              onClick={completeOnboarding}
+              disabled={saving || !isAdmin}
+              size="lg"
+              className="min-w-[180px] bg-gradient-to-r from-cyan-600 to-blue-600 font-semibold text-white shadow-md hover:from-cyan-500 hover:to-blue-500 disabled:opacity-60"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : !isAdmin ? (
+                <>
+                  <ShieldAlert className="mr-2 h-4 w-4" />
+                  Solo administradores
+                </>
+              ) : isRevisit ? (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Guardar cambios
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Finalizar configuracion
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </section>
     </div>
