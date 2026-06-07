@@ -2791,14 +2791,33 @@ function POSPageContent() {
         </div>
       </div>
 
+      {/* Desktop floating checkout button — always visible when cart has items */}
+      {canCheckout && (
+        <div className="hidden md:block fixed bottom-6 right-6 z-50">
+          <Button
+            onClick={() => setIsCheckoutOpen(true)}
+            size="lg"
+            className="h-14 px-6 text-base font-bold rounded-2xl shadow-2xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white transition-all hover:scale-105 hover:shadow-[0_8px_30px_rgba(16,185,129,0.4)] active:scale-95 animate-in slide-in-from-bottom-4 duration-300"
+          >
+            <CreditCard className="mr-2 h-5 w-5" />
+            Cobrar {formatCurrency(unifiedCalculations.total)}
+          </Button>
+        </div>
+      )}
+
       {/* Mobile Cart Bottom Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t p-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-lg z-50">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t-2 border-primary/20 p-3 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-4px_20px_rgba(0,0,0,0.1)] z-50">
         <div className="grid grid-cols-[1fr_auto] gap-2 items-stretch">
           <Sheet open={isMobileCartOpen} onOpenChange={setIsMobileCartOpen}>
             <SheetTrigger asChild>
-              <div className="flex flex-col justify-center cursor-pointer hover:bg-muted/50 px-3 py-2 rounded-md transition-colors border border-border/60">
+              <div className="flex flex-col justify-center cursor-pointer hover:bg-muted/50 px-3 py-2 rounded-xl transition-colors border border-border/60 relative">
                  <span className="text-[11px] text-muted-foreground">{unifiedCalculations.totalItemCount} items en carrito</span>
                  <span className="font-bold text-base">{formatCurrency(unifiedCalculations.total)}</span>
+                 {unifiedCalculations.totalItemCount > 0 && (
+                   <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                     {unifiedCalculations.totalItemCount}
+                   </span>
+                 )}
               </div>
             </SheetTrigger>
             <SheetContent side="bottom" className="h-[80vh] p-0 flex flex-col overflow-hidden">
@@ -2838,14 +2857,14 @@ function POSPageContent() {
           </Sheet>
 
           <Button
-            className="pos-button-primary h-full min-h-[52px] px-4 text-sm font-semibold"
+            className="h-full min-h-[52px] px-5 text-sm font-bold rounded-xl shadow-lg bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white transition-all active:scale-[0.97]"
             onClick={() => setIsCheckoutOpen(true)}
             disabled={!canCheckout}
             title={checkoutDisabledReason}
           >
-            <CreditCard className="mr-2 h-4 w-4" />
+            <CreditCard className="mr-2 h-5 w-5" />
             Cobrar
-            <span className="ml-2 font-bold">{formatCurrency(unifiedCalculations.total)}</span>
+            <span className="ml-2 font-bold tabular-nums">{formatCurrency(unifiedCalculations.total)}</span>
           </Button>
         </div>
       </div>

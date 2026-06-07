@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Check, Eye, Package, ShoppingCart, Tag, Zap, XCircle } from 'lucide-react'
+import { Check, Eye, MapPin, Package, ShoppingCart, Tag, Zap, XCircle } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
 import { useAuth } from '@/contexts/auth-context'
 import { usePathname } from 'next/navigation'
@@ -19,10 +19,28 @@ interface ProductCardProps {
   product: PublicProduct
   priority?: boolean
   isWholesale?: boolean
+  /** Name of the branch the listing is scoped to (when a branch filter is active). */
+  branchName?: string
+  /** Branches where this product has stock (used when browsing all branches). */
+  productBranches?: Array<{ id: string; name: string }>
 }
 
 export function ProductCard(props: ProductCardProps) {
-  const { product, priority = false } = props
+  const { product, priority = false, branchName, productBranches } = props
+
+  // Branch label: an explicit selected branch wins; otherwise summarize the
+  // branches where this product is available.
+  const branchLabel =
+    branchName ||
+    (productBranches && productBranches.length === 1
+      ? productBranches[0].name
+      : productBranches && productBranches.length > 1
+        ? `${productBranches.length} sucursales`
+        : '')
+  const branchTitle =
+    !branchName && productBranches && productBranches.length > 0
+      ? productBranches.map((branch) => branch.name).join(', ')
+      : undefined
   const { hasPermission } = useAuth()
   const { addProduct } = usePublicCart()
   const pathname = usePathname()
@@ -133,6 +151,17 @@ export function ProductCard(props: ProductCardProps) {
               </span>
             )}
           </div>
+
+          {/* Branch badge — top right */}
+          {branchLabel && (
+            <span
+              title={branchTitle}
+              className="absolute right-2.5 top-2.5 z-10 flex max-w-[70%] items-center gap-1 rounded-full bg-background/90 px-2.5 py-1 text-[11px] font-semibold leading-none text-foreground shadow-sm ring-1 ring-border/60 backdrop-blur-sm"
+            >
+              <MapPin className="h-2.5 w-2.5 shrink-0 text-primary" />
+              <span className="truncate">{branchLabel}</span>
+            </span>
+          )}
 
           {/* Out-of-stock overlay */}
           {!isInStock && (
@@ -313,6 +342,12 @@ export function ProductCard(props: ProductCardProps) {
               {product.category && (
                 <Badge variant="outline" className="rounded-full text-[11px]">
                   {product.category.name}
+                </Badge>
+              )}
+              {branchLabel && (
+                <Badge variant="outline" title={branchTitle} className="gap-1 rounded-full text-[11px]">
+                  <MapPin className="h-2.5 w-2.5 text-primary" />
+                  {branchLabel}
                 </Badge>
               )}
               {isLowStock && (

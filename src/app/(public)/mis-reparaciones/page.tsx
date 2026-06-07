@@ -82,7 +82,7 @@ export default async function MisReparacionesPage() {
   }
 
   const settings = await fetchWebsiteSettings()
-  const companyName = settings?.company_info?.name || '4G Celulares'
+  const companyName = settings?.company_info?.name || 'Tienda'
 
   let repairs: RepairRow[] = []
   let customerName = ''

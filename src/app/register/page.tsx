@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Eye, EyeOff, ArrowRight, Shield, Sparkles } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, Shield, Sparkles, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
@@ -21,6 +21,18 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: 'ENTERPRISE',
 }
 
+// Maps API field names to friendly display labels for inline errors.
+const FIELD_LABELS: Record<string, string> = {
+  fullName: 'Nombre completo',
+  email: 'Correo electrónico',
+  password: 'Contraseña',
+  companyName: 'Nombre de la empresa',
+  companySlug: 'Subdominio',
+  plan: 'Plan',
+}
+
+type FieldErrors = Record<string, string>
+
 function RegisterForm() {
   const [formData, setFormData] = useState({
     email: '',
@@ -30,28 +42,43 @@ function RegisterForm() {
     companyName: '',
     companySlug: '',
   })
-  // Track whether the user has manually edited the slug field
+  // Track whether the user has manually edited the slug field.
   const [slugTouched, setSlugTouched] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Per-field inline errors (from Zod or client-side validation).
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
 
   const router = useRouter()
   const searchParams = useSearchParams()
   const reduceMotion = useReducedMotion()
 
+  const rawRedirect = searchParams.get('redirect') || ''
+  const loginHref = rawRedirect ? `/login?redirect=${encodeURIComponent(rawRedirect)}` : '/login'
   const planParam = searchParams.get('plan')?.toLowerCase() ?? ''
   const selectedPlanLabel = PLAN_LABELS[planParam] ?? ''
   const selectedPlan = selectedPlanLabel ? planParam : 'free'
 
+  // Always resolve slug: prefer what the user typed, fall back to slugified company name.
+  const previewSlug = slugifyTenantName(formData.companySlug || formData.companyName)
+
   const handleInputChange = (field: string, value: string) => {
+    // Clear per-field error when the user starts correcting that field.
+    if (fieldErrors[field]) {
+      setFieldErrors((prev) => { const next = { ...prev }; delete next[field]; return next })
+    }
+    if (error) setError('')
+
     if (field === 'companyName' && !slugTouched) {
-      // Auto-mirror the company name into the slug preview (but don't fill the field)
+      // Auto-mirror into slug preview without touching the slug input itself.
       setFormData((prev) => ({ ...prev, companyName: value }))
       return
     }
     if (field === 'companySlug') {
+      // Slug field: track whether the user has typed anything (non-empty = touched).
+      // When cleared, reset to auto-mirror from companyName.
       setSlugTouched(value.trim().length > 0)
     }
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -61,28 +88,28 @@ function RegisterForm() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setFieldErrors({})
 
-    if (formData.password !== formData.confirmPassword) {
-      setError('Las contrasenas no coinciden')
-      setLoading(false)
-      return
-    }
-
-    const passwordError = validatePassword(formData.password)
-    if (passwordError) {
-      setError(passwordError)
-      setLoading(false)
-      return
-    }
+    // Client-side validations — fast, no round-trip.
+    const clientErrors: FieldErrors = {}
 
     if (!formData.fullName.trim()) {
-      setError('El nombre completo es requerido')
-      setLoading(false)
-      return
+      clientErrors.fullName = 'El nombre completo es requerido'
     }
 
     if (!formData.companyName.trim()) {
-      setError('El nombre de la empresa es requerido')
+      clientErrors.companyName = 'El nombre de la empresa es requerido'
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      clientErrors.confirmPassword = 'Las contraseñas no coinciden'
+    } else {
+      const passwordError = validatePassword(formData.password)
+      if (passwordError) clientErrors.password = passwordError
+    }
+
+    if (Object.keys(clientErrors).length > 0) {
+      setFieldErrors(clientErrors)
       setLoading(false)
       return
     }
@@ -96,7 +123,6 @@ function RegisterForm() {
           email: formData.email,
           password: formData.password,
           companyName: formData.companyName,
-          // Use the resolved slug (user input or auto-generated from company name)
           companySlug: previewSlug,
           plan: selectedPlan,
         }),
@@ -110,8 +136,21 @@ function RegisterForm() {
         return
       }
 
+      // Map server-side field errors (from Zod) into inline UI errors.
       if (!response.ok || !result.success) {
-        setError(result.error || 'No se pudo crear la cuenta.')
+        if (Array.isArray(result.fieldErrors) && result.fieldErrors.length > 0) {
+          const serverFieldErrors: FieldErrors = {}
+          for (const { field, message } of result.fieldErrors as { field: string; message: string }[]) {
+            serverFieldErrors[field] = message
+          }
+          setFieldErrors(serverFieldErrors)
+          // Also set a summary error for screen readers / users who might miss inline errors.
+          const firstField = result.fieldErrors[0]?.field ?? ''
+          const label = FIELD_LABELS[firstField] ?? firstField
+          setError(label ? `Revisá el campo "${label}".` : 'Revisá el formulario.')
+        } else {
+          setError(result.error || 'No se pudo crear la cuenta.')
+        }
         setLoading(false)
         return
       }
@@ -137,8 +176,7 @@ function RegisterForm() {
 
   const pwd = formData.password
   const pwdChecks = getPasswordChecks(pwd)
-  // Always resolve slug: prefer what the user typed, fall back to slugified company name
-  const previewSlug = slugifyTenantName(formData.companySlug || formData.companyName)
+  const allChecksOk = pwdChecks.every((c) => c.ok)
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -172,8 +210,9 @@ function RegisterForm() {
             </CardHeader>
 
             <CardContent className="space-y-6">
-              <form onSubmit={handleRegister} className="space-y-4">
-                <div className="space-y-2">
+              <form onSubmit={handleRegister} className="space-y-4" noValidate>
+                {/* Nombre completo */}
+                <div className="space-y-1.5">
                   <Label htmlFor="fullName" className="text-slate-200">
                     Nombre completo
                   </Label>
@@ -186,11 +225,17 @@ function RegisterForm() {
                     required
                     autoFocus
                     disabled={loading}
-                    className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                    aria-invalid={!!fieldErrors.fullName}
+                    aria-describedby={fieldErrors.fullName ? 'err-fullName' : undefined}
+                    className={`h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60 ${fieldErrors.fullName ? 'border-red-500/70' : ''}`}
                   />
+                  {fieldErrors.fullName && (
+                    <p id="err-fullName" className="text-xs text-red-400" role="alert">{fieldErrors.fullName}</p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
+                {/* Email */}
+                <div className="space-y-1.5">
                   <Label htmlFor="email" className="text-slate-200">
                     Correo electronico
                   </Label>
@@ -203,11 +248,17 @@ function RegisterForm() {
                     required
                     autoComplete="email"
                     disabled={loading}
-                    className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                    aria-invalid={!!fieldErrors.email}
+                    aria-describedby={fieldErrors.email ? 'err-email' : undefined}
+                    className={`h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60 ${fieldErrors.email ? 'border-red-500/70' : ''}`}
                   />
+                  {fieldErrors.email && (
+                    <p id="err-email" className="text-xs text-red-400" role="alert">{fieldErrors.email}</p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
+                {/* Nombre empresa */}
+                <div className="space-y-1.5">
                   <Label htmlFor="companyName" className="text-slate-200">
                     Nombre de la empresa
                   </Label>
@@ -219,13 +270,19 @@ function RegisterForm() {
                     onChange={(e) => handleInputChange('companyName', e.target.value)}
                     required
                     disabled={loading}
-                    className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                    aria-invalid={!!fieldErrors.companyName}
+                    aria-describedby={fieldErrors.companyName ? 'err-companyName' : undefined}
+                    className={`h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60 ${fieldErrors.companyName ? 'border-red-500/70' : ''}`}
                   />
+                  {fieldErrors.companyName && (
+                    <p id="err-companyName" className="text-xs text-red-400" role="alert">{fieldErrors.companyName}</p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
+                {/* Subdominio */}
+                <div className="space-y-1.5">
                   <Label htmlFor="companySlug" className="text-slate-200">
-                    Subdominio <span className="text-slate-500 font-normal">(opcional)</span>
+                    Subdominio <span className="font-normal text-slate-500">(opcional)</span>
                   </Label>
                   <Input
                     id="companySlug"
@@ -234,20 +291,25 @@ function RegisterForm() {
                     value={formData.companySlug}
                     onChange={(e) => handleInputChange('companySlug', e.target.value)}
                     disabled={loading}
-                    className="h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                    aria-invalid={!!fieldErrors.companySlug}
+                    aria-describedby="hint-slug"
+                    className={`h-11 border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60 ${fieldErrors.companySlug ? 'border-red-500/70' : ''}`}
                   />
-                  {previewSlug ? (
-                    <p className="flex items-center gap-1.5 text-xs text-slate-400">
+                  {fieldErrors.companySlug ? (
+                    <p className="text-xs text-red-400" role="alert">{fieldErrors.companySlug}</p>
+                  ) : previewSlug ? (
+                    <p id="hint-slug" className="flex items-center gap-1.5 text-xs text-slate-400">
                       <span className="text-slate-500">URL:</span>
                       <span className="font-mono text-cyan-400">{previewSlug}</span>
                       <span className="text-slate-500">.tu-dominio.com</span>
                     </p>
                   ) : (
-                    <p className="text-xs text-slate-500">Se genera automaticamente desde el nombre de la empresa.</p>
+                    <p id="hint-slug" className="text-xs text-slate-500">Se genera automaticamente desde el nombre de la empresa.</p>
                   )}
                 </div>
 
-                <div className="space-y-2">
+                {/* Contraseña */}
+                <div className="space-y-1.5">
                   <Label htmlFor="password" className="text-slate-200">
                     Contrasena
                   </Label>
@@ -261,7 +323,8 @@ function RegisterForm() {
                       required
                       autoComplete="new-password"
                       disabled={loading}
-                      className="h-11 border-slate-700 bg-slate-950/60 pr-11 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                      aria-invalid={!!fieldErrors.password}
+                      className={`h-11 border-slate-700 bg-slate-950/60 pr-11 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60 ${fieldErrors.password ? 'border-red-500/70' : ''}`}
                     />
                     <button
                       type="button"
@@ -272,9 +335,13 @@ function RegisterForm() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  {fieldErrors.password && (
+                    <p className="text-xs text-red-400" role="alert">{fieldErrors.password}</p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
+                {/* Confirmar contraseña */}
+                <div className="space-y-1.5">
                   <Label htmlFor="confirmPassword" className="text-slate-200">
                     Confirmar contrasena
                   </Label>
@@ -288,7 +355,8 @@ function RegisterForm() {
                       required
                       autoComplete="new-password"
                       disabled={loading}
-                      className="h-11 border-slate-700 bg-slate-950/60 pr-11 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60"
+                      aria-invalid={!!fieldErrors.confirmPassword}
+                      className={`h-11 border-slate-700 bg-slate-950/60 pr-11 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500/60 ${fieldErrors.confirmPassword ? 'border-red-500/70' : ''}`}
                     />
                     <button
                       type="button"
@@ -299,19 +367,38 @@ function RegisterForm() {
                       {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  {fieldErrors.confirmPassword && (
+                    <p className="text-xs text-red-400" role="alert">{fieldErrors.confirmPassword}</p>
+                  )}
                 </div>
 
-                <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-                  <p className="mb-2 text-xs font-semibold text-slate-300">Requisitos de contrasena</p>
-                  <ul className="space-y-1 text-xs">
-                    {pwdChecks.map((item) => (
-                      <li key={item.label} className={item.ok ? 'text-emerald-400' : 'text-slate-500'}>
-                        {item.label}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {/* Checklist de contraseña con barra de progreso */}
+                {pwd && (
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+                    {/* Barra de progreso */}
+                    <div className="mb-2.5 flex gap-1">
+                      {pwdChecks.map((item, i) => (
+                        <div
+                          key={i}
+                          className={`h-1 flex-1 rounded-full transition-colors ${item.ok ? 'bg-cyan-500' : 'bg-slate-700'}`}
+                        />
+                      ))}
+                    </div>
+                    <ul className="space-y-1 text-xs">
+                      {pwdChecks.map((item) => (
+                        <li
+                          key={item.label}
+                          className={`flex items-center gap-1.5 ${item.ok ? 'text-emerald-400' : 'text-slate-500'}`}
+                        >
+                          <CheckCircle2 className={`h-3 w-3 shrink-0 ${item.ok ? 'opacity-100' : 'opacity-30'}`} />
+                          {item.label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
+                {/* Error global animado */}
                 <AnimatePresence>
                   {error && (
                     <motion.div
@@ -330,8 +417,8 @@ function RegisterForm() {
 
                 <Button
                   type="submit"
-                  className="h-11 w-full bg-gradient-to-r from-cyan-600 to-blue-600 font-semibold text-white hover:from-cyan-500 hover:to-blue-500"
-                  disabled={loading}
+                  className="h-11 w-full bg-gradient-to-r from-cyan-600 to-blue-600 font-semibold text-white hover:from-cyan-500 hover:to-blue-500 disabled:opacity-60"
+                  disabled={loading || (pwd.length > 0 && !allChecksOk)}
                 >
                   {loading ? (
                     <>
@@ -350,7 +437,7 @@ function RegisterForm() {
               <div className="pt-1 text-center">
                 <p className="text-sm text-slate-400">
                   Ya tienes cuenta?{' '}
-                  <Link href="/login" className="font-semibold text-cyan-400 hover:text-cyan-300 hover:underline">
+                  <Link href={loginHref} className="font-semibold text-cyan-400 hover:text-cyan-300 hover:underline">
                     Iniciar sesion
                   </Link>
                 </p>

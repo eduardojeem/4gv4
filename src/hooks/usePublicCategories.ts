@@ -1,4 +1,6 @@
 import useSWR from 'swr'
+import { usePathname } from 'next/navigation'
+import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 
 interface Category {
   id: string
@@ -13,8 +15,11 @@ const fetcher = async (url: string) => {
 }
 
 export function usePublicCategories() {
+  const pathname = usePathname()
+  const tenantSlug = getTenantSlugFromPathname(pathname)
+
   const { data, error, isLoading } = useSWR<Category[]>(
-    '/api/public/categories',
+    withOrgQuery('/api/public/categories', tenantSlug),
     fetcher,
     { revalidateOnFocus: false }
   )

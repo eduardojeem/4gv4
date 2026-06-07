@@ -29,6 +29,10 @@ export interface FilterPanelProps {
   filters: DashboardFilters
   onFiltersChange: (filters: DashboardFilters) => void
   onClearFilters: () => void
+  /** Full brand list (e.g. from the brands table). Falls back to brands derived from `products`. */
+  brandOptions?: string[]
+  /** Global result count. When provided overrides the count derived from `products`. */
+  resultCount?: number
   className?: string
 }
 
@@ -40,17 +44,22 @@ export function FilterPanel({
   filters,
   onFiltersChange,
   onClearFilters,
+  brandOptions,
+  resultCount,
   className
 }: FilterPanelProps) {
   const ALL_OPTION_VALUE = '__all__'
 
-  // Get unique brands from products
-  const brands = useMemo(() => getUniqueBrands(products), [products])
+  // Prefer the full brand list; otherwise derive from the products in view.
+  const brands = useMemo(
+    () => brandOptions ?? getUniqueBrands(products),
+    [brandOptions, products]
+  )
 
-  // Calculate filtered product count in real-time
+  // Calculate filtered product count: prefer the global count, else derive locally.
   const filteredCount = useMemo(() => {
-    return applyFilters(products, filters).length
-  }, [products, filters])
+    return resultCount ?? applyFilters(products, filters).length
+  }, [resultCount, products, filters])
 
   if (!isOpen) return null
 

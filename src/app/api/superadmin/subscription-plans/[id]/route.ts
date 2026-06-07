@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
+import { logSuperAdminAction } from '@/lib/superadmin/audit'
 
 type UpdatePlanBody = {
   name?: unknown
@@ -188,6 +189,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       tier: plan.tier,
     },
     user_agent: request.headers.get('user-agent'),
+  })
+
+  await logSuperAdminAction({
+    actorId: user.id,
+    actorEmail: user.email,
+    action: 'subscription_plan.updated',
+    resource: 'subscription_plans',
+    resourceId: id,
+    newValues: { ...patch, tier: plan.tier },
+    request,
   })
 
   return NextResponse.json({ plan })

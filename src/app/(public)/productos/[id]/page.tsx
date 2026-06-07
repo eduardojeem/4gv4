@@ -40,7 +40,7 @@ export async function generateMetadata(
 
   const { product } = result
   const settings = await fetchWebsiteSettings()
-  const companyName = settings?.company_info?.name || '4G Celulares'
+  const companyName = settings?.company_info?.name || 'Tienda'
   const previousImages = (await parent).openGraph?.images || []
   const productImage = resolveProductImageUrl(product.image)
 

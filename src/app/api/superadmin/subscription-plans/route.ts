@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
+import { logSuperAdminAction } from '@/lib/superadmin/audit'
 
 // ---------------------------------------------------------------------------
 // GET — Stats por plan: cantidad de orgs y MRR estimado
@@ -126,6 +127,16 @@ export async function POST(request: NextRequest) {
     resource_id: plan.id,
     metadata: { tier, name, price },
   }).then(() => {}, () => {})
+
+  await logSuperAdminAction({
+    actorId: user.id,
+    actorEmail: user.email,
+    action: 'subscription_plan.created',
+    resource: 'subscription_plans',
+    resourceId: plan.id,
+    newValues: { tier, name, price },
+    request,
+  })
 
   return NextResponse.json({ plan }, { status: 201 })
 }

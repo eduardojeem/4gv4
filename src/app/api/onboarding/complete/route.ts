@@ -151,7 +151,6 @@ export async function POST(request: Request) {
   const branchPayload = {
     organization_id: organizationId,
     name: 'Sucursal principal',
-    slug: slugifyBranch(input.displayName),
     address: input.address,
     city: input.city,
     phone: input.phone,
@@ -207,7 +206,7 @@ export async function POST(request: Request) {
       ),
     defaultBranch?.id
       ? admin.from('branches').update(branchPayload).eq('id', defaultBranch.id)
-      : admin.from('branches').insert({ ...branchPayload, code: 'principal' }),
+      : admin.from('branches').insert({ ...branchPayload, code: 'principal', slug: 'principal' }),
     admin
       .from('website_settings')
       .upsert(

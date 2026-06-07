@@ -65,6 +65,26 @@ export function getTenantSlugFromPath(pathname: string) {
   return slugifyTenantName(maybeSlug)
 }
 
+const TENANT_PUBLIC_SECTIONS = ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil']
+
+/**
+ * Client-safe: extract the tenant slug from a public pathname like
+ * `/precimax-celulares/inicio`. Returns '' when the path isn't a tenant route.
+ */
+export function getTenantSlugFromPathname(pathname: string): string {
+  const segments = pathname.split('/').filter(Boolean)
+  return segments.length > 1 && TENANT_PUBLIC_SECTIONS.includes(segments[1])
+    ? segments[0]
+    : ''
+}
+
+/** Append `?org=<slug>` (or `&org=`) to a public API URL so it resolves the right tenant. */
+export function withOrgQuery(url: string, slug: string): string {
+  if (!slug) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}org=${encodeURIComponent(slug)}`
+}
+
 export function slugifyTenantName(value: string) {
   return value
     .normalize('NFD')

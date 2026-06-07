@@ -1,7 +1,7 @@
 
 import { Suspense } from 'react'
 import { Metadata } from 'next'
-import { getPublicProducts, getPublicCategories, resolveWholesaleStatus, getPublicBranches } from '@/lib/api/products-server'
+import { getPublicProducts, getPublicCategories, resolveWholesaleStatus, getPublicBranches, getProductsBranchPresence } from '@/lib/api/products-server'
 import { ProductCard } from '@/components/public/ProductCard'
 import { ProductFilters } from '@/components/public/ProductFilters'
 import { Breadcrumbs } from '@/components/public/Breadcrumbs'
@@ -9,6 +9,7 @@ import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import {
   ProductSearch,
   ProductSort,
+  BranchSelect,
   ProductPagination,
   MobileFilters,
   FilterBadges,
@@ -23,7 +24,7 @@ export const revalidate = 60
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await fetchWebsiteSettings()
-  const name = settings?.company_info?.name || '4G Celulares'
+  const name = settings?.company_info?.name || 'Tienda'
   return {
     title: 'Catálogo de Productos',
     description: `Explorá el catálogo de ${name}. Celulares, repuestos y accesorios con las mejores marcas y precios.`,
@@ -75,6 +76,14 @@ export default async function ProductsPage(props: {
   ])
 
   const { products, total, totalPages, brands, priceRange } = productsData
+  const selectedBranchName = branchId ? branches.find((b) => b.id === branchId)?.name : undefined
+
+  // When browsing all branches, resolve which branches each product has stock in
+  // so the cards can still identify their location.
+  const productBranchMap =
+    !branchId && branches.length > 1
+      ? await getProductsBranchPresence(products.map((p) => p.id), branches)
+      : {}
 
   const hasActiveFilters = (
     categoryId !== '' ||
@@ -162,9 +171,14 @@ export default async function ProductsPage(props: {
                   brands={brands}
                   branches={branches}
                 />
-                <Suspense fallback={<div className="h-9 w-[150px] bg-muted animate-pulse rounded-lg" />}>
-                  <ProductSort />
-                </Suspense>
+                <div className="flex items-center gap-2">
+                  <Suspense fallback={<div className="h-9 w-[180px] bg-muted animate-pulse rounded-lg" />}>
+                    <BranchSelect branches={branches} />
+                  </Suspense>
+                  <Suspense fallback={<div className="h-9 w-[150px] bg-muted animate-pulse rounded-lg" />}>
+                    <ProductSort />
+                  </Suspense>
+                </div>
               </div>
               <div className="mt-3">
                 <Suspense>
@@ -203,6 +217,8 @@ export default async function ProductsPage(props: {
                     product={product}
                     priority={index < 4}
                     isWholesale={isWholesale}
+                    branchName={selectedBranchName}
+                    productBranches={productBranchMap[product.id]}
                   />
                 ))}
               </div>

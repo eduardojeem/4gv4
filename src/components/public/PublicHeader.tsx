@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { Package, Wrench, Menu, X, Phone, User, UserPlus, Shield, Clock, LayoutDashboard, Truck } from 'lucide-react'
+import Image from 'next/image'
+import { Package, Wrench, Store, Menu, X, Phone, User, UserPlus, Shield, Clock, LayoutDashboard, Truck } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -50,9 +51,11 @@ export function PublicHeader() {
   }, [])
 
   const companyInfo = settings?.company_info
-  const envSupportPhone = (process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP || process.env.NEXT_PUBLIC_COMPANY_PHONE || '').toString()
-  const phoneDisplay = companyInfo?.phone || envSupportPhone
+  // Only show the organization's own phone — never the platform-level env fallback.
+  const phoneDisplay = companyInfo?.phone || ''
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
+  const companyLogoUrl = companyInfo?.logoUrl?.trim() || ''
+  const weekdayHours = companyInfo?.hours?.weekdays?.trim() || ''
   const showTopBar = companyInfo?.showTopBar !== false
   const canAccessDashboard = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'
   const isWholesaleUser = hasPermission(WHOLESALE_PRICE_PERMISSION)
@@ -172,8 +175,8 @@ export function PublicHeader() {
           : 'bg-background/80 backdrop-blur-lg border-b border-border/40'
       }`}
     >
-      {/* Top bar */}
-      {showTopBar && (
+      {/* Top bar — only when the org actually provides contact info */}
+      {showTopBar && (phoneDisplay || weekdayHours) && (
         <div className={`hidden border-b md:block py-1.5 transition-colors ${
           companyInfo?.headerStyle === 'accent'
             ? 'border-white/10 bg-white/5 text-primary-foreground/90'
@@ -181,29 +184,26 @@ export function PublicHeader() {
             ? 'border-slate-900 bg-slate-900/30 text-slate-400'
             : 'border-border/30 bg-muted/40 text-muted-foreground'
         }`}>
-          <div className="container flex h-auto items-center justify-between text-xs font-medium">
+          <div className="container flex h-auto items-center text-xs font-medium">
             <div className="flex items-center gap-6">
-              <a
-                href={phoneClean ? `tel:${phoneClean}` : undefined}
-                className="flex items-center gap-1.5 transition-colors hover:opacity-80"
-                aria-label="Llamar al local"
-              >
-                <Phone className={`h-3.5 w-3.5 ${companyInfo?.headerStyle === 'accent' ? 'text-white' : 'text-primary'}`} />
-                <span>{phoneDisplay || '(sin telefono)'}</span>
-              </a>
-              <span className="flex items-center gap-1.5">
-                <Clock className={`h-3.5 w-3.5 ${companyInfo?.headerStyle === 'accent' ? 'text-white' : 'text-primary'}`} />
-                {companyInfo?.hours?.weekdays || 'Lun - Vie: 8:00 - 18:00'}
-                {companyInfo?.hours?.saturday ? ` | Sáb: ${companyInfo.hours.saturday}` : ''}
-              </span>
+              {phoneDisplay && (
+                <a
+                  href={phoneClean ? `tel:${phoneClean}` : undefined}
+                  className="flex items-center gap-1.5 transition-colors hover:opacity-80"
+                  aria-label="Llamar al local"
+                >
+                  <Phone className={`h-3.5 w-3.5 ${companyInfo?.headerStyle === 'accent' ? 'text-white' : 'text-primary'}`} />
+                  <span>{phoneDisplay}</span>
+                </a>
+              )}
+              {weekdayHours && (
+                <span className="flex items-center gap-1.5">
+                  <Clock className={`h-3.5 w-3.5 ${companyInfo?.headerStyle === 'accent' ? 'text-white' : 'text-primary'}`} />
+                  {weekdayHours}
+                  {companyInfo?.hours?.saturday ? ` | Sáb: ${companyInfo.hours.saturday}` : ''}
+                </span>
+              )}
             </div>
-            <Link
-              href={customerLoginHref}
-              className="flex items-center gap-1.5 transition-colors hover:opacity-80"
-            >
-              <User className={`h-3.5 w-3.5 ${companyInfo?.headerStyle === 'accent' ? 'text-white' : 'text-primary'}`} />
-              Portal cliente
-            </Link>
           </div>
         </div>
       )}
@@ -212,16 +212,26 @@ export function PublicHeader() {
       <div className="container flex h-16 items-center justify-between gap-4">
         {/* Logo */}
         <Link href={withTenantPrefix('/inicio')} className="group flex items-center gap-3 shrink-0" aria-label="Ir a inicio">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-md shadow-primary/10 transition-all duration-300 group-hover:scale-105 group-hover:rotate-3 ${
+          <div className={`relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl shadow-md shadow-primary/10 transition-all duration-300 group-hover:scale-105 group-hover:rotate-3 ${
             companyInfo?.headerStyle === 'accent'
               ? 'bg-white text-primary'
               : 'bg-primary text-primary-foreground'
           }`}>
-            <Wrench className="h-5.5 w-5.5" />
+            {companyLogoUrl ? (
+              <Image
+                src={companyLogoUrl}
+                alt={companyInfo?.name || 'Logo'}
+                fill
+                sizes="40px"
+                className="object-cover"
+              />
+            ) : (
+              <Store className="h-5.5 w-5.5" />
+            )}
           </div>
           <div className="hidden sm:block">
             <span className="block text-base font-extrabold leading-tight tracking-tight">
-              {companyInfo?.name || '4G Celulares'}
+              {companyInfo?.name || 'Tienda'}
             </span>
             <span className={`block text-[10px] font-medium leading-tight ${
               companyInfo?.headerStyle === 'accent' ? 'text-white/80' : 'text-muted-foreground'
@@ -256,19 +266,6 @@ export function PublicHeader() {
               </Link>
             )
           })}
-          {mounted && !user && (
-            <Link
-              href={customerLoginHref}
-              className={`relative flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
-                companyInfo?.headerStyle === 'accent'
-                  ? 'text-white/80 hover:text-white hover:bg-white/10'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60'
-              }`}
-            >
-              <User className="h-4 w-4 shrink-0" />
-              Ingresar
-            </Link>
-          )}
         </nav>
 
         {/* Right side: Theme toggle + CTA + User */}
@@ -486,13 +483,16 @@ export function PublicHeader() {
             )}
           </div>
 
-          {/* Mobile contact info */}
+          {/* Mobile contact info — only when the org provides it */}
+          {(weekdayHours || phoneDisplay) && (
           <div className="mt-3 border-t border-border/50 px-4 pt-4">
             <div className="flex flex-col gap-2 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <Clock className="h-3.5 w-3.5" />
-                <span>{companyInfo?.hours?.weekdays || 'Lun - Vie: 8:00 - 18:00'}</span>
-              </div>
+              {weekdayHours && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{weekdayHours}</span>
+                </div>
+              )}
               {companyInfo?.hours?.saturday && (
                 <div className="flex items-center gap-2">
                   <Clock className="h-3.5 w-3.5" />
@@ -510,6 +510,7 @@ export function PublicHeader() {
               )}
             </div>
           </div>
+          )}
         </nav>
       </div>
 

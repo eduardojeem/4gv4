@@ -19,6 +19,7 @@ import { Switch } from '@/components/ui/switch'
 import { Product } from '@/types/products'
 import { getStockStatus } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 
 export interface ProductCardProps {
   product: Product
@@ -31,9 +32,6 @@ export interface ProductCardProps {
   onToggleActive?: (product: Product, newValue: boolean) => void
   className?: string
 }
-
-const formatGs = (value: number) =>
-  `Gs. ${value.toLocaleString('es-PY', { maximumFractionDigits: 0 })}`
 
 export const ProductCard = React.memo(function ProductCard({
   product,
@@ -302,14 +300,14 @@ export const ProductCard = React.memo(function ProductCard({
             <div>
               <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider mb-0.5">Precio venta</p>
               <span className="text-xl font-black text-gray-900 dark:text-gray-50 tracking-tight">
-                {formatGs(product.sale_price)}
+                {formatCurrency(product.sale_price)}
               </span>
             </div>
             {product.purchase_price && product.purchase_price > 0 && (
               <div className="text-right">
                 <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider mb-0.5">Costo</p>
                 <span className="text-sm font-semibold text-gray-400 dark:text-gray-500">
-                  {formatGs(product.purchase_price)}
+                  {formatCurrency(product.purchase_price)}
                 </span>
               </div>
             )}

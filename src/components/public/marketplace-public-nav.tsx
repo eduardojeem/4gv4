@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Building2, Grid3X3, LayoutDashboard, LayoutGrid, LogOut, Menu, Package, Rocket, Search, ShoppingBag, Store, User, X } from 'lucide-react'
+import { Building2, Grid3X3, LayoutDashboard, LayoutGrid, LogOut, Menu, Package, Rocket, Search, ShoppingBag, Store, User, UserPlus, X } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -25,6 +25,9 @@ const navItems = [
   { href: '/marketplace/categorias', label: 'Categorías', icon: Grid3X3, exact: false },
   { href: '/marketplace/empresas', label: 'Empresas', icon: Building2, exact: false },
 ]
+
+const marketplaceLoginHref = '/login?redirect=/marketplace'
+const marketplaceRegisterHref = '/cliente/registro?redirect=/marketplace'
 
 export function MarketplacePublicNav() {
   const pathname = usePathname()
@@ -159,15 +162,15 @@ export function MarketplacePublicNav() {
           ) : (
             <>
               <Button asChild variant="ghost" size="sm" className="hidden gap-2 sm:inline-flex">
-                <Link href="/login">
+                <Link href={marketplaceLoginHref}>
                   <User className="h-4 w-4" />
                   Ingresar
                 </Link>
               </Button>
-              <Button asChild size="sm" className="hidden gap-2 bg-cyan-600 hover:bg-cyan-700 sm:inline-flex dark:bg-cyan-600 dark:hover:bg-cyan-700">
-                <Link href="/register">
-                  <ShoppingBag className="h-4 w-4" />
-                  Crear mi tienda
+              <Button asChild size="sm" className="hidden gap-2 bg-cyan-600 text-white hover:bg-cyan-500 sm:inline-flex">
+                <Link href={marketplaceRegisterHref}>
+                  <UserPlus className="h-4 w-4" />
+                  Crear cuenta
                 </Link>
               </Button>
             </>
@@ -242,16 +245,16 @@ export function MarketplacePublicNav() {
                 </div>
               ) : (
                 <div className="grid gap-2">
-                  <Button asChild variant="outline" size="sm" className="w-full gap-2">
-                    <Link href="/login" onClick={() => setMobileOpen(false)}>
-                      <User className="h-4 w-4" />
-                      Ingresar
+                  <Button asChild size="sm" className="w-full gap-2 bg-cyan-600 text-white hover:bg-cyan-500">
+                    <Link href={marketplaceRegisterHref} onClick={() => setMobileOpen(false)}>
+                      <UserPlus className="h-4 w-4" />
+                      Crear cuenta
                     </Link>
                   </Button>
-                  <Button asChild size="sm" className="w-full gap-2 bg-cyan-600 hover:bg-cyan-700">
-                    <Link href="/register" onClick={() => setMobileOpen(false)}>
-                      <ShoppingBag className="h-4 w-4" />
-                      Crear mi tienda
+                  <Button asChild variant="outline" size="sm" className="w-full gap-2">
+                    <Link href={marketplaceLoginHref} onClick={() => setMobileOpen(false)}>
+                      <User className="h-4 w-4" />
+                      Ingresar
                     </Link>
                   </Button>
                   <Button asChild variant="outline" size="sm" className="w-full gap-2 border-cyan-200 text-cyan-700 hover:bg-cyan-50 dark:border-cyan-800 dark:text-cyan-300">

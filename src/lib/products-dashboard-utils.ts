@@ -77,10 +77,10 @@ export function applyFilters(products: Product[], filters: DashboardFilters): Pr
   if (filters.quick_filter) {
     switch (filters.quick_filter) {
       case 'low_stock':
-        filtered = filtered.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0)
+        filtered = filtered.filter(isLowStock)
         break
       case 'out_of_stock':
-        filtered = filtered.filter(p => p.stock_quantity === 0)
+        filtered = filtered.filter(isOutOfStock)
         break
       case 'active':
         filtered = filtered.filter(p => p.is_active)
@@ -96,13 +96,35 @@ export function applyFilters(products: Product[], filters: DashboardFilters): Pr
 }
 
 /**
+ * Stock helpers — single source of truth for stock classification.
+ *
+ * When `min_stock` is not set we treat the threshold as 0, i.e. the product is
+ * only ever "out of stock" (never "low stock"). This keeps badges, metrics,
+ * quick-filter counts and alerts perfectly aligned.
+ */
+type StockShape = { stock_quantity?: number | null; min_stock?: number | null }
+
+export function getMinStockThreshold(product: Pick<StockShape, 'min_stock'>): number {
+  return Number(product.min_stock ?? 0)
+}
+
+export function isOutOfStock(product: Pick<StockShape, 'stock_quantity'>): boolean {
+  return Number(product.stock_quantity ?? 0) <= 0
+}
+
+export function isLowStock(product: StockShape): boolean {
+  const stock = Number(product.stock_quantity ?? 0)
+  return stock > 0 && stock <= getMinStockThreshold(product)
+}
+
+/**
  * Get stock status for a product
  */
 export function getStockStatus(product: Product): 'in_stock' | 'low_stock' | 'out_of_stock' {
-  if (product.stock_quantity === 0) {
+  if (isOutOfStock(product)) {
     return 'out_of_stock'
   }
-  if (product.stock_quantity <= product.min_stock) {
+  if (isLowStock(product)) {
     return 'low_stock'
   }
   return 'in_stock'
@@ -166,13 +188,9 @@ export function calculateMetrics(products: Product[]): DashboardMetrics {
   const total_products = products.length
   const active_products = products.filter(p => p.is_active).length
   
-  const low_stock_count = products.filter(
-    p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0
-  ).length
-  
-  const out_of_stock_count = products.filter(
-    p => p.stock_quantity === 0
-  ).length
+  const low_stock_count = products.filter(isLowStock).length
+
+  const out_of_stock_count = products.filter(isOutOfStock).length
   
   const inventory_value = products.reduce(
     (sum, p) => sum + (p.sale_price * p.stock_quantity),
@@ -261,16 +279,6 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
 }
 
 /**
- * Format currency value
- */
-export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN'
-  }).format(value)
-}
-
-/**
  * Format large numbers (e.g., 1000000 -> 1M)
  */
 export function formatLargeNumber(value: number): string {
@@ -292,6 +300,36 @@ export function getUniqueBrands(products: Product[]): string[] {
     .filter((brand): brand is string => !!brand)
   
   return Array.from(new Set(brands)).sort()
+}
+
+const CSV_DELIMITER = ';'
+const CSV_BOM = '\uFEFF'
+
+function formatCSVDate(value: string | null | undefined): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('es-PY')
+}
+
+function formatCSVNumber(value: number | null | undefined): string {
+  return Number(value || 0).toFixed(2)
+}
+
+function escapeCSVValue(value: unknown): string {
+  const str = String(value ?? '')
+  if (str.includes(CSV_DELIMITER) || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+function buildCSV(headers: string[], rows: unknown[][]): string {
+  return [
+    `sep=${CSV_DELIMITER}`,
+    headers.map(escapeCSVValue).join(CSV_DELIMITER),
+    ...rows.map(row => row.map(escapeCSVValue).join(CSV_DELIMITER))
+  ].join('\r\n')
 }
 
 /**
@@ -368,11 +406,98 @@ export function exportProductsToCSV(products: Product[]): string {
   return csvContent
 }
 
+export function exportProductsToInventoryCSV(products: Product[]): string {
+  if (products.length === 0) {
+    return ''
+  }
+
+  const headers = [
+    'SKU',
+    'Nombre',
+    'Descripción',
+    'Categoría',
+    'Marca',
+    'Proveedor',
+    'Precio Compra',
+    'Precio Venta',
+    'Precio Mayoreo',
+    'Stock',
+    'Stock Mínimo',
+    'Stock Máximo',
+    'Unidad',
+    'Código Barras',
+    'Ubicación',
+    'Activo',
+    'Destacado',
+    'Valor Stock',
+    'Margen %',
+    'Estado Stock',
+    'Fecha Creación',
+    'Fecha Actualización',
+    'ID',
+  ]
+
+  const exportHeaders = [
+    'SKU',
+    'Nombre',
+    'Descripcion',
+    'Categoria',
+    'Marca',
+    'Proveedor',
+    'Precio Compra',
+    'Precio Venta',
+    'Precio Mayoreo',
+    'Stock',
+    'Stock Minimo',
+    'Stock Maximo',
+    'Unidad',
+    'Codigo Barras',
+    'Ubicacion',
+    'Activo',
+    'Destacado',
+    'Valor Stock',
+    'Margen %',
+    'Estado Stock',
+    'Fecha Creacion',
+    'Fecha Actualizacion',
+    'ID',
+  ]
+
+  const rows = products.map(product => [
+    product.sku,
+    product.name,
+    product.description || '',
+    product.category?.name || '',
+    product.brand || '',
+    product.supplier?.name || '',
+    formatCSVNumber(product.purchase_price),
+    formatCSVNumber(product.sale_price),
+    product.wholesale_price !== undefined && product.wholesale_price !== null ? formatCSVNumber(product.wholesale_price) : '',
+    product.stock_quantity,
+    product.min_stock,
+    product.max_stock || '',
+    product.unit_measure,
+    product.barcode || '',
+    product.location || '',
+    product.is_active ? 'Sí' : 'No',
+    product.featured ? 'Sí' : 'No',
+    formatCSVNumber(Number(product.sale_price || 0) * Number(product.stock_quantity || 0)),
+    product.purchase_price ? (((Number(product.sale_price || 0) - Number(product.purchase_price || 0)) / Number(product.purchase_price)) * 100).toFixed(2) : '0.00',
+    isOutOfStock(product) ? 'Sin stock' : (isLowStock(product) ? 'Stock bajo' : 'En stock'),
+    formatCSVDate(product.created_at),
+    formatCSVDate(product.updated_at),
+    product.id,
+  ])
+
+  return buildCSV(exportHeaders, rows)
+}
+
 /**
  * Download CSV file
  */
 export function downloadCSV(csvContent: string, filename: string = 'productos.csv'): void {
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const content = csvContent.startsWith(CSV_BOM) ? csvContent : `${CSV_BOM}${csvContent}`
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   
   if (link.download !== undefined) {

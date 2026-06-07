@@ -23,6 +23,13 @@ export async function fetchWebsiteSettings(): Promise<WebsiteSettings | null> {
       ? await resolvePublicOrganizationBySlug(tenantSlug, supabase)
       : null
 
+    // A tenant slug was requested but no org matched. We're on the admin client
+    // (RLS bypassed), so running an unfiltered query would leak another tenant's
+    // settings. Return null instead — the caller renders safe defaults.
+    if (tenantSlug && !organization) {
+      return null
+    }
+
     let query = supabase
       .from('website_settings')
       .select('key, value')
@@ -40,7 +47,15 @@ export async function fetchWebsiteSettings(): Promise<WebsiteSettings | null> {
       partial[row.key as keyof WebsiteSettings] = row.value
     })
 
-    return applyWebsiteSettingsDefaults(partial)
+    const normalized = applyWebsiteSettingsDefaults(partial)
+
+    // When the tenant hasn't customized its public name, fall back to the
+    // organization's real name (never a hardcoded brand).
+    if (organization && !normalized.company_info.name?.trim()) {
+      normalized.company_info.name = organization.name
+    }
+
+    return normalized
   } catch {
     return null
   }

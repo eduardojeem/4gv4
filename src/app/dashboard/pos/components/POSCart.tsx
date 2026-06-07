@@ -513,20 +513,23 @@ export const POSCart: React.FC<POSCartProps> = memo(({
           </div>
 
           {/* Sticky CTA — Single total + prominent button */}
-          <div className="p-3 border-t border-border/40 bg-gradient-to-t from-background to-background/95">
-            <div className="flex items-center gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Total</p>
-                <p className="text-xl font-bold text-primary leading-tight tabular-nums">{formatCurrency(cartTotal)}</p>
+          <div className="p-4 border-t-2 border-primary/20 bg-gradient-to-t from-primary/5 to-background">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Total a cobrar</p>
+                <p className="text-2xl font-bold text-primary leading-tight tabular-nums">{formatCurrency(cartTotal)}</p>
               </div>
               <Button
                 onClick={onCheckout}
                 disabled={isProcessing || !canCheckout}
                 title={checkoutDisabledReason}
+                size="lg"
                 className={cn(
-                  "ml-auto h-11 px-6 text-sm font-bold rounded-xl shadow-md transition-all",
-                  "bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary hover:shadow-lg hover:scale-[1.02]",
-                  "active:scale-[0.98]"
+                  "w-full h-12 text-base font-bold rounded-xl shadow-lg transition-all",
+                  "bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white",
+                  "hover:shadow-xl hover:scale-[1.01]",
+                  "active:scale-[0.98]",
+                  "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 )}
               >
                 {isProcessing ? (
@@ -536,8 +539,8 @@ export const POSCart: React.FC<POSCartProps> = memo(({
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Cobrar
+                    <CreditCard className="h-5 w-5 mr-2" />
+                    Cobrar ahora
                   </>
                 )}
               </Button>

@@ -37,6 +37,12 @@ export async function GET(request: NextRequest) {
 
     const normalized = applyWebsiteSettingsDefaults(settingsObj)
 
+    // When the tenant hasn't customized its public name, fall back to the
+    // organization's real name (never a hardcoded brand).
+    if (!normalized.company_info.name?.trim()) {
+      normalized.company_info.name = organization.name
+    }
+
     const response = NextResponse.json({
       success: true,
       data: normalized,

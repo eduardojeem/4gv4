@@ -28,6 +28,8 @@ import {
   Boxes,
   Receipt,
   ClipboardList,
+  Store,
+  Globe,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -161,6 +163,7 @@ export default function DashboardPage() {
   const { selectedBranchId } = useBranch()
   const [loadingStats, setLoadingStats] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<number>(-Infinity)
+  const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [stats, setStats] = useState<KpiStat[]>([
     { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/dashboard/reports' },
     { title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo', href: '/dashboard/pos' },
@@ -307,12 +310,34 @@ export default function DashboardPage() {
     }
   }, [fetchDashboardStats])
 
+  // Load organization slug for store link
+  useEffect(() => {
+    if (!config.supabase.isConfigured) return
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase
+        .from('organization_members')
+        .select('organizations!inner(slug)')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => {
+          const org = data?.organizations as any
+          const slug = Array.isArray(org) ? org[0]?.slug : org?.slug
+          if (slug) setOrgSlug(slug)
+        })
+    })
+  }, [supabase])
+
   const quickActions = [
     { title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const },
     { title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs', tone: 'amber' as const },
     { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers', tone: 'violet' as const },
     { title: 'Nuevo producto', icon: Package, href: '/dashboard/products', tone: 'emerald' as const },
     { title: 'Ver reportes', icon: BarChart3, href: '/dashboard/reports', tone: 'cyan' as const },
+    { title: 'Mi tienda pública', icon: Store, href: orgSlug ? `/${orgSlug}/inicio` : '/marketplace/empresas', tone: 'emerald' as const },
+    { title: 'Marketplace', icon: Globe, href: '/marketplace', tone: 'cyan' as const },
   ]
 
   const greeting = (() => {
@@ -460,12 +485,14 @@ export default function DashboardPage() {
       </section>
 
       {/* Quick links footer */}
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {[
           { href: '/dashboard/pos', icon: ShoppingCart, label: 'Punto de venta', sub: 'POS y cobros' },
           { href: '/dashboard/products', icon: Boxes, label: 'Inventario', sub: 'Catálogo y stock' },
           { href: '/dashboard/orders', icon: Receipt, label: 'Órdenes', sub: 'Historial y estado' },
           { href: '/dashboard/customers', icon: ClipboardList, label: 'Clientes', sub: 'CRM y contactos' },
+          { href: '/marketplace', icon: Globe, label: 'Marketplace', sub: 'Explorar empresas y productos' },
+          { href: orgSlug ? `/${orgSlug}/inicio` : '/marketplace/empresas', icon: Store, label: 'Mi tienda pública', sub: 'Ver cómo te ven los clientes' },
         ].map(({ href, icon: Icon, label, sub }) => (
           <Link
             key={href}

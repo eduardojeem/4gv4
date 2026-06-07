@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/superadmin/auth'
+import { logSuperAdminAction } from '@/lib/superadmin/audit'
 
 // ---------------------------------------------------------------------------
 // POST: grant super_admin role to a user (by email)
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Upsert user_roles + profiles
-  const [{ error: roleError }, { error: profileError }, { error: auditError }] = await Promise.all([
+  const [{ error: roleError }, { error: profileError }] = await Promise.all([
     admin.from('user_roles').upsert(
       { user_id: targetUser.id, role: 'super_admin', is_active: true, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' }
@@ -44,22 +45,22 @@ export async function POST(request: NextRequest) {
       { id: targetUser.id, email: targetUser.email, role: 'super_admin', status: 'active' },
       { onConflict: 'id' }
     ),
-    admin.from('audit_log').insert({
-      user_id: me.id,
-      action: 'role_change',
-      resource: 'user_roles',
-      resource_id: targetUser.id,
-      new_values: { role: 'super_admin', target_email: email, granted_by: me.email },
-    }),
   ])
 
   if (roleError || profileError) {
     return NextResponse.json({ error: (roleError ?? profileError)?.message || 'No se pudo asignar el rol.' }, { status: 500 })
   }
 
-  if (auditError) {
-    console.warn('Audit log failed for super_admin grant:', auditError.message)
-  }
+  await logSuperAdminAction({
+    actorId: me.id,
+    actorEmail: me.email,
+    action: 'role_change',
+    resource: 'user_roles',
+    resourceId: targetUser.id,
+    newValues: { role: 'super_admin', target_email: email },
+    request,
+    severity: 'critical',
+  })
 
   return NextResponse.json({ success: true, userId: targetUser.id, email: targetUser.email })
 }
@@ -103,12 +104,16 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: (roleError ?? profileError)?.message || 'No se pudo revocar el rol.' }, { status: 500 })
   }
 
-  await admin.from('audit_log').insert({
-    user_id: me.id,
+  await logSuperAdminAction({
+    actorId: me.id,
+    actorEmail: me.email,
     action: 'role_change',
     resource: 'user_roles',
-    resource_id: userId,
-    new_values: { role: 'admin', previous_role: 'super_admin', revoked_by: me.email },
+    resourceId: userId,
+    oldValues: { role: 'super_admin' },
+    newValues: { role: 'admin' },
+    request,
+    severity: 'critical',
   })
 
   return NextResponse.json({ success: true })

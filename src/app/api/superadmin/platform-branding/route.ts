@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/superadmin/auth'
+import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import {
   DEFAULT_PLATFORM_BRANDING,
   getBrandingFromFeatures,
@@ -122,17 +123,15 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'No se pudo guardar la marca SaaS.' }, { status: 500 })
   }
 
-  try {
-    await admin.from('audit_log').insert({
-      user_id: me.id,
-      action: 'update_platform_branding',
-      resource: 'system_settings',
-      resource_id: 'system',
-      new_values: { saas_branding: branding },
-    })
-  } catch (auditError) {
-    console.error('Failed to write platform branding audit log:', auditError)
-  }
+  await logSuperAdminAction({
+    actorId: me.id,
+    actorEmail: me.email,
+    action: 'update_platform_branding',
+    resource: 'system_settings',
+    resourceId: 'system',
+    newValues: { saas_branding: branding },
+    request,
+  })
 
   return NextResponse.json({
     success: true,

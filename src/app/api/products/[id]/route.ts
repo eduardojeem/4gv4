@@ -89,13 +89,21 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
     const body = await request.json()
     const supabase = await createClient()
     const requestedBranchId = getRequestedBranchId(request, typeof body?.branch_id === 'string' ? body.branch_id : undefined)
-    const branchScope = await resolveBranchScopeForUser({
-      userId: user.id,
-      role: user.role as AppRole | undefined,
-      requestedBranchId,
-      organizationId: organization.id,
-      strict: Boolean(requestedBranchId),
-    })
+
+    let branchScope: Awaited<ReturnType<typeof resolveBranchScopeForUser>>
+    try {
+      branchScope = await resolveBranchScopeForUser({
+        userId: user.id,
+        role: user.role as AppRole | undefined,
+        requestedBranchId,
+        organizationId: organization.id,
+        strict: Boolean(requestedBranchId),
+      })
+    } catch (branchErr) {
+      console.error('[PRODUCTS PUT] Branch scope error:', branchErr)
+      // Non-fatal: proceed without branch scope
+      branchScope = { branchId: null, allBranches: true } as any
+    }
 
     const validationResult = productUpdateSchema.safeParse({
       ...body,
@@ -116,7 +124,10 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
 
     const validated = validationResult.data
     const updatePayload: Record<string, unknown> = {}
-    const desiredStockQuantity = validated.stock_quantity
+    // Only consider stock_quantity if the client explicitly sent it
+    const desiredStockQuantity = 'stock_quantity' in body && body.stock_quantity !== undefined
+      ? validated.stock_quantity
+      : undefined
 
     const allowedKeys: Array<keyof typeof validated> = [
       'name',
@@ -133,6 +144,8 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
     ]
 
     for (const key of allowedKeys) {
+      // Only include fields that the client actually sent in the body
+      if (!(key in body)) continue
       const value = validated[key]
       if (value !== undefined) {
         updatePayload[key] = value
@@ -161,6 +174,7 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
         .maybeSingle()
 
       if (error) {
+        console.error('[PRODUCTS PUT] Supabase update error:', error.message, error.code, error.details)
         logger.error('Failed to update product by id', { productId: id, error: error.message })
         throw error
       }
@@ -198,22 +212,26 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
 
     updatedProduct = refreshedProduct as Record<string, unknown>
 
-    const responseProduct = branchScope.branchId && desiredStockQuantity !== undefined
-      ? applyBranchInventoryToProducts(
-          [updatedProduct as Record<string, unknown> & { id: string; stock_quantity?: number | null }],
-          new Map([[id, Number(desiredStockQuantity)]]),
-          true
-        )[0]
-      : updatedProduct
+    // Only apply branch inventory overlay when the request explicitly changed stock
+    let responseProduct = updatedProduct
+    if (branchScope.branchId && desiredStockQuantity !== undefined) {
+      responseProduct = applyBranchInventoryToProducts(
+        [updatedProduct as Record<string, unknown> & { id: string; stock_quantity?: number | null }],
+        new Map([[id, Number(desiredStockQuantity)]]),
+        true
+      )[0] ?? updatedProduct
+    }
 
     return NextResponse.json({
       success: true,
       data: responseProduct,
     })
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    console.error('[PRODUCTS PUT] Update failed:', errMsg, error)
     logger.error('Product update by id API error', { error })
     return NextResponse.json(
-      { success: false, error: 'Error interno del servidor' },
+      { success: false, error: 'Error interno del servidor', _debug: errMsg },
       { status: 500 }
     )
   }

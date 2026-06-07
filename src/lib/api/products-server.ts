@@ -536,6 +536,46 @@ export async function getPublicBranches(): Promise<PublicBranch[]> {
 }
 
 /**
+ * For a set of products, resolve in which active branches each one has stock.
+ * Returns a plain map (serializable to client components) of
+ * productId -> [{ id, name }]. Used to show branch badges when the shopper is
+ * browsing "all branches". Returns {} when there are no branches/inventory.
+ */
+export async function getProductsBranchPresence(
+  productIds: string[],
+  branches: { id: string; name: string }[]
+): Promise<Record<string, { id: string; name: string }[]>> {
+  if (productIds.length === 0 || branches.length === 0) return {}
+
+  const supabase = createAdminSupabase() as SupabaseClient
+  try {
+    const { data, error } = await supabase
+      .from('branch_inventory')
+      .select('product_id, branch_id, stock_quantity')
+      .in('product_id', productIds)
+      .gt('stock_quantity', 0)
+
+    if (error || !data) return {}
+
+    const branchById = new Map(branches.map((branch) => [branch.id, branch]))
+    const result: Record<string, { id: string; name: string }[]> = {}
+
+    for (const row of data as Array<{ product_id: string; branch_id: string }>) {
+      const branch = branchById.get(row.branch_id)
+      if (!branch) continue
+      const list = result[row.product_id] ?? (result[row.product_id] = [])
+      if (!list.some((entry) => entry.id === branch.id)) {
+        list.push({ id: branch.id, name: branch.name })
+      }
+    }
+
+    return result
+  } catch {
+    return {}
+  }
+}
+
+/**
  * Get branches with full contact info for the homepage locations section.
  * Returns empty array if branches table doesn't exist.
  */

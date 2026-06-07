@@ -83,11 +83,12 @@ export function applyBranchInventoryToProducts<T extends { id: string; stock_qua
     }
 
     if (branchScoped) {
-      // Product exists in catalog but not in this branch's inventory → out of stock for this branch
+      // Product exists in catalog but not in this branch's inventory.
+      // Preserve the global stock_quantity instead of zeroing it — the branch
+      // hasn't been populated yet, so the global value is the best we have.
       return {
         ...product,
-        stock_quantity: 0,
-        branch_stock_quantity: 0,
+        branch_stock_quantity: product.stock_quantity ?? 0,
       }
     }
 

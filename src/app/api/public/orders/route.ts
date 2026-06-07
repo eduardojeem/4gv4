@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { generateOrderNumber, normalizeOrder } from '@/lib/orders/helpers'
 import { releaseReservedStock, reserveOrderStock, type OrderStockItem } from '@/lib/orders/stock'
@@ -151,6 +152,36 @@ export async function POST(request: NextRequest) {
 
       if (customerError) throw customerError
       customerId = customer.id
+    }
+
+    // Best-effort: if the buyer is a logged-in customer, link this store's
+    // customer record to their global account so the order shows up in their
+    // profile and the store recognizes them. Never blocks order creation.
+    try {
+      const authClient = await createClient()
+      const { data: { user: buyer } } = await authClient.auth.getUser()
+      if (buyer && customerId) {
+        await Promise.all([
+          supabase
+            .from('customers')
+            .update({ profile_id: buyer.id, updated_at: now })
+            .eq('id', customerId)
+            .eq('organization_id', organization.id),
+          supabase.from('organization_members').upsert(
+            {
+              organization_id: organization.id,
+              user_id: buyer.id,
+              role: 'customer',
+              status: 'active',
+            },
+            { onConflict: 'organization_id,user_id' }
+          ),
+        ])
+      }
+    } catch (linkError) {
+      logger.warn('Could not link buyer to store customer record', {
+        error: linkError instanceof Error ? linkError.message : linkError,
+      })
     }
 
     const { data: order, error: orderError } = await supabase

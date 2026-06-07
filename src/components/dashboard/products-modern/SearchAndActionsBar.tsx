@@ -21,6 +21,8 @@ export interface SearchAndActionsBarProps {
   onViewModeChange: (mode: ViewMode) => void
   onRefresh: () => void
   onExport: () => void
+  onExportPdf?: () => void
+  onImport?: () => void
   isLoading?: boolean
   className?: string
 }
@@ -34,13 +36,15 @@ export function SearchAndActionsBar({
   onViewModeChange,
   onRefresh,
   onExport,
+  onExportPdf,
+  onImport,
   isLoading = false,
   className
 }: SearchAndActionsBarProps) {
   return (
     <Card className={cn('border-0 shadow-md bg-white dark:bg-gray-800', className)}>
       <CardContent className="p-4">
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col gap-3 xl:flex-row">
           {/* Search Bar */}
           <SearchBar
             value={searchQuery}
@@ -48,7 +52,7 @@ export function SearchAndActionsBar({
           />
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Filter Toggle */}
             <FilterToggle
               isOpen={isFilterPanelOpen}
@@ -65,6 +69,8 @@ export function SearchAndActionsBar({
             <ActionButtons
               onRefresh={onRefresh}
               onExport={onExport}
+              onExportPdf={onExportPdf}
+              onImport={onImport}
               isLoading={isLoading}
             />
           </div>

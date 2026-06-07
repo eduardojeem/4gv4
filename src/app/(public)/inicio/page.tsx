@@ -9,7 +9,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const company = settings?.company_info
   const hero = settings?.hero_content
 
-  const name = company?.name || '4G Celulares'
+  const name = company?.name || 'Tienda'
   const title = hero?.title || 'Reparación y venta de tecnología'
   const description = hero?.subtitle || 'Servicio técnico profesional con garantía. Venta de accesorios y repuestos.'
 

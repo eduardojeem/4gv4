@@ -19,7 +19,7 @@ export function PublicFooter() {
   const emailDisplay = company?.email || process.env.NEXT_PUBLIC_COMPANY_EMAIL || ''
   const addressDisplay = company?.address || ''
 
-  const companyName = company?.name || '4G Celulares'
+  const companyName = company?.name || 'Tienda'
 
   return (
     <footer className="border-t border-border/50 bg-muted/30">

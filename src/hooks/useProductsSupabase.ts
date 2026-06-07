@@ -9,11 +9,13 @@ import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 import { isServiceLikeProduct } from '@/lib/products/is-service-like'
+import { isLowStock, isOutOfStock } from '@/lib/products-dashboard-utils'
 
 interface ProductFilters {
   search?: string
   category?: string
   supplier?: string
+  brand?: string
   stockStatus?: 'all' | 'in_stock' | 'low_stock' | 'out_of_stock'
   priceMin?: number
   priceMax?: number
@@ -133,8 +135,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       const totalCostValue = productList?.reduce((sum, p) => sum + ((p.purchase_price || 0) * (p.stock_quantity || 0)), 0) || 0
       const totalMargin = totalStockValue - totalCostValue
       const avgMarginPercentage = totalCostValue > 0 ? (totalMargin / totalCostValue) * 100 : 0
-      const lowStockCount = productList?.filter(p => (p.stock_quantity || 0) <= (p.min_stock || 5) && (p.stock_quantity || 0) > 0)?.length || 0
-      const outOfStockCount = productList?.filter(p => (p.stock_quantity || 0) === 0)?.length || 0
+      const lowStockCount = productList?.filter(isLowStock)?.length || 0
+      const outOfStockCount = productList?.filter(isOutOfStock)?.length || 0
 
       setDashboardStats({
         totalProducts,
@@ -195,6 +197,10 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
 
       if (activeFilters.supplier) {
         query = query.eq('supplier_id', activeFilters.supplier)
+      }
+
+      if (activeFilters.brand) {
+        query = query.ilike('brand', activeFilters.brand)
       }
 
       if (activeFilters.isActive !== undefined) {
@@ -258,13 +264,11 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       
       let resultData = await applySelectedBranchStock((data || []) as unknown as Product[])
       if (activeFilters.stockStatus === 'low_stock') {
-        resultData = resultData.filter(
-          p => (p.stock_quantity || 0) <= (p.min_stock || 0) && (p.stock_quantity || 0) > 0
-        )
+        resultData = resultData.filter(isLowStock)
       } else if (activeFilters.stockStatus === 'in_stock') {
-        resultData = resultData.filter((product) => Number(product.stock_quantity || 0) > 0)
+        resultData = resultData.filter((product) => !isOutOfStock(product))
       } else if (activeFilters.stockStatus === 'out_of_stock') {
-        resultData = resultData.filter((product) => Number(product.stock_quantity || 0) === 0)
+        resultData = resultData.filter(isOutOfStock)
       }
 
       if (!resultData || resultData.length === 0) {
@@ -358,7 +362,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         const skipMetadataAlerts = isServiceLikeProduct(product)
 
         // Alerta de stock bajo
-        if (product.stock_quantity <= (product.min_stock || 5) && product.stock_quantity > 0) {
+        if (isLowStock(product)) {
           generatedAlerts.push({
             id: `alert-${alertId++}`,
             product_id: product.id,
@@ -377,7 +381,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         }
 
         // Alerta de stock agotado
-        if (product.stock_quantity === 0) {
+        if (isOutOfStock(product)) {
           generatedAlerts.push({
             id: `alert-${alertId++}`,
             product_id: product.id,
@@ -883,6 +887,10 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         query = query.eq('supplier_id', filters.supplier)
       }
 
+      if (filters.brand) {
+        query = query.ilike('brand', filters.brand)
+      }
+
       if (filters.isActive !== undefined) {
         query = query.eq('is_active', filters.isActive)
       }
@@ -941,11 +949,11 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       let items = baseItems
 
       if (filters.stockStatus === 'low_stock') {
-        items = baseItems.filter(p => (Number(p.stock_quantity || 0) <= Number(p.min_stock || 0)) && Number(p.stock_quantity || 0) > 0)
+        items = baseItems.filter(isLowStock)
       } else if (filters.stockStatus === 'in_stock') {
-        items = baseItems.filter(p => Number(p.stock_quantity || 0) > 0)
+        items = baseItems.filter(p => !isOutOfStock(p))
       } else if (filters.stockStatus === 'out_of_stock') {
-        items = baseItems.filter(p => Number(p.stock_quantity || 0) === 0)
+        items = baseItems.filter(isOutOfStock)
       }
 
       const csvContent = [
@@ -954,7 +962,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
           const margin = (Number(p.sale_price || 0) - Number(p.purchase_price || 0))
           const marginPct = p.purchase_price ? (margin / Number(p.purchase_price)) * 100 : 0
           const stockValue = Number(p.sale_price || 0) * Number(p.stock_quantity || 0)
-          const stockStatus = Number(p.stock_quantity || 0) === 0 ? 'Sin Stock' : (Number(p.stock_quantity || 0) <= Number(p.min_stock || 5) ? 'Stock Bajo' : 'En Stock')
+          const stockStatus = isOutOfStock(p) ? 'Sin Stock' : (isLowStock(p) ? 'Stock Bajo' : 'En Stock')
           return [
             p.sku,
             `"${p.name}"`,
@@ -993,6 +1001,327 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       return { 
         success: false, 
         error: err instanceof Error ? err.message : 'Error desconocido' 
+      }
+    }
+  }, [applySelectedBranchStock, selectedBranchId, supabase])
+
+  const exportInventoryCSV = useCallback(async (filters: ProductFilters = {}) => {
+    try {
+      let query = supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(id, name, description),
+          supplier:suppliers(id, name, contact_name, phone, address)
+        `)
+
+      if (filters.search) {
+        query = query.or(`name.ilike.%${filters.search}%,sku.ilike.%${filters.search}%,brand.ilike.%${filters.search}%`)
+      }
+      if (filters.category) query = query.eq('category_id', filters.category)
+      if (filters.supplier) query = query.eq('supplier_id', filters.supplier)
+      if (filters.brand) query = query.ilike('brand', filters.brand)
+      if (filters.isActive !== undefined) query = query.eq('is_active', filters.isActive)
+      if (filters.priceMin !== undefined) query = query.filter('sale_price', 'gte', filters.priceMin)
+      if (filters.priceMax !== undefined) query = query.filter('sale_price', 'lte', filters.priceMax)
+
+      if (filters.stockStatus && filters.stockStatus !== 'all' && !selectedBranchId) {
+        if (filters.stockStatus === 'in_stock') query = query.filter('stock_quantity', 'gt', 0)
+        if (filters.stockStatus === 'low_stock') query = query.filter('stock_quantity', 'gt', 0)
+        if (filters.stockStatus === 'out_of_stock') query = query.filter('stock_quantity', 'eq', 0)
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+      if (!data || data.length === 0) return { success: false, error: 'No hay datos para exportar' }
+
+      type CSVProduct = {
+        id: string
+        sku: string
+        name: string
+        description?: string | null
+        brand?: string | null
+        purchase_price: number | null
+        sale_price: number | null
+        wholesale_price?: number | null
+        stock_quantity: number | null
+        min_stock: number | null
+        max_stock?: number | null
+        unit_measure: string
+        barcode?: string | null
+        location?: string | null
+        is_active: boolean
+        featured?: boolean | null
+        category?: { name?: string } | null
+        supplier?: { name?: string } | null
+      }
+
+      const baseItems = await applySelectedBranchStock(data as unknown as CSVProduct[])
+      let items = baseItems
+      if (filters.stockStatus === 'low_stock') items = baseItems.filter(isLowStock)
+      if (filters.stockStatus === 'in_stock') items = baseItems.filter(product => !isOutOfStock(product))
+      if (filters.stockStatus === 'out_of_stock') items = baseItems.filter(isOutOfStock)
+      if (items.length === 0) return { success: false, error: 'No hay datos para exportar' }
+
+      const delimiter = ';'
+      const exportHeaders = [
+        'SKU', 'Nombre', 'Descripcion', 'Categoria', 'Marca', 'Proveedor',
+        'Precio Compra', 'Precio Venta', 'Precio Mayorista', 'Stock', 'Stock Minimo',
+        'Stock Maximo', 'Unidad', 'Codigo Barras', 'Ubicacion', 'Activo', 'Destacado',
+        'Margen %', 'Valor Stock', 'Estado Stock', 'ID'
+      ]
+      const escapeCSVValue = (value: unknown) => {
+        const str = String(value ?? '')
+        return /[;"\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
+      }
+      const formatNumber = (value: number | null | undefined) => Number(value || 0).toFixed(2)
+      const headers = [
+        'SKU', 'Nombre', 'Descripción', 'Categoría', 'Marca', 'Proveedor',
+        'Precio Compra', 'Precio Venta', 'Precio Mayorista', 'Stock', 'Stock Mínimo',
+        'Stock Máximo', 'Unidad', 'Código Barras', 'Ubicación', 'Activo', 'Destacado',
+        'Margen %', 'Valor Stock', 'Estado Stock', 'ID'
+      ]
+      const rows = items.map(product => {
+        const margin = Number(product.sale_price || 0) - Number(product.purchase_price || 0)
+        const marginPct = product.purchase_price ? (margin / Number(product.purchase_price)) * 100 : 0
+        const stockValue = Number(product.sale_price || 0) * Number(product.stock_quantity || 0)
+        const stockStatus = isOutOfStock(product) ? 'Sin stock' : (isLowStock(product) ? 'Stock bajo' : 'En stock')
+        return [
+          product.sku,
+          product.name,
+          product.description || '',
+          product.category?.name || '',
+          product.brand || '',
+          product.supplier?.name || '',
+          formatNumber(product.purchase_price),
+          formatNumber(product.sale_price),
+          product.wholesale_price !== undefined && product.wholesale_price !== null ? formatNumber(product.wholesale_price) : '',
+          product.stock_quantity,
+          product.min_stock,
+          product.max_stock || '',
+          product.unit_measure,
+          product.barcode || '',
+          product.location || '',
+          product.is_active ? 'Sí' : 'No',
+          product.featured ? 'Sí' : 'No',
+          marginPct.toFixed(2),
+          stockValue.toFixed(2),
+          stockStatus,
+          product.id,
+        ]
+      })
+      const csvContent = [
+        `sep=${delimiter}`,
+        exportHeaders.map(escapeCSVValue).join(delimiter),
+        ...rows.map(row => row.map(escapeCSVValue).join(delimiter))
+      ].join('\r\n')
+
+      const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `productos_${new Date().toISOString().split('T')[0]}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      return { success: true }
+    } catch (err) {
+      console.error('Error exporting inventory CSV:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Error desconocido'
+      }
+    }
+  }, [applySelectedBranchStock, selectedBranchId, supabase])
+
+  const exportToPDF = useCallback(async (filters: ProductFilters = {}) => {
+    try {
+      let query = supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(id, name, description),
+          supplier:suppliers(id, name, contact_name, phone, address)
+        `)
+
+      if (filters.search) {
+        query = query.or(`name.ilike.%${filters.search}%,sku.ilike.%${filters.search}%,brand.ilike.%${filters.search}%`)
+      }
+
+      if (filters.category) {
+        query = query.eq('category_id', filters.category)
+      }
+
+      if (filters.supplier) {
+        query = query.eq('supplier_id', filters.supplier)
+      }
+
+      if (filters.brand) {
+        query = query.ilike('brand', filters.brand)
+      }
+
+      if (filters.isActive !== undefined) {
+        query = query.eq('is_active', filters.isActive)
+      }
+
+      if (filters.priceMin !== undefined) {
+        query = query.filter('sale_price', 'gte', filters.priceMin)
+      }
+
+      if (filters.priceMax !== undefined) {
+        query = query.filter('sale_price', 'lte', filters.priceMax)
+      }
+
+      if (filters.stockStatus && filters.stockStatus !== 'all') {
+        if (filters.stockStatus === 'in_stock' && !selectedBranchId) {
+          query = query.filter('stock_quantity', 'gt', 0)
+        } else if (filters.stockStatus === 'low_stock' && !selectedBranchId) {
+          query = query.filter('stock_quantity', 'gt', 0)
+        } else if (filters.stockStatus === 'out_of_stock' && !selectedBranchId) {
+          query = query.filter('stock_quantity', 'eq', 0)
+        }
+      }
+
+      const { data, error } = await query
+      if (error) throw error
+
+      if (!data || data.length === 0) {
+        return { success: false, error: 'No hay datos para exportar' }
+      }
+
+      type PDFProduct = {
+        id: string
+        sku: string
+        name: string
+        brand?: string | null
+        sale_price: number | null
+        stock_quantity: number | null
+        min_stock: number | null
+        is_active: boolean
+        category?: { name?: string } | null
+        supplier?: { name?: string } | null
+      }
+
+      const baseItems = await applySelectedBranchStock(data as unknown as PDFProduct[])
+      let items = baseItems
+
+      if (filters.stockStatus === 'low_stock') {
+        items = baseItems.filter(isLowStock)
+      } else if (filters.stockStatus === 'in_stock') {
+        items = baseItems.filter(p => !isOutOfStock(p))
+      } else if (filters.stockStatus === 'out_of_stock') {
+        items = baseItems.filter(isOutOfStock)
+      }
+
+      if (items.length === 0) {
+        return { success: false, error: 'No hay datos para exportar' }
+      }
+
+      const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ])
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const generatedAt = new Date()
+      const formatNumber = (value: number) => value.toLocaleString('es-PY')
+      const formatGs = (value: number | null | undefined) => `Gs. ${Number(value || 0).toLocaleString('es-PY')}`
+      const getStockStatus = (product: Pick<PDFProduct, 'stock_quantity' | 'min_stock'>) =>
+        isOutOfStock(product) ? 'Sin stock' : (isLowStock(product) ? 'Stock bajo' : 'En stock')
+
+      const activeCount = items.filter(p => p.is_active).length
+      const lowStockCount = items.filter(isLowStock).length
+      const outOfStockCount = items.filter(isOutOfStock).length
+      const inventoryValue = items.reduce(
+        (sum, product) => sum + Number(product.sale_price || 0) * Number(product.stock_quantity || 0),
+        0
+      )
+
+      doc.setFillColor(15, 23, 42)
+      doc.rect(0, 0, 297, 30, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(18)
+      doc.text('Reporte de productos', 14, 13)
+      doc.setFontSize(9)
+      doc.text(`Generado: ${generatedAt.toLocaleString('es-PY')}`, 14, 21)
+      doc.text(`Productos: ${formatNumber(items.length)}`, 232, 13)
+      doc.text(`Valor inventario: ${formatGs(inventoryValue)}`, 232, 21)
+
+      autoTable(doc, {
+        startY: 36,
+        head: [['Indicador', 'Valor']],
+        body: [
+          ['Total productos', formatNumber(items.length)],
+          ['Activos', formatNumber(activeCount)],
+          ['Stock bajo', formatNumber(lowStockCount)],
+          ['Sin stock', formatNumber(outOfStockCount)],
+        ],
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 2.5 },
+        headStyles: { fillColor: [8, 145, 178], textColor: 255 },
+        margin: { left: 14, right: 218 },
+      })
+
+      autoTable(doc, {
+        startY: 36,
+        head: [[
+          'SKU',
+          'Producto',
+          'Categoria',
+          'Marca',
+          'Proveedor',
+          'Stock',
+          'Min.',
+          'Precio',
+          'Valor stock',
+          'Estado',
+        ]],
+        body: items.map(product => [
+          product.sku || '-',
+          product.name || '-',
+          product.category?.name || '-',
+          product.brand || '-',
+          product.supplier?.name || '-',
+          formatNumber(Number(product.stock_quantity || 0)),
+          formatNumber(Number(product.min_stock || 0)),
+          formatGs(product.sale_price),
+          formatGs(Number(product.sale_price || 0) * Number(product.stock_quantity || 0)),
+          `${product.is_active ? 'Activo' : 'Inactivo'} / ${getStockStatus(product)}`,
+        ]),
+        theme: 'striped',
+        styles: { fontSize: 7.5, cellPadding: 1.8, overflow: 'linebreak' },
+        headStyles: { fillColor: [30, 41, 59], textColor: 255 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: {
+          0: { cellWidth: 24 },
+          1: { cellWidth: 46 },
+          2: { cellWidth: 30 },
+          3: { cellWidth: 28 },
+          4: { cellWidth: 32 },
+          5: { halign: 'right', cellWidth: 18 },
+          6: { halign: 'right', cellWidth: 16 },
+          7: { halign: 'right', cellWidth: 27 },
+          8: { halign: 'right', cellWidth: 30 },
+          9: { cellWidth: 34 },
+        },
+        margin: { left: 14, right: 14 },
+        didDrawPage: () => {
+          doc.setFontSize(8)
+          doc.setTextColor(100)
+          doc.text(`Pagina ${doc.getCurrentPageInfo().pageNumber}`, 270, 202)
+        },
+      })
+
+      doc.save(`productos_${generatedAt.toISOString().split('T')[0]}.pdf`)
+      return { success: true }
+    } catch (err) {
+      console.error('Error exporting to PDF:', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Error desconocido'
       }
     }
   }, [applySelectedBranchStock, selectedBranchId, supabase])
@@ -1065,7 +1394,8 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     getTopSellingProducts,
     // Funciones de utilidad
     resolveAlert,
-    exportToCSV,
+    exportToCSV: exportInventoryCSV,
+    exportToPDF,
     // Setters para compatibilidad
     setProducts,
     // Función para refrescar todos los datos

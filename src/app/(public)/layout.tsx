@@ -10,7 +10,7 @@ import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWit
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await fetchWebsiteSettings()
   const company = settings?.company_info
-  const name = company?.name || '4G Celulares'
+  const name = company?.name || 'Tienda'
   const description = 'Reparación profesional de celulares con garantía. Venta de accesorios y repuestos originales.'
 
   return {

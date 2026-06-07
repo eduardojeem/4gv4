@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/superadmin/auth'
+import { logSuperAdminAction } from '@/lib/superadmin/audit'
 
 function slugify(value: string) {
   return value
@@ -101,14 +102,18 @@ export async function POST(request: NextRequest) {
       trial_ends_at: trialEndsAt,
       cancel_at_period_end: false,
     }, { onConflict: 'organization_id' }),
-    admin.from('audit_log').insert({
-      user_id: superAdmin.id,
-      action: 'create',
-      resource: 'organizations',
-      resource_id: org.id,
-      new_values: { name, slug, plan, created_by: 'superadmin' },
-    }),
   ])
+
+  await logSuperAdminAction({
+    actorId: superAdmin.id,
+    actorEmail: superAdmin.email,
+    action: 'create',
+    resource: 'organizations',
+    resourceId: org.id,
+    organizationId: org.id,
+    newValues: { name, slug, plan },
+    request,
+  })
 
   // Create owner if email provided
   let ownerCreated = false
@@ -143,6 +148,17 @@ export async function POST(request: NextRequest) {
           admin.from('organizations').update({ owner_id: userId }).eq('id', org.id),
         ])
         ownerCreated = true
+        await logSuperAdminAction({
+          actorId: superAdmin.id,
+          actorEmail: superAdmin.email,
+          action: 'invite_owner',
+          resource: 'organizations',
+          resourceId: org.id,
+          organizationId: org.id,
+          newValues: { owner_email: ownerEmail, owner_user_id: userId },
+          request,
+          severity: 'high',
+        })
       }
     } catch (err) {
       ownerError = err instanceof Error ? err.message : 'Error al invitar al owner.'

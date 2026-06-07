@@ -9,7 +9,6 @@ import { useAuth } from '@/contexts/auth-context'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
 
 const navLinks = [
-  { label: 'Marketplace', href: '/marketplace' },
   { label: 'Caracteristicas', href: '/saas#caracteristicas' },
   { label: 'Negocios', href: '/saas/negocios' },
   { label: 'Planes', href: '/saas/planes' },

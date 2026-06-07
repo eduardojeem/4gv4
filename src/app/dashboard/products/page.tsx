@@ -23,6 +23,9 @@ import {
   ProductGrid,
   ProductTable,
   BulkActionsToolbar,
+  AlertsBanner,
+  ProductQuickViewModal,
+  ImportProductsModal,
 } from "@/components/dashboard/products-modern";
 import {
   AlertDialog,
@@ -36,9 +39,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Pagination } from "@/components/ui/pagination";
 import {
-  exportProductsToCSV,
+  exportProductsToInventoryCSV,
   downloadCSV,
 } from "@/lib/products-dashboard-utils";
+import type { DashboardMetrics } from "@/types/products-dashboard";
+import type { QuickFilterCounts } from "@/components/dashboard/products-modern/QuickFiltersBar";
 import type { Database } from "@/lib/supabase/types";
 type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
@@ -51,11 +56,13 @@ export default function ProductsPage() {
     suppliers,
     alerts,
     loading,
+    dashboardStats,
     createProduct,
     updateProduct,
     deleteProduct,
     refreshData,
     exportToCSV,
+    exportToPDF,
     setFilters: setServerFilters,
     setSort: setServerSort,
     setPagination: setServerPagination,
@@ -100,9 +107,58 @@ export default function ProductsPage() {
   const [isPending, startTransition] = useTransition();
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [serverSearch, setServerSearch] = useState("");
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
+  const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+
+  const normalizedAlerts = useMemo(() => {
+    return alerts
+      .map(alert => ({
+        ...alert,
+        type: alert.type || (alert as any).alert_type || 'other'
+      }))
+      .filter(alert => !dismissedAlertIds.includes(alert.id));
+  }, [alerts, dismissedAlertIds]);
+
+  // Métricas y contadores GLOBALES (todo el catálogo), no solo la página visible.
+  // Se usa dashboardStats cuando está disponible; si no, se cae a las métricas
+  // calculadas sobre la vista actual para no quedar en blanco.
+  const globalMetrics = useMemo<DashboardMetrics>(() => ({
+    total_products: dashboardStats?.totalProducts ?? metrics.total_products,
+    active_products: dashboardStats?.activeProducts ?? metrics.active_products,
+    low_stock_count: dashboardStats?.lowStockCount ?? metrics.low_stock_count,
+    out_of_stock_count: dashboardStats?.outOfStockCount ?? metrics.out_of_stock_count,
+    inventory_value: dashboardStats?.totalStockValue ?? metrics.inventory_value,
+  }), [dashboardStats, metrics]);
+
+  const globalQuickFilterCounts = useMemo<QuickFilterCounts | undefined>(() => {
+    if (!dashboardStats) return undefined;
+    return {
+      all: dashboardStats.totalProducts,
+      low_stock: dashboardStats.lowStockCount,
+      out_of_stock: dashboardStats.outOfStockCount,
+      active: dashboardStats.activeProducts,
+    };
+  }, [dashboardStats]);
+
+  const handleAlertClick = (type: 'out_of_stock' | 'low_stock' | 'missing_data') => {
+    if (type === 'out_of_stock') {
+      handleQuickFilter('out_of_stock');
+      toast.info("Mostrando productos agotados");
+    } else if (type === 'low_stock') {
+      handleQuickFilter('low_stock');
+      toast.info("Mostrando productos con bajo stock");
+    } else if (type === 'missing_data') {
+      toast.info("Por favor revisa la información de tus productos");
+    }
+  };
+
+  const handleDismissAlert = (alertId: string) => {
+    setDismissedAlertIds(prev => [...prev, alertId]);
+  };
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -126,6 +182,7 @@ export default function ProductsPage() {
       search: serverSearch || "",
       category: filters.category_id || "",
       supplier: filters.supplier_id || "",
+      brand: filters.brand || "",
       stockStatus:
         quickFilterStockStatus ||
         (filters.stock_status as
@@ -167,6 +224,7 @@ export default function ProductsPage() {
         prev.search === next.search &&
         prev.category === next.category &&
         prev.supplier === next.supplier &&
+        prev.brand === next.brand &&
         prev.stockStatus === next.stockStatus &&
         prev.priceMin === next.priceMin &&
         prev.priceMax === next.priceMax &&
@@ -242,14 +300,20 @@ export default function ProductsPage() {
     const { id, created_at, updated_at, category, supplier, ...rest } =
       product as any;
 
+    const parseDimensions = (value: unknown): Json => {
+      if (typeof value !== "string") return value as Json;
+      try {
+        return JSON.parse(value) as Json;
+      } catch {
+        return null as Json;
+      }
+    };
+
     const duplicatedData = {
       ...rest,
       sku: `DUP-${product.sku}-${Math.floor(Math.random() * 1000)}`,
       name: `${product.name} (Copia)`,
-      dimensions:
-        typeof product.dimensions === "string"
-          ? JSON.parse(product.dimensions)
-          : product.dimensions,
+      dimensions: parseDimensions(product.dimensions),
     };
 
     const result = await createProduct(duplicatedData);
@@ -260,7 +324,14 @@ export default function ProductsPage() {
     }
   };
 
+  // Click on a product opens a quick-view modal instead of navigating away.
   const handleProductViewDetails = (product: Product) => {
+    setQuickViewProduct(product);
+  };
+
+  // Explicit "see full detail" navigates to the dedicated product page.
+  const handleViewFullDetails = (product: Product) => {
+    setQuickViewProduct(null);
     router.push(`/dashboard/products/${product.id}`);
   };
 
@@ -275,6 +346,49 @@ export default function ProductsPage() {
     }
   };
 
+  // Handle import
+  const handleImportProducts = async (rows: Array<{ name: string; sku?: string; description?: string; brand?: string; category?: string; purchase_price?: number; sale_price: number; stock_quantity?: number; min_stock?: number; barcode?: string; unit_measure?: string }>) => {
+    let success = 0;
+    let failed = 0;
+    const errors: Array<{ row: number; error: string }> = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        const result = await createProduct({
+          name: row.name,
+          sku: row.sku || `IMP-${Date.now()}-${i}`,
+          description: row.description || '',
+          brand: row.brand || null,
+          category_id: categories.find((category) =>
+            category.name?.trim().toLowerCase() === row.category?.trim().toLowerCase()
+          )?.id || null,
+          purchase_price: row.purchase_price || 0,
+          sale_price: row.sale_price,
+          stock_quantity: row.stock_quantity || 0,
+          min_stock: row.min_stock || 0,
+          is_active: true,
+          barcode: row.barcode || null,
+          unit_measure: row.unit_measure || 'unidad',
+        } as any);
+
+        if (result.success) {
+          success++;
+        } else {
+          failed++;
+          errors.push({ row: i + 2, error: result.error || 'Error desconocido' });
+        }
+      } catch (err) {
+        failed++;
+        errors.push({ row: i + 2, error: err instanceof Error ? err.message : 'Error' });
+      }
+    }
+
+    // Refresh after import
+    await refreshData();
+    return { success, failed, errors };
+  };
+
   // Handle export
   const handleExport = async () => {
     const result = await exportToCSV(mappedServerFilters);
@@ -282,6 +396,15 @@ export default function ProductsPage() {
       toast.success(`${totalProducts} productos exportados`);
     } else {
       toast.error(result.error || "No hay productos para exportar");
+    }
+  };
+
+  const handleExportPdf = async () => {
+    const result = await exportToPDF(mappedServerFilters);
+    if (result.success) {
+      toast.success("PDF de productos descargado");
+    } else {
+      toast.error(result.error || "No hay productos para descargar");
     }
   };
 
@@ -383,7 +506,7 @@ export default function ProductsPage() {
       selectedProductIds.includes(p.id),
     );
     startTransition(() => {
-      const csv = exportProductsToCSV(selectedProducts);
+      const csv = exportProductsToInventoryCSV(selectedProducts);
       if (csv) {
         downloadCSV(
           csv,
@@ -403,7 +526,7 @@ export default function ProductsPage() {
     switch (metric) {
       case "all":
         handleQuickFilter("all");
-        toast.info(`Mostrando todos los productos (${products.length})`);
+        toast.info(`Mostrando todos los productos (${totalProducts})`);
         break;
       case "low_stock":
         handleQuickFilter("low_stock");
@@ -444,8 +567,15 @@ export default function ProductsPage() {
           </Button>
         </div>
 
+        {/* Alerts Banner */}
+        <AlertsBanner
+          alerts={normalizedAlerts as any}
+          onAlertClick={handleAlertClick}
+          onDismissAlert={handleDismissAlert}
+        />
+
         {/* Metrics Grid */}
-        <MetricsGrid metrics={metrics} onMetricClick={handleMetricClick} />
+        <MetricsGrid metrics={globalMetrics} onMetricClick={handleMetricClick} />
 
         {/* Search and Actions Bar */}
         <SearchAndActionsBar
@@ -457,12 +587,15 @@ export default function ProductsPage() {
           onViewModeChange={setViewMode}
           onRefresh={handleRefresh}
           onExport={handleExport}
+          onExportPdf={handleExportPdf}
+          onImport={() => setImportModalOpen(true)}
           isLoading={loading || isPending}
         />
 
         {/* Quick Filters Bar */}
         <QuickFiltersBar
           products={products}
+          counts={globalQuickFilterCounts}
           activeFilter={filters.quick_filter}
           onFilterClick={handleQuickFilter}
         />
@@ -479,6 +612,8 @@ export default function ProductsPage() {
                 filters={filters}
                 onFiltersChange={handleFilterChange}
                 onClearFilters={clearFilters}
+                brandOptions={brands.map((b) => b.name).filter(Boolean)}
+                resultCount={totalProducts}
               />
             </div>
           </Card>
@@ -585,6 +720,18 @@ export default function ProductsPage() {
         />
       )}
 
+      {/* Quick-view modal */}
+      <ProductQuickViewModal
+        product={quickViewProduct}
+        isOpen={quickViewProduct !== null}
+        onClose={() => setQuickViewProduct(null)}
+        onEdit={(product) => {
+          setQuickViewProduct(null);
+          handleProductEdit(product);
+        }}
+        onViewFullDetails={handleViewFullDetails}
+      />
+
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -608,6 +755,13 @@ export default function ProductsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Modal */}
+      <ImportProductsModal
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
+        onImport={handleImportProducts}
+      />
     </div>
   );
 }

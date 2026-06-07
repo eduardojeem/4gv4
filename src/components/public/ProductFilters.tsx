@@ -11,7 +11,6 @@ import { clearAllProductFilters } from '@/lib/utils/product-filters'
 import { Accordion } from '@/components/ui/accordion'
 import { CategoryFilter } from './filters/CategoryFilter'
 import { BrandFilter } from './filters/BrandFilter'
-import { BranchFilter } from './filters/BranchFilter'
 import { StockFilter } from './filters/StockFilter'
 import { PriceFilter } from './filters/PriceFilter'
 
@@ -198,9 +197,8 @@ export function ProductFilters({
           </div>
         )}
 
-        <Accordion type="multiple" defaultValue={['category', 'branch', 'brand', 'stock', 'price']} className="w-full rounded-xl border border-border/60 bg-card shadow-sm">
+        <Accordion type="multiple" defaultValue={['category', 'brand', 'stock', 'price']} className="w-full rounded-xl border border-border/60 bg-card shadow-sm">
           <CategoryFilter categories={categories} selectedCategoryId={categoryId} onSelect={(id) => updateFilters({ category_id: id })} />
-          <BranchFilter branches={branches} selectedBranchId={branchId} onSelect={(id) => updateFilters({ branch_id: id })} />
           <BrandFilter brands={brands} selectedBrand={brand} onSelect={(b) => updateFilters({ brand: b })} />
           <StockFilter inStock={inStock} onChange={(checked) => updateFilters({ in_stock: checked })} />
           <PriceFilter priceRange={priceRange} localRange={localPriceRange} onChange={setLocalPriceRange} onCommit={(values) => updateFilters({ min_price: values[0] > 0 ? values[0] : null, max_price: values[1] < PRODUCTS_MAX_PRICE ? values[1] : null })} />

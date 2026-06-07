@@ -8,10 +8,24 @@ import { AlertTriangle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { QuickFilterButton } from './QuickFilterButton'
 import { Product } from '@/types/products'
+import { isLowStock, isOutOfStock } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
+
+export interface QuickFilterCounts {
+  all: number
+  low_stock: number
+  out_of_stock: number
+  active: number
+}
 
 export interface QuickFiltersBarProps {
   products: Product[]
+  /**
+   * Global counts (whole catalog). When provided they take precedence over the
+   * local `products` array, so the bar reflects the full inventory instead of
+   * just the current page.
+   */
+  counts?: QuickFilterCounts
   activeFilter?: 'all' | 'low_stock' | 'out_of_stock' | 'active' | null
   onFilterClick: (filter: 'all' | 'low_stock' | 'out_of_stock' | 'active') => void
   className?: string
@@ -19,17 +33,18 @@ export interface QuickFiltersBarProps {
 
 export function QuickFiltersBar({
   products,
+  counts: providedCounts,
   activeFilter,
   onFilterClick,
   className
 }: QuickFiltersBarProps) {
-  // Calculate counts for each filter
+  // Prefer global counts; otherwise derive from the local products array.
   const counts = useMemo(() => {
+    if (providedCounts) return providedCounts
+
     const total = products.length
-    const lowStock = products.filter(
-      p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0
-    ).length
-    const outOfStock = products.filter(p => p.stock_quantity === 0).length
+    const lowStock = products.filter(isLowStock).length
+    const outOfStock = products.filter(isOutOfStock).length
     const active = products.filter(p => p.is_active).length
 
     return {
@@ -38,7 +53,7 @@ export function QuickFiltersBar({
       out_of_stock: outOfStock,
       active
     }
-  }, [products])
+  }, [products, providedCounts])
 
   return (
     <Card className={cn('border-0 shadow-md', className)}>

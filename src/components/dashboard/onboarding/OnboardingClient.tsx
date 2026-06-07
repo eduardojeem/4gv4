@@ -212,7 +212,7 @@ export function OnboardingClient({ organization, subscription, completedAt, step
       if (!response.ok) {
         // Show debug details in console for diagnostics
         if (payload?._debug) {
-          console.error('[Onboarding] Server debug:', payload._debug)
+          console.error('[Onboarding] Server debug:', JSON.stringify(payload._debug, null, 2))
         }
         throw new Error(payload?.error || 'No se pudo finalizar el onboarding')
       }

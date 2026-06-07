@@ -95,20 +95,25 @@ export function useProductsDashboard({
     debouncedSearch(query)
   }, [debouncedSearch])
 
+  // In server mode the server already resolves search/filter/sort/pagination, so
+  // re-processing on the client (which only sees the current page) is skipped.
   // Apply search
   const searchedProducts = useMemo(() => {
+    if (serverPaginated) return products
     return searchProducts(products, debouncedSearchQuery)
-  }, [products, debouncedSearchQuery])
+  }, [products, debouncedSearchQuery, serverPaginated])
 
   // Apply filters
   const filteredProducts = useMemo(() => {
+    if (serverPaginated) return searchedProducts
     return applyFilters(searchedProducts, filters)
-  }, [searchedProducts, filters])
+  }, [searchedProducts, filters, serverPaginated])
 
   // Apply sorting
   const displayedProducts = useMemo(() => {
+    if (serverPaginated) return filteredProducts
     return sortProducts(filteredProducts, sortConfig)
-  }, [filteredProducts, sortConfig])
+  }, [filteredProducts, sortConfig, serverPaginated])
 
   // Reset page when filters change
   useEffect(() => {

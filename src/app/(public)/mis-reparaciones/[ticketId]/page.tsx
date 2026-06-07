@@ -140,7 +140,7 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { ticketId } = await params
   const settings = await fetchWebsiteSettings()
-  const companyName = settings?.company_info?.name || '4G Celulares'
+  const companyName = settings?.company_info?.name || 'Tienda'
 
   return {
     title: `Reparación ${ticketId} | ${companyName}`,

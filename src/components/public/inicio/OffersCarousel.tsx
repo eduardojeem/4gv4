@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { ArrowRight, Package, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 import useSWR from 'swr'
 
 export interface OfferCard {
@@ -61,9 +62,10 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
   const pathname = usePathname()
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
+  const tenantSlug = getTenantSlugFromPathname(pathname)
 
   const { data: offerCards, error, isLoading } = useSWR(
-    '/api/public/products?per_page=50&sort=newest&has_offer=true',
+    withOrgQuery('/api/public/products?per_page=50&sort=newest&has_offer=true', tenantSlug),
     offersFetcher,
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   )

@@ -8,6 +8,7 @@ import { Package2, AlertTriangle, TrendingUp, DollarSign } from 'lucide-react'
 import { MetricCard } from './MetricCard'
 import { DashboardMetrics } from '@/types/products-dashboard'
 import { formatLargeNumber } from '@/lib/products-dashboard-utils'
+import { formatCurrencyCompact } from '@/lib/currency'
 
 export interface MetricsGridProps {
   metrics: DashboardMetrics
@@ -15,7 +16,7 @@ export interface MetricsGridProps {
 }
 
 export function MetricsGrid({ metrics, onMetricClick }: MetricsGridProps) {
-  const formattedValue = formatLargeNumber(metrics.inventory_value)
+  const formattedValue = formatCurrencyCompact(metrics.inventory_value)
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -59,7 +60,7 @@ export function MetricsGrid({ metrics, onMetricClick }: MetricsGridProps) {
       {/* Inventory Value Card */}
       <MetricCard
         title="Valor Total"
-        value={`$${formattedValue}`}
+        value={formattedValue}
         subtitle="En inventario"
         icon={DollarSign}
         gradient="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/40 dark:to-green-900/20"

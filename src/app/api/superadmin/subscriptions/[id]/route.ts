@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { normalizePlanCode } from '@/lib/saas/subscription-service'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
+import { logSuperAdminAction } from '@/lib/superadmin/audit'
 
 const VALID_STATUSES = new Set(['trialing', 'active', 'past_due', 'suspended', 'cancelled', 'canceled', 'expired', 'unpaid'])
 
@@ -131,6 +132,20 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       updated_by_email: user.email,
     },
     user_agent: request.headers.get('user-agent'),
+  })
+
+  // Also surface in the unified superadmin audit log.
+  await logSuperAdminAction({
+    actorId: user.id,
+    actorEmail: user.email,
+    action: 'subscription.updated',
+    resource: 'subscriptions',
+    resourceId: id,
+    organizationId: previous.organization_id,
+    oldValues: { plan: previous.plan, status: previous.status },
+    newValues: { plan: updatePayload.plan, status: updatePayload.status },
+    request,
+    severity: 'high',
   })
 
   return NextResponse.json({ subscription })

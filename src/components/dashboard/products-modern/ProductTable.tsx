@@ -22,6 +22,7 @@ import { Product } from '@/types/products'
 import { SortConfig } from '@/types/products-dashboard'
 import { getStockStatus } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 
 export interface ProductTableProps {
   products: Product[]
@@ -225,7 +226,7 @@ export function ProductTable({
               const stockStatus = getStockStatus(product)
               const statusConfig = stockStatusConfig[stockStatus]
               const StatusIcon = statusConfig.icon
-              const stockPercentage = Math.min(100, (product.stock_quantity / (product.min_stock * 3)) * 100)
+              const stockPercentage = Math.min(100, (product.stock_quantity / Math.max((product.min_stock || 0) * 3, 1)) * 100)
 
               // Resolve image from images[] array or legacy image field
               const imageUrl: string | undefined =
@@ -361,7 +362,7 @@ export function ProductTable({
                       "font-bold bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 dark:from-white dark:via-gray-200 dark:to-white bg-clip-text text-transparent",
                       isCompact ? "text-sm" : "text-base"
                     )}>
-                      ${product.sale_price.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      {formatCurrency(product.sale_price)}
                     </span>
                   </TableCell>
 

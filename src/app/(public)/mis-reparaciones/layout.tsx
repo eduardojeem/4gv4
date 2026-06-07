@@ -3,7 +3,7 @@ import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await fetchWebsiteSettings()
-  const companyName = settings?.company_info?.name || '4G Celulares'
+  const companyName = settings?.company_info?.name || 'Tienda'
 
   return {
     title: `Mis Reparaciones | ${companyName}`,

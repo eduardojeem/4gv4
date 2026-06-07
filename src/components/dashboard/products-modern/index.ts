@@ -47,3 +47,9 @@ export type { BulkActionsToolbarProps } from './BulkActionsToolbar'
 
 export { AlertsBanner } from './AlertsBanner'
 export type { AlertsBannerProps } from './AlertsBanner'
+
+export { ProductQuickViewModal } from './ProductQuickViewModal'
+export type { ProductQuickViewModalProps } from './ProductQuickViewModal'
+
+export { ImportProductsModal } from './ImportProductsModal'
+export type { ImportProductsModalProps } from './ImportProductsModal'

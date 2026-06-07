@@ -1,5 +1,6 @@
 export { ProductSearch } from './ProductSearch'
 export { ProductSort } from './ProductSort'
+export { BranchSelect } from './BranchSelect'
 export { ProductPagination } from './ProductPagination'
 export { MobileFilters } from './MobileFilters'
 export { FilterBadges } from './FilterBadges'

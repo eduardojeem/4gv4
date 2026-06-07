@@ -8,11 +8,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Loader2, Eye, EyeOff, ArrowRight, ArrowLeft, Cpu, Shield, CheckCircle2 } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, ArrowLeft, Cpu, Shield, CheckCircle2, Store } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { sanitizeRedirectPath, isValidEmail } from '@/lib/auth/password-validation'
+import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { logAuthEventClient } from '@/lib/auth-event-client'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
@@ -39,6 +40,22 @@ export default function LoginPage() {
     ? 'No se pudo completar la verificacion del enlace. Solicita uno nuevo o inicia sesion nuevamente.'
     : ''
   const visibleError = error || callbackError
+
+  // Registration targets, kept distinct so shoppers aren't funneled into
+  // business (company) creation. The redirect is preserved across the flow.
+  const rawRedirect = searchParams.get('redirect') || ''
+  const redirectQuery = rawRedirect ? `?redirect=${encodeURIComponent(rawRedirect)}` : ''
+  const companyRegisterHref = `/register${redirectQuery}`
+  // Customer accounts are tenant-scoped. If the redirect points to a specific
+  // store, register there; otherwise send the shopper to pick a store.
+  const redirectTenantSlug = getTenantSlugFromPathname(rawRedirect)
+  const customerRegisterHref = redirectTenantSlug
+    ? `/${redirectTenantSlug}/cliente/registro`
+    : `/cliente/registro${redirectQuery}`
+  // When arriving from the marketplace or a store, show storefront branding
+  // instead of the SaaS (business) header to avoid mixing both worlds.
+  const isCustomerContext = Boolean(redirectTenantSlug) || rawRedirect.startsWith('/marketplace')
+  const backHref = isCustomerContext ? (rawRedirect || '/marketplace') : '/saas'
 
   const initializeActiveOrganization = async () => {
     try {
@@ -175,7 +192,38 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex flex-col min-h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <SaaSPublicNav variant="dark" />
+      {isCustomerContext ? (
+        <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-xl">
+          <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+            <Link href={backHref} className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-600 text-white">
+                {branding.logoUrl ? (
+                  <img src={branding.logoUrl} alt={branding.marketplaceName} className="h-6 w-6 object-contain" />
+                ) : (
+                  <Store className="h-5 w-5" />
+                )}
+              </div>
+              <div>
+                <div className="text-sm font-semibold leading-none text-white">{branding.marketplaceName}</div>
+                <div className="mt-1 text-xs text-slate-400">{branding.marketplaceTagline}</div>
+              </div>
+            </Link>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="gap-2 border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white"
+            >
+              <Link href={backHref}>
+                <ArrowLeft className="h-4 w-4" />
+                Volver
+              </Link>
+            </Button>
+          </div>
+        </header>
+      ) : (
+        <SaaSPublicNav variant="dark" />
+      )}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_18%,rgba(14,165,233,0.13),transparent_34%),radial-gradient(circle_at_86%_82%,rgba(37,99,235,0.12),transparent_36%)] pointer-events-none" />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:48px_48px] opacity-35 pointer-events-none" />
 
@@ -190,30 +238,32 @@ export default function LoginPage() {
             <CardHeader className="space-y-4 pb-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 shadow-lg shadow-blue-950/30">
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg shadow-lg ${isCustomerContext ? 'bg-cyan-600 shadow-cyan-950/30' : 'bg-blue-600 shadow-blue-950/30'}`}>
                     {branding.logoUrl ? (
-                      <img src={branding.logoUrl} alt={branding.platformName} className="h-6 w-6 object-contain" />
+                      <img src={branding.logoUrl} alt={isCustomerContext ? branding.marketplaceName : branding.platformName} className="h-6 w-6 object-contain" />
+                    ) : isCustomerContext ? (
+                      <Store className="h-5 w-5 text-white" />
                     ) : (
                       <Cpu className="h-5 w-5 text-white" />
                     )}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-100">{branding.platformName}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{branding.loginEyebrow}</p>
+                    <p className="text-sm font-semibold text-slate-100">{isCustomerContext ? branding.marketplaceName : branding.platformName}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{isCustomerContext ? 'Cuenta de cliente' : branding.loginEyebrow}</p>
                   </div>
                 </div>
                 <Link
-                  href="/saas"
+                  href={backHref}
                   className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
-                  Inicio
+                  {isCustomerContext ? 'Volver' : 'Inicio'}
                 </Link>
               </div>
               <div>
                 <CardTitle className="text-2xl font-bold text-white">Iniciar sesion</CardTitle>
                 <CardDescription className="mt-1 text-slate-400">
-                  {branding.loginSubtitle}
+                  {isCustomerContext ? 'Ingresá para comprar y seguir tus pedidos.' : branding.loginSubtitle}
                 </CardDescription>
               </div>
             </CardHeader>
@@ -348,14 +398,38 @@ export default function LoginPage() {
                 </Button>
               </form>
 
-              <div className="pt-1 text-center">
-                <p className="text-sm text-slate-400">
-                  No tienes cuenta?{' '}
-                  <Link href="/register" className="font-semibold text-cyan-300 hover:text-cyan-200 hover:underline">
-                    Registrate
-                  </Link>
-                </p>
-              </div>
+              {isCustomerContext ? (
+                <div className="space-y-3 pt-1">
+                  {/* Customer (shopper) sign-up — only in storefront/marketplace context */}
+                  <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-center">
+                    <p className="text-sm font-medium text-slate-200">¿Querés comprar como cliente?</p>
+                    <Link
+                      href={customerRegisterHref}
+                      className="mt-1 inline-block text-sm font-semibold text-cyan-300 hover:text-cyan-200 hover:underline"
+                    >
+                      Crear cuenta de cliente
+                    </Link>
+                  </div>
+
+                  {/* Business (company) sign-up — secondary here */}
+                  <p className="text-center text-xs text-slate-500">
+                    ¿Tenés un negocio?{' '}
+                    <Link href={companyRegisterHref} className="font-semibold text-slate-300 hover:text-slate-200 hover:underline">
+                      Registrá tu empresa
+                    </Link>
+                  </p>
+                </div>
+              ) : (
+                /* SaaS context — only business sign-up, no customer option */
+                <div className="pt-1 text-center">
+                  <p className="text-sm text-slate-400">
+                    No tienes cuenta?{' '}
+                    <Link href={companyRegisterHref} className="font-semibold text-cyan-300 hover:text-cyan-200 hover:underline">
+                      Registrá tu empresa
+                    </Link>
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
