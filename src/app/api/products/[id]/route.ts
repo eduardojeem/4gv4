@@ -141,6 +141,7 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
       'is_active',
       'barcode',
       'unit_measure',
+      'visibility',
     ]
 
     for (const key of allowedKeys) {

@@ -7,7 +7,7 @@ import React, { memo, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Package, AlertTriangle, EyeOff } from 'lucide-react';
 import { formatCurrency } from '@/lib/currency';
 import { VirtualizedProductGrid } from './VirtualizedProductList';
 import type { Product } from '@/types/product-unified';
@@ -35,7 +35,13 @@ const ProductCard = memo<{
       <CardContent className="p-4">
         <div className="flex flex-col h-full">
           {/* Product Image */}
-          <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
+          <div className="relative aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+            {product.is_active === false && (
+              <span className="absolute left-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-slate-900/80 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                <EyeOff className="h-2.5 w-2.5" />
+                Oculto
+              </span>
+            )}
             {product.image ? (
               <img
                 src={product.image}

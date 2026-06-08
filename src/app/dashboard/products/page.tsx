@@ -693,6 +693,7 @@ export default function ProductsPage() {
           categories={categories as any}
           brands={brands as any}
           suppliers={suppliers as any}
+          onCatalogChange={() => refreshData()}
           onSave={async (data) => {
             try {
               if (editingProduct) {

@@ -109,6 +109,7 @@ export const productSchema = z
     unit_measure: z.string().optional().nullable(),
     barcode: z.string().optional().nullable(),
     is_active: z.boolean().default(true),
+    visibility: z.enum(['public', 'wholesale', 'hidden']).optional().default('public'),
     images: z.array(z.string()).default([]),
   })
   .superRefine((data, ctx) => {

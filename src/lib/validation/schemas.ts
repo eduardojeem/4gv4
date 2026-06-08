@@ -58,6 +58,8 @@ export const productSchema = z.object({
   
   is_active: z.boolean()
     .default(true),
+
+  visibility: z.enum(['public', 'wholesale', 'hidden']).optional(),
   
   barcode: z.string()
     .max(50, 'Barcode must be less than 50 characters')

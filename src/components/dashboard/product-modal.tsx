@@ -122,6 +122,7 @@ export function ProductModal({
       unit_measure: '',
       barcode: '',
       is_active: true,
+      visibility: 'public',
       images: []
     }
   })
@@ -211,6 +212,7 @@ export function ProductModal({
         unit_measure: product.unit_measure || '',
         barcode: product.barcode || '',
         is_active: product.is_active ?? true,
+        visibility: (product as any).visibility || 'public',
         images: product.images || []
       })
     } else {
@@ -234,6 +236,7 @@ export function ProductModal({
         unit_measure: '',
         barcode: '',
         is_active: true,
+        visibility: 'public',
         images: []
       })
     }
@@ -356,6 +359,7 @@ export function ProductModal({
       stock_quantity: Number(data.stock_quantity),
       min_stock: Number(data.min_stock),
       is_active: data.is_active ?? true,
+      visibility: data.visibility || 'public',
       has_offer: data.has_offer ?? false,
     }
   }
@@ -826,6 +830,29 @@ export function ProductModal({
                             <FormLabel className="font-normal cursor-pointer">
                               Producto activo
                             </FormLabel>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="visibility"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Visibilidad en tienda pública</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value || 'public'}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Seleccionar visibilidad" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="public">Público — visible para todos</SelectItem>
+                                <SelectItem value="wholesale">Mayorista — solo clientes mayoristas</SelectItem>
+                                <SelectItem value="hidden">Oculto — no se muestra en la tienda</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
                           </FormItem>
                         )}
                       />

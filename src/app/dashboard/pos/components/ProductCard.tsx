@@ -1,7 +1,7 @@
 'use client'
 
 import React, { memo } from 'react'
-import { Plus, Star, Package, ShoppingCart, AlertTriangle } from 'lucide-react'
+import { Plus, Star, Package, ShoppingCart, AlertTriangle, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -100,6 +100,11 @@ export const ProductCard = memo(({
               <div className="flex items-center gap-2 mb-0.5">
                 <h3 className="font-medium text-sm truncate">{product.name}</h3>
                 {product.featured && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500 flex-shrink-0" />}
+                {product.is_active === false && (
+                  <EyeOff className="h-3 w-3 flex-shrink-0 text-muted-foreground" aria-label="Oculto del catálogo público">
+                    <title>Oculto del catálogo público</title>
+                  </EyeOff>
+                )}
                 {showStock && stockStatus && (
                   <Badge 
                     variant="outline" 
@@ -243,6 +248,12 @@ export const ProductCard = memo(({
             <h3 className="font-semibold text-[13px] leading-tight line-clamp-2 text-foreground group-hover:text-primary transition-colors sm:text-sm">
               {product.name}
             </h3>
+            {product.is_active === false && (
+              <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-900/80 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                <EyeOff className="h-2.5 w-2.5" />
+                Oculto
+              </span>
+            )}
             <p className="text-[10px] text-muted-foreground mt-1 truncate">
               {product.category?.name || product.category_id}
             </p>

@@ -119,11 +119,9 @@ export function CategoryModal({
       }
     }
 
-    // Validar descripción
-    if (!formData.description.trim()) {
-      newErrors.description = 'La descripción es requerida'
-    } else if (formData.description.length < 10) {
-      newErrors.description = 'La descripción debe tener al menos 10 caracteres'
+    // Validar descripción (opcional para creación rápida)
+    if (formData.description && formData.description.length > 0 && formData.description.length < 3) {
+      newErrors.description = 'La descripción debe tener al menos 3 caracteres'
     }
 
     // Validación de subcategorías opcional
@@ -235,14 +233,14 @@ export function CategoryModal({
               {/* Descripción */}
               <div className="space-y-2">
                 <Label htmlFor="description" className="text-sm font-medium">
-                  Descripción *
+                  Descripción
                 </Label>
                 <Textarea
                   id="description"
                   value={formData.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
-                  placeholder="Describe qué tipo de productos incluye esta categoría"
-                  rows={3}
+                  placeholder="Describe qué tipo de productos incluye esta categoría (opcional)"
+                  rows={2}
                   className={cn(errors.description && 'border-red-500')}
                 />
                 {errors.description && (
@@ -255,42 +253,36 @@ export function CategoryModal({
             </CardContent>
           </Card>
 
-          {/* Subcategorías */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Hash className="w-4 h-4" />
-                Subcategorías
-              </CardTitle>
-              <CardDescription>
-                Separa las subcategorías con comas. Ej: iPhone, Samsung Galaxy, Xiaomi
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="subcategories" className="text-sm font-medium">
-                  Lista de Subcategorías *
-                </Label>
-                <Textarea
-                  id="subcategories"
-                  value={formData.subcategories}
-                  onChange={(e) => handleInputChange('subcategories', e.target.value)}
-                  placeholder="iPhone, Samsung Galaxy, Xiaomi, Huawei, OnePlus"
-                  rows={3}
-                  className={cn(errors.subcategories && 'border-red-500')}
-                />
-                {errors.subcategories && (
-                  <p className="text-sm text-red-500 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    {errors.subcategories}
-                  </p>
-                )}
-              </div>
-
-              {/* Preview de subcategorías */}
-              {previewSubcategories.length > 0 && (
+          {/* Subcategorías (opcional, colapsado por defecto) */}
+          <details className="group">
+            <summary className="cursor-pointer list-none">
+              <Card className="group-open:rounded-b-none">
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
+                    <Hash className="w-4 h-4" />
+                    Subcategorías y personalización (opcional)
+                  </CardTitle>
+                </CardHeader>
+              </Card>
+            </summary>
+            <Card className="rounded-t-none border-t-0">
+              <CardContent className="space-y-4 pt-4">
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Vista Previa:</Label>
+                  <Label htmlFor="subcategories" className="text-sm font-medium">
+                    Lista de Subcategorías
+                  </Label>
+                  <Textarea
+                    id="subcategories"
+                    value={formData.subcategories}
+                    onChange={(e) => handleInputChange('subcategories', e.target.value)}
+                    placeholder="iPhone, Samsung Galaxy, Xiaomi, Huawei"
+                    rows={2}
+                    className={cn(errors.subcategories && 'border-red-500')}
+                  />
+                  <p className="text-xs text-muted-foreground">Separa con comas</p>
+                </div>
+
+                {previewSubcategories.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {previewSubcategories.map((subcat, index) => (
                       <Badge key={index} variant="secondary" className="text-xs">
@@ -298,66 +290,32 @@ export function CategoryModal({
                       </Badge>
                     ))}
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                )}
 
-          {/* Personalización */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Palette className="w-4 h-4" />
-                Personalización
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Color */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Color de la Categoría</Label>
-                <div className="flex items-center gap-3">
-                  <div 
-                    className="w-8 h-8 rounded-lg border-2 border-gray-200"
-                    style={{ backgroundColor: formData.color }}
-                  />
-                  <Input
-                    type="color"
-                    value={formData.color}
-                    onChange={(e) => handleInputChange('color', e.target.value)}
-                    className="w-16 h-8 p-1 border rounded"
-                  />
-                  <div className="flex gap-1">
-                    {PREDEFINED_COLORS.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        className="w-6 h-6 rounded border-2 border-gray-200 hover:border-gray-400 transition-colors"
-                        style={{ backgroundColor: color }}
-                        onClick={() => handleInputChange('color', color)}
-                      />
-                    ))}
+                {/* Color */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Color</Label>
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-7 h-7 rounded-lg border"
+                      style={{ backgroundColor: formData.color }}
+                    />
+                    <div className="flex gap-1 flex-wrap">
+                      {PREDEFINED_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          className="w-6 h-6 rounded border hover:scale-110 transition-transform"
+                          style={{ backgroundColor: color }}
+                          onClick={() => handleInputChange('color', color)}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Icono */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Icono</Label>
-                <Select value={formData.icon} onValueChange={(value) => handleInputChange('icon', value)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORY_ICONS.map((icon) => (
-                      <SelectItem key={icon} value={icon}>
-                        {icon}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </details>
 
           <DialogFooter className="flex gap-2">
             <Button
