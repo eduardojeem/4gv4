@@ -202,12 +202,19 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
       .select('*')
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('[CATEGORIES POST] Insert error:', error.message, error.code, error.details, error.hint)
+      throw error
+    }
 
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : JSON.stringify(error)
+    const errCode = (error as any)?.code || ''
+    const errDetails = (error as any)?.details || (error as any)?.hint || ''
+    console.error('[CATEGORIES POST] Failed:', errMsg, errCode, errDetails)
     logger.error('Categories API POST error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudo crear la categoria.' }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'No se pudo crear la categoria.', _debug: `${errMsg} | code: ${errCode} | ${errDetails}` }, { status: 500 })
   }
 })
 

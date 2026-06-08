@@ -89,7 +89,12 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
 
     if (error) throw error
     return NextResponse.json({ success: true, data }, { status: 201 })
-  } catch (error) {
+  } catch (error: any) {
+    const code = error?.code || ''
+    const message = error?.message || ''
+    if (code === '23505' || message.includes('duplicate') || message.includes('unique')) {
+      return NextResponse.json({ success: false, error: 'Ya existe una marca con este nombre.' }, { status: 409 })
+    }
     logger.error('Brands API POST error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo crear la marca.' }, { status: 500 })
   }

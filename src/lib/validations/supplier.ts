@@ -2,79 +2,77 @@ import { z } from 'zod'
 
 // Supplier validation schema
 export const supplierSchema = z.object({
-  // Basic Information (Required)
+  // Basic Information — only name is required
   name: z.string()
     .min(2, "El nombre debe tener al menos 2 caracteres")
     .max(100, "El nombre no puede exceder 100 caracteres")
     .trim(),
   
   contact_name: z.string()
-    .min(2, "El nombre del contacto debe tener al menos 2 caracteres")
     .max(100, "El nombre del contacto no puede exceder 100 caracteres")
-    .trim(),
+    .trim()
+    .optional()
+    .or(z.literal('')),
   
   email: z.string()
     .email("Formato de email inválido")
-    .max(255, "El email no puede exceder 255 caracteres")
+    .max(255)
     .toLowerCase()
-    .trim(),
+    .trim()
+    .optional()
+    .or(z.literal('')),
   
   phone: z.string()
-    .min(10, "El teléfono debe tener al menos 10 dígitos")
     .max(20, "El teléfono no puede exceder 20 caracteres")
-    .regex(/^[\+]?[0-9\s\-\(\)]+$/, "Formato de teléfono inválido")
-    .trim(),
+    .trim()
+    .optional()
+    .or(z.literal('')),
 
-  // Optional Basic Information
+  // Optional Information
   address: z.string()
-    .max(255, "La dirección no puede exceder 255 caracteres")
+    .max(255)
     .trim()
     .optional()
     .or(z.literal('')),
   
   city: z.string()
-    .max(100, "La ciudad no puede exceder 100 caracteres")
+    .max(100)
     .trim()
     .optional()
     .or(z.literal('')),
   
   country: z.string()
-    .max(100, "El país no puede exceder 100 caracteres")
+    .max(100)
     .trim()
     .optional()
     .or(z.literal('')),
   
   postal_code: z.string()
-    .max(20, "El código postal no puede exceder 20 caracteres")
+    .max(20)
     .trim()
     .optional()
     .or(z.literal('')),
   
   website: z.string()
-    .url("Formato de URL inválido")
-    .max(255, "La URL no puede exceder 255 caracteres")
+    .max(255)
     .optional()
     .or(z.literal(''))
     .transform(val => val === '' ? undefined : val),
 
   // Business Information
-  business_type: z.enum(['manufacturer', 'distributor', 'wholesaler', 'retailer', 'service_provider'] as const, {
-    error: () => ({ message: "Tipo de negocio inválido" })
-  }),
+  business_type: z.enum(['manufacturer', 'distributor', 'wholesaler', 'retailer', 'service_provider'] as const).optional().default('distributor'),
 
   // Status and Performance
-  status: z.enum(['active', 'inactive', 'pending', 'suspended'] as const, {
-    error: () => ({ message: "Estado inválido" })
-  }).default('pending'),
+  status: z.enum(['active', 'inactive', 'pending', 'suspended'] as const).optional().default('active'),
 
   rating: z.number()
-    .min(0, "La calificación no puede ser menor a 0")
-    .max(5, "La calificación no puede ser mayor a 5")
+    .min(0)
+    .max(5)
     .default(0),
 
   // Notes
   notes: z.string()
-    .max(1000, "Las notas no pueden exceder 1000 caracteres")
+    .max(1000)
     .trim()
     .optional()
     .or(z.literal(''))

@@ -34,13 +34,12 @@ import {
   FormDescription,
 } from '@/components/ui/form'
 import type { Product, Category, Supplier, Brand, ProductFormData } from '@/types/products'
-import type { Category as UICategory } from '@/lib/types/catalog'
 import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { generateEAN13 } from '@/lib/validations/product-validation'
 import { productSchema, ProductFormValues } from '@/lib/validations/product-schema'
-import { CategoryModal } from './category-modal'
+import { CategoryModal } from '@/components/categories/CategoryModal'
 import { SupplierModal } from './supplier-modal'
 import { BrandModal } from '@/components/dashboard/brands/BrandModal'
 import { useCategories } from '@/hooks/useCategories'
@@ -242,41 +241,28 @@ export function ProductModal({
     }
   }, [product, form])
 
-  const handleSaveCategory = async (categoryData: any) => {
+  const handleSaveCategory = async (categoryData: { name: string; description: string; parent_id: string | null; global_category_id: string | null; is_active: boolean }) => {
     const payload = {
       name: categoryData.name,
       description: categoryData.description,
-      parent_id: categoryData.parentId || null,
-      is_active: true
+      parent_id: categoryData.parent_id,
+      global_category_id: categoryData.global_category_id,
+      is_active: categoryData.is_active,
     }
     
     const result = await createCategory(payload)
     if (result.success && result.data) {
-       toast.success('Categoría creada')
        const newCategory = result.data as unknown as Category
        setLocalCategories(prev => [...prev, newCategory])
        setValue('category_id', newCategory.id)
        setIsCategoryModalOpen(false)
        onCatalogChange?.()
+       toast.success('Categoría creada')
     } else {
        toast.error(result.error || 'Error al crear categoría')
+       throw new Error(result.error || 'Error al crear categoría')
     }
   }
-
-  // Convert DB categories to UI categories
-  const uiCategories: UICategory[] = localCategories.map(cat => ({
-    id: cat.id,
-    name: cat.name,
-    description: cat.description || '',
-    subcategories: [],
-    color: '#3B82F6',
-    isActive: cat.is_active,
-    productCount: 0,
-    createdAt: cat.created_at,
-    updatedAt: cat.updated_at,
-    parentId: cat.parent_id || undefined,
-    icon: 'Tag'
-  }))
 
   const handleSaveSupplier = async (supplierData: Partial<UISupplier>) => {
     const result = await createSupplier(supplierData as any)
@@ -1330,9 +1316,8 @@ export function ProductModal({
     <CategoryModal
       isOpen={isCategoryModalOpen}
       onClose={() => setIsCategoryModalOpen(false)}
-      mode="add"
-      onSave={handleSaveCategory}
-      existingCategories={uiCategories}
+      onSubmit={handleSaveCategory}
+      categories={localCategories as any}
     />
 
     <SupplierModal

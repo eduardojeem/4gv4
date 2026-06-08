@@ -63,8 +63,8 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
       country: supplier?.country || '',
       postal_code: supplier?.postal_code || '',
       website: supplier?.website || '',
-      business_type: (supplier?.business_type as any) || 'manufacturer',
-      status: (supplier?.status as any) || 'pending',
+      business_type: (supplier?.business_type as any) || 'distributor',
+      status: (supplier?.status as any) || 'active',
       rating: supplier?.rating || 0,
       notes: supplier?.notes || '',
     },
@@ -86,8 +86,8 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
         country: supplier?.country || '',
         postal_code: supplier?.postal_code || '',
         website: supplier?.website || '',
-        business_type: (supplier?.business_type as any) || 'manufacturer',
-        status: (supplier?.status as any) || 'pending',
+        business_type: (supplier?.business_type as any) || 'distributor',
+        status: (supplier?.status as any) || 'active',
         rating: supplier?.rating || 0,
         notes: supplier?.notes || '',
       }
@@ -297,7 +297,7 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
                             name="contact_name"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Nombre del Contacto *</FormLabel>
+                                <FormLabel>Nombre del Contacto</FormLabel>
                                 <FormControl>
                                   <Input placeholder="Juan Pérez" {...field} />
                                 </FormControl>
@@ -311,7 +311,7 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
                             name="email"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Email *</FormLabel>
+                                <FormLabel>Email</FormLabel>
                                 <FormControl>
                                   <Input type="email" placeholder="contacto@empresa.com" {...field} />
                                 </FormControl>
@@ -325,9 +325,9 @@ export function SupplierModal({ isOpen, onClose, onSave, supplier, mode, loading
                             name="phone"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Teléfono *</FormLabel>
+                                <FormLabel>Teléfono</FormLabel>
                                 <FormControl>
-                                  <Input placeholder="+1 234 567 8900" {...field} />
+                                  <Input placeholder="+595 981 123 456" {...field} />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>
