@@ -121,13 +121,6 @@ async function handler(
     // Usar datos validados
     value = validation.data
 
-    // Obtener valor anterior para auditoría (si existe)
-    const { data: existingSetting } = await supabase
-      .from('website_settings')
-      .select('value')
-      .eq('key', key)
-      .maybeSingle()
-
     // Resolver organizationId para RLS (con fallback seguro en super_admin si aplica)
     let orgId = context.organizationId
     if (!orgId) {
@@ -138,9 +131,9 @@ async function handler(
         .eq('status', 'active')
         .limit(1)
         .maybeSingle()
-      
+
       orgId = membership?.organization_id || null
-      
+
       if (!orgId) {
         const { data: defaultOrg } = await supabase
           .from('organizations')
@@ -151,25 +144,29 @@ async function handler(
       }
     }
 
-    console.log('DIAGNOSTICO RLS:', {
-      userId: context.user.id,
-      userRole: context.user.role,
-      contextOrgId: context.organizationId,
-      resolvedOrgId: orgId,
-      keyToUpsert: key
-    })
-
-    // Upsert usando cliente administrador para bypass RLS de manera robusta y segura
+    // Upsert manual por (organization_id, key): evita depender del ON CONFLICT
+    // (que rompe si la unicidad real es compuesta) y respeta el modelo
+    // multi-tenant — una fila de settings por organización.
     const adminSupabase = createAdminSupabase()
-    const { error } = await adminSupabase
+
+    let existingQuery = adminSupabase
       .from('website_settings')
-      .upsert({
-        key,
-        value,
-        organization_id: orgId,
-        updated_by: context.user.id,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'key' })
+      .select('id, value')
+      .eq('key', key)
+    existingQuery = orgId
+      ? existingQuery.eq('organization_id', orgId)
+      : existingQuery.is('organization_id', null)
+    const { data: existingRow } = await existingQuery.maybeSingle()
+
+    const writePayload = {
+      value,
+      updated_by: context.user.id,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { error } = existingRow
+      ? await adminSupabase.from('website_settings').update(writePayload).eq('id', existingRow.id)
+      : await adminSupabase.from('website_settings').insert({ key, organization_id: orgId, ...writePayload })
 
     if (error) {
       console.error('Failed to update website setting', { 
@@ -196,7 +193,7 @@ async function handler(
         action: 'update_website_setting',
         resource: 'website_settings',
         resource_id: key,
-        old_values: { value: existingSetting?.value },
+        old_values: { value: existingRow?.value },
         new_values: { value }
       })
     } catch (err) {
