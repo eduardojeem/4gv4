@@ -204,9 +204,13 @@ export async function POST(request: Request) {
         },
         { onConflict: 'organization_id' }
       ),
-    defaultBranch?.id
-      ? admin.from('branches').update(branchPayload).eq('id', defaultBranch.id)
-      : admin.from('branches').insert({ ...branchPayload, code: 'principal', slug: 'principal' }),
+    // Upsert por (organization_id, slug) para que coincida con idx_branches_org_slug.
+    // Evita el "duplicate key" cuando ya existe la sucursal 'principal' creada al
+    // dar de alta la organización (el lookup por is_default puede no encontrarla).
+    admin.from('branches').upsert(
+      { ...branchPayload, code: 'principal', slug: 'principal' },
+      { onConflict: 'organization_id,slug' }
+    ),
     admin
       .from('website_settings')
       .upsert(
