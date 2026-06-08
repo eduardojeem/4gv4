@@ -141,12 +141,15 @@ export async function POST(request: Request) {
     },
   }
 
-  const { data: defaultBranch } = await admin
+  // Buscar la sucursal principal existente por slug o is_default (limit 1 para
+  // tolerar datos duplicados sin que maybeSingle falle).
+  const { data: existingBranchRows } = await admin
     .from('branches')
     .select('id, metadata')
     .eq('organization_id', organizationId)
-    .eq('is_default', true)
-    .maybeSingle()
+    .or('slug.eq.principal,is_default.eq.true')
+    .limit(1)
+  const defaultBranch = existingBranchRows?.[0] ?? null
 
   const branchPayload = {
     organization_id: organizationId,
@@ -204,13 +207,11 @@ export async function POST(request: Request) {
         },
         { onConflict: 'organization_id' }
       ),
-    // Upsert por (organization_id, slug) para que coincida con idx_branches_org_slug.
-    // Evita el "duplicate key" cuando ya existe la sucursal 'principal' creada al
-    // dar de alta la organización (el lookup por is_default puede no encontrarla).
-    admin.from('branches').upsert(
-      { ...branchPayload, code: 'principal', slug: 'principal' },
-      { onConflict: 'organization_id,slug' }
-    ),
+    // Update/insert manual (sin ON CONFLICT) para evitar choques con
+    // idx_branches_org_slug y el error "cannot affect row a second time".
+    defaultBranch?.id
+      ? admin.from('branches').update(branchPayload).eq('id', defaultBranch.id)
+      : admin.from('branches').insert({ ...branchPayload, code: 'principal', slug: 'principal' }),
     admin
       .from('website_settings')
       .upsert(
