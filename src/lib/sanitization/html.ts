@@ -1,34 +1,31 @@
-import DOMPurify from 'dompurify'
-import { JSDOM } from 'jsdom'
-
 /**
- * Utilidades para sanitización de HTML y prevención de XSS
+ * Utilidades para sanitización de HTML y prevención de XSS.
+ *
+ * La política es "remover TODO el HTML, conservar el texto" (no se permite ningún
+ * tag), así que se implementa sin jsdom/DOMPurify — esas dependencias pesadas son
+ * frágiles en runtimes serverless y provocaban fallos al inicializar el módulo.
  */
 
-// Crear instancia de DOMPurify para Node.js
-const window = new JSDOM('').window
-const purify = DOMPurify(window as any)
-
-/**
- * Configuración de sanitización
- */
-const SANITIZE_CONFIG = {
-  ALLOWED_TAGS: [], // No permitir ningún tag HTML
-  ALLOWED_ATTR: [],
-  KEEP_CONTENT: true, // Mantener el contenido de texto
+const NAMED_ENTITIES: Record<string, string> = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&#x27;': "'", '&nbsp;': ' ',
 }
 
 /**
- * Sanitiza una cadena de texto removiendo HTML y scripts
+ * Sanitiza una cadena de texto removiendo HTML y scripts, conservando el texto.
  */
 export function sanitizeText(text: string): string {
   if (!text || typeof text !== 'string') {
     return ''
   }
 
-  // Remover HTML tags y scripts
-  const sanitized = purify.sanitize(text, SANITIZE_CONFIG)
-  
+  const sanitized = text
+    // Remover bloques peligrosos con su contenido
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    // Remover cualquier otro tag HTML (conservando su contenido de texto)
+    .replace(/<[^>]*>/g, '')
+    // Decodificar entidades comunes para no dejar texto distorsionado
+    .replace(/&amp;|&lt;|&gt;|&quot;|&#39;|&#x27;|&nbsp;/gi, (m) => NAMED_ENTITIES[m.toLowerCase()] ?? m)
+
   // Trim y normalizar espacios
   return sanitized.trim().replace(/\s+/g, ' ')
 }

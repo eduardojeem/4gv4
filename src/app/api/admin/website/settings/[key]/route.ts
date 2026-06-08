@@ -219,7 +219,12 @@ async function handler(
   } catch (error) {
     console.error('Website settings update API error', { error })
     return NextResponse.json(
-      { success: false, error: 'Failed to update setting' },
+      {
+        success: false,
+        error: 'Failed to update setting',
+        // Admin-only route: surface the real cause to unblock diagnosis.
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 }
     )
   }
