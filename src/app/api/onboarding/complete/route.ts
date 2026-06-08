@@ -209,8 +209,18 @@ export async function POST(request: Request) {
       ),
     // Update/insert manual (sin ON CONFLICT) para evitar choques con
     // idx_branches_org_slug y el error "cannot affect row a second time".
+    // En UPDATE NO se pisan is_active/is_default: si el admin desactivó la
+    // sucursal, re-correr el onboarding no debe reactivarla.
     defaultBranch?.id
-      ? admin.from('branches').update(branchPayload).eq('id', defaultBranch.id)
+      ? admin.from('branches').update({
+          organization_id: branchPayload.organization_id,
+          name: branchPayload.name,
+          address: branchPayload.address,
+          city: branchPayload.city,
+          phone: branchPayload.phone,
+          email: branchPayload.email,
+          metadata: branchPayload.metadata,
+        }).eq('id', defaultBranch.id)
       : admin.from('branches').insert({ ...branchPayload, code: 'principal', slug: 'principal' }),
     admin
       .from('website_settings')
