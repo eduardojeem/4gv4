@@ -268,7 +268,8 @@ class OfflineManager {
     if (!this.db) throw new Error('Database not initialized')
 
     const products = await this.db.getAll('products')
-    return products.filter((p) => p.is_active)
+    // is_active = visibilidad pública, no disponibilidad en POS: devolver todos.
+    return products
   }
 
   /**

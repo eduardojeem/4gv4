@@ -187,10 +187,12 @@ export function usePOSProducts() {
       const cacheKey = getBranchCacheKey(selectedBranchId)
       if (!productsFetchPromisesByBranch[cacheKey]) {
         productsFetchPromisesByBranch[cacheKey] = (async () => {
+          // NOTE: no filtramos por is_active. is_active controla la visibilidad
+          // en el catálogo PÚBLICO; en el POS (venta interna) se debe poder
+          // vender cualquier producto aunque esté oculto del público.
           const { data: dbProducts, error } = await supabase
             .from('products')
             .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active, image_url, images, categories(name)')
-            .eq('is_active', true)
             .order('name')
             .limit(5000)
 
@@ -262,7 +264,6 @@ export function usePOSProducts() {
           )
         `)
         .eq('barcode', barcode)
-        .eq('is_active', true)
         .single()
 
       if (error) {

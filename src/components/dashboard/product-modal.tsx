@@ -59,6 +59,8 @@ interface ProductModalProps {
   categories: Category[]
   brands: Brand[]
   suppliers: Supplier[]
+  /** Called when a category, brand, or supplier is created from within the modal */
+  onCatalogChange?: () => void
 }
 
 const DEFAULT_POST_SALE_VALUES = {
@@ -77,7 +79,8 @@ export function ProductModal({
   onSave,
   categories,
   brands,
-  suppliers
+  suppliers,
+  onCatalogChange
 }: ProductModalProps) {
   const [activeTab, setActiveTab] = useState('basic')
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
@@ -251,6 +254,7 @@ export function ProductModal({
        setLocalCategories(prev => [...prev, newCategory])
        setValue('category_id', newCategory.id)
        setIsCategoryModalOpen(false)
+       onCatalogChange?.()
     } else {
        toast.error(result.error || 'Error al crear categoría')
     }
@@ -279,6 +283,7 @@ export function ProductModal({
        setLocalSuppliers(prev => [...prev, newSupplier])
        setValue('supplier_id', newSupplier.id)
        setIsSupplierModalOpen(false)
+       onCatalogChange?.()
     } else {
        toast.error(result.error || 'Error al crear proveedor')
     }
@@ -293,6 +298,7 @@ export function ProductModal({
        setValue('brand_id', newBrand.id)
        setValue('brand', newBrand.name)
        setIsBrandModalOpen(false)
+       onCatalogChange?.()
        return { success: true }
     } else {
        toast.error(result.error || 'Error al crear marca')
