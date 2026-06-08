@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { WebsiteEditorDirtyContext } from '@/components/admin/website/website-editor-dirty'
 import { CompanyInfoForm } from '@/components/admin/website/CompanyInfoForm'
 import { HeroEditor } from '@/components/admin/website/HeroEditor'
 import { ServicesManager } from '@/components/admin/website/ServicesManager'
@@ -21,6 +22,33 @@ const TABS = [
 
 export default function WebsiteAdminPage() {
   const [orgSlug, setOrgSlug] = useState('')
+  const [tab, setTab] = useState('company')
+  const dirtyRef = useRef(false)
+
+  const setDirty = useCallback((dirty: boolean) => {
+    dirtyRef.current = dirty
+  }, [])
+
+  const handleTabChange = (next: string) => {
+    if (next !== tab && dirtyRef.current) {
+      const ok = window.confirm('Tenés cambios sin guardar. ¿Descartarlos y cambiar de pestaña?')
+      if (!ok) return
+      dirtyRef.current = false
+    }
+    setTab(next)
+  }
+
+  // Warn before closing/reloading with unsaved changes.
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirtyRef.current) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [])
 
   useEffect(() => {
     fetch('/api/onboarding/status')
@@ -32,6 +60,7 @@ export default function WebsiteAdminPage() {
   }, [])
 
   return (
+   <WebsiteEditorDirtyContext.Provider value={{ setDirty }}>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -53,7 +82,7 @@ export default function WebsiteAdminPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="company" className="space-y-6">
+      <Tabs value={tab} onValueChange={handleTabChange} className="space-y-6">
         <div className="-mb-px overflow-x-auto">
           <TabsList className="inline-flex h-auto w-max min-w-full items-end gap-0 rounded-none border-b border-border bg-transparent p-0">
             {TABS.map(({ value, label, icon: Icon }) => (
@@ -76,5 +105,6 @@ export default function WebsiteAdminPage() {
         <TabsContent value="checkout" className="mt-0"><CheckoutSettingsEditor /></TabsContent>
       </Tabs>
     </div>
+   </WebsiteEditorDirtyContext.Provider>
   )
 }

@@ -157,6 +157,11 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
                   <p className="max-w-[160px] truncate text-xs text-slate-400">
                     {sub.owner_email || sub.owner_id || ''}
                   </p>
+                  <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
+                    <span title="Miembros">{sub.members_count ?? 0} 👤</span>
+                    <span title="Productos">{sub.products_count ?? 0} 📦</span>
+                    <span title="Ventas">{sub.sales_count ?? 0} 🧾</span>
+                  </div>
                 </TableCell>
 
                 {/* Actions */}

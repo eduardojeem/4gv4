@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { Package, Wrench, Store, Menu, X, Phone, User, UserPlus, Shield, Clock, LayoutDashboard, Truck } from 'lucide-react'
+import { Package, Wrench, Store, Menu, X, Phone, User, UserPlus, Shield, Clock, LayoutDashboard, Truck, Briefcase } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -61,12 +61,12 @@ export function PublicHeader() {
   const isWholesaleUser = hasPermission(WHOLESALE_PRICE_PERMISSION)
   const pathSegments = pathname.split('/').filter(Boolean)
   const pathTenantSlug =
-    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil'].includes(pathSegments[1])
+    pathSegments.length > 1 && ['inicio', 'productos', 'servicios', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil'].includes(pathSegments[1])
       ? pathSegments[0]
       : ''
   const tenantPrefix = pathTenantSlug ? `/${pathTenantSlug}` : ''
   const withTenantPrefix = (href: string) => {
-    if (!tenantPrefix || !['/inicio', '/productos', '/mis-reparaciones', '/track', '/carrito', '/perfil'].some((path) => href === path || href.startsWith(`${path}/`) || href.startsWith(`${path}#`))) {
+    if (!tenantPrefix || !['/inicio', '/productos', '/servicios', '/mis-reparaciones', '/track', '/carrito', '/perfil'].some((path) => href === path || href.startsWith(`${path}/`) || href.startsWith(`${path}#`))) {
       return href
     }
 
@@ -144,11 +144,15 @@ export function PublicHeader() {
     }
   }
 
+  const servicesEnabled = settings?.company_info?.servicesPageEnabled !== false && 
+    (Array.isArray(settings?.services) && settings.services.length > 0)
+
   const navLinks = [
     { href: withTenantPrefix('/inicio'), label: 'Inicio', icon: null },
     { href: withTenantPrefix('/productos'), label: 'Productos', icon: Package },
+    ...(servicesEnabled ? [{ href: withTenantPrefix('/servicios'), label: 'Servicios', icon: Briefcase }] : []),
     { href: withTenantPrefix('/track'), label: 'Rastrear pedidos', icon: Truck },
-    { href: withTenantPrefix('/mis-reparaciones'), label: 'Rastrear reparaciones', icon: Wrench },
+    ...(user ? [{ href: withTenantPrefix('/mis-reparaciones'), label: 'Mis reparaciones', icon: Wrench }] : []),
   ]
   const customerLoginHref = tenantPrefix ? `${tenantPrefix}/cliente/login` : '/login'
   const customerRegisterHref = tenantPrefix ? `${tenantPrefix}/cliente/registro` : '/register'

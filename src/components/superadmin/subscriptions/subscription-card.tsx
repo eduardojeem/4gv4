@@ -92,7 +92,7 @@ export function SubscriptionCard({ subscription: sub, onOpenDetail }: Props) {
       {/* Meta */}
       <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
         <span>{sub.owner_name || sub.owner_email || 'Sin owner'}</span>
-        <span>{sub.provider}</span>
+        <span>{sub.members_count ?? 0} 👤 · {sub.products_count ?? 0} 📦 · {sub.sales_count ?? 0} 🧾</span>
       </div>
 
       {/* Actions */}

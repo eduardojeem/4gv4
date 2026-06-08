@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EnterSupportButton } from '@/components/superadmin/EnterSupportButton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -546,6 +547,7 @@ export function OrganizationsDashboard({ organizations }: { organizations: Super
                       {/* Acciones */}
                       <td className="py-3 pl-3 pr-4">
                         <div className="flex justify-end gap-0.5">
+                          <EnterSupportButton iconOnly organizationId={org.id} organizationName={org.name} />
                           <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Abrir tienda">
                             <a href={`/${org.slug}/inicio`} target="_blank" rel="noreferrer">
                               <Globe className="h-3.5 w-3.5" />

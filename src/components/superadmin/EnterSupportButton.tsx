@@ -9,13 +9,15 @@ interface EnterSupportButtonProps {
   organizationId: string
   organizationName: string
   className?: string
+  /** Render as a compact icon button (e.g. inside a table actions cell). */
+  iconOnly?: boolean
 }
 
 /**
  * Starts a time-boxed "support mode" session against a tenant. The super_admin
  * must provide a reason; the action is audited and a banner appears while active.
  */
-export function EnterSupportButton({ organizationId, organizationName, className }: EnterSupportButtonProps) {
+export function EnterSupportButton({ organizationId, organizationName, className, iconOnly = false }: EnterSupportButtonProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
 
@@ -43,6 +45,23 @@ export function EnterSupportButton({ organizationId, organizationName, className
     } finally {
       setLoading(false)
     }
+  }
+
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        onClick={start}
+        disabled={loading}
+        title="Modo soporte (auditado y temporal)"
+        className={cn(
+          'inline-flex h-8 w-8 items-center justify-center rounded-lg text-amber-600 transition-colors hover:bg-amber-50 disabled:opacity-50 dark:text-amber-400 dark:hover:bg-amber-950/40',
+          className
+        )}
+      >
+        <LifeBuoy className="h-3.5 w-3.5" />
+      </button>
+    )
   }
 
   return (

@@ -1,6 +1,8 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebContentOverview, type WebContentData } from '@/components/superadmin/WebContentOverview'
 
+export const revalidate = 60
+
 async function getWebContentData(): Promise<WebContentData> {
   const admin = createAdminSupabase()
 

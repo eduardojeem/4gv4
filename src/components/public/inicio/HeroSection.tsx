@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, MessageCircle } from 'lucide-react'
+import { ArrowRight, MessageCircle, ShoppingBag, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { CompanyInfo, HeroStats, HeroContent } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
@@ -43,8 +43,9 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
           </p>
           <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
             <Button asChild size="lg" className={`bg-white ${brand.ctaBtn} hover:bg-white/90`}>
-              <Link href={`${tenantPrefix}/mis-reparaciones`}>
-                Rastrear mi reparación
+              <Link href={`${tenantPrefix}/productos`}>
+                <ShoppingBag className="mr-2 h-5 w-5" />
+                Ver productos
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
@@ -54,6 +55,17 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
                 Escribinos
               </a>
             </Button>
+          </div>
+
+          {/* Repair tracking — secondary path for the mixed (sales + service) model */}
+          <div className="mt-5">
+            <Link
+              href={`${tenantPrefix}/mis-reparaciones`}
+              className={`inline-flex items-center gap-1.5 text-sm font-medium ${brand.text200} underline-offset-4 transition-colors hover:text-white hover:underline`}
+            >
+              <Wrench className="h-4 w-4" />
+              ¿Tenés una reparación? Rastreá tu equipo
+            </Link>
           </div>
 
           {/* Stats */}

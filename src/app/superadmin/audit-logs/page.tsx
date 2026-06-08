@@ -1,6 +1,24 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { AuditLogsDashboard, type AuditLogRow } from '@/components/superadmin/AuditLogsDashboard'
 
+const ALLOWED_SEVERITY = new Set(['low', 'medium', 'high', 'critical'])
+
+function normalizeSeverity(value: string | null): AuditLogRow['severity'] {
+  if (value && ALLOWED_SEVERITY.has(value)) return value as AuditLogRow['severity']
+  if (value === 'warning') return 'medium'
+  if (value === 'error') return 'high'
+  return 'low'
+}
+
+/** Extract a targeted organization id from a log's details payload, if present. */
+function detailsOrgId(details: unknown): string | null {
+  if (details && typeof details === 'object') {
+    const value = (details as Record<string, unknown>).organization_id
+    if (typeof value === 'string' && value) return value
+  }
+  return null
+}
+
 async function getAuditLogsData() {
   const admin = createAdminSupabase()
 
@@ -27,15 +45,17 @@ async function getAuditLogsData() {
     )
   }
 
-  // Cruzar con organizations si el resource_id apunta a una org
-  const orgRefIds = Array.from(new Set(
-    logs
-      .filter((l) => l.resource === 'organizations' && l.resource_id)
-      .map((l) => l.resource_id as string)
-  ))
+  // Cruzar con organizations: el resource_id (cuando el recurso es 'organizations')
+  // o el details.organization_id (acciones cross-tenant: soporte, suscripciones, etc.)
+  const orgIds = new Set<string>()
+  logs.forEach((l) => {
+    if (l.resource === 'organizations' && l.resource_id) orgIds.add(l.resource_id)
+    const detailOrg = detailsOrgId(l.details)
+    if (detailOrg) orgIds.add(detailOrg)
+  })
   let orgsById = new Map<string, { name: string; slug: string }>()
-  if (orgRefIds.length > 0) {
-    const { data: orgs } = await admin.from('organizations').select('id, name, slug').in('id', orgRefIds)
+  if (orgIds.size > 0) {
+    const { data: orgs } = await admin.from('organizations').select('id, name, slug').in('id', Array.from(orgIds))
     orgsById = new Map(
       ((orgs ?? []) as Array<{ id: string; name: string; slug: string }>)
         .map((o) => [o.id, { name: o.name, slug: o.slug }])
@@ -44,7 +64,8 @@ async function getAuditLogsData() {
 
   const rows: AuditLogRow[] = logs.map((l) => {
     const profile = l.user_id ? profilesById.get(l.user_id) : null
-    const org = l.resource === 'organizations' && l.resource_id ? orgsById.get(l.resource_id) : null
+    const orgId = l.resource === 'organizations' && l.resource_id ? l.resource_id : detailsOrgId(l.details)
+    const org = orgId ? orgsById.get(orgId) : null
     return {
       id: l.id,
       userId: l.user_id,
@@ -53,7 +74,7 @@ async function getAuditLogsData() {
       action: l.action,
       resource: l.resource,
       resourceId: l.resource_id,
-      severity: (l.severity ?? 'low') as 'low' | 'medium' | 'high' | 'critical',
+      severity: normalizeSeverity(l.severity),
       ipAddress: l.ip_address,
       userAgent: l.user_agent,
       createdAt: l.created_at,

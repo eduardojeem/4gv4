@@ -27,6 +27,9 @@ export type SuperAdminSubscription = {
   cancel_at_period_end: boolean
   created_at: string | null
   updated_at: string | null
+  members_count?: number
+  products_count?: number
+  sales_count?: number
 }
 
 export type TabValue = 'all' | 'attention' | 'renewals' | 'trials' | 'canceling'

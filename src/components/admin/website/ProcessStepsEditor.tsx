@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +18,12 @@ export function ProcessStepsEditor() {
   const [stepsDraft, setStepsDraft] = useState<ProcessStep[] | null>(null)
   const steps = stepsDraft ?? settings?.process_steps ?? getWebsiteSettingsDefaults().process_steps
   const hasChanges = stepsDraft !== null
+
+  const dirtyCtx = useWebsiteEditorDirty()
+  useEffect(() => {
+    dirtyCtx?.setDirty(hasChanges)
+    return () => dirtyCtx?.setDirty(false)
+  }, [hasChanges, dirtyCtx])
 
   const handleSave = async () => {
     const invalid = steps.find(s => !s.title.trim() || s.title.trim().length < 2 || !s.description.trim() || s.description.trim().length < 5)
@@ -67,44 +74,42 @@ export function ProcessStepsEditor() {
   }
 
   if (isLoading && !stepsDraft && !settings) {
-    return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
+    return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
   }
   if (error && !stepsDraft && !settings) {
-    return <div className="rounded-lg border p-6 text-center text-sm text-red-600">Error: {error}</div>
+    return <div className="rounded-lg border p-6 text-center text-sm text-destructive">Error: {error}</div>
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between rounded-xl bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/20 dark:to-indigo-950/20 p-6">
-        <div>
-          <h3 className="flex items-center gap-2 text-lg font-semibold">
-            <Footprints className="h-5 w-5 text-violet-600" />
-            Pasos del Proceso
-          </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Cómo se muestra el flujo de trabajo en el sitio público ({steps.length} pasos)
-          </p>
+    <div className="space-y-6 pb-24 md:pb-6">
+      <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/30 p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
+            <Footprints className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold">Pasos del proceso</h3>
+            <p className="text-xs text-muted-foreground">
+              Cómo se muestra tu flujo de trabajo en el sitio público · {steps.length} paso{steps.length !== 1 ? 's' : ''}
+            </p>
+          </div>
         </div>
-        <Button
-          onClick={handleAdd}
-          size="sm"
-          className="bg-violet-600 hover:bg-violet-700 text-white"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Agregar Paso
+        <Button onClick={handleAdd} size="sm" className="shrink-0 gap-2">
+          <Plus className="h-4 w-4" />
+          <span className="hidden sm:inline">Agregar paso</span>
         </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {steps.map((step, index) => (
-          <Card key={step.id} className="border-none shadow-lg">
-            <CardHeader className="bg-gradient-to-r from-violet-50/60 to-indigo-50/60 dark:from-violet-950/10 dark:to-indigo-950/10 p-4 pb-3">
+          <Card key={step.id}>
+            <CardHeader className="border-b bg-muted/30 p-4 pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 text-sm font-bold shrink-0">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
                     {step.number}
                   </div>
-                  <span className="text-sm font-medium text-gray-500">Paso {step.number}</span>
+                  <span className="text-sm font-medium text-muted-foreground">Paso {step.number}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleMove(index, 'up')} disabled={index === 0}>
@@ -113,7 +118,7 @@ export function ProcessStepsEditor() {
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleMove(index, 'down')} disabled={index === steps.length - 1}>
                     <ArrowDown className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDelete(step.id)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDelete(step.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -121,24 +126,24 @@ export function ProcessStepsEditor() {
             </CardHeader>
             <CardContent className="space-y-4 p-4">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-gray-400">Título</Label>
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Título</Label>
                 <Input
                   value={step.title}
                   onChange={e => handleUpdate(step.id, 'title', e.target.value)}
-                  placeholder="Ej: Diagnóstico Gratuito"
+                  placeholder="Ej: Diagnóstico gratuito"
                   maxLength={60}
-                  className="h-10 border-gray-100 bg-gray-50/50 focus:bg-white"
+                  className="h-10"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-gray-400">Descripción</Label>
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Descripción</Label>
                 <Textarea
                   value={step.description}
                   onChange={e => handleUpdate(step.id, 'description', e.target.value)}
                   placeholder="Ej: Evaluamos tu dispositivo sin costo"
                   rows={2}
                   maxLength={150}
-                  className="resize-none border-gray-100 bg-gray-50/50 focus:bg-white text-sm"
+                  className="resize-none text-sm"
                 />
               </div>
             </CardContent>
@@ -146,17 +151,12 @@ export function ProcessStepsEditor() {
         ))}
       </div>
 
-      <div className="fixed bottom-6 right-6 md:sticky md:bottom-6 md:flex md:justify-end z-50">
-        <Button
-          onClick={handleSave}
-          disabled={isSaving || !hasChanges}
-          size="lg"
-          className="shadow-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 transition-all duration-300 rounded-full md:rounded-xl px-8 md:px-6 h-14 md:h-12"
-        >
+      <div className="fixed bottom-6 right-6 z-50 md:sticky md:bottom-6 md:flex md:justify-end">
+        <Button onClick={handleSave} disabled={isSaving || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl md:px-6">
           {isSaving ? (
             <><Loader2 className="mr-2 h-5 w-5 animate-spin" /><span className="hidden md:inline">Guardando...</span></>
           ) : (
-            <><Save className="mr-2 h-5 w-5" /><span className="hidden md:inline">Guardar Pasos</span><span className="md:hidden">Guardar</span></>
+            <><Save className="mr-2 h-5 w-5" /><span className="hidden md:inline">Guardar pasos</span><span className="md:hidden">Guardar</span></>
           )}
         </Button>
       </div>

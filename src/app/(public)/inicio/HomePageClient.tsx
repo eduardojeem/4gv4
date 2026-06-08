@@ -4,6 +4,8 @@ import { useMemo } from 'react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
 import { HeroSection } from '@/components/public/inicio/HeroSection'
+import { CategoryShowcase } from '@/components/public/inicio/CategoryShowcase'
+import { FeaturedProducts } from '@/components/public/inicio/FeaturedProducts'
 import { OffersCarousel } from '@/components/public/inicio/OffersCarousel'
 import type { OfferCard } from '@/components/public/inicio/OffersCarousel'
 import { ServicesGrid } from '@/components/public/inicio/ServicesGrid'
@@ -140,13 +142,22 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
         contactHref={contactHref}
       />
 
-      <OffersCarousel
-        companyName={company_info.name || '4G Movil'}
-        fallbackOffers={fallbackOffers}
-      />
+      {/* ── Sales-first sections ── */}
+      <CategoryShowcase />
 
+      <div id="ofertas">
+        <OffersCarousel
+          companyName={company_info.name || '4G Movil'}
+          fallbackOffers={fallbackOffers}
+        />
+      </div>
+
+      <FeaturedProducts />
+
+      {/* ── Services (kept for the mixed model) ── */}
       <ServicesGrid services={safeServices} />
 
+      {/* ── Trust / secondary ── */}
       <ProcessSteps brand={brand} steps={processSteps} />
 
       <BranchLocations branches={branches} brand={brand} />

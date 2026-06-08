@@ -35,6 +35,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { StatCard } from '@/components/superadmin/StatCard'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -114,41 +115,6 @@ function completionTextColor(percent: number) {
 // ---------------------------------------------------------------------------
 // Stat card
 // ---------------------------------------------------------------------------
-
-function StatCard({ label, value, sub, icon: Icon, tone = 'default' }: {
-  label: string; value: string | number; sub: string
-  icon: React.ComponentType<{ className?: string }>
-  tone?: 'default' | 'success' | 'warning' | 'danger' | 'info'
-}) {
-  const tones = {
-    default: 'bg-card border',
-    success: 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20',
-    warning: 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20',
-    danger:  'border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/20',
-    info:    'border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20',
-  }
-  const iconTones = {
-    default: 'text-slate-500',
-    success: 'text-emerald-600 dark:text-emerald-400',
-    warning: 'text-amber-600 dark:text-amber-400',
-    danger:  'text-red-600 dark:text-red-400',
-    info:    'text-blue-600 dark:text-blue-400',
-  }
-  return (
-    <div className={cn('rounded-xl border p-5', tones[tone])}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
-          <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{value}</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{sub}</p>
-        </div>
-        <div className={cn('rounded-lg border bg-background p-2', iconTones[tone])}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Completion checks visualization (mini icons)

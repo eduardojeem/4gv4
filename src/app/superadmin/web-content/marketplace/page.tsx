@@ -17,15 +17,48 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { StatCard } from '@/components/superadmin/StatCard'
 import { cn } from '@/lib/utils'
+
+export const revalidate = 60
+
+/**
+ * Per-org product counts via the aggregated `org_catalog_counts` view (Postgres
+ * does the counting). Returns null if the view isn't present yet, so the caller
+ * can fall back to row-counting and nothing breaks before the migration runs.
+ */
+async function getProductCountsFromView(
+  admin: ReturnType<typeof createAdminSupabase>
+): Promise<Map<string, number> | null> {
+  // The view isn't in the generated DB types, so access it through a narrow shape.
+  const client = admin as unknown as {
+    from: (table: string) => {
+      select: (columns: string) => Promise<{
+        data: Array<{ organization_id: string; products: number | string }> | null
+        error: unknown
+      }>
+    }
+  }
+
+  const { data, error } = await client
+    .from('org_catalog_counts')
+    .select('organization_id, products')
+
+  if (error || !data) return null
+
+  return new Map(data.map((row) => [row.organization_id, Number(row.products) || 0]))
+}
 
 async function getMarketplaceData() {
   const admin = createAdminSupabase()
 
-  const [{ data: orgsData }, { data: productCounts }, { data: categoryCounts }] = await Promise.all([
+  // Prefer the aggregated view; only scan product rows if it isn't available.
+  const productCountsByOrg = await getProductCountsFromView(admin)
+
+  const [{ data: orgsData }, { data: categoryCounts }, productFallback] = await Promise.all([
     admin.from('organizations').select('id, name, slug, plan, marketplace_public, created_at').limit(500),
-    admin.from('products').select('organization_id'),
     admin.from('categories').select('organization_id, name'),
+    productCountsByOrg ? Promise.resolve({ data: null }) : admin.from('products').select('organization_id'),
   ])
 
   const orgs = (orgsData ?? []) as Array<{
@@ -33,13 +66,15 @@ async function getMarketplaceData() {
     marketplace_public: boolean | null; created_at: string | null
   }>
 
-  // Count products per org
-  const productsByOrg = new Map<string, number>()
-  ;(productCounts ?? []).forEach((p: { organization_id: string | null }) => {
-    if (p.organization_id) productsByOrg.set(p.organization_id, (productsByOrg.get(p.organization_id) ?? 0) + 1)
-  })
+  // Products per org: from the view, or from the fallback row scan.
+  const productsByOrg = productCountsByOrg ?? new Map<string, number>()
+  if (!productCountsByOrg) {
+    ;((productFallback?.data ?? []) as Array<{ organization_id: string | null }>).forEach((p) => {
+      if (p.organization_id) productsByOrg.set(p.organization_id, (productsByOrg.get(p.organization_id) ?? 0) + 1)
+    })
+  }
 
-  // Count categories per org
+  // Count categories per org + global names (categories are far fewer than products)
   const categoriesByOrg = new Map<string, number>()
   const categoryNames = new Map<string, number>()
   ;(categoryCounts ?? []).forEach((c: { organization_id: string | null; name: string | null }) => {
@@ -61,7 +96,11 @@ async function getMarketplaceData() {
   })).sort((a, b) => b.products - a.products)
 
   const publicOrgs = orgsRich.filter((o) => o.marketplace_public !== false)
-  const totalProducts = orgsRich.reduce((sum, o) => sum + o.products, 0)
+  // Total products: accurate across ALL orgs from the view (not capped by the
+  // 500-org display limit); falls back to summing the scanned rows.
+  const totalProducts = productCountsByOrg
+    ? Array.from(productCountsByOrg.values()).reduce((sum, n) => sum + n, 0)
+    : orgsRich.reduce((sum, o) => sum + o.products, 0)
   const totalCategories = categoryNames.size
 
   return {
@@ -81,37 +120,6 @@ const PLAN_COLORS: Record<string, string> = {
   BASIC: 'border-blue-200 bg-blue-50 text-blue-700',
   PRO: 'border-violet-200 bg-violet-50 text-violet-700',
   ENTERPRISE: 'border-amber-200 bg-amber-50 text-amber-700',
-}
-
-function StatCard({ label, value, sub, icon: Icon, tone = 'default' }: {
-  label: string; value: string | number; sub: string
-  icon: React.ComponentType<{ className?: string }>
-  tone?: 'default' | 'success' | 'warning' | 'info'
-}) {
-  const tones = {
-    default: 'bg-card border',
-    success: 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20',
-    warning: 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20',
-    info:    'border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20',
-  }
-  const iconTones = {
-    default: 'text-slate-500', success: 'text-emerald-600 dark:text-emerald-400',
-    warning: 'text-amber-600 dark:text-amber-400', info: 'text-blue-600 dark:text-blue-400',
-  }
-  return (
-    <div className={cn('rounded-xl border p-5', tones[tone])}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
-          <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{value}</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{sub}</p>
-        </div>
-        <div className={cn('rounded-lg border bg-background p-2', iconTones[tone])}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
-  )
 }
 
 export default async function SuperAdminMarketplaceContentPage() {

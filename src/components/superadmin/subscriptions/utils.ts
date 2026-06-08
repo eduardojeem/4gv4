@@ -73,6 +73,8 @@ export function getRecommendation(subscription: SuperAdminSubscription) {
   if (subscription.status === 'trialing' && trialDays !== null && trialDays <= 7 && trialDays >= 0) return 'Convertir trial a plan pago'
   if (renewalDays !== null && renewalDays <= 7 && renewalDays >= 0) return 'Confirmar renovación'
   if (renewalDays !== null && renewalDays < 0) return 'Actualizar periodo o estado'
+  // Detect abandoned accounts: has subscription but no products or sales
+  if ((subscription.products_count ?? 0) === 0 && (subscription.sales_count ?? 0) === 0) return 'Cuenta sin actividad — seguimiento'
   return 'Sin acción crítica'
 }
 

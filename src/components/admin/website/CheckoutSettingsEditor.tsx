@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import type { CheckoutSettings, PaymentMethodConfig } from '@/types/website-settings'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -134,6 +135,12 @@ export function CheckoutSettingsEditor() {
   const baseline: CheckoutSettings = lastSaved ?? settings?.checkout ?? defaultCheckout
   const current:  CheckoutSettings = draft ?? baseline
   const hasChanges = draft !== null
+
+  const dirtyCtx = useWebsiteEditorDirty()
+  useEffect(() => {
+    dirtyCtx?.setDirty(hasChanges)
+    return () => dirtyCtx?.setDirty(false)
+  }, [hasChanges, dirtyCtx])
 
   function patch<K extends keyof CheckoutSettings>(key: K, val: CheckoutSettings[K]) {
     setDraft((prev) => ({ ...(prev ?? baseline), [key]: val }))

@@ -19,6 +19,7 @@ export interface CompanyInfo {
   instagram?: string
   facebook?: string
   tiktok?: string
+  servicesPageEnabled?: boolean
 }
 
 export interface HeroStats {
@@ -41,9 +42,12 @@ export interface Service {
   color: string
   benefits: string[]
   active?: boolean
-  price?: string      // e.g. "Desde $49.990"
+  price?: string | number | null
+  priceNote?: string
   duration?: string   // e.g. "30-60 min"
   ctaUrl?: string     // optional link override per service
+  featured?: boolean
+  category?: string
 }
 
 export interface Testimonial {

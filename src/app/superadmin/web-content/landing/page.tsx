@@ -17,10 +17,18 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { StatCard } from '@/components/superadmin/StatCard'
 import { cn } from '@/lib/utils'
+
+export const revalidate = 60
+
+// Detect a "customized" hero by comparing against the live template default,
+// not a hardcoded string that silently breaks if the template copy changes.
+const DEFAULT_HERO_TITLE = getWebsiteSettingsDefaults().hero_content.title
 
 async function getLandingData() {
   const admin = createAdminSupabase()
@@ -35,11 +43,13 @@ async function getLandingData() {
   const settings = (settingsData ?? []) as Array<{ organization_id: string | null; key: string; value: unknown; updated_at: string | null }>
 
   const byOrg = new Map<string, Map<string, unknown>>()
+  const heroUpdatedByOrg = new Map<string, string | null>()
   settings.forEach((s) => {
     if (!s.organization_id) return
     const m = byOrg.get(s.organization_id) ?? new Map()
     m.set(s.key, s.value)
     byOrg.set(s.organization_id, m)
+    if (s.key === 'hero_content') heroUpdatedByOrg.set(s.organization_id, s.updated_at)
   })
 
   let totalServices = 0
@@ -66,13 +76,13 @@ async function getLandingData() {
     if (company?.logoUrl) withLogo++
     if (maintenance?.enabled) withMaintenanceActive++
 
-    if (hero?.title && typeof hero.title === 'string' && hero.title !== 'Reparación profesional para tu equipo') {
+    if (hero?.title && typeof hero.title === 'string' && hero.title !== DEFAULT_HERO_TITLE) {
       customizedHeros.push({
         name: o.name,
         slug: o.slug,
         title: String(hero.title),
         subtitle: String(hero.subtitle ?? ''),
-        updatedAt: settings.find((x) => x.organization_id === o.id && x.key === 'hero_content')?.updated_at ?? null,
+        updatedAt: heroUpdatedByOrg.get(o.id) ?? null,
       })
     }
   })
@@ -88,37 +98,6 @@ async function getLandingData() {
     totalTestimonials,
     customizedHeros: customizedHeros.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')).slice(0, 10),
   }
-}
-
-function StatCard({ label, value, sub, icon: Icon, tone = 'default' }: {
-  label: string; value: string | number; sub: string
-  icon: React.ComponentType<{ className?: string }>
-  tone?: 'default' | 'success' | 'warning' | 'info'
-}) {
-  const tones = {
-    default: 'bg-card border',
-    success: 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20',
-    warning: 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20',
-    info:    'border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20',
-  }
-  const iconTones = {
-    default: 'text-slate-500', success: 'text-emerald-600 dark:text-emerald-400',
-    warning: 'text-amber-600 dark:text-amber-400', info: 'text-blue-600 dark:text-blue-400',
-  }
-  return (
-    <div className={cn('rounded-xl border p-5', tones[tone])}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
-          <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{value}</p>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{sub}</p>
-        </div>
-        <div className={cn('rounded-lg border bg-background p-2', iconTones[tone])}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
-  )
 }
 
 export default async function SuperAdminLandingContentPage() {

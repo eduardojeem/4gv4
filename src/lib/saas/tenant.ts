@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1'])
-const TENANT_PATH_SECTIONS = new Set(['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente'])
+const TENANT_PATH_SECTIONS = new Set(['inicio', 'productos', 'servicios', 'mis-reparaciones', 'track', 'carrito', 'cliente'])
 
 function stripPort(host: string) {
   return host.split(':')[0]?.toLowerCase() ?? ''
@@ -65,7 +65,7 @@ export function getTenantSlugFromPath(pathname: string) {
   return slugifyTenantName(maybeSlug)
 }
 
-const TENANT_PUBLIC_SECTIONS = ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil']
+const TENANT_PUBLIC_SECTIONS = ['inicio', 'productos', 'servicios', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil']
 
 /**
  * Client-safe: extract the tenant slug from a public pathname like

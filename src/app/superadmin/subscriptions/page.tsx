@@ -91,6 +91,32 @@ export default async function SuperAdminSubscriptionsPage() {
         .in('id', ownerIds)
     : { data: [] }
 
+  // Load member counts and product counts per organization (using count queries for performance)
+  const memberCountMap = new Map<string, number>()
+  const productCountMap = new Map<string, number>()
+  const salesCountMap = new Map<string, number>()
+
+  if (organizationIds.length > 0) {
+    // Use individual count queries per org is too slow for many orgs.
+    // Instead, use a single grouped RPC or raw count approach.
+    // For now, use lightweight select with head:true per batch.
+    const [{ data: membersRaw }, { data: productsRaw }, { data: salesRaw }] = await Promise.all([
+      admin.from('organization_members').select('organization_id', { count: 'exact', head: false }).in('organization_id', organizationIds).eq('status', 'active'),
+      admin.from('products').select('organization_id', { count: 'exact', head: false }).in('organization_id', organizationIds).eq('is_active', true).limit(5000),
+      admin.from('sales').select('organization_id', { count: 'exact', head: false }).in('organization_id', organizationIds).limit(5000),
+    ])
+
+    for (const row of (membersRaw ?? []) as { organization_id: string }[]) {
+      memberCountMap.set(row.organization_id, (memberCountMap.get(row.organization_id) ?? 0) + 1)
+    }
+    for (const row of (productsRaw ?? []) as { organization_id: string }[]) {
+      productCountMap.set(row.organization_id, (productCountMap.get(row.organization_id) ?? 0) + 1)
+    }
+    for (const row of (salesRaw ?? []) as { organization_id: string }[]) {
+      salesCountMap.set(row.organization_id, (salesCountMap.get(row.organization_id) ?? 0) + 1)
+    }
+  }
+
   const organizationsById = new Map(organizations.map((organization) => [organization.id, organization]))
   const profilesById = new Map(((profilesData ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]))
   const plansByCode = new Map(((plansData ?? []) as PlanRow[]).map((plan) => [plan.code, plan]))
@@ -137,6 +163,9 @@ export default async function SuperAdminSubscriptionsPage() {
       cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
       created_at: subscription.created_at,
       updated_at: subscription.updated_at,
+      members_count: memberCountMap.get(subscription.organization_id) ?? 0,
+      products_count: productCountMap.get(subscription.organization_id) ?? 0,
+      sales_count: salesCountMap.get(subscription.organization_id) ?? 0,
     }
   })
 

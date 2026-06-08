@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation'
 import { MessageCircle, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWhatsApp } from '@/hooks/useWhatsApp'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { cn } from '@/lib/utils'
+import { formatWhatsAppPhone, openWhatsApp, WhatsAppTemplates } from '@/lib/whatsapp'
 
 interface WhatsAppFloatButtonProps {
   showOnPages?: string[] // Array of paths where to show the button
@@ -21,7 +23,23 @@ export function WhatsAppFloatButton({
   const [pingDone, setPingDone]       = useState(false)
   const [hovered, setHovered]         = useState(false)
   const { contactBusiness } = useWhatsApp()
+  const { settings } = useWebsiteSettings()
   const pathname = usePathname()
+
+  // Use organization's WhatsApp/phone from settings, fallback to env/global
+  const orgPhone = settings?.company_info?.whatsapp || settings?.company_info?.phone || ''
+  const hasOrgPhone = orgPhone.replace(/\D/g, '').length >= 6
+
+  const handleWhatsAppClick = () => {
+    if (hasOrgPhone) {
+      openWhatsApp({
+        phone: formatWhatsAppPhone(orgPhone),
+        message: WhatsAppTemplates.generalInquiry(),
+      })
+    } else {
+      contactBusiness()
+    }
+  }
 
   // Reveal button after 1 s
   useEffect(() => {
@@ -59,6 +77,7 @@ export function WhatsAppFloatButton({
   }
 
   if (!shouldShow()) return null
+  if (!hasOrgPhone) return null
 
   return (
     <AnimatePresence>
@@ -104,7 +123,7 @@ export function WhatsAppFloatButton({
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => contactBusiness()}
+            onClick={() => handleWhatsAppClick()}
             onMouseEnter={() => { setHovered(true);  setShowTooltip(true)  }}
             onMouseLeave={() => { setHovered(false); setShowTooltip(false) }}
             onFocus={()  => setShowTooltip(true)}

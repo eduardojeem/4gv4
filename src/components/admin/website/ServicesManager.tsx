@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { useWebsiteEditorDirty } from '@/components/admin/website/website-editor-dirty'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -89,6 +90,12 @@ export function ServicesManager() {
   const services = servicesDraft ?? settings?.services ?? getWebsiteSettingsDefaults().services
   const hasChanges = servicesDraft !== null
   const activeServicesCount = services.filter((service) => service.active !== false).length
+
+  const dirtyCtx = useWebsiteEditorDirty()
+  useEffect(() => {
+    dirtyCtx?.setDirty(hasChanges)
+    return () => dirtyCtx?.setDirty(false)
+  }, [hasChanges, dirtyCtx])
 
   const handleSaveAll = async () => {
     const invalidService = services.find((service) => {
@@ -254,6 +261,28 @@ export function ServicesManager() {
           <Plus className="mr-2 h-5 w-5" /> Nuevo Servicio
         </Button>
       </div>
+
+      {/* Services page toggle */}
+      <Card className="border-blue-100 dark:border-blue-900/40">
+        <CardContent className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-3">
+            <Eye className="h-5 w-5 text-blue-600" />
+            <div>
+              <p className="font-medium text-sm">Página de servicios pública</p>
+              <p className="text-xs text-muted-foreground">Muestra un link &quot;Servicios&quot; en el menú de tu tienda con precios y detalle</p>
+            </div>
+          </div>
+          <Switch
+            checked={settings?.company_info?.servicesPageEnabled !== false && services.length > 0}
+            onCheckedChange={async (enabled) => {
+              const currentInfo = settings?.company_info ?? getWebsiteSettingsDefaults().company_info
+              await updateSetting('company_info', { ...currentInfo, servicesPageEnabled: enabled })
+              toast.success(enabled ? 'Página de servicios activada' : 'Página de servicios desactivada')
+            }}
+            disabled={isSaving || services.length === 0}
+          />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {services.map((service, index) => {
@@ -425,7 +454,7 @@ export function ServicesManager() {
                       <Input
                         value={editingService.price || ''}
                         onChange={(e) => setEditingService({ ...editingService, price: e.target.value })}
-                        placeholder="Desde $49.990"
+                        placeholder="Desde Gs. 150.000"
                         maxLength={30}
                         className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
                       />
@@ -440,6 +469,41 @@ export function ServicesManager() {
                         className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
                       />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Categoría</Label>
+                      <Input
+                        value={editingService.category || ''}
+                        onChange={(e) => setEditingService({ ...editingService, category: e.target.value })}
+                        placeholder="Ej: Reparaciones, Accesorios"
+                        maxLength={50}
+                        className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Nota de precio</Label>
+                      <Input
+                        value={editingService.priceNote || ''}
+                        onChange={(e) => setEditingService({ ...editingService, priceNote: e.target.value })}
+                        placeholder="por unidad, por hora..."
+                        maxLength={30}
+                        className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-xl border border-gray-100">
+                    <Label className="text-sm font-medium flex items-center gap-2 cursor-pointer" htmlFor="featured-switch">
+                      <Sparkles className={`h-4 w-4 ${editingService.featured ? 'text-amber-500' : 'text-gray-400'}`} />
+                      {editingService.featured ? 'Servicio destacado' : 'No destacado'}
+                    </Label>
+                    <Switch
+                      id="featured-switch"
+                      checked={editingService.featured || false}
+                      onCheckedChange={(checked) => setEditingService({ ...editingService, featured: checked })}
+                    />
                   </div>
 
                   <div className="space-y-2">

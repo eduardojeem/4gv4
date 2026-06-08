@@ -286,6 +286,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             userAgent,
             details: { email, method: 'password' }
           })
+
+          // Register active session for session management UI
+          if (data.session?.access_token) {
+            const { getSessionIdFromAccessToken } = await import('@/lib/session-id')
+            const sessionId = await getSessionIdFromAccessToken(data.session.access_token)
+            if (sessionId) {
+              const ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
+              const isMobile = /Mobile|Android|iPhone/i.test(ua)
+              const isTablet = /iPad|Tablet/i.test(ua)
+              const browser = ua.match(/(Chrome|Firefox|Safari|Edge|Brave|Opera)\/?\s*(\d+)/)?.[1] || 'Unknown'
+              const os = ua.match(/(Windows|Mac OS|Linux|Android|iOS)/)?.[1] || 'Unknown'
+
+              await supabase.from('user_sessions').upsert({
+                user_id: data.user.id,
+                session_id: sessionId,
+                user_agent: ua,
+                device_type: isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
+                browser,
+                os,
+                is_active: true,
+                last_activity: new Date().toISOString(),
+              }, { onConflict: 'session_id' })
+            }
+          }
         } catch (logError) {
           console.error('Error logging auth event (login):', logError)
         }
@@ -510,6 +534,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           )
           if (!isMounted) return
           setUser(buildAuthUser(nextSession.user, resolveStableProfile(nextSession.user, userProfile)))
+
+          // Register/refresh current session for session management
+          try {
+            const { getSessionIdFromAccessToken } = await import('@/lib/session-id')
+            const sessionId = await getSessionIdFromAccessToken(nextSession.access_token)
+            if (sessionId) {
+              const ua = typeof window !== 'undefined' ? window.navigator.userAgent : ''
+              const isMobile = /Mobile|Android|iPhone/i.test(ua)
+              const isTablet = /iPad|Tablet/i.test(ua)
+              const browser = ua.match(/(Chrome|Firefox|Safari|Edge|Brave|Opera)\/?\s*(\d+)/)?.[1] || 'Unknown'
+              const os = ua.match(/(Windows|Mac OS|Linux|Android|iOS)/)?.[1] || 'Unknown'
+
+              void (async () => {
+                try {
+                  await supabase.from('user_sessions').upsert({
+                    user_id: nextSession.user.id,
+                    session_id: sessionId,
+                    user_agent: ua,
+                    device_type: isTablet ? 'tablet' : isMobile ? 'mobile' : 'desktop',
+                    browser,
+                    os,
+                    is_active: true,
+                    last_activity: new Date().toISOString(),
+                  }, { onConflict: 'session_id' })
+                } catch {}
+              })()
+            }
+          } catch {}
         } else {
           setUser(null)
         }

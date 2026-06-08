@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -19,6 +19,7 @@ import {
   Eye,
   FileText,
   Globe,
+  LifeBuoy,
   LogIn,
   LogOut,
   Mail,
@@ -108,6 +109,14 @@ const ACTION_META: Record<string, { label: string; color: string; icon: React.Co
   suspicious_activity:    { label: 'Actividad sospechosa',      color: 'text-red-600',     icon: ShieldAlert,  category: 'security' },
   data_export:            { label: 'Exportación de datos',      color: 'text-violet-600',  icon: Download,     category: 'resource' },
   bulk_operation:         { label: 'Operación masiva',          color: 'text-cyan-600',    icon: Zap,          category: 'resource' },
+  // Platform (super_admin) actions
+  'support.started':      { label: 'Soporte iniciado',          color: 'text-amber-600',   icon: LifeBuoy,     category: 'platform' },
+  'support.ended':        { label: 'Soporte finalizado',        color: 'text-slate-500',   icon: ShieldCheck,  category: 'platform' },
+  invite_owner:           { label: 'Invitación de owner',       color: 'text-blue-600',    icon: UserPlus,     category: 'platform' },
+  'subscription.updated': { label: 'Suscripción actualizada',   color: 'text-cyan-600',    icon: FileText,     category: 'platform' },
+  'subscription_plan.created': { label: 'Plan creado',          color: 'text-blue-600',    icon: FileText,     category: 'platform' },
+  'subscription_plan.updated': { label: 'Plan actualizado',     color: 'text-cyan-600',    icon: FileText,     category: 'platform' },
+  update_platform_branding: { label: 'Branding de plataforma',  color: 'text-violet-600',  icon: Globe,        category: 'platform' },
 }
 
 const SEVERITY_META: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -171,9 +180,15 @@ function StatCard({ label, value, sub, icon: Icon, tone = 'default' }: {
 
 function DetailsDrawer({ log, onClose }: { log: AuditLogRow; onClose: () => void }) {
   const actionMeta = ACTION_META[log.action] ?? { label: log.action, color: 'text-slate-600', icon: Activity, category: 'other' }
-  const severityMeta = SEVERITY_META[log.severity]
+  const severityMeta = SEVERITY_META[log.severity] ?? SEVERITY_META.low
   const ActionIcon = actionMeta.icon
   const SeverityIcon = severityMeta.icon
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
@@ -307,7 +322,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 
 type SortKey = 'date' | 'action' | 'user' | 'severity'
 type FilterSeverity = 'all' | 'low' | 'medium' | 'high' | 'critical'
-type FilterCategory = 'all' | 'auth' | 'resource' | 'security' | 'user'
+type FilterCategory = 'all' | 'auth' | 'resource' | 'security' | 'user' | 'platform'
 type DateFilter = 'all' | '1h' | '24h' | '7d' | '30d'
 
 export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
@@ -427,8 +442,9 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
 
   const categoryPills: Array<{ key: FilterCategory; label: string }> = [
     { key: 'all', label: 'Todas' },
-    { key: 'auth', label: 'Auth' },
+    { key: 'platform', label: 'Plataforma' },
     { key: 'security', label: 'Seguridad' },
+    { key: 'auth', label: 'Auth' },
     { key: 'resource', label: 'Recursos' },
     { key: 'user', label: 'Usuario' },
   ]
@@ -636,7 +652,7 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
                   </tr>
                 ) : filtered.map((r) => {
                   const actionMeta = ACTION_META[r.action] ?? { label: r.action, color: 'text-slate-600', icon: Activity, category: 'other' }
-                  const severityMeta = SEVERITY_META[r.severity]
+                  const severityMeta = SEVERITY_META[r.severity] ?? SEVERITY_META.low
                   const ActionIcon = actionMeta.icon
                   const SeverityIcon = severityMeta.icon
                   const ResourceIcon = RESOURCE_ICON[r.resource] ?? RESOURCE_ICON.default
@@ -645,8 +661,17 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
                     <tr
                       key={r.id}
                       onClick={() => setSelectedLog(r)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Ver detalle de ${actionMeta.label}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setSelectedLog(r)
+                        }
+                      }}
                       className={cn(
-                        'cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40',
+                        'cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-400 dark:border-slate-800 dark:hover:bg-slate-800/40',
                         (r.severity === 'critical' || r.severity === 'high') && 'bg-orange-50/30 dark:bg-orange-950/10'
                       )}
                     >

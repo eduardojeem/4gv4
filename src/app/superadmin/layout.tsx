@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { SuperAdminShell } from '@/components/superadmin/superadmin-shell'
+import { SupportSessionBanner } from '@/components/superadmin/SupportSessionBanner'
 import { requireSuperAdmin } from '@/lib/superadmin/auth'
+import { getActiveSupportSession } from '@/lib/superadmin/support-session'
 
 export const metadata: Metadata = {
   title: 'Super Admin | Plataforma SaaS',
@@ -20,9 +22,14 @@ export default async function SuperAdminLayout({ children }: { children: React.R
     redirect('/dashboard')
   }
 
+  const supportSession = await getActiveSupportSession()
+
   return (
-    <SuperAdminShell userEmail={user.email}>
-      {children}
-    </SuperAdminShell>
+    <>
+      {supportSession && <SupportSessionBanner session={supportSession} />}
+      <SuperAdminShell userEmail={user.email}>
+        {children}
+      </SuperAdminShell>
+    </>
   )
 }
