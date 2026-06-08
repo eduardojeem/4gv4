@@ -388,6 +388,25 @@ export function useCashRegister() {
 
             const actorId = await resolveActorId(userId)
 
+            // cash_closures / cash_movements tienen RLS por organización
+            // (has_org_permission(organization_id, ...)). Hay que setear
+            // organization_id en el insert o la política lo rechaza.
+            let organizationId: string | null = null
+            if (actorId) {
+                const { data: orgRow } = await supabase
+                    .from('organization_members')
+                    .select('organization_id')
+                    .eq('user_id', actorId)
+                    .eq('status', 'active')
+                    .limit(1)
+                    .maybeSingle()
+                organizationId = (orgRow as { organization_id?: string } | null)?.organization_id ?? null
+            }
+            if (!organizationId) {
+                toast.error('No se pudo determinar tu organización para abrir la caja.')
+                return false
+            }
+
             // Create new session (closure record with status implicitly open)
             const { data: session, error: sessionError } = await supabase
                 .from('cash_closures')
@@ -397,6 +416,7 @@ export function useCashRegister() {
                     type: 'z',
                     date: null, // Explicitly null to mark as open
                     opened_by: actorId || null,
+                    organization_id: organizationId,
                     ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
                 })
                 .select()
@@ -414,6 +434,7 @@ export function useCashRegister() {
                     reason: 'Apertura de caja',
                     created_by: actorId,
                     created_at: new Date().toISOString(),
+                    organization_id: organizationId,
                     ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
                 })
 
@@ -441,8 +462,11 @@ export function useCashRegister() {
             toast.success('Caja abierta exitosamente')
             return true
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Desconocido'
-            console.error('Error opening register:', error)
+            const e = error as { message?: string; details?: string; hint?: string; code?: string } | null
+            const message = error instanceof Error
+                ? error.message
+                : (e?.message || e?.details || e?.hint || (e?.code ? `Código ${e.code}` : 'Desconocido'))
+            console.error('Error opening register:', JSON.stringify(error), error)
             toast.error(`Error al abrir caja: ${message}`)
             return false
         } finally {
