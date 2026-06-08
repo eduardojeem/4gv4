@@ -372,12 +372,9 @@ export async function POST(request: Request) {
         )
       }
 
-      if (product.is_active === false) {
-        return NextResponse.json(
-          { error: 'Uno de los productos seleccionados está inactivo.' },
-          { status: 400 }
-        )
-      }
+      // NOTE: is_active controla la visibilidad en el catálogo PÚBLICO, no la
+      // posibilidad de vender en el POS. Un producto oculto del público debe
+      // poder venderse en caja, así que NO se rechaza por is_active.
 
       const currentStock = Number(product.stock_quantity || 0)
       const branchStock = branchInventoryMap.has(productId)
