@@ -103,8 +103,14 @@ export async function GET() {
   const hasCompanyBasics = Boolean((settings?.display_name || organization.name) && settings?.currency && settings?.timezone)
   const hasContactBasics = Boolean((branch?.phone || companyInfo.phone) && (branch?.address || companyInfo.address) && branch?.city)
 
+  // Una vez que el admin completa explícitamente el onboarding, NO se lo fuerza
+  // de vuelta. Los heurísticos de datos solo sirven para auto-saltar/mostrar el
+  // onboarding en organizaciones que nunca lo completaron (evita el loop por el
+  // que cada navegación reabría el onboarding y re-ejecutaba sus efectos).
+  const needsOnboarding = !isCompleted && (!hasCompanyBasics || !hasContactBasics)
+
   return NextResponse.json({
-    needsOnboarding: !isCompleted || !hasCompanyBasics || !hasContactBasics,
+    needsOnboarding,
     completed: isCompleted,
     hasCompanyBasics,
     hasContactBasics,
