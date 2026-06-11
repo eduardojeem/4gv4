@@ -5,6 +5,8 @@ import { logger } from '@/lib/logger'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getOrderStatusDbValues, normalizeOrderStatus } from '@/lib/orders/flow'
+import { sendEmail } from '@/lib/email/resend'
+import { renderOrderConfirmationEmail } from '@/lib/email/templates'
 import { generateOrderNumber, normalizeOrder, sanitizeOrderSearch } from '@/lib/orders/helpers'
 import { releaseReservedStock, reserveOrderStock, type OrderStockItem } from '@/lib/orders/stock'
 import type { FulfillmentType, PaymentMethod } from '@/lib/orders/types'
@@ -298,6 +300,30 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
       .eq('id', order.id)
       .eq('organization_id', organization.id)
       .single()
+
+      // Send order confirmation email (non-blocking)
+      if (order.customer_email) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+        const orderItems = ((fullOrder?.order_items ?? []) as any[]).map((item: any) => ({
+          name: item.product_name || item.name || 'Producto',
+          quantity: Number(item.quantity || 1),
+          price: Number(item.unit_price || item.price || 0),
+        }))
+        sendEmail({
+          to: order.customer_email,
+          subject: `Pedido confirmado #${order.code || order.id.slice(0, 8)}`,
+          html: renderOrderConfirmationEmail({
+            customerName: order.customer_name || 'Cliente',
+            orderCode: order.code || order.id.slice(0, 8),
+            items: orderItems,
+            total: Number(order.total || 0),
+            deliveryMethod: order.delivery_method === 'pickup' ? 'pickup' : 'delivery',
+            estimatedTime: order.estimated_time || undefined,
+            trackUrl: `${appUrl}/${organization.slug}/track?order=${order.id}`,
+            brand: { name: organization.name },
+          }),
+        }).catch((err) => logger.error('Failed to send order confirmation email', { error: err }))
+      }
 
       return NextResponse.json({ success: true, data: normalizeOrder(fullOrder ?? order) }, { status: 201 })
     } catch (error) {

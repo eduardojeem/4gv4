@@ -4,6 +4,8 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { registerCompanySchema } from '@/lib/validation/saas'
 import { logger } from '@/lib/logger'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
+import { sendEmail } from '@/lib/email/resend'
+import { renderWelcomeEmail } from '@/lib/email/templates'
 import {
   buildCompanyRegistrationRedirectUrl,
   cleanupPartialProvisioning,
@@ -314,6 +316,21 @@ export async function POST(request: Request) {
       organizationId: organization.id,
       slug: organization.slug,
       plan: selectedPlan,
+    })
+
+    // Send welcome email (non-blocking — don't fail registration if email fails)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000'
+    sendEmail({
+      to: input.email,
+      subject: `Bienvenido a la plataforma — ${input.companyName}`,
+      html: renderWelcomeEmail({
+        ownerName: input.fullName,
+        companyName: input.companyName,
+        plan: subscriptionPlan.name || selectedPlan,
+        loginUrl: `${appUrl}/login`,
+      }),
+    }).catch((err) => {
+      logger.error('Failed to send welcome email', { error: err, email: input.email })
     })
 
     return NextResponse.json(
