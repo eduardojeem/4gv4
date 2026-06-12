@@ -139,6 +139,7 @@ export const ProductCard = React.memo(function ProductCard({
                 src={imageUrl!}
                 alt={product.name}
                 fill
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                 className={cn(
                   'object-cover transition-all duration-500',
                   isHovered ? 'scale-110 brightness-105' : 'scale-100 brightness-100'

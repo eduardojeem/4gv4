@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { createSupabaseClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import {
     Dialog,
@@ -54,32 +53,47 @@ export function CustomerQuickCreateDialog({
     const onSubmit = async (data: CustomerFormData) => {
         setIsSubmitting(true)
         try {
-            const supabase = createSupabaseClient()
-
-            const { data: customerRow, error } = await supabase
-                .from('customers')
-                .insert({
+            const response = await fetch('/api/repairs/customers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     name: `${data.first_name} ${data.last_name}`.trim(),
                     phone: data.phone,
                     email: data.email || null,
-                    customer_type: 'regular',
-                    status: 'active',
-                })
-                .select('id, name, phone, email, customer_type, status, created_at')
-                .single()
+                }),
+            })
 
-            if (error) throw error
+            const payload = await response.json().catch(() => null) as {
+                success?: boolean
+                data?: {
+                    id: string
+                    customer_code?: string | null
+                    name?: string | null
+                    phone?: string | null
+                    email?: string | null
+                    customer_type?: string | null
+                    status?: string | null
+                    created_at?: string | null
+                }
+                error?: string
+            } | null
+
+            if (!response.ok || !payload?.success || !payload.data) {
+                throw new Error(payload?.error || 'Error al crear el cliente')
+            }
+
+            const customerRow = payload.data
 
             toast.success('Cliente creado exitosamente')
             const parts = String(customerRow.name || '').trim().split(/\s+/)
             const created: Customer = {
                 id: customerRow.id,
-                customerCode: `CLI-${String(customerRow.id).slice(0, 6)}`,
+                customerCode: customerRow.customer_code || `CLI-${String(customerRow.id).slice(0, 6)}`,
                 name: String(customerRow.name || '').trim() || [parts[0], parts.slice(1).join(' ')].filter(Boolean).join(' ').trim(),
                 phone: customerRow.phone || '',
                 email: customerRow.email || '',
-                customer_type: customerRow.customer_type || 'regular',
-                status: customerRow.status || 'active',
+                customer_type: (customerRow.customer_type as Customer['customer_type']) || 'regular',
+                status: (customerRow.status as Customer['status']) || 'active',
                 total_purchases: 0,
                 total_repairs: 0,
                 registration_date: customerRow.created_at || new Date().toISOString(),

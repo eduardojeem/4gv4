@@ -167,6 +167,20 @@ export default function TechnicianPanel() {
   const handleFormSubmit = async (data: RepairFormData) => {
     try {
       if (dialogMode === 'add') {
+        const hasSharedRepairData =
+          data.devices.length > 1 &&
+          (
+            (data.parts?.length ?? 0) > 0 ||
+            (data.notes?.length ?? 0) > 0 ||
+            (data.laborCost ?? 0) > 0 ||
+            data.finalCost !== null
+          )
+
+        if (hasSharedRepairData) {
+          toast.error('Para varios dispositivos, crea una reparación por equipo si necesitas repuestos, notas o costos distintos.')
+          return false
+        }
+
         const createdRepairs = await Promise.all(
           data.devices.map(async (device) => {
             const urgency: 'urgent' | 'normal' = data.urgency === 'high' ? 'urgent' : 'normal'

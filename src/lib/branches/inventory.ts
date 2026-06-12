@@ -1,4 +1,9 @@
-type ErrorLike = { message?: string | null } | null
+type ErrorLike = {
+  message?: string | null
+  code?: string | null
+  details?: string | null
+  hint?: string | null
+} | null
 
 type InventoryRow = {
   product_id: string
@@ -25,6 +30,18 @@ export type BranchInventoryClient = {
 export interface BranchInventoryMapResult {
   stockMap: Map<string, number>
   branchScoped: boolean
+}
+
+export function formatBranchInventoryError(error: ErrorLike) {
+  if (!error) return 'No se pudo sincronizar el stock por sucursal.'
+
+  const message = `${error.message || 'No se pudo sincronizar el stock por sucursal.'}${error.code ? ` (${error.code})` : ''}`
+
+  return [
+    message,
+    error.details,
+    error.hint,
+  ].filter(Boolean).join(' - ')
 }
 
 export async function loadBranchInventoryStockMap(
@@ -120,7 +137,7 @@ export async function upsertBranchInventoryStock(params: {
   )
 
   if (response.error) {
-    throw new Error(response.error.message || 'No se pudo sincronizar el stock por sucursal.')
+    throw new Error(formatBranchInventoryError(response.error))
   }
 
   return { applied: true }

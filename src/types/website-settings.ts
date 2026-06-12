@@ -20,6 +20,7 @@ export interface CompanyInfo {
   facebook?: string
   tiktok?: string
   servicesPageEnabled?: boolean
+  marketplacePublic?: boolean
 }
 
 export interface HeroStats {

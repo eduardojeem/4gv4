@@ -198,6 +198,12 @@ const nextConfig: NextConfig = {
   
   // Headers para optimización de caché
   async headers() {
+    // Development chunks change on every HMR update. Marking them immutable
+    // leaves browsers executing stale module factories after Turbopack rebuilds.
+    if (process.env.NODE_ENV !== 'production') {
+      return []
+    }
+
     return [
       {
         source: '/_next/static/(.*)',
@@ -214,15 +220,6 @@ const nextConfig: NextConfig = {
           {
             key: 'Cache-Control',
             value: 'public, max-age=86400, stale-while-revalidate=604800',
-          },
-        ],
-      },
-      {
-        source: '/api/(.*)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=60, stale-while-revalidate=300',
           },
         ],
       },

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo, type PointerEvent } from 'react'
-import { useCustomers, type Customer } from '@/hooks/use-customers'
+import { useState, useMemo, useEffect, useCallback, type PointerEvent } from 'react'
+import type { Customer } from '@/hooks/use-customers'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,9 +14,67 @@ import {
 import { Check, ChevronsUpDown, Plus, User, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CustomerQuickCreateDialog } from './CustomerQuickCreateDialog'
+import { toast } from 'sonner'
+
+interface RepairCustomerRow {
+    id: string
+    customer_code?: string | null
+    name?: string | null
+    email?: string | null
+    phone?: string | null
+    address?: string | null
+    city?: string | null
+    ruc?: string | null
+    customer_type?: string | null
+    status?: string | null
+    created_at?: string | null
+    updated_at?: string | null
+}
 
 function stopFocusSteal(event: PointerEvent<HTMLButtonElement>) {
     event.preventDefault()
+}
+
+function mapCustomerRow(row: RepairCustomerRow): Customer {
+    const createdAt = row.created_at || new Date().toISOString()
+    return {
+        id: row.id,
+        customerCode: row.customer_code || `CLI-${row.id.slice(0, 6)}`,
+        name: row.name || '',
+        email: row.email || '',
+        phone: row.phone || '',
+        ruc: row.ruc || '',
+        customer_type: (row.customer_type as Customer['customer_type']) || 'regular',
+        status: (row.status as Customer['status']) || 'active',
+        total_purchases: 0,
+        total_repairs: 0,
+        registration_date: createdAt,
+        created_at: createdAt,
+        last_visit: createdAt,
+        last_activity: row.updated_at || createdAt,
+        address: row.address || '',
+        city: row.city || '',
+        credit_score: 0,
+        segment: 'regular',
+        satisfaction_score: 0,
+        lifetime_value: 0,
+        avg_order_value: 0,
+        purchase_frequency: 'low',
+        preferred_contact: 'email',
+        birthday: '',
+        loyalty_points: 0,
+        credit_limit: 0,
+        current_balance: 0,
+        pending_amount: 0,
+        notes: '',
+        tags: [],
+        referral_source: '',
+        discount_percentage: 0,
+        payment_terms: 'Contado',
+        assigned_salesperson: 'Sin asignar',
+        last_purchase_amount: 0,
+        total_spent_this_year: 0,
+    }
 }
 
 interface CustomerSelectorProps {
@@ -28,60 +86,54 @@ interface CustomerSelectorProps {
 }
 
 export function CustomerSelector({ value, initialCustomer, onChange, error, disabled }: CustomerSelectorProps) {
-    const { customers, isLoading, actions } = useCustomers()
+    const [customers, setCustomers] = useState<Customer[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const [open, setOpen] = useState(false)
     const [showQuickCreate, setShowQuickCreate] = useState(false)
     const [searchValue, setSearchValue] = useState('')
     const [optimisticCustomer, setOptimisticCustomer] = useState<Customer | null>(null)
     const debouncedSearch = useDebounce(searchValue, 300)
 
-    // Find selected customer
+    const refreshCustomers = useCallback(async () => {
+        try {
+            setIsLoading(true)
+            const response = await fetch('/api/repairs/customers', { cache: 'no-store' })
+            const payload = await response.json().catch(() => null) as { success?: boolean; data?: RepairCustomerRow[]; error?: string } | null
+
+            if (!response.ok || !payload?.success) {
+                throw new Error(payload?.error || 'No se pudieron cargar los clientes')
+            }
+
+            setCustomers((payload.data || []).map(mapCustomerRow))
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'No se pudieron cargar los clientes'
+            toast.error(message)
+            setCustomers([])
+        } finally {
+            setIsLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        void refreshCustomers()
+    }, [refreshCustomers])
+
     const selectedCustomer = useMemo(() => {
         const fromList = customers.find(c => c.id === value)
         if (fromList) return fromList
         if (optimisticCustomer?.id === value) return optimisticCustomer
         if (initialCustomer?.id === value) {
-            return {
+            return mapCustomerRow({
                 id: initialCustomer.id,
-                customerCode: `CLI-${initialCustomer.id.slice(0, 6)}`,
-                name: initialCustomer.name || '',
-                email: initialCustomer.email || '',
-                phone: initialCustomer.phone || '',
+                name: initialCustomer.name,
+                email: initialCustomer.email,
+                phone: initialCustomer.phone,
                 customer_type: 'regular',
                 status: 'active',
-                total_purchases: 0,
-                total_repairs: 0,
-                registration_date: '',
-                created_at: '',
-                last_visit: '',
-                last_activity: '',
-                address: '',
-                city: '',
-                credit_score: 0,
-                segment: 'regular',
-                satisfaction_score: 0,
-                lifetime_value: 0,
-                avg_order_value: 0,
-                purchase_frequency: 'low',
-                preferred_contact: 'email',
-                birthday: '',
-                loyalty_points: 0,
-                credit_limit: 0,
-                current_balance: 0,
-                pending_amount: 0,
-                notes: '',
-                tags: [],
-                referral_source: '',
-                discount_percentage: 0,
-                payment_terms: 'Contado',
-                assigned_salesperson: 'Sin asignar',
-                last_purchase_amount: 0,
-                total_spent_this_year: 0
-            } satisfies Customer
+            })
         }
     }, [customers, initialCustomer, optimisticCustomer, value])
 
-    // Filter customers based on search
     const filteredCustomers = useMemo(() => {
         if (!debouncedSearch) return customers.slice(0, 50)
         const lower = debouncedSearch.toLowerCase()
@@ -99,7 +151,7 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
             if (typeof window === 'undefined') return []
             const raw = localStorage.getItem('recent-customers')
             const ids: string[] = raw ? JSON.parse(raw) : []
-            return ids.map(id => customers.find(c => c.id === id)).filter(Boolean).slice(0, 5) as typeof customers
+            return ids.map(id => customers.find(c => c.id === id)).filter(Boolean).slice(0, 5) as Customer[]
         } catch {
             return []
         }
@@ -128,6 +180,7 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
 
     const handleCustomerCreated = (customerId: string, customerData: Customer) => {
         setOptimisticCustomer(customerData)
+        setCustomers((current) => [customerData, ...current.filter((customer) => customer.id !== customerId)])
         onChange(customerId, customerData)
         setShowQuickCreate(false)
     }
@@ -182,7 +235,7 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={actions.refresh}
+                                    onClick={() => void refreshCustomers()}
                                     disabled={disabled || isLoading}
                                     className="h-8"
                                 >
@@ -204,11 +257,11 @@ export function CustomerSelector({ value, initialCustomer, onChange, error, disa
                         <div>
                             <div className="border-b px-3 py-2">
                                 <Input
-                                placeholder="Buscar por nombre, teléfono o email..."
-                                value={searchValue}
-                                onChange={(event) => setSearchValue(event.target.value)}
-                                autoComplete="off"
-                                className="h-9 border-0 px-0 shadow-none focus-visible:ring-0"
+                                    placeholder="Buscar por nombre, teléfono o email..."
+                                    value={searchValue}
+                                    onChange={(event) => setSearchValue(event.target.value)}
+                                    autoComplete="off"
+                                    className="h-9 border-0 px-0 shadow-none focus-visible:ring-0"
                                 />
                             </div>
                             <div className="max-h-[300px] overflow-y-auto overflow-x-hidden p-1">

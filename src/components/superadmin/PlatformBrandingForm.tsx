@@ -191,13 +191,15 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
             <CardContent className="space-y-4">
               <div className="rounded-xl border bg-slate-950 p-4 text-white">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
-                    {draft.logoUrl ? (
-                      <img src={draft.logoUrl} alt={draft.platformName} className="h-6 w-6 object-contain" />
-                    ) : (
+                  {draft.logoUrl ? (
+                    <div className="flex h-10 items-center">
+                      <img src={draft.logoUrl} alt={draft.platformName} className="h-10 w-auto max-w-[180px] object-contain" />
+                    </div>
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
                       <ImageIcon className="h-5 w-5" />
-                    )}
-                  </div>
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{draft.platformName}</p>
                     <p className="truncate text-xs text-slate-400">{draft.platformTagline}</p>

@@ -47,6 +47,31 @@ interface DashboardStats {
   suppliersCount: number
 }
 
+interface ProductApiPayload {
+  success?: boolean
+  data?: Product
+  error?: string
+  details?: Array<{
+    field?: string
+    message?: string
+  }>
+}
+
+function getProductApiError(payload: ProductApiPayload | null, fallback: string) {
+  if (!payload) return fallback
+
+  const detailMessage = payload.details
+    ?.map(detail => [detail.field, detail.message].filter(Boolean).join(': '))
+    .filter(Boolean)
+    .join('; ')
+
+  if (detailMessage) {
+    return `${payload.error || fallback}: ${detailMessage}`
+  }
+
+  return payload.error || fallback
+}
+
 export function useProductsSupabase(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true
   const [products, setProducts] = useState<Product[]>([])
@@ -462,10 +487,10 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         },
         body: JSON.stringify(productData),
       })
-      const payload = await response.json().catch(() => null) as { success?: boolean; data?: Product; error?: string } | null
+      const payload = await response.json().catch(() => null) as ProductApiPayload | null
 
       if (!response.ok || !payload?.success || !payload.data) {
-        throw new Error(payload?.error || 'Error al crear el producto')
+        throw new Error(getProductApiError(payload, 'Error al crear el producto'))
       }
 
       // Actualizar estado local inmediatamente
@@ -491,9 +516,9 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       return { success: true, data: newProduct }
     } catch (err: unknown) {
       console.error('Error creating product:', err)
-      if (typeof err === 'object' && err !== null) {
-        console.error('Error details:', JSON.stringify(err, null, 2))
-      }
+      console.error('Error details:', err instanceof Error
+        ? { name: err.name, message: err.message, stack: err.stack }
+        : err)
       let errorMessage = 'Error al crear el producto'
       
       if (typeof err === 'object' && err !== null && 'code' in err && err.code === '23505') { // Unique constraint violation
@@ -523,10 +548,10 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         },
         body: JSON.stringify(productData),
       })
-      const payload = await response.json().catch(() => null) as { success?: boolean; data?: Product; error?: string } | null
+      const payload = await response.json().catch(() => null) as ProductApiPayload | null
 
       if (!response.ok || !payload?.success || !payload.data) {
-        throw new Error(payload?.error || 'Error al actualizar el producto')
+        throw new Error(getProductApiError(payload, 'Error al actualizar el producto'))
       }
 
       // Actualizar estado local inmediatamente
@@ -539,9 +564,9 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       return { success: true, data: updatedProduct }
     } catch (err: unknown) {
       console.error('Error updating product:', err)
-      if (typeof err === 'object' && err !== null) {
-        console.error('Error details:', JSON.stringify(err, null, 2))
-      }
+      console.error('Error details:', err instanceof Error
+        ? { name: err.name, message: err.message, stack: err.stack }
+        : err)
       let errorMessage = 'Error al actualizar el producto'
       
       if (typeof err === 'object' && err !== null && 'code' in err && err.code === '23505') {

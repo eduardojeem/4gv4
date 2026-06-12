@@ -14,6 +14,7 @@ import { useProductsSupabase } from "@/hooks/useProductsSupabase";
 import { useProductsDashboard } from "@/hooks/useProductsDashboard";
 import { ProductModal } from "@/components/dashboard/product-modal";
 import { toast } from "sonner";
+import { usePermissions } from "@/hooks/use-permissions";
 import type { Product } from "@/types/product-unified";
 import {
   MetricsGrid,
@@ -49,6 +50,7 @@ type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
 export default function ProductsPage() {
   const router = useRouter();
+  const { hasPermission } = usePermissions();
   const {
     products,
     categories,
@@ -113,6 +115,10 @@ export default function ProductsPage() {
   const [serverSearch, setServerSearch] = useState("");
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
+  const canCreateProducts =
+    hasPermission("inventory.products.create") ||
+    hasPermission("products.create") ||
+    hasPermission("products.manage");
 
   const normalizedAlerts = useMemo(() => {
     return alerts
@@ -295,6 +301,11 @@ export default function ProductsPage() {
   };
 
   const handleProductDuplicate = async (product: Product) => {
+    if (!canCreateProducts) {
+      toast.error("No tienes permisos para crear productos");
+      return;
+    }
+
     // Exclude system fields and relations that shouldn't be duplicated
 
     const { id, created_at, updated_at, category, supplier, ...rest } =
@@ -348,6 +359,15 @@ export default function ProductsPage() {
 
   // Handle import
   const handleImportProducts = async (rows: Array<{ name: string; sku?: string; description?: string; brand?: string; category?: string; purchase_price?: number; sale_price: number; stock_quantity?: number; min_stock?: number; barcode?: string; unit_measure?: string }>) => {
+    if (!canCreateProducts) {
+      toast.error("No tienes permisos para importar productos");
+      return {
+        success: 0,
+        failed: rows.length,
+        errors: [{ row: 1, error: "Sin permisos para crear productos" }],
+      };
+    }
+
     let success = 0;
     let failed = 0;
     const errors: Array<{ row: number; error: string }> = [];
@@ -557,14 +577,16 @@ export default function ProductsPage() {
             </p>
           </div>
 
-          <Button
-            size="lg"
-            onClick={() => setCreateModalOpen(true)}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/30 transition-all duration-200 cursor-pointer"
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Nuevo Producto
-          </Button>
+          {canCreateProducts && (
+            <Button
+              size="lg"
+              onClick={() => setCreateModalOpen(true)}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/30 transition-all duration-200 cursor-pointer"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Nuevo Producto
+            </Button>
+          )}
         </div>
 
         {/* Alerts Banner */}
@@ -588,7 +610,7 @@ export default function ProductsPage() {
           onRefresh={handleRefresh}
           onExport={handleExport}
           onExportPdf={handleExportPdf}
-          onImport={() => setImportModalOpen(true)}
+          onImport={canCreateProducts ? () => setImportModalOpen(true) : undefined}
           isLoading={loading || isPending}
         />
 

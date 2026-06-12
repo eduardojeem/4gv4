@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle } from 'lucide-react'
+import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import {
   Dialog,
@@ -49,6 +49,7 @@ import type { UISupplier } from '@/lib/types/supplier-ui'
 import { uploadFile } from '@/lib/supabase-storage'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { getProductSubmitState } from './product-modal-submit-state'
 
 interface ProductModalProps {
   product: Product | null
@@ -70,6 +71,14 @@ const DEFAULT_POST_SALE_VALUES = {
   return_policy: 'Devolucion dentro de 7 dias con factura, empaque original y producto sin danos.',
   exchange_policy: 'Cambio dentro de 7 dias por falla de fabrica o error de entrega, sujeto a stock.',
 } as const
+
+function FieldRequirement({ required = false, conditional }: { required?: boolean; conditional?: string }) {
+  return (
+    <span className={`ml-1 text-xs font-normal ${required || conditional ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+      {conditional || (required ? '• Obligatorio' : '• Opcional')}
+    </span>
+  )
+}
 
 export function ProductModal({
   product,
@@ -101,6 +110,7 @@ export function ProductModal({
   // No afecta el comportamiento en runtime.
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema) as any,
+    mode: 'onChange',
     defaultValues: {
       sku: '',
       name: '',
@@ -126,7 +136,12 @@ export function ProductModal({
     }
   })
 
-  const { formState: { isSubmitting, errors }, setValue, watch } = form
+  const { formState: { isSubmitting, errors, isValid }, setValue, watch } = form
+  const submitState = getProductSubmitState({
+    isEditing: Boolean(product),
+    isSubmitting,
+    isValid,
+  })
   
   // Watch values for calculations
   const purchasePrice = watch('purchase_price')
@@ -302,8 +317,7 @@ export function ProductModal({
   }
 
   const cleanProductData = (data: ProductFormValues) => {
-    // Remove max_stock: no existe en la BD, es solo referencia visual
-    const { max_stock, ...rest } = data;
+    const rest = { ...data };
     
     // Si no hay producto (creación), no enviamos ID
     if (!product) {
@@ -535,6 +549,10 @@ export function ProductModal({
 
             {/* Main Content */}
             <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">
+              <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                <span><strong className="font-medium text-red-600 dark:text-red-400">• Obligatorio</strong> para crear el producto</span>
+                <span><strong className="font-medium">• Opcional</strong> se puede completar después</span>
+              </div>
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" orientation="vertical">
                 
                 {/* Basic Info */}
@@ -553,7 +571,7 @@ export function ProductModal({
                           name="sku"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>SKU / Código *</FormLabel>
+                              <FormLabel>SKU / Código <FieldRequirement required /></FormLabel>
                               <div className="flex gap-2">
                                 <FormControl>
                                   <Input placeholder="Ej: PROD-001" {...field} />
@@ -578,7 +596,7 @@ export function ProductModal({
                           name="name"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Nombre del Producto *</FormLabel>
+                              <FormLabel>Nombre del Producto <FieldRequirement required /></FormLabel>
                               <FormControl>
                                 <Input placeholder="Ej: iPhone 14 Pro" {...field} />
                               </FormControl>
@@ -592,7 +610,7 @@ export function ProductModal({
                           name="brand_id"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Marca</FormLabel>
+                              <FormLabel>Marca <FieldRequirement /></FormLabel>
                               <div className="flex gap-2">
                                 <Select 
                                   onValueChange={(value) => {
@@ -636,7 +654,7 @@ export function ProductModal({
                           name="unit_measure"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Unidad de Medida</FormLabel>
+                              <FormLabel>Unidad de Medida <FieldRequirement /></FormLabel>
                               <Select onValueChange={field.onChange} value={field.value || ""}>
                                 <FormControl>
                                   <SelectTrigger>
@@ -666,7 +684,7 @@ export function ProductModal({
                             name="barcode"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Código de Barras</FormLabel>
+                                <FormLabel>Código de Barras <FieldRequirement /></FormLabel>
                                 <div className="flex gap-2">
                                   <FormControl>
                                     <Input 
@@ -702,7 +720,7 @@ export function ProductModal({
                         name="description"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Descripción</FormLabel>
+                            <FormLabel>Descripción <FieldRequirement /></FormLabel>
                             <FormControl>
                               <Textarea 
                                 placeholder="Descripción detallada del producto..." 
@@ -736,7 +754,7 @@ export function ProductModal({
                           name="category_id"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Categoría</FormLabel>
+                              <FormLabel>Categoría <FieldRequirement required /></FormLabel>
                               <div className="flex gap-2">
                                 <Select onValueChange={field.onChange} value={field.value || ""}>
                                   <FormControl>
@@ -771,7 +789,7 @@ export function ProductModal({
                           name="supplier_id"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Proveedor</FormLabel>
+                              <FormLabel>Proveedor <FieldRequirement /></FormLabel>
                               <div className="flex gap-2">
                                 <Select onValueChange={field.onChange} value={field.value || ""}>
                                   <FormControl>
@@ -814,7 +832,7 @@ export function ProductModal({
                               />
                             </FormControl>
                             <FormLabel className="font-normal cursor-pointer">
-                              Producto activo
+                              Producto activo <FieldRequirement />
                             </FormLabel>
                           </FormItem>
                         )}
@@ -825,7 +843,7 @@ export function ProductModal({
                         name="visibility"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Visibilidad en tienda pública</FormLabel>
+                            <FormLabel>Visibilidad en tienda pública <FieldRequirement /></FormLabel>
                             <Select onValueChange={field.onChange} value={field.value || 'public'}>
                               <FormControl>
                                 <SelectTrigger>
@@ -862,7 +880,7 @@ export function ProductModal({
                           <FormItem>
                             <FormLabel className="flex items-center gap-2">
                               <GSIcon className="h-4 w-4" />
-                              Precio de Compra (Costo)
+                              Precio de Compra (Costo) <FieldRequirement required />
                             </FormLabel>
                             <FormControl>
                               <Input 
@@ -884,7 +902,7 @@ export function ProductModal({
                           <FormItem>
                             <FormLabel className="flex items-center gap-2">
                               <Tag className="h-4 w-4 text-green-600 dark:text-green-400" />
-                              Precio de Venta al Público *
+                              Precio de Venta al Público <FieldRequirement required />
                             </FormLabel>
                             <FormControl>
                               <Input 
@@ -921,7 +939,7 @@ export function ProductModal({
                         <CardHeader className="pb-3">
                           <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-700 dark:text-blue-400">
                             <Users className="h-4 w-4" />
-                            Precio Mayorista
+                            Precio Mayorista <FieldRequirement />
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-2">
@@ -954,7 +972,7 @@ export function ProductModal({
                           <div className="flex items-center justify-between">
                             <CardTitle className={`text-sm font-medium flex items-center gap-2 ${hasOffer ? 'text-red-700 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                               <Tag className="h-4 w-4" />
-                              Precio en Oferta
+                              Precio en Oferta <FieldRequirement conditional={hasOffer ? '• Obligatorio con oferta activa' : '• Opcional'} />
                             </CardTitle>
                             <FormField
                               control={form.control}
@@ -1007,7 +1025,7 @@ export function ProductModal({
                       <CardHeader className="pb-3">
                         <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                           <Warehouse className="h-4 w-4" />
-                          Stock Actual
+                          Stock Actual <FieldRequirement required />
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -1034,7 +1052,7 @@ export function ProductModal({
                       <CardHeader className="pb-3">
                         <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                           <Package className="h-4 w-4" />
-                          Stock Mínimo
+                          Stock Mínimo <FieldRequirement required />
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -1064,7 +1082,7 @@ export function ProductModal({
                       <CardHeader className="pb-3">
                         <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                           <Warehouse className="h-4 w-4 text-amber-600" />
-                          Stock Máximo
+                          Stock Máximo <FieldRequirement />
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -1108,7 +1126,7 @@ export function ProductModal({
                           name="warranty_months"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Meses de garantia</FormLabel>
+                              <FormLabel>Meses de garantía <FieldRequirement /></FormLabel>
                               <FormControl>
                                 <Input type="number" min={0} max={60} {...field} value={field.value ?? 0} />
                               </FormControl>
@@ -1132,7 +1150,7 @@ export function ProductModal({
                         name="warranty_info"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Condiciones de garantia</FormLabel>
+                            <FormLabel>Condiciones de garantía <FieldRequirement /></FormLabel>
                             <FormControl>
                               <Textarea
                                 rows={4}
@@ -1162,7 +1180,7 @@ export function ProductModal({
                           name="return_window_days"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Dias para devolucion</FormLabel>
+                              <FormLabel>Días para devolución <FieldRequirement /></FormLabel>
                               <FormControl>
                                 <Input type="number" min={0} max={90} {...field} value={field.value ?? 0} />
                               </FormControl>
@@ -1178,7 +1196,7 @@ export function ProductModal({
                           name="exchange_window_days"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Dias para cambio</FormLabel>
+                              <FormLabel>Días para cambio <FieldRequirement /></FormLabel>
                               <FormControl>
                                 <Input type="number" min={0} max={90} {...field} value={field.value ?? 0} />
                               </FormControl>
@@ -1203,7 +1221,7 @@ export function ProductModal({
                         name="return_policy"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Politica de devolucion</FormLabel>
+                            <FormLabel>Política de devolución <FieldRequirement /></FormLabel>
                             <FormControl>
                               <Textarea
                                 rows={4}
@@ -1222,7 +1240,7 @@ export function ProductModal({
                         name="exchange_policy"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Politica de cambio</FormLabel>
+                            <FormLabel>Política de cambio <FieldRequirement /></FormLabel>
                             <FormControl>
                               <Textarea
                                 rows={4}
@@ -1245,7 +1263,7 @@ export function ProductModal({
                     <CardHeader>
                       <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                         <Upload className="h-4 w-4" />
-                        Imágenes del Producto
+                        Imágenes del Producto <FieldRequirement />
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -1277,16 +1295,25 @@ export function ProductModal({
         </Form>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-gray-800 px-8 py-4 flex justify-between items-center gap-4">
-          <div className="text-sm text-gray-600 dark:text-gray-400 hidden md:block">
-            {product ? 'Modificando producto existente' : 'Creando nuevo producto'}
+        <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-gray-800 px-4 md:px-8 py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+          <div
+            id="product-form-status"
+            role="status"
+            className={`flex items-start sm:items-center gap-2 text-sm ${submitState.ready ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}
+          >
+            {submitState.ready ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+            ) : (
+              <AlertCircle className="h-4 w-4 shrink-0" />
+            )}
+            <span>{submitState.status}</span>
           </div>
-          <div className="flex gap-3 ml-auto">
+          <div className="flex gap-3 w-full sm:w-auto sm:ml-auto">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
-              className="min-w-[100px] border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800"
+              className="min-w-[100px] flex-1 sm:flex-none border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800"
             >
               Cancelar
             </Button>
@@ -1294,7 +1321,12 @@ export function ProductModal({
               type="submit"
               form="product-form"
               disabled={isSubmitting}
-              className="min-w-[140px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 dark:from-blue-700 dark:to-indigo-700 dark:hover:from-blue-600 dark:hover:to-indigo-600 text-white shadow-lg shadow-blue-500/30 dark:shadow-blue-900/30"
+              aria-describedby="product-form-status"
+              className={`min-w-[180px] flex-1 sm:flex-none text-white shadow-lg ${
+                submitState.ready
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/30 dark:shadow-blue-900/30'
+                  : 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20 dark:bg-amber-700 dark:hover:bg-amber-600'
+              }`}
             >
               {isSubmitting ? (
                 <>
@@ -1304,7 +1336,7 @@ export function ProductModal({
               ) : (
                 <>
                   <Package className="h-4 w-4 mr-2" />
-                  {product ? 'Actualizar Producto' : 'Crear Producto'}
+                  {submitState.label}
                 </>
               )}
             </Button>

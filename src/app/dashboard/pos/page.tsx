@@ -85,6 +85,8 @@ import { useAuth } from '@/contexts/auth-context'
 import { CartItem, PaymentSplit, PaymentMethodOption } from './types'
 import type { Product } from '@/types/product-unified'
 import { SALE_STATUS } from '@/lib/sales-status'
+import { branchHeaders } from '@/lib/branches/client'
+import { buildQuickItemPayload, getQuickItemApiError } from './lib/quick-item'
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
@@ -292,6 +294,8 @@ function POSPageContent() {
   const [quickItemPrice, setQuickItemPrice] = useState('')
   const [quickItemQty, setQuickItemQty] = useState('1')
   const [quickItemSku, setQuickItemSku] = useState('')
+  const [quickItemPublishToCatalog, setQuickItemPublishToCatalog] = useState(false)
+  const [quickItemError, setQuickItemError] = useState('')
   const [quickItemSaving, setQuickItemSaving] = useState(false)
 
   // Estados para variantes y promociones
@@ -432,7 +436,8 @@ function POSPageContent() {
     loading: productsLoading,
     error: productsError,
     processSale: processInventorySale,
-    findProductByBarcode
+    findProductByBarcode,
+    syncProduct
   } = usePOSProducts()
 
   // Optimized Cart Hook
@@ -2101,87 +2106,55 @@ function POSPageContent() {
   }, [heldSales, replaceCart, setSelectedRepairIds, setSelectedCustomer, setIsWholesale, setGeneralDiscount])
 
   const createQuickItem = useCallback(async () => {
-    const name = quickItemName.trim()
-    const price = Number(quickItemPrice)
-    const qty = Math.max(1, Number(quickItemQty) || 1)
-    const providedSku = quickItemSku.trim()
-
-    if (name.length < 2) {
-      toast.error('Ingrese un nombre valido')
-      return
-    }
-    if (!Number.isFinite(price) || price <= 0) {
-      toast.error('Ingrese un precio valido')
-      return
-    }
-
+    setQuickItemError('')
     setQuickItemSaving(true)
     try {
-      const supabase = createSupabaseClient()
-      let sku = providedSku || `QK-${Date.now().toString().slice(-8)}`
+      const payload = buildQuickItemPayload({
+        name: quickItemName,
+        price: quickItemPrice,
+        quantity: quickItemQty,
+        sku: quickItemSku,
+        publishToCatalog: quickItemPublishToCatalog,
+      })
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...branchHeaders(selectedBranchId),
+        },
+        body: JSON.stringify(payload),
+      })
+      const result = await response.json().catch(() => null) as {
+        success?: boolean
+        data?: Product
+        error?: string
+        details?: Array<{ field?: string; message?: string }>
+      } | null
 
-      if (providedSku) {
-        const { data: existingSku } = await supabase
-          .from('products')
-          .select('id')
-          .eq('sku', sku)
-          .maybeSingle()
-        if (existingSku?.id) {
-          toast.error('El SKU ya existe. Use otro SKU.')
-          return
-        }
+      if (!response.ok || !result?.success || !result.data) {
+        throw new Error(getQuickItemApiError(result))
       }
 
-      const payload = {
-        sku,
-        name,
-        description: 'Item rapido creado desde POS',
-        purchase_price: 0,
-        sale_price: price,
-        stock_quantity: qty,
-        min_stock: 0,
-        unit_measure: 'unidad',
-        is_active: true,
-        visibility: 'public' as const,
-        featured: false
-      }
-
-      const { data: created, error: createError } = await supabase
-        .from('products')
-        .insert(payload)
-        .select('id, name, sku, sale_price, stock_quantity, category_id, is_active')
-        .single()
-
-      if (createError || !created) {
-        throw new Error(createError?.message || 'No se pudo crear el item rapido')
-      }
-
-      const quickProduct = {
-        id: created.id,
-        name: created.name,
-        sku: created.sku,
-        sale_price: Number(created.sale_price || 0),
-        stock_quantity: Number(created.stock_quantity || 0),
-        category_id: created.category_id,
-        is_active: created.is_active,
-        purchase_price: 0
-      } as Product
-
-      addToCartHook(quickProduct, qty)
-      showAddToCartToast({ name: quickProduct.name, quantity: qty })
+      const quickProduct = result.data
+      syncProduct(quickProduct)
+      addToCartHook(quickProduct, payload.stock_quantity)
+      showAddToCartToast({ name: quickProduct.name, quantity: payload.stock_quantity })
 
       setQuickItemName('')
       setQuickItemPrice('')
       setQuickItemQty('1')
       setQuickItemSku('')
+      setQuickItemPublishToCatalog(false)
       setIsQuickItemDialogOpen(false)
       toast.success('Item rapido creado y sincronizado')
-    } catch (e: any) {
-      toast.error(`Error creando item rapido: ${String(e?.message || e)}`)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'No se pudo crear el item rapido.'
+      setQuickItemError(message)
+      toast.error(message)
     } finally {
       setQuickItemSaving(false)
     }
-  }, [quickItemName, quickItemPrice, quickItemQty, quickItemSku, addToCartHook])
+  }, [quickItemName, quickItemPrice, quickItemQty, quickItemSku, quickItemPublishToCatalog, selectedBranchId, syncProduct, addToCartHook])
 
   return (
     <div className={`pos-theme pos-shell min-h-dvh flex flex-col ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
@@ -2869,71 +2842,145 @@ function POSPageContent() {
         </div>
       </div>
 
-      <Dialog open={isQuickItemDialogOpen} onOpenChange={setIsQuickItemDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Agregar item rapido</DialogTitle>
-            <DialogDescription>
-              Crea un producto al vuelo, lo sincroniza en base de datos y lo agrega al carrito.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-3 py-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="quick-item-name">Nombre</Label>
-              <Input
-                id="quick-item-name"
-                value={quickItemName}
-                onChange={(e) => setQuickItemName(e.target.value)}
-                placeholder="Ej: Cambio de pin de carga"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="quick-item-price">Precio</Label>
-                <Input
-                  id="quick-item-price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={quickItemPrice}
-                  onChange={(e) => setQuickItemPrice(e.target.value)}
-                  placeholder="0.00"
-                />
+      <Dialog
+        open={isQuickItemDialogOpen}
+        onOpenChange={(open) => {
+          setIsQuickItemDialogOpen(open)
+          if (!open) setQuickItemError('')
+        }}
+      >
+        <DialogContent className="max-w-xl p-0 overflow-hidden">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              void createQuickItem()
+            }}
+          >
+            <DialogHeader className="border-b bg-muted/30 px-5 py-4 text-left">
+              <div className="flex items-start gap-3 pr-6">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle>Agregar item rapido</DialogTitle>
+                  <DialogDescription className="mt-1">
+                    Crea el producto en inventario y agregalo a esta venta en un solo paso.
+                  </DialogDescription>
+                </div>
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="quick-item-qty">Cantidad</Label>
-                <Input
-                  id="quick-item-qty"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={quickItemQty}
-                  onChange={(e) => setQuickItemQty(e.target.value)}
-                />
+            </DialogHeader>
+
+            <div className="max-h-[65vh] overflow-y-auto px-5 py-5">
+              <div className="grid gap-5">
+                <div className="grid gap-2">
+                  <Label htmlFor="quick-item-name">Nombre del item <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="quick-item-name"
+                    autoFocus
+                    maxLength={200}
+                    value={quickItemName}
+                    onChange={(e) => setQuickItemName(e.target.value)}
+                    placeholder="Ej: Cambio de pin de carga"
+                    disabled={quickItemSaving}
+                  />
+                  <p className="text-xs text-muted-foreground">Usa un nombre claro para identificarlo luego en inventario.</p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="quick-item-price">Precio de venta <span className="text-destructive">*</span></Label>
+                    <Input
+                      id="quick-item-price"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={quickItemPrice}
+                      onChange={(e) => setQuickItemPrice(e.target.value)}
+                      placeholder="0"
+                      disabled={quickItemSaving}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="quick-item-qty">Cantidad a vender <span className="text-destructive">*</span></Label>
+                    <Input
+                      id="quick-item-qty"
+                      type="number"
+                      min="1"
+                      step="1"
+                      inputMode="numeric"
+                      value={quickItemQty}
+                      onChange={(e) => setQuickItemQty(e.target.value)}
+                      disabled={quickItemSaving}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="quick-item-sku">SKU opcional</Label>
+                  <Input
+                    id="quick-item-sku"
+                    maxLength={50}
+                    value={quickItemSku}
+                    onChange={(e) => setQuickItemSku(e.target.value.toUpperCase())}
+                    placeholder="Se genera automaticamente"
+                    disabled={quickItemSaving}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/20 p-3">
+                  <div>
+                    <Label htmlFor="quick-item-public" className="font-medium">Mostrar en catalogo publico</Label>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Desactivado por defecto para evitar publicar items ocasionales.
+                    </p>
+                  </div>
+                  <Switch
+                    id="quick-item-public"
+                    checked={quickItemPublishToCatalog}
+                    onCheckedChange={setQuickItemPublishToCatalog}
+                    disabled={quickItemSaving}
+                  />
+                </div>
+
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Package className="h-4 w-4 text-primary" />
+                    <p className="text-sm font-semibold">Resumen</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Cantidad</p>
+                      <p className="font-medium">{Math.max(1, Number(quickItemQty) || 1)} unidad(es)</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Total a agregar</p>
+                      <p className="font-semibold text-primary">
+                        {formatCurrency((Number(quickItemPrice) || 0) * Math.max(1, Number(quickItemQty) || 1))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {quickItemError && (
+                  <Alert variant="destructive" role="alert">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>{quickItemError}</AlertDescription>
+                  </Alert>
+                )}
               </div>
             </div>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="quick-item-sku">SKU (opcional)</Label>
-              <Input
-                id="quick-item-sku"
-                value={quickItemSku}
-                onChange={(e) => setQuickItemSku(e.target.value)}
-                placeholder="Se genera automatico si lo dejas vacio"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsQuickItemDialogOpen(false)} disabled={quickItemSaving}>
-              Cancelar
-            </Button>
-            <Button onClick={createQuickItem} disabled={quickItemSaving}>
-              {quickItemSaving ? 'Guardando...' : 'Guardar y agregar'}
-            </Button>
-          </DialogFooter>
+            <DialogFooter className="border-t bg-background/95 px-5 py-4">
+              <Button type="button" variant="outline" onClick={() => setIsQuickItemDialogOpen(false)} disabled={quickItemSaving}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={quickItemSaving}>
+                {quickItemSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                {quickItemSaving ? 'Sincronizando...' : 'Crear y agregar al carrito'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

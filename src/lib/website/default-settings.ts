@@ -12,7 +12,8 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       brandColor: 'blue',
       headerStyle: 'glass',
       headerColor: '',
-      showTopBar: true
+      showTopBar: true,
+      marketplacePublic: true
     },
     hero_content: {
       badge: 'Servicio técnico especializado',

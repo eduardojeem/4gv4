@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ArrowRight, Building2, Menu, Store, X, LogIn, LayoutDashboard } from 'lucide-react'
@@ -20,15 +20,10 @@ interface SaaSPublicNavProps {
 
 export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
   const pathname = usePathname()
   const { user } = useAuth()
   const isDark = variant === 'dark'
   const { branding } = usePlatformBranding()
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   function isActive(href: string) {
     if (href.includes('#')) return pathname === '/saas'
@@ -43,15 +38,17 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
     }`}>
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href="/saas" className="flex items-center gap-3">
-          <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-            isDark ? 'bg-blue-600 text-white' : 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
-          }`}>
-            {branding.logoUrl ? (
-              <img src={branding.logoUrl} alt={branding.platformName} className="h-6 w-6 object-contain" />
-            ) : (
+          {branding.logoUrl ? (
+            <div className="flex h-10 items-center">
+              <img src={branding.logoUrl} alt={branding.platformName} className="h-10 w-auto max-w-[180px] object-contain" />
+            </div>
+          ) : (
+            <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+              isDark ? 'bg-blue-600 text-white' : 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
+            }`}>
               <Building2 className="h-5 w-5" />
-            )}
-          </div>
+            </div>
+          )}
           <div>
             <div className={`text-sm font-semibold leading-none ${isDark ? 'text-white' : 'text-slate-950 dark:text-slate-50'}`}>{branding.platformName}</div>
             <div className={`mt-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{branding.platformTagline}</div>
@@ -88,7 +85,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
             </Link>
           </Button>
 
-          {mounted && user ? (
+          {user ? (
             <Button asChild size="sm" className="hidden gap-2 md:inline-flex bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md">
               <Link href="/dashboard">
                 <LayoutDashboard className="h-4 w-4" />
@@ -97,18 +94,16 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
             </Button>
           ) : (
             <>
-              {mounted && (
-                <Button asChild variant="ghost" size="sm" className={`hidden gap-2 md:inline-flex font-medium ${
-                  isDark
-                    ? 'text-slate-300 hover:bg-slate-900 hover:text-white'
-                    : 'text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white'
-                }`}>
-                  <Link href="/login">
-                    <LogIn className="h-4 w-4" />
-                    Ingresar
-                  </Link>
-                </Button>
-              )}
+              <Button asChild variant="ghost" size="sm" className={`hidden gap-2 md:inline-flex font-medium ${
+                isDark
+                  ? 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white'
+              }`}>
+                <Link href="/login">
+                  <LogIn className="h-4 w-4" />
+                  Ingresar
+                </Link>
+              </Button>
               <Button asChild size="sm" className="hidden gap-2 md:inline-flex">
                 <Link href={branding.primaryCtaHref}>
                   {branding.primaryCtaLabel}
@@ -165,7 +160,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
               </Link>
             </Button>
 
-            {mounted && user ? (
+            {user ? (
               <Button asChild size="sm" className="w-full gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md">
                 <Link href="/dashboard" onClick={() => setMobileOpen(false)}>
                   <LayoutDashboard className="h-4 w-4" />
@@ -174,16 +169,14 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
               </Button>
             ) : (
               <>
-                {mounted && (
-                  <Button asChild variant="outline" size="sm" className={`w-full gap-2 ${
-                    isDark ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white' : ''
-                  }`}>
-                    <Link href="/login" onClick={() => setMobileOpen(false)}>
-                      <LogIn className="h-4 w-4" />
-                      Ingresar
-                    </Link>
-                  </Button>
-                )}
+                <Button asChild variant="outline" size="sm" className={`w-full gap-2 ${
+                  isDark ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white' : ''
+                }`}>
+                  <Link href="/login" onClick={() => setMobileOpen(false)}>
+                    <LogIn className="h-4 w-4" />
+                    Ingresar
+                  </Link>
+                </Button>
                 <Button asChild size="sm" className="w-full gap-2">
                   <Link href={branding.primaryCtaHref} onClick={() => setMobileOpen(false)}>
                     {branding.primaryCtaLabel}

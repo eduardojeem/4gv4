@@ -16,6 +16,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_clave_anonima_de_supabase
 NEXT_PUBLIC_LOCALE=es-PY
 NEXT_PUBLIC_CURRENCY=PYG
 NEXT_PUBLIC_TAX_RATE=0.10
+RESEND_API_KEY=re_xxxxxxxxx
+EMAIL_FROM="SERVIX 360 <onboarding@resend.dev>"
+EMAIL_REPLY_TO=soporte@tudominio.com
 ```
 
 ## Configuración de Supabase
@@ -40,6 +43,23 @@ supabase db push
 npm install
 npm run dev
 ```
+
+## Resend
+
+La integracion base ya esta preparada en:
+- [src/lib/email/resend.ts](/F:/4g/4gv4/src/lib/email/resend.ts)
+- [src/app/api/admin/email/test/route.ts](/F:/4g/4gv4/src/app/api/admin/email/test/route.ts)
+
+Checklist:
+1. Crear una API key en Resend.
+2. Cargar `RESEND_API_KEY` en `.env.local`.
+3. Definir `EMAIL_FROM`.
+4. Opcional: definir `EMAIL_REPLY_TO`.
+5. Levantar la app y probar `POST /api/admin/email/test` con una sesion admin.
+
+Comportamiento actual:
+- Sin `RESEND_API_KEY`, el envio se omite sin romper el flujo.
+- Con clave valida, ya podes reutilizar `sendEmail()` y `renderBrandedEmail()` en eventos reales.
 
 ## Seguridad
 

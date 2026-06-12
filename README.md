@@ -61,6 +61,33 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
 ```
 
+### 3.1 Configurar Resend
+
+La base ya existe en el proyecto:
+- [src/lib/email/resend.ts](/F:/4g/4gv4/src/lib/email/resend.ts)
+- [src/app/api/admin/email/test/route.ts](/F:/4g/4gv4/src/app/api/admin/email/test/route.ts)
+
+Variables recomendadas en `.env.local`:
+
+```env
+RESEND_API_KEY=re_xxxxxxxxx
+EMAIL_FROM="SERVIX 360 <onboarding@resend.dev>"
+EMAIL_REPLY_TO=soporte@tudominio.com
+```
+
+Notas:
+- `onboarding@resend.dev` sirve para pruebas iniciales.
+- En produccion conviene verificar tu dominio en Resend y usar un remitente propio.
+- Si falta `RESEND_API_KEY`, el helper no rompe el flujo: omite el envio y devuelve `skipped`.
+
+Prueba rapida con sesion admin activa:
+
+```bash
+curl -X POST http://localhost:3000/api/admin/email/test ^
+  -H "Content-Type: application/json" ^
+  -d "{\"to\":\"tu-email@dominio.com\"}"
+```
+
 ### 4. Configurar Supabase
 
 ```bash

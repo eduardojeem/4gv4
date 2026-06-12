@@ -80,7 +80,7 @@ export function ProductQuickViewModal({
             {/* Image */}
             <div className="relative w-20 h-20 flex-shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 dark:from-gray-800 dark:to-gray-700 ring-1 ring-gray-200 dark:ring-gray-700">
               {isValidImage ? (
-                <Image src={imageUrl!} alt={product.name} fill className="object-cover" />
+                <Image src={imageUrl!} alt={product.name} fill sizes="80px" className="object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <Package className="h-8 w-8 text-gray-300 dark:text-gray-500" />

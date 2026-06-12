@@ -6,7 +6,7 @@ import { resolveWholesaleAccessForUser } from '@/lib/auth/wholesale-access'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { headers } from 'next/headers'
 import { getTenantSlugFromHost } from '@/lib/saas/tenant'
-import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
+import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-tenant'
 
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 
@@ -22,7 +22,7 @@ async function resolveServerPublicOrganization(supabase: SupabaseClient) {
     headerStore.get('x-tenant-slug') ||
     getTenantSlugFromHost(headerStore.get('host') ?? '')
 
-  return resolvePublicOrganizationBySlug(tenantSlug, supabase)
+  return resolvePublicStorefrontOrganizationBySlug(tenantSlug, supabase)
 }
 
 /** Resolve whether the current session belongs to a wholesale customer.
@@ -446,6 +446,18 @@ export interface BranchStockInfo {
   isAvailable: boolean
 }
 
+type BranchInventoryRow = {
+  stock_quantity: number | null
+  branch: Array<{
+    id: string
+    organization_id?: string
+    name: string
+    city: string | null
+    phone: string | null
+    is_active: boolean
+  }> | null
+}
+
 /**
  * Get stock availability per branch for a specific product.
  * Used in the public product detail page to show "Available at X sucursales".
@@ -479,14 +491,18 @@ export async function getProductBranchStock(productId: string): Promise<BranchSt
     if (!data || data.length === 0) return []
 
     // Filter only active branches and map to public-safe format
-    return data
-      .filter((row: any) => row.branch?.is_active === true)
-      .filter((row: any) => row.branch?.organization_id === undefined || row.branch?.organization_id === organization.id)
-      .map((row: any) => ({
-        branchId: row.branch.id,
-        branchName: row.branch.name,
-        city: row.branch.city,
-        phone: row.branch.phone,
+    return (data as unknown as BranchInventoryRow[])
+      .map((row) => ({
+        stock_quantity: row.stock_quantity,
+        branch: Array.isArray(row.branch) ? row.branch[0] ?? null : null,
+      }))
+      .filter((row) => row.branch?.is_active === true)
+      .filter((row) => row.branch?.organization_id === undefined || row.branch?.organization_id === organization.id)
+      .map((row) => ({
+        branchId: row.branch!.id,
+        branchName: row.branch!.name,
+        city: row.branch!.city,
+        phone: row.branch!.phone,
         stockQuantity: row.stock_quantity ?? 0,
         isAvailable: (row.stock_quantity ?? 0) > 0,
       }))

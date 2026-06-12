@@ -151,6 +151,10 @@ export function usePOSProducts() {
     })
   }, [selectedBranchId])
 
+  const syncProductInState = useCallback((product: UnifiedProduct) => {
+    updateProductInState(product as unknown as Product)
+  }, [updateProductInState])
+
   // Función para actualizar stock en tiempo real
   const updateStockInState = useCallback((stockMovement: StockMovement) => {
     if (stockMovement.product_id) {
@@ -568,6 +572,7 @@ export function usePOSProducts() {
     // Funciones de datos
     fetchProducts,
     refreshProducts: fetchProducts,
+    syncProduct: syncProductInState,
 
     // Funciones de tiempo real
     toggleRealTime,

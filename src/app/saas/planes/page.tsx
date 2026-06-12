@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getPlatformBranding } from '@/lib/platform/branding'
 
 export const metadata: Metadata = {
-  title: 'Planes | MiPOS SaaS',
+  title: 'Planes | SERVIX 360',
   description: 'Planes FREE, BASIC, PRO y ENTERPRISE para operar POS, inventario, reparaciones y marketplace.',
 }
 

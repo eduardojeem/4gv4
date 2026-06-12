@@ -9,6 +9,7 @@ export type PublicOrganization = {
   slug: string
   plan: string | null
   logo_url: string | null
+  marketplace_public: boolean | null
 }
 
 const FALLBACK_PUBLIC_ORG_SLUG = process.env.DEFAULT_PUBLIC_ORG_SLUG || 'default'
@@ -30,6 +31,26 @@ export async function resolvePublicOrganization(
   return resolvePublicOrganizationBySlug(getTenantSlugFromRequest(request), supabase)
 }
 
+export function isPublicStorefrontEnabled(organization: Pick<PublicOrganization, 'marketplace_public'> | null | undefined) {
+  return organization?.marketplace_public !== false
+}
+
+export async function resolvePublicStorefrontOrganization(
+  request: NextRequest,
+  supabase: SupabaseClient = createAdminSupabase()
+) {
+  const organization = await resolvePublicOrganization(request, supabase)
+  return isPublicStorefrontEnabled(organization) ? organization : null
+}
+
+export async function resolvePublicStorefrontOrganizationBySlug(
+  requestedSlug: string | null | undefined,
+  supabase: SupabaseClient = createAdminSupabase()
+) {
+  const organization = await resolvePublicOrganizationBySlug(requestedSlug, supabase)
+  return isPublicStorefrontEnabled(organization) ? organization : null
+}
+
 export async function resolvePublicOrganizationBySlug(
   requestedSlug: string | null | undefined,
   supabase: SupabaseClient = createAdminSupabase()
@@ -42,7 +63,7 @@ export async function resolvePublicOrganizationBySlug(
 
   const { data, error } = await supabase
     .from('organizations')
-    .select('id, name, slug, plan, logo_url')
+    .select('id, name, slug, plan, logo_url, marketplace_public')
     .eq('slug', slug)
     .maybeSingle()
 

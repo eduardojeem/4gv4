@@ -84,10 +84,25 @@ const priorityOptions = [
 ] as const
 
 const urgencyOptions = [
-  { value: 'low', label: 'Baja', color: 'bg-green-100 text-green-700' },
-  { value: 'medium', label: 'Media', color: 'bg-yellow-100 text-yellow-700' },
-  { value: 'high', label: 'Alta', color: 'bg-red-100 text-red-700' }
+  { value: 'medium', label: 'Normal', color: 'bg-yellow-100 text-yellow-700' },
+  { value: 'high', label: 'Urgente', color: 'bg-red-100 text-red-700' }
 ] as const
+
+const sectionCardClass =
+  'shadow-lg border border-slate-200/80 bg-white/90 dark:border-slate-800/80 dark:bg-slate-950/70'
+
+const sectionHeaderClass =
+  'border-b border-slate-200/70 bg-slate-50/70 dark:border-slate-800/80 dark:bg-slate-950/40'
+
+const sectionTitleClass = 'text-base font-semibold text-slate-900 dark:text-slate-100'
+
+const sectionIconClass =
+  'flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm dark:bg-slate-100 dark:text-slate-900'
+
+const subsectionCardClass =
+  'border border-slate-200/80 bg-white dark:border-slate-800/80 dark:bg-slate-950/60 shadow-sm'
+
+const fieldClass = 'border-slate-200 dark:border-slate-800'
 
 export function RepairFormDialogV2({
   open,
@@ -106,7 +121,7 @@ export function RepairFormDialogV2({
   const [selectedQuickCustomer, setSelectedQuickCustomer] = useState<{ id: string; name: string; phone: string; email: string } | null>(null)
 
   // Select schema based on quick mode
-  const schema = quickMode ? RepairFormQuickSchema : RepairFormSchema
+  const resolver = zodResolver(quickMode ? RepairFormQuickSchema : RepairFormSchema) as unknown as import('react-hook-form').Resolver<RepairFormData>
 
   // Initialize form with React Hook Form + Zod
   // Use RepairFormData as the main type (compatible with both schemas)
@@ -118,9 +133,10 @@ export function RepairFormDialogV2({
     watch,
     setValue,
     reset,
-    setFocus
+    setFocus,
+    trigger
   } = useForm<RepairFormData>({
-    resolver: zodResolver(schema) as unknown as import('react-hook-form').Resolver<RepairFormData>,
+    resolver,
     mode: 'onChange', // Validate on change for real-time feedback
     defaultValues: {
       customerName: initialData?.customerName || '',
@@ -211,6 +227,12 @@ export function RepairFormDialogV2({
     }
   }, [open, initialData, reset])
 
+  useEffect(() => {
+    if (open) {
+      void trigger()
+    }
+  }, [open, quickMode, trigger])
+
   // Handle form submission
   const onSubmitForm = async (data: RepairFormData) => {
     setIsSubmitting(true)
@@ -274,32 +296,34 @@ export function RepairFormDialogV2({
   return (
     <>
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className={`${isFullscreen ? 'max-w-full w-full max-h-full h-full' : 'max-w-[96vw] w-[96vw] max-h-[96vh] h-[96vh]'} overflow-hidden flex flex-col p-0 dark:bg-slate-950 dark:border-slate-800 transition-all duration-300`}>
-        <DialogHeader className="flex-shrink-0 px-8 pt-6 pb-5 border-b border-border bg-gradient-to-r from-primary/5 via-primary/3 to-transparent dark:from-primary/10 dark:via-primary/5 dark:to-transparent dark:border-slate-800">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent dark:from-primary dark:to-primary/80">
-                {mode === 'add' ? '✨ Nueva Reparación' : '✏️ Editar Reparación'}
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground mt-1 dark:text-slate-400">
-                Complete los datos del cliente y los dispositivos a reparar
-              </DialogDescription>
+      <DialogContent className={`overflow-hidden flex flex-col p-0 transition-all duration-300 rounded-2xl border-border/60 shadow-2xl max-sm:w-screen max-sm:h-[100dvh] max-sm:max-w-full max-sm:rounded-none ${isFullscreen ? 'sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]' : 'sm:w-[92vw] sm:max-w-5xl sm:h-[88vh] sm:max-h-[88vh]'} dark:bg-slate-950 dark:border-slate-800`}>
+        <DialogHeader className="flex-shrink-0 px-4 sm:px-6 py-3.5 border-b border-border bg-muted/20 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                {mode === 'add' ? <Plus className="h-5 w-5" /> : <Pencil className="h-5 w-5" />}
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-lg font-bold tracking-tight truncate">
+                  {mode === 'add' ? 'Nueva Reparación' : 'Editar Reparación'}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground dark:text-slate-400 truncate">
+                  Complete los datos del cliente y los dispositivos a reparar
+                </DialogDescription>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 shrink-0 mr-8">
               {mode === 'edit' && repair && (
-                <div className="text-right px-4 py-2 bg-primary/10 dark:bg-primary/20 rounded-lg border border-primary/20 dark:border-primary/30">
-                  <div className="text-xs text-muted-foreground dark:text-slate-400">Ticket</div>
-                  <div className="text-lg font-mono font-bold text-primary dark:text-primary">
-                    #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
-                  </div>
-                </div>
+                <Badge variant="outline" className="bg-background font-mono text-xs px-2.5 py-1">
+                  #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
+                </Badge>
               )}
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="icon"
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="h-9 w-9 hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-colors"
+                className="h-9 w-9"
                 title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
               >
                 {isFullscreen ? (
@@ -319,16 +343,16 @@ export function RepairFormDialogV2({
         <div className="flex-1 overflow-y-auto px-6 py-5 bg-gradient-to-b from-background to-muted/10 dark:from-slate-950 dark:to-slate-900/50">
           <form id={formId} onSubmit={handleSubmit(onSubmitForm)} className="space-y-5 max-w-[1800px] mx-auto">
             {/* Quick Mode Toggle */}
-            <div className="flex items-center justify-between p-5 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 rounded-xl border-2 border-amber-200/50 dark:border-amber-800/50 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 dark:from-amber-500 dark:to-orange-600 flex items-center justify-center shadow-lg">
-                  <Zap className="h-6 w-6 text-white" />
+            <div className="flex items-center justify-between px-4 py-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200/70 dark:border-amber-800/50">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-amber-400/90 dark:bg-amber-500 flex items-center justify-center shrink-0">
+                  <Zap className="h-4.5 w-4.5 text-white" />
                 </div>
                 <div>
-                  <Label htmlFor="quick-mode" className="cursor-pointer font-semibold text-base text-amber-900 dark:text-amber-100">
+                  <Label htmlFor="quick-mode" className="cursor-pointer font-semibold text-sm text-amber-900 dark:text-amber-100">
                     Modo Rápido
                   </Label>
-                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
                     Validación simplificada para registro rápido
                   </p>
                 </div>
@@ -342,15 +366,15 @@ export function RepairFormDialogV2({
             </div>
 
             {/* Sección 1: Información del Cliente (Ancho Completo) */}
-            <Card className="shadow-lg border-2 border-blue-200 dark:border-blue-900/50 hover:border-blue-400 dark:hover:border-blue-700 transition-all duration-200 bg-gradient-to-br from-white to-blue-50/20 dark:from-slate-900/50 dark:to-blue-950/10">
-              <CardHeader className="pb-3 bg-gradient-to-r from-blue-50/50 to-transparent dark:from-blue-950/30 dark:to-transparent border-b border-blue-100 dark:border-blue-900/30">
+            <Card className={sectionCardClass}>
+              <CardHeader className={`pb-3 ${sectionHeaderClass}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 flex items-center justify-center shadow-lg">
-                      <User className="h-4 w-4 text-white" />
+                    <div className={sectionIconClass}>
+                      <User className="h-4 w-4" />
                     </div>
                     <div>
-                      <CardTitle className="text-base font-bold text-blue-800 dark:text-blue-300">
+                      <CardTitle className={sectionTitleClass}>
                         Información del Cliente
                       </CardTitle>
                       {watch('customerName') && (
@@ -368,7 +392,7 @@ export function RepairFormDialogV2({
                         size="sm"
                         onClick={handleEditCustomer}
                         disabled={isSubmitting}
-                        className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/50 dark:hover:text-blue-400 transition-colors"
+                        className="h-8 w-8 p-0 hover:bg-muted hover:text-foreground transition-colors"
                         title="Editar cliente"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -383,7 +407,7 @@ export function RepairFormDialogV2({
                         setShowQuickCustomerModal(true)
                       }}
                       disabled={isSubmitting}
-                      className="h-8 w-8 p-0 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950/50 dark:hover:text-green-400 transition-colors"
+                      className="h-8 w-8 p-0 hover:bg-primary/10 hover:text-primary transition-colors"
                       title="Nuevo cliente"
                     >
                       <UserPlus className="h-3.5 w-3.5" />
@@ -429,16 +453,16 @@ export function RepairFormDialogV2({
                 
                 {/* Información adicional del cliente si está seleccionado */}
                 {watch('existingCustomerId') && watch('customerPhone') && (
-                  <div className="pt-2 border-t border-blue-100 dark:border-blue-900/30 space-y-2">
+                  <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800/80 space-y-2">
                     {watch('customerPhone') && (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-slate-400">
-                        <Phone className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                        <Phone className="h-3 w-3 text-primary" />
                         <span>{watch('customerPhone')}</span>
                       </div>
                     )}
                     {watch('customerEmail') && (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground dark:text-slate-400">
-                        <Mail className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                        <Mail className="h-3 w-3 text-primary" />
                         <span>{watch('customerEmail')}</span>
                       </div>
                     )}
@@ -448,15 +472,15 @@ export function RepairFormDialogV2({
             </Card>
 
             {/* Sección 2: Dispositivos a Reparar (Ancho Completo) */}
-            <Card className="shadow-lg border-2 border-green-200 dark:border-green-900/50 hover:border-green-400 dark:hover:border-green-700 transition-all duration-200 bg-gradient-to-br from-white to-green-50/20 dark:from-slate-900/50 dark:to-green-950/10">
-              <CardHeader className="pb-3 bg-gradient-to-r from-green-50/50 to-transparent dark:from-green-950/30 dark:to-transparent border-b border-green-100 dark:border-green-900/30">
+            <Card className={sectionCardClass}>
+              <CardHeader className={`pb-3 ${sectionHeaderClass}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 flex items-center justify-center shadow-lg">
-                      <Smartphone className="h-4 w-4 text-white" />
+                    <div className={sectionIconClass}>
+                      <Smartphone className="h-4 w-4" />
                     </div>
                     <div>
-                      <CardTitle className="text-base font-bold text-green-800 dark:text-green-300">
+                      <CardTitle className={sectionTitleClass}>
                         Dispositivos a Reparar
                       </CardTitle>
                       <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
@@ -480,7 +504,7 @@ export function RepairFormDialogV2({
                         technician: '',
                         estimatedCost: 0
                       })}
-                      className="h-8 gap-1.5 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950/50 dark:hover:text-green-400 transition-colors text-xs"
+                      className="h-8 gap-1.5 hover:bg-primary/10 hover:text-primary transition-colors text-xs"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       Agregar
@@ -494,15 +518,15 @@ export function RepairFormDialogV2({
                   const DeviceIcon = deviceTypeOptions.find(opt => opt.value === deviceType)?.icon || Smartphone
                   
                   return (
-                  <Card key={field.id} className="border-2 border-green-200 dark:border-green-900/50 hover:border-green-400 dark:hover:border-green-700 transition-all duration-200 bg-gradient-to-br from-white to-green-50/20 dark:from-slate-900/50 dark:to-green-950/10 shadow-md hover:shadow-lg">
-                    <CardHeader className="pb-2 bg-gradient-to-r from-green-50/50 to-transparent dark:from-green-950/30 dark:to-transparent border-b border-green-100 dark:border-green-900/30">
+                  <Card key={field.id} className={subsectionCardClass}>
+                    <CardHeader className={`pb-2 ${sectionHeaderClass}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-green-600 dark:from-green-600 dark:to-green-700 flex items-center justify-center text-xs font-bold text-white shadow-md">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-slate-900 text-xs font-bold text-white shadow-sm dark:bg-slate-100 dark:text-slate-900">
                             {index + 1}
                           </div>
                           <div>
-                            <CardTitle className="text-sm font-bold text-green-800 dark:text-green-300 flex items-center gap-1.5">
+                            <CardTitle className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                               <DeviceIcon className="h-3.5 w-3.5" />
                               Dispositivo {index + 1}
                             </CardTitle>
@@ -533,7 +557,7 @@ export function RepairFormDialogV2({
                         {/* Device Type */}
                         <div className="space-y-1.5">
                           <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
-                            <Smartphone className="h-3 w-3 text-green-600 dark:text-green-400" />
+                            <Smartphone className="h-3 w-3 text-primary" />
                             Tipo <span className="text-red-500">*</span>
                           </Label>
                           <Controller
@@ -542,7 +566,7 @@ export function RepairFormDialogV2({
                             render={({ field }) => (
                               <Select value={field.value} onValueChange={field.onChange}>
                                 <SelectTrigger
-                                  className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.deviceType ? 'border-red-500' : ''}`}
+                                  className={`h-9 text-sm ${fieldClass} ${errors.devices?.[index]?.deviceType ? 'border-red-500' : ''}`}
                                 >
                                   <SelectValue placeholder="Tipo" />
                                 </SelectTrigger>
@@ -578,7 +602,7 @@ export function RepairFormDialogV2({
                           <Input
                             {...register(`devices.${index}.brand`)}
                             placeholder="Apple, Samsung..."
-                            className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.brand ? 'border-red-500' : ''}`}
+                            className={`h-9 text-sm ${fieldClass} ${errors.devices?.[index]?.brand ? 'border-red-500' : ''}`}
                           />
                           {errors.devices?.[index]?.brand && (
                             <p className="text-xs text-red-500 flex items-center gap-1">
@@ -596,7 +620,7 @@ export function RepairFormDialogV2({
                           <Input
                             {...register(`devices.${index}.model`)}
                             placeholder="iPhone 15 Pro..."
-                            className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.model ? 'border-red-500' : ''}`}
+                            className={`h-9 text-sm ${fieldClass} ${errors.devices?.[index]?.model ? 'border-red-500' : ''}`}
                           />
                           {errors.devices?.[index]?.model && (
                             <p className="text-xs text-red-500 flex items-center gap-1">
@@ -612,20 +636,31 @@ export function RepairFormDialogV2({
                         {/* Technician */}
                         <div className="space-y-1.5">
                           <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
-                            <User className="h-3 w-3 text-green-600 dark:text-green-400" />
-                            Técnico Asignado <span className="text-red-500">*</span>
+                            <User className="h-3 w-3 text-primary" />
+                            Técnico Asignado
                           </Label>
                           <Controller
                             name={`devices.${index}.technician`}
                             control={control}
                             render={({ field }) => (
-                              <Select value={field.value} onValueChange={field.onChange}>
+                              <Select
+                                value={field.value || '__unassigned__'}
+                                onValueChange={value =>
+                                  field.onChange(value === '__unassigned__' ? '' : value)
+                                }
+                              >
                                 <SelectTrigger
-                                  className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.technician ? 'border-red-500' : ''}`}
+                                  className={`h-9 text-sm ${fieldClass} ${errors.devices?.[index]?.technician ? 'border-red-500' : ''}`}
                                 >
-                                  <SelectValue placeholder="Selecciona técnico" />
+                                  <SelectValue placeholder="Sin asignar" />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__unassigned__">
+                                    <div className="flex items-center gap-2">
+                                      <User className="h-4 w-4" />
+                                      Sin asignar
+                                    </div>
+                                  </SelectItem>
                                   {technicians.map(tech => (
                                     <SelectItem key={tech.id} value={tech.id}>
                                       <div className="flex items-center gap-2">
@@ -649,12 +684,12 @@ export function RepairFormDialogV2({
                         {/* Estimated Cost */}
                         <div className="space-y-1.5">
                           <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
-                            <DollarSign className="h-3 w-3 text-green-600 dark:text-green-400" />
+                            <DollarSign className="h-3 w-3 text-primary" />
                             Costo Estimado
                             <span className="text-xs text-muted-foreground ml-1">(opcional)</span>
                           </Label>
                           <div className="relative">
-                            <DollarSign className="absolute left-2.5 top-2 h-4 w-4 text-green-600 dark:text-green-400" />
+                            <DollarSign className="absolute left-2.5 top-2 h-4 w-4 text-primary" />
                             <Input
                               type="number"
                               step="0.01"
@@ -662,7 +697,7 @@ export function RepairFormDialogV2({
                                 valueAsNumber: true
                               })}
                               placeholder="0.00"
-                              className={`h-9 text-sm pl-8 border-green-200 dark:border-green-900/50 font-semibold ${errors.devices?.[index]?.estimatedCost ? 'border-red-500' : ''}`}
+                              className={`h-9 text-sm pl-8 font-semibold ${fieldClass} ${errors.devices?.[index]?.estimatedCost ? 'border-red-500' : ''}`}
                             />
                           </div>
                           {errors.devices?.[index]?.estimatedCost && (
@@ -675,17 +710,17 @@ export function RepairFormDialogV2({
                       </div>
 
                       {/* Problema y Descripción en ancho completo */}
-                      <div className="space-y-3 pt-2 border-t border-green-100 dark:border-green-900/30">
+                      <div className="space-y-3 pt-2 border-t border-slate-200/70 dark:border-slate-800/80">
                       {/* Issue */}
                       <div className="space-y-1.5">
                         <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
-                          <AlertCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
+                          <AlertCircle className="h-3 w-3 text-primary" />
                           Problema Principal <span className="text-red-500">*</span>
                         </Label>
                         <Input
                           {...register(`devices.${index}.issue`)}
                           placeholder="Pantalla rota, no enciende..."
-                          className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.issue ? 'border-red-500' : ''}`}
+                          className={`h-9 text-sm ${fieldClass} ${errors.devices?.[index]?.issue ? 'border-red-500' : ''}`}
                         />
                         {errors.devices?.[index]?.issue && (
                           <p className="text-xs text-red-500 flex items-center gap-1">
@@ -698,14 +733,14 @@ export function RepairFormDialogV2({
                       {/* Description */}
                       <div className="space-y-1.5">
                         <Label className="text-xs font-medium flex items-center gap-1 text-muted-foreground dark:text-slate-400">
-                          <FileText className="h-3 w-3 text-green-600 dark:text-green-400" />
+                          <FileText className="h-3 w-3 text-primary" />
                           Descripción Detallada
                         </Label>
                         <Textarea
                           {...register(`devices.${index}.description`)}
                           placeholder="Describe el problema en detalle..."
                           rows={2}
-                          className={`resize-none text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.description ? 'border-red-500' : ''}`}
+                          className={`resize-none text-sm ${fieldClass} ${errors.devices?.[index]?.description ? 'border-red-500' : ''}`}
                         />
                         {errors.devices?.[index]?.description && (
                           <p className="text-xs text-red-500 flex items-center gap-1">
@@ -717,7 +752,7 @@ export function RepairFormDialogV2({
                       </div>
 
                       {/* Acceso y Seguridad */}
-                      <div className="space-y-3 pt-2 border-t border-green-100 dark:border-green-900/30">
+                      <div className="space-y-3 pt-2 border-t border-slate-200/70 dark:border-slate-800/80">
                         {/* Access Password */}
                         <div className="space-y-2">
                           <Label className="text-xs font-medium text-muted-foreground dark:text-slate-400">
@@ -742,7 +777,7 @@ export function RepairFormDialogV2({
                                   field.onChange(value)
                                 }}
                               >
-                                <SelectTrigger className="h-9 text-sm border-green-200 dark:border-green-900/50">
+                                <SelectTrigger className={`h-9 text-sm ${fieldClass}`}>
                                   <SelectValue placeholder="Tipo de acceso" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -823,13 +858,15 @@ export function RepairFormDialogV2({
                             <div className="space-y-1.5">
                               <Input
                                 type="text"
+                                autoComplete="off"
+                                inputMode={watch(`devices.${index}.accessType`) === 'pin' ? 'numeric' : 'text'}
                                 {...register(`devices.${index}.accessPassword`)}
                                 placeholder={
                                   watch(`devices.${index}.accessType`) === 'pin' ? 'Ej: 1234, 0000' :
                                   watch(`devices.${index}.accessType`) === 'password' ? 'Ej: micontraseña123' :
                                   'Describe el método de acceso...'
                                 }
-                                className={`h-9 text-sm border-green-200 dark:border-green-900/50 ${errors.devices?.[index]?.accessPassword ? 'border-red-500' : ''}`}
+                                className={`h-9 text-sm ${fieldClass} ${errors.devices?.[index]?.accessPassword ? 'border-red-500' : ''}`}
                               />
                             </div>
                           )}
@@ -932,14 +969,14 @@ export function RepairFormDialogV2({
             </Card>
 
             {/* Sección 3: Prioridad y Urgencia (Ancho Completo) */}
-            <Card className="shadow-lg border-2 border-purple-200 dark:border-purple-900/50 hover:border-purple-400 dark:hover:border-purple-700 transition-all duration-200 bg-gradient-to-br from-white to-purple-50/20 dark:from-slate-900/50 dark:to-purple-950/10">
-              <CardHeader className="pb-3 bg-gradient-to-r from-purple-50/50 to-transparent dark:from-purple-950/30 dark:to-transparent border-b border-purple-100 dark:border-purple-900/30">
+            <Card className={sectionCardClass}>
+              <CardHeader className={`pb-3 ${sectionHeaderClass}`}>
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 dark:from-purple-600 dark:to-purple-700 flex items-center justify-center shadow-lg">
-                    <AlertCircle className="h-4 w-4 text-white" />
+                  <div className={sectionIconClass}>
+                    <AlertCircle className="h-4 w-4" />
                   </div>
                   <div>
-                    <CardTitle className="text-base font-bold text-purple-800 dark:text-purple-300">
+                    <CardTitle className={sectionTitleClass}>
                       Prioridad y Urgencia
                     </CardTitle>
                     <p className="text-xs text-muted-foreground dark:text-slate-400 mt-0.5">
@@ -960,7 +997,7 @@ export function RepairFormDialogV2({
                       control={control}
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger className={`h-9 text-sm border-purple-200 dark:border-purple-900/50 ${errors.priority ? 'border-red-500' : ''}`}>
+                          <SelectTrigger className={`h-9 text-sm ${fieldClass} ${errors.priority ? 'border-red-500' : ''}`}>
                             <SelectValue placeholder="Selecciona" />
                           </SelectTrigger>
                           <SelectContent>
@@ -993,7 +1030,7 @@ export function RepairFormDialogV2({
                       control={control}
                       render={({ field }) => (
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger className={`h-9 text-sm border-purple-200 dark:border-purple-900/50 ${errors.urgency ? 'border-red-500' : ''}`}>
+                          <SelectTrigger className={`h-9 text-sm ${fieldClass} ${errors.urgency ? 'border-red-500' : ''}`}>
                             <SelectValue placeholder="Selecciona" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1018,6 +1055,12 @@ export function RepairFormDialogV2({
                 </div>
               </CardContent>
             </Card>
+
+            {mode === 'add' && fields.length > 1 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                Los repuestos, notas y costos se aplican al lote completo. Para registrar costos o piezas distintas por equipo, crea cada reparación por separado.
+              </div>
+            )}
 
             {/* Secciones de ancho completo: Repuestos, Notas y Calculadora */}
             {/* Parts */}
@@ -1442,32 +1485,30 @@ export function RepairFormDialogV2({
         </div>
 
         {/* Form Actions */}
-        <DialogFooter className="flex-shrink-0 px-8 py-6 border-t border-border bg-gradient-to-r from-muted/30 to-transparent dark:from-slate-900/50 dark:to-transparent dark:border-slate-800 backdrop-blur-sm">
-          <div className="flex items-center justify-between w-full">
-            <div className="text-sm">
+        <DialogFooter className="flex-shrink-0 px-4 py-3 border-t border-border bg-background dark:border-slate-800">
+          <div className="flex items-center justify-between w-full gap-3">
+            <div className="text-sm min-w-0">
               {!isValid && Object.keys(errors).length > 0 && (
-                <span className="flex items-center gap-2 text-red-600 dark:text-red-400 font-medium bg-red-50 dark:bg-red-950/50 px-4 py-2 rounded-lg border border-red-200 dark:border-red-900">
-                  <AlertCircle className="h-4 w-4" />
+                <span className="flex items-center gap-2 text-red-600 dark:text-red-400 font-medium text-xs sm:text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
                   Completa los campos requeridos
                 </span>
               )}
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-2 shrink-0">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="min-w-[120px] h-11 hover:bg-muted dark:hover:bg-slate-800"
               >
-                <X className="h-4 w-4 mr-2" />
                 Cancelar
               </Button>
               <Button
                 form={formId}
                 type="submit"
                 disabled={isSubmitting}
-                className="min-w-[160px] h-11 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 dark:from-primary dark:to-primary/90 shadow-lg hover:shadow-xl transition-all"
+                className="min-w-[150px]"
               >
                 <Save className="h-4 w-4 mr-2" />
                 {isSubmitting ? 'Guardando...' : mode === 'add' ? 'Crear Reparación' : 'Guardar Cambios'}

@@ -22,31 +22,31 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { 
-  User, Phone, Mail, MapPin, Calendar, Wrench, 
-  Smartphone, Tablet, Laptop, Monitor, AlertCircle, 
+import {
+  User, Phone, Mail, MapPin, Calendar, Wrench,
+  Smartphone, Tablet, Laptop, Monitor, AlertCircle,
   DollarSign, Clock, FileText, Image as ImageIcon,
   Edit, Trash, Printer, Package as PackageIcon, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
-  PackageCheck, PackageX, CheckCircle2, ExternalLink, MoreVertical
+  PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 import { toast } from 'sonner'
-import { Repair, RepairDeliveryOutcome } from '@/types/repairs'
+import { Repair, RepairDeliveryOutcome, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { PatternDrawer } from './PatternDrawer'
 import { printRepairReceipt, generateRepairShareText, RepairPrintPayload } from '@/lib/repair-receipt'
-import { 
-  getWarrantyStatus, 
-  getDaysRemaining, 
+import {
+  getWarrantyStatus,
+  getDaysRemaining,
   getWarrantyStatusColor,
   getWarrantyTypeLabel,
   formatWarrantyDuration,
-  formatWarrantyExpiration 
+  formatWarrantyExpiration
 } from '@/lib/warranty-utils'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { logger } from '@/lib/logger'
@@ -59,6 +59,17 @@ interface RepairDetailDialogProps {
   onEdit?: (repair: Repair) => void
   onDeliver?: (repair: Repair) => void
   onQuickPay?: (repair: Repair) => void
+}
+
+// Flujo lineal de estados para el stepper de progreso.
+// "pausado" se representa sobre la etapa de reparación; "cancelado" reemplaza el stepper.
+const STATUS_FLOW: RepairStatus[] = ['recibido', 'diagnostico', 'reparacion', 'listo', 'entregado']
+const STATUS_FLOW_LABELS: Record<string, string> = {
+  recibido: 'Recibido',
+  diagnostico: 'Diagnóstico',
+  reparacion: 'Reparación',
+  listo: 'Listo',
+  entregado: 'Entregado',
 }
 
 export function RepairDetailDialog({
@@ -121,6 +132,13 @@ export function RepairDetailDialog({
 
   const StatusIcon = statusConfig[repair.status]?.icon || AlertCircle
   const DeviceIcon = deviceTypeConfig[repair.deviceType]?.icon || Smartphone
+  const isPaused = repair.status === 'pausado'
+  const isCancelled = repair.status === 'cancelado'
+  const currentStepIndex = isPaused ? 2 : STATUS_FLOW.indexOf(repair.status)
+  const partsTotal = (repair.parts || []).reduce((acc, part) => acc + (part.cost * part.quantity), 0)
+  const displayCost = repair.finalCost !== null && repair.finalCost !== undefined
+    ? repair.finalCost
+    : (repair.estimatedCost || 0)
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'Pendiente'
@@ -185,7 +203,7 @@ export function RepairDetailDialog({
       const url = `https://wa.me/?text=${encodedText}`
       window.open(url, '_blank')
     } else if (method === 'whatsapp-pdf') {
-       // Opción para abrir el diálogo de impresión directamente, 
+       // Opción para abrir el diálogo de impresión directamente,
        // sugiriendo al usuario guardar como PDF y enviarlo
        // Ya que compartir archivos directamente a WhatsApp Web no es posible vía API
        // y Web Share API tiene soporte limitado en escritorio.
@@ -289,84 +307,79 @@ export function RepairDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={cn(
-        "flex flex-col p-0 gap-0 overflow-hidden transition-all duration-300",
-        isMaximized 
-          ? "w-[98vw] max-w-[98vw] h-[98vh]" 
-          : "max-w-6xl h-[90vh]"
-      )}>
-        <DialogHeader className="p-6 pb-2 bg-muted/20 border-b shrink-0">
+      <DialogContent
+        showCloseButton={false}
+        className={cn(
+          "flex flex-col p-0 gap-0 overflow-hidden transition-all duration-300",
+          "rounded-2xl border-border/60 shadow-2xl",
+          // En móvil ocupa toda la pantalla, estilo app
+          "max-sm:w-screen max-sm:h-[100dvh] max-sm:max-w-full max-sm:rounded-none",
+          isMaximized
+            ? "sm:w-[98vw] sm:max-w-[98vw] sm:h-[96vh] sm:max-h-[96vh]"
+            : "sm:w-[92vw] sm:max-w-5xl sm:h-[85vh] sm:max-h-[85vh]"
+        )}>
+        <DialogHeader className="px-4 sm:px-6 py-3.5 bg-muted/20 border-b shrink-0">
           <div className="flex justify-between items-start gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-background">
-                  {repair.ticketNumber || `ID: ${repair.id.slice(0, 8)}`}
-                </Badge>
-                <Badge className={cn(priorityConfig[repair.priority].color)}>
-                  Prioridad {priorityConfig[repair.priority].label}
-                </Badge>
-                {repair.urgency === 'urgent' && (
-                  <Badge className={cn(urgencyConfig[repair.urgency].color)}>
-                    {urgencyConfig[repair.urgency].label}
-                  </Badge>
-                )}
+            <div className="flex items-start gap-4 min-w-0">
+              <div className={cn(
+                "hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-sm",
+                statusConfig[repair.status]?.bgColor || 'bg-slate-500'
+              )}>
+                <DeviceIcon className="h-6 w-6" />
               </div>
-              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                <DeviceIcon className="h-6 w-6 text-muted-foreground" />
-                {repair.device}
-              </DialogTitle>
-              <DialogDescription className="flex items-center gap-2 text-sm">
-                <StatusIcon className="h-4 w-4" />
-                <span className="font-medium text-foreground">
-                  {statusConfig[repair.status]?.label || repair.status}
-                </span>
-                <span className="text-muted-foreground">•</span>
-                <span>{repair.brand} {repair.model}</span>
-              </DialogDescription>
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Badge variant="outline" className="bg-background font-mono text-xs">
+                    #{repair.ticketNumber || repair.id.slice(0, 8).toUpperCase()}
+                  </Badge>
+                  <Badge className={cn("gap-1", statusConfig[repair.status]?.color)}>
+                    <StatusIcon className="h-3.5 w-3.5" />
+                    {statusConfig[repair.status]?.label || repair.status}
+                  </Badge>
+                  <Badge variant="outline" className={cn(priorityConfig[repair.priority].color)}>
+                    Prioridad {priorityConfig[repair.priority].label}
+                  </Badge>
+                  {repair.urgency === 'urgent' && (
+                    <Badge className={cn(urgencyConfig[repair.urgency].color)}>
+                      {urgencyConfig[repair.urgency].label}
+                    </Badge>
+                  )}
+                </div>
+                <DialogTitle className="text-xl font-bold tracking-tight truncate">
+                  {repair.device}
+                </DialogTitle>
+                <DialogDescription className="flex items-center gap-2 text-sm flex-wrap">
+                  <span>{deviceTypeConfig[repair.deviceType]?.label || repair.deviceType}</span>
+                  <span className="text-muted-foreground/50">•</span>
+                  <span>{repair.brand} {repair.model}</span>
+                </DialogDescription>
+              </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Acciones">
-                    <MoreVertical className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" aria-label="Compartir" title="Compartir reparación">
+                    <Share2 className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-56">
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <Printer className="mr-2 h-4 w-4" />
-                      Imprimir
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="min-w-56">
-                      <DropdownMenuItem onClick={() => handlePrint('customer')}>Comprobante Cliente</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handlePrint('technician')}>Ficha Técnica</DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <Share2 className="mr-2 h-4 w-4" />
-                      Compartir
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="min-w-64">
-                      <DropdownMenuItem onClick={() => handleShare('whatsapp')}>
-                        <MessageCircle className="mr-2 h-4 w-4" />
-                        Enviar Texto por WhatsApp
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleShare('whatsapp-pdf')}>
-                        <FileText className="mr-2 h-4 w-4" />
-                        PDF para WhatsApp
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleShare('copy')}>
-                        <Copy className="mr-2 h-4 w-4" />
-                        Copiar Texto
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleShare('native')}>
-                        <Share2 className="mr-2 h-4 w-4" />
-                        Otras apps
-                      </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
+                <DropdownMenuContent align="end" className="min-w-64">
+                  <DropdownMenuItem onClick={() => handleShare('whatsapp')}>
+                    <MessageCircle className="mr-2 h-4 w-4" />
+                    Enviar Texto por WhatsApp
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleShare('whatsapp-pdf')}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    PDF para WhatsApp
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleShare('copy')}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copiar Texto
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleShare('native')}>
+                    <Share2 className="mr-2 h-4 w-4" />
+                    Otras apps
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -382,10 +395,39 @@ export function RepairDetailDialog({
                   <Maximize2 className="h-4 w-4" />
                 )}
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" title="Imprimir documentos de la reparación">
+                    <Printer className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Imprimir</span>
+                    <ChevronDown className="h-3.5 w-3.5 ml-1 hidden sm:block opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-72">
+                  <DropdownMenuItem onClick={() => handlePrint('customer')} className="items-start gap-3 py-2.5">
+                    <FileText className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium">Comprobante para el cliente</p>
+                      <p className="text-xs text-muted-foreground">
+                        Recibo con datos del equipo, costo y garantía
+                      </p>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handlePrint('technician')} className="items-start gap-3 py-2.5">
+                    <Wrench className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium">Ficha técnica (taller)</p>
+                      <p className="text-xs text-muted-foreground">
+                        Orden interna con diagnóstico y detalle del trabajo
+                      </p>
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               {onEdit && (
                 <Button variant="outline" size="sm" onClick={() => onEdit(repair)}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
+                  <Edit className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Editar</span>
                 </Button>
               )}
               <Button variant="ghost" size="icon" onClick={onClose}>
@@ -396,760 +438,637 @@ export function RepairDetailDialog({
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col">
-          <div className="border-b bg-muted/20">
-            <div className="relative">
-              <ScrollArea className="w-full">
-                <div className="px-6 pt-2">
-                  <TabsList className="bg-transparent h-auto p-0 gap-4">
-                  <TabsTrigger 
-                    value="info" 
-                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-                  >
-                    Información
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="diagnostic" 
-                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-                  >
-                    Diagnóstico
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="finance" 
-                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-                  >
-                    Costos y Piezas
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="history" 
-                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-                  >
-                    Historial y Notas
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="images" 
-                    className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none pb-3 pt-2 px-1"
-                  >
-                    Imágenes ({repair.images?.length || 0})
-                  </TabsTrigger>
-                </TabsList>
-                </div>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
-              <div className="pointer-events-none absolute right-0 top-0 h-full w-10 bg-gradient-to-l from-muted/20 to-transparent sm:hidden" />
-              <div className="pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-muted/20 to-transparent sm:hidden" />
+        {/* Stepper de progreso */}
+        <div className="px-4 sm:px-6 py-2 border-b bg-background shrink-0">
+          {isCancelled ? (
+            <div className="flex items-center gap-3 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 px-4 py-2.5">
+              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0" />
+              <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                Esta reparación fue cancelada.
+              </p>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center max-w-3xl mx-auto">
+              {STATUS_FLOW.map((step, i) => {
+                const cfg = statusConfig[step]
+                const Icon = cfg.icon
+                const done = i < currentStepIndex
+                const current = i === currentStepIndex
+                return (
+                  <React.Fragment key={step}>
+                    {i > 0 && (
+                      <div className={cn(
+                        "h-0.5 flex-1 mx-1.5 rounded-full",
+                        i <= currentStepIndex ? "bg-emerald-400" : "bg-border"
+                      )} />
+                    )}
+                    <div className="flex flex-col items-center gap-1 shrink-0">
+                      <div className={cn(
+                        "h-7 w-7 rounded-full flex items-center justify-center border-2 transition-colors",
+                        done && "bg-emerald-500 border-emerald-500 text-white",
+                        current && !isPaused && cn(cfg.bgColor, "border-transparent text-white shadow-md"),
+                        current && isPaused && "bg-purple-500 border-purple-500 text-white",
+                        !done && !current && "bg-muted border-border text-muted-foreground"
+                      )}>
+                        {done ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                      </div>
+                      <span className={cn(
+                        "text-[10px] font-medium leading-none hidden sm:block",
+                        current ? "text-foreground" : "text-muted-foreground"
+                      )}>
+                        {current && isPaused ? 'Pausado' : STATUS_FLOW_LABELS[step]}
+                      </span>
+                    </div>
+                  </React.Fragment>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
-          <ScrollArea className="flex-1 bg-background w-full">
-            <ScrollBar orientation="horizontal" />
-            <div className="p-6 min-w-full">
-              {/* Información General */}
-              <TabsContent value="info" className="mt-0 space-y-6">
-                {/* Mensaje de Estado de Pago */}
-                {repair.status === 'listo' && (
-                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900/50 rounded-lg p-4 mb-4">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5" />
-                      <div>
-                        <h4 className="font-semibold text-yellow-800 dark:text-yellow-400">Equipo Listo para Entrega</h4>
-                        <p className="text-sm text-yellow-700 dark:text-yellow-500/90 mt-1">
-                          El equipo está listo. Para entregarlo, debe procesar el pago desde el módulo de <strong>Punto de Venta (POS)</strong>.
+        <ScrollArea className="flex-1 min-h-0 bg-background w-full">
+          <div className="p-4 sm:p-6 space-y-5">
+            {/* Mensaje de Estado de Pago */}
+            {repair.status === 'listo' && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900/50 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-yellow-800 dark:text-yellow-400">Equipo Listo para Entrega</h4>
+                    <p className="text-sm text-yellow-700 dark:text-yellow-500/90 mt-1">
+                      El equipo está listo. Para entregarlo, debe procesar el pago desde el módulo de <strong>Punto de Venta (POS)</strong>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Delivery outcome banner */}
+            {repair.status === 'entregado' && (() => {
+              const outcome = repair.deliveryOutcome as RepairDeliveryOutcome | null | undefined
+              const outcomeMap = {
+                repaired: {
+                  Icon: CheckCircle2,
+                  title: 'Equipo Reparado y Entregado',
+                  desc: 'El equipo fue reparado correctamente y entregado al cliente.',
+                  bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+                  border: 'border-emerald-200 dark:border-emerald-900/50',
+                  iconCls: 'text-emerald-600 dark:text-emerald-400',
+                  titleCls: 'text-emerald-800 dark:text-emerald-300',
+                  descCls: 'text-emerald-700 dark:text-emerald-400/90',
+                },
+                withdrawn: {
+                  Icon: PackageX,
+                  title: 'Retirado Sin Reparar',
+                  desc: 'El cliente retiró el equipo antes de completar la reparación.',
+                  bg: 'bg-amber-50 dark:bg-amber-950/30',
+                  border: 'border-amber-200 dark:border-amber-900/50',
+                  iconCls: 'text-amber-600 dark:text-amber-400',
+                  titleCls: 'text-amber-800 dark:text-amber-300',
+                  descCls: 'text-amber-700 dark:text-amber-400/90',
+                },
+                unrepairable: {
+                  Icon: Wrench,
+                  title: 'No Fue Posible Reparar',
+                  desc: 'El equipo tiene daños irreparables o no se encontraron los repuestos.',
+                  bg: 'bg-rose-50 dark:bg-rose-950/30',
+                  border: 'border-rose-200 dark:border-rose-900/50',
+                  iconCls: 'text-rose-600 dark:text-rose-400',
+                  titleCls: 'text-rose-800 dark:text-rose-300',
+                  descCls: 'text-rose-700 dark:text-rose-400/90',
+                },
+              }
+              // Fallback for entregado without outcome (legacy records)
+              const cfg = outcome ? outcomeMap[outcome] : {
+                Icon: PackageCheck,
+                title: 'Equipo Entregado',
+                desc: 'La reparación fue completada y el equipo fue entregado al cliente.',
+                bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+                border: 'border-emerald-200 dark:border-emerald-900/50',
+                iconCls: 'text-emerald-600 dark:text-emerald-400',
+                titleCls: 'text-emerald-800 dark:text-emerald-300',
+                descCls: 'text-emerald-700 dark:text-emerald-400/90',
+              }
+              const { Icon } = cfg
+              return (
+                <div className={cn('rounded-lg border p-4', cfg.bg, cfg.border)}>
+                  <div className="flex items-start gap-3">
+                    <Icon className={cn('h-5 w-5 mt-0.5 shrink-0', cfg.iconCls)} />
+                    <div className="flex-1 min-w-0">
+                      <h4 className={cn('font-semibold', cfg.titleCls)}>{cfg.title}</h4>
+                      <p className={cn('text-sm mt-1', cfg.descCls)}>{cfg.desc}</p>
+                      {repair.pickedUpAt && (
+                        <p className={cn('text-xs mt-2 flex items-center gap-1.5', cfg.descCls)}>
+                          <Calendar className="h-3.5 w-3.5" />
+                          Entregado el{' '}
+                          {format(new Date(repair.pickedUpAt), "d 'de' MMMM yyyy, HH:mm", { locale: es })}
                         </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Delivery outcome banner */}
-                {repair.status === 'entregado' && (() => {
-                  const outcome = repair.deliveryOutcome as RepairDeliveryOutcome | null | undefined
-                  const outcomeMap = {
-                    repaired: {
-                      Icon: CheckCircle2,
-                      title: 'Equipo Reparado y Entregado',
-                      desc: 'El equipo fue reparado correctamente y entregado al cliente.',
-                      bg: 'bg-emerald-50 dark:bg-emerald-950/30',
-                      border: 'border-emerald-200 dark:border-emerald-900/50',
-                      iconCls: 'text-emerald-600 dark:text-emerald-400',
-                      titleCls: 'text-emerald-800 dark:text-emerald-300',
-                      descCls: 'text-emerald-700 dark:text-emerald-400/90',
-                    },
-                    withdrawn: {
-                      Icon: PackageX,
-                      title: 'Retirado Sin Reparar',
-                      desc: 'El cliente retiró el equipo antes de completar la reparación.',
-                      bg: 'bg-amber-50 dark:bg-amber-950/30',
-                      border: 'border-amber-200 dark:border-amber-900/50',
-                      iconCls: 'text-amber-600 dark:text-amber-400',
-                      titleCls: 'text-amber-800 dark:text-amber-300',
-                      descCls: 'text-amber-700 dark:text-amber-400/90',
-                    },
-                    unrepairable: {
-                      Icon: Wrench,
-                      title: 'No Fue Posible Reparar',
-                      desc: 'El equipo tiene daños irreparables o no se encontraron los repuestos.',
-                      bg: 'bg-rose-50 dark:bg-rose-950/30',
-                      border: 'border-rose-200 dark:border-rose-900/50',
-                      iconCls: 'text-rose-600 dark:text-rose-400',
-                      titleCls: 'text-rose-800 dark:text-rose-300',
-                      descCls: 'text-rose-700 dark:text-rose-400/90',
-                    },
-                  }
-                  // Fallback for entregado without outcome (legacy records)
-                  const cfg = outcome ? outcomeMap[outcome] : {
-                    Icon: PackageCheck,
-                    title: 'Equipo Entregado',
-                    desc: 'La reparación fue completada y el equipo fue entregado al cliente.',
-                    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
-                    border: 'border-emerald-200 dark:border-emerald-900/50',
-                    iconCls: 'text-emerald-600 dark:text-emerald-400',
-                    titleCls: 'text-emerald-800 dark:text-emerald-300',
-                    descCls: 'text-emerald-700 dark:text-emerald-400/90',
-                  }
-                  const { Icon } = cfg
-                  return (
-                    <div className={cn('rounded-lg border p-4 mb-4', cfg.bg, cfg.border)}>
-                      <div className="flex items-start gap-3">
-                        <Icon className={cn('h-5 w-5 mt-0.5 shrink-0', cfg.iconCls)} />
-                        <div className="flex-1 min-w-0">
-                          <h4 className={cn('font-semibold', cfg.titleCls)}>{cfg.title}</h4>
-                          <p className={cn('text-sm mt-1', cfg.descCls)}>{cfg.desc}</p>
-                          {repair.pickedUpAt && (
-                            <p className={cn('text-xs mt-2 flex items-center gap-1.5', cfg.descCls)}>
-                              <Calendar className="h-3.5 w-3.5" />
-                              Entregado el{' '}
-                              {format(new Date(repair.pickedUpAt), "d 'de' MMMM yyyy, HH:mm", { locale: es })}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })()}
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Cliente */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <User className="h-5 w-5 text-primary" />
-                      Información del Cliente
-                    </h3>
-                    <div className="bg-muted/30 p-4 rounded-lg space-y-3 border">
-                      <div className="flex items-start gap-3">
-                        <User className="h-4 w-4 text-muted-foreground mt-1" />
-                        <div>
-                          <p className="font-medium">{repair.customer.name}</p>
-                          <p className="text-xs text-muted-foreground">Cliente Registrado</p>
-                        </div>
-                      </div>
-                      {repair.customer.phone && (
-                        <div className="flex items-center gap-3">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          <p className="text-sm">{repair.customer.phone}</p>
-                        </div>
-                      )}
-                      {repair.customer.phone && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full sm:w-auto gap-2"
-                          onClick={handleSendStatusByWhatsApp}
-                          disabled={isSendingStatusWhatsApp}
-                        >
-                          <MessageCircle className="h-4 w-4" />
-                          {isSendingStatusWhatsApp ? 'Enviando estado...' : 'Avisar estado por WhatsApp'}
-                        </Button>
-                      )}
-                      {repair.customer.email && (
-                        <div className="flex items-center gap-3">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
-                          <p className="text-sm">{repair.customer.email}</p>
-                        </div>
                       )}
                     </div>
                   </div>
+                </div>
+              )
+            })()}
 
-                  {/* Fechas y Técnico */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Calendar className="h-5 w-5 text-primary" />
-                      Detalles del Servicio
-                    </h3>
-                    <div className="bg-muted/30 p-4 rounded-lg space-y-3 border">
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground flex items-center gap-2">
-                          <Clock className="h-4 w-4" /> Recibido:
-                        </span>
-                        <span className="font-medium">{formatDate(repair.createdAt)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground flex items-center gap-2">
-                          <Clock className="h-4 w-4" /> Estimado:
-                        </span>
-                        <span className="font-medium">{formatDate(repair.estimatedCompletion)}</span>
-                      </div>
-                      {repair.completedAt && (
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-muted-foreground flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-500" /> Completado:
-                          </span>
-                          <span className="font-medium text-green-600">{formatDate(repair.completedAt)}</span>
-                        </div>
+            <div className="flex flex-col lg:flex-row gap-6 items-start">
+              {/* ─── Columna lateral: resumen siempre visible ─── */}
+              <aside className="w-full lg:w-80 shrink-0 space-y-4">
+                {/* Costo */}
+                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 dark:from-emerald-600 dark:via-emerald-700 dark:to-teal-800 p-5 text-white shadow-md">
+                  <DollarSign className="pointer-events-none absolute -right-4 -top-4 h-28 w-28 text-white/10" />
+                  <div className="relative space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-white/85 text-xs font-medium uppercase tracking-wide">
+                        Costo de la Reparación
+                      </span>
+                      {repair.status === 'entregado' && (
+                        <Badge variant="secondary" className="bg-white/90 text-emerald-700 hover:bg-white font-bold text-[10px]">
+                          PAGADO
+                        </Badge>
                       )}
-                      <Separator />
-                      <div className="flex items-center gap-3 pt-1">
-                        <Wrench className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">Técnico Asignado</p>
-                          <p className="text-sm text-muted-foreground">
-                            {repair.technician?.name || 'Sin asignar'}
-                          </p>
+                      {repair.status === 'listo' && (
+                        <Badge variant="secondary" className="bg-yellow-400 text-yellow-900 hover:bg-yellow-400 font-bold text-[10px] border-none">
+                          PENDIENTE DE PAGO
+                        </Badge>
+                      )}
+                      {repair.paymentStatus === 'parcial' && repair.status !== 'entregado' && repair.status !== 'listo' && (
+                        <Badge variant="secondary" className="bg-blue-400 text-blue-900 hover:bg-blue-400 font-bold text-[10px] border-none">
+                          PAGO PARCIAL
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold text-3xl">{formatCurrency(displayCost)}</span>
+                      {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
+                        <Badge variant="secondary" className="bg-white/20 text-white border-white/30 text-[10px]">
+                          {repair.finalCost > repair.estimatedCost ? '↑' : '↓'} Ajustado
+                        </Badge>
+                      )}
+                    </div>
+                    {repair.paymentStatus === 'parcial' && repair.paidAmount !== undefined && repair.paidAmount > 0 && (
+                      <div className="text-white/90 text-xs space-y-1 pt-1">
+                        <div className="flex justify-between border-b border-white/20 pb-1">
+                          <span>Pagado:</span>
+                          <span className="font-semibold">{formatCurrency(repair.paidAmount)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-white">
+                          <span>Restante:</span>
+                          <span>{formatCurrency(displayCost - repair.paidAmount)}</span>
                         </div>
                       </div>
+                    )}
+                    {repair.finalCost === null || repair.finalCost === undefined ? (
+                      <p className="text-white/75 text-[11px] leading-snug">
+                        * Costo estimado — el final se determina al completar el diagnóstico
+                      </p>
+                    ) : (
+                      <div className="flex items-center gap-3 text-white/90 text-xs pt-1">
+                        <span>
+                          <span className="text-white/70">Mano de obra </span>
+                          <span className="font-semibold">{formatCurrency(repair.laborCost || 0)}</span>
+                        </span>
+                        <span className="text-white/40">•</span>
+                        <span>
+                          <span className="text-white/70">Piezas </span>
+                          <span className="font-semibold">{formatCurrency(partsTotal)}</span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cliente */}
+                <div className="rounded-xl border bg-card p-4 space-y-3.5 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-sm">
+                      {repair.customer.name
+                        .split(' ')
+                        .map((w) => w[0])
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .join('')
+                        .toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate text-sm">{repair.customer.name}</p>
+                      <p className="text-xs text-muted-foreground">Cliente registrado</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    {repair.customer.phone && (
+                      <a
+                        href={`tel:${repair.customer.phone}`}
+                        className="flex items-center gap-2.5 text-foreground/90 hover:text-primary transition-colors"
+                      >
+                        <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                        {repair.customer.phone}
+                      </a>
+                    )}
+                    {repair.customer.email && (
+                      <a
+                        href={`mailto:${repair.customer.email}`}
+                        className="flex items-center gap-2.5 text-foreground/90 hover:text-primary transition-colors break-all"
+                      >
+                        <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                        {repair.customer.email}
+                      </a>
+                    )}
+                  </div>
+                  {repair.customer.phone && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2"
+                      onClick={handleSendStatusByWhatsApp}
+                      disabled={isSendingStatusWhatsApp}
+                    >
+                      <MessageCircle className="h-4 w-4 text-emerald-600" />
+                      {isSendingStatusWhatsApp ? 'Enviando estado...' : 'Avisar estado por WhatsApp'}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Servicio: fechas y técnico */}
+                <div className="rounded-xl border bg-card p-4 space-y-3 shadow-sm">
+                  <div className="flex justify-between items-center gap-3 text-sm">
+                    <span className="text-muted-foreground flex items-center gap-2 shrink-0">
+                      <Clock className="h-4 w-4" /> Recibido
+                    </span>
+                    <span className="font-medium text-right text-xs">{formatDate(repair.createdAt)}</span>
+                  </div>
+                  <div className="flex justify-between items-center gap-3 text-sm">
+                    <span className="text-muted-foreground flex items-center gap-2 shrink-0">
+                      <Clock className="h-4 w-4" /> Estimado
+                    </span>
+                    <span className="font-medium text-right text-xs">{formatDate(repair.estimatedCompletion)}</span>
+                  </div>
+                  {repair.completedAt && (
+                    <div className="flex justify-between items-center gap-3 text-sm">
+                      <span className="text-muted-foreground flex items-center gap-2 shrink-0">
+                        <CheckCircle className="h-4 w-4 text-emerald-500" /> Completado
+                      </span>
+                      <span className="font-medium text-emerald-600 text-right text-xs">{formatDate(repair.completedAt)}</span>
+                    </div>
+                  )}
+                  <Separator />
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 shrink-0 rounded-lg bg-muted flex items-center justify-center">
+                      <Wrench className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Técnico asignado</p>
+                      <p className={cn(
+                        "text-sm font-medium truncate",
+                        !repair.technician?.name && "text-muted-foreground italic"
+                      )}>
+                        {repair.technician?.name || 'Sin asignar'}
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Costo Final - Destacado */}
-                <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 p-6 rounded-xl shadow-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="h-5 w-5 text-white" />
-                        <span className="text-white/90 text-sm font-medium uppercase tracking-wide">
-                          Costo de la Reparación
-                        </span>
-                        {repair.status === 'entregado' && (
-                           <Badge variant="secondary" className="bg-white/90 text-emerald-700 hover:bg-white font-bold ml-2">
-                              PAGADO Y ENTREGADO
-                           </Badge>
-                        )}
-                        {repair.status === 'listo' && (
-                           <Badge variant="secondary" className="bg-yellow-400 text-yellow-900 hover:bg-yellow-400 font-bold ml-2 border-none">
-                              PENDIENTE DE PAGO
-                           </Badge>
-                        )}
-                        {repair.paymentStatus === 'parcial' && repair.status !== 'entregado' && (
-                           <Badge variant="secondary" className="bg-blue-400 text-blue-900 hover:bg-blue-400 font-bold ml-2 border-none">
-                              PAGO PARCIAL
-                           </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-baseline gap-3">
-                        <span className="font-bold text-white text-4xl">
-                          {repair.finalCost !== null && repair.finalCost !== undefined 
-                            ? formatCurrency(repair.finalCost) 
-                            : formatCurrency(repair.estimatedCost || 0)
-                          }
-                        </span>
-                        {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
-                          <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                            {repair.finalCost > repair.estimatedCost ? '↑' : '↓'} Ajustado
-                          </Badge>
-                        )}
-                      </div>
-                      {/* Información detallada del pago */}
-                      {repair.paymentStatus === 'parcial' && repair.paidAmount !== undefined && repair.paidAmount > 0 && (
-                        <div className="mt-2 text-white/90 text-sm">
-                          <div className="flex justify-between border-b border-white/20 pb-1 mb-1">
-                            <span>Pagado:</span>
-                            <span className="font-semibold">{formatCurrency(repair.paidAmount)}</span>
-                          </div>
-                          <div className="flex justify-between font-bold text-white">
-                            <span>Restante:</span>
-                            <span>{formatCurrency((repair.finalCost || repair.estimatedCost || 0) - repair.paidAmount)}</span>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {repair.finalCost === null || repair.finalCost === undefined ? (
-                        <p className="text-white/80 text-xs">
-                          * Costo estimado - El costo final será determinado al completar el diagnóstico
-                        </p>
-                      ) : (
-                        <div className="flex items-center gap-4 text-white/90 text-sm mt-2">
-                          <div className="flex items-center gap-1">
-                            <span className="text-white/70">Mano de obra:</span>
-                            <span className="font-semibold">{formatCurrency(repair.laborCost || 0)}</span>
-                          </div>
-                          <span className="text-white/50">•</span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-white/70">Piezas:</span>
-                            <span className="font-semibold">
-                              {formatCurrency(
-                                (repair.parts || []).reduce((acc, part) => acc + (part.cost * part.quantity), 0)
-                              )}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
-                      <DollarSign className="h-8 w-8 text-white" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Garantía */}
+                {/* Garantía compacta */}
                 {repair.warrantyMonths && repair.warrantyMonths > 0 ? (
                   <div className={cn(
-                    "rounded-lg border p-4",
+                    "rounded-xl border p-4 space-y-2.5",
                     getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).bg,
                     getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).border
                   )}>
-                    <div className="space-y-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-1">
-                          {/* Header */}
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "p-2 rounded-lg bg-background border",
-                              getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).border
-                            )}>
-                              <Shield className={cn(
-                                "h-5 w-5",
-                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).icon
-                              )} />
-                            </div>
-                            <div>
-                              <h3 className={cn(
-                                "text-lg font-bold tracking-tight",
-                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
-                              )}>
-                                Garantía de Reparación
-                              </h3>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired' 
-                                  ? 'Esta garantía ha expirado'
-                                  : getWarrantyStatus(repair.warrantyExpiresAt) === 'expiring'
-                                  ? 'La garantía está por vencer'
-                                  : 'Garantía activa y vigente'
-                                }
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="bg-background">
-                          {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired'
-                            ? 'Vencida'
-                            : getWarrantyStatus(repair.warrantyExpiresAt) === 'expiring'
-                            ? 'Por vencer'
-                            : 'Activa'}
-                        </Badge>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Shield className={cn(
+                          "h-4 w-4",
+                          getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).icon
+                        )} />
+                        <span className={cn(
+                          "text-sm font-semibold",
+                          getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
+                        )}>
+                          Garantía
+                        </span>
                       </div>
-                          
-                          {/* Info Grid */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="bg-background/60 dark:bg-background/30 rounded-lg p-4 border">
-                              <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">Duración</p>
-                              <p className={cn(
-                                "font-bold text-xl",
-                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
-                              )}>
-                                {formatWarrantyDuration(repair.warrantyMonths)}
-                              </p>
-                            </div>
-                            
-                            <div className="bg-background/60 dark:bg-background/30 rounded-lg p-4 border">
-                              <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">Cobertura</p>
-                              <p className={cn(
-                                "font-bold text-xl",
-                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
-                              )}>
-                                {getWarrantyTypeLabel(repair.warrantyType || 'full').split(' ')[0]}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {repair.warrantyType === 'labor' && 'Mano de obra'}
-                                {repair.warrantyType === 'parts' && 'Repuestos'}
-                                {repair.warrantyType === 'full' && 'Total'}
-                              </p>
-                            </div>
-                            
-                            {repair.warrantyExpiresAt && (
-                              <div className="bg-background/60 dark:bg-background/30 rounded-lg p-4 border">
-                                <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
-                                  {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired' ? 'Venció' : 'Vence'}
-                                </p>
-                                <p className={cn(
-                                  "font-bold text-xl",
-                                  getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
-                                )}>
-                                  {formatWarrantyExpiration(repair.warrantyExpiresAt).split(' de ')[0]}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {formatWarrantyExpiration(repair.warrantyExpiresAt).split(' de ').slice(1).join(' de ')}
-                                </p>
-                                {getWarrantyStatus(repair.warrantyExpiresAt) !== 'expired' && (
-                                  <div className={cn(
-                                    "mt-2 px-2 py-1 rounded-md text-xs font-semibold inline-block bg-background border",
-                                    getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).border
-                                  )}>
-                                    {getDaysRemaining(repair.warrantyExpiresAt)} días restantes
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Fecha de retiro del equipo */}
-                          {repair.pickedUpAt && (
-                            <div className="bg-background/60 dark:bg-background/30 rounded-lg p-4 border">
-                              <div className="flex items-start gap-3">
-                                <div className={cn(
-                                  "p-2 rounded-lg bg-background border",
-                                  getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).border
-                                )}>
-                                  <Calendar className={cn(
-                                    "h-4 w-4",
-                                    getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).icon
-                                  )} />
-                                </div>
-                                <div className="flex-1">
-                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Equipo retirado</p>
-                                  <p className={cn(
-                                    "text-sm font-semibold mt-1",
-                                    getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
-                                  )}>
-                                    {formatDate(repair.pickedUpAt)}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    La garantía comenzó desde esta fecha
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Warranty Notes */}
-                          {repair.warrantyNotes && (
-                            <div className="bg-background/60 dark:bg-background/30 rounded-lg p-4 border">
-                              <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Notas Adicionales</p>
-                              <p className={cn(
-                                "text-sm leading-relaxed",
-                                getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).text
-                              )}>
-                                {repair.warrantyNotes}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Footer Message */}
-                          <div className={cn(
-                            "rounded-lg p-4 border border-dashed",
-                            getWarrantyStatusColor(getWarrantyStatus(repair.warrantyExpiresAt)).border,
-                            "bg-background/40 dark:bg-background/20"
-                          )}>
-                            <p className="text-xs text-muted-foreground leading-relaxed">
-                              {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired' 
-                                ? '⚠️ La garantía ha expirado. Contacte al taller para más información sobre extensiones o nuevas reparaciones.'
-                                : getWarrantyStatus(repair.warrantyExpiresAt) === 'expiring'
-                                ? '⚠️ La garantía está por vencer. Conserve su comprobante y verifique el estado de su equipo antes de que expire.'
-                                : '✓ Garantía activa. Conserve este comprobante para hacer válida la garantía en caso de ser necesario.'
-                              }
-                            </p>
-                          </div>
+                      <Badge variant="outline" className="bg-background text-[10px]">
+                        {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired'
+                          ? 'Vencida'
+                          : getWarrantyStatus(repair.warrantyExpiresAt) === 'expiring'
+                          ? 'Por vencer'
+                          : 'Activa'}
+                      </Badge>
                     </div>
+                    <div className="text-xs space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Duración</span>
+                        <span className="font-medium">{formatWarrantyDuration(repair.warrantyMonths)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Cobertura</span>
+                        <span className="font-medium">{getWarrantyTypeLabel(repair.warrantyType || 'full')}</span>
+                      </div>
+                      {repair.warrantyExpiresAt && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">
+                            {getWarrantyStatus(repair.warrantyExpiresAt) === 'expired' ? 'Venció' : 'Vence'}
+                          </span>
+                          <span className="font-medium">{formatWarrantyExpiration(repair.warrantyExpiresAt)}</span>
+                        </div>
+                      )}
+                      {repair.warrantyExpiresAt && getWarrantyStatus(repair.warrantyExpiresAt) !== 'expired' && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Restan</span>
+                          <span className="font-semibold">{getDaysRemaining(repair.warrantyExpiresAt)} días</span>
+                        </div>
+                      )}
+                      {repair.pickedUpAt && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Retirado</span>
+                          <span className="font-medium">{formatDate(repair.pickedUpAt)}</span>
+                        </div>
+                      )}
+                    </div>
+                    {repair.warrantyNotes && (
+                      <p className="text-[11px] text-muted-foreground border-t pt-2 leading-snug">
+                        {repair.warrantyNotes}
+                      </p>
+                    )}
                   </div>
                 ) : (
-                  <div className="rounded-lg border border-dashed bg-muted/10 p-4">
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-900/50">
-                          <Shield className="h-6 w-6 text-slate-400" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-semibold text-slate-700 dark:text-slate-300">Sin Garantía</p>
-                          <p className="text-sm text-muted-foreground mt-0.5">Esta reparación no incluye garantía.</p>
-                        </div>
-                      </div>
+                  <div className="rounded-xl border border-dashed bg-muted/10 p-4 flex items-center gap-3">
+                    <Shield className="h-5 w-5 text-slate-400 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Sin garantía</p>
+                      <p className="text-xs text-muted-foreground">No incluye garantía.</p>
+                    </div>
                   </div>
                 )}
-              </TabsContent>
+              </aside>
 
-              {/* Diagnóstico */}
-              <TabsContent value="diagnostic" className="mt-0 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="md:col-span-2 space-y-6">
+              {/* ─── Área principal: detalle por pestañas ─── */}
+              <main className="flex-1 min-w-0 w-full">
+                <Tabs defaultValue="diagnostic" className="w-full">
+                  <TabsList className="w-full justify-start overflow-x-auto h-auto p-1">
+                    <TabsTrigger value="diagnostic" className="text-xs sm:text-sm">
+                      Diagnóstico
+                    </TabsTrigger>
+                    <TabsTrigger value="finance" className="text-xs sm:text-sm">
+                      Costos y Piezas
+                    </TabsTrigger>
+                    <TabsTrigger value="history" className="text-xs sm:text-sm">
+                      Historial ({repair.notes?.length || 0})
+                    </TabsTrigger>
+                    <TabsTrigger value="images" className="text-xs sm:text-sm">
+                      Imágenes ({repair.images?.length || 0})
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* Diagnóstico */}
+                  <TabsContent value="diagnostic" className="mt-4 space-y-5">
                     <div className="space-y-2">
-                      <h3 className="text-lg font-semibold">Problema Reportado</h3>
-                      <div className="bg-muted/30 p-4 rounded-lg border min-h-[100px]">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Problema Reportado</h3>
+                      <div className="rounded-xl border bg-card p-5 shadow-sm">
                         <p className="text-sm leading-relaxed">{repair.issue}</p>
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <h3 className="text-lg font-semibold">Descripción Detallada</h3>
-                      <div className="bg-muted/30 p-4 rounded-lg border min-h-[100px]">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Descripción Detallada</h3>
+                      <div className="rounded-xl border bg-card p-5 shadow-sm">
                         <p className="text-sm leading-relaxed whitespace-pre-wrap">
                           {repair.description || 'Sin descripción detallada.'}
                         </p>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">Seguridad y Acceso</h3>
-                    <div className="bg-muted/30 p-4 rounded-lg border space-y-4">
-                      <div>
-                        <p className="text-sm font-medium mb-1">Tipo de Acceso</p>
-                        <Badge variant="outline" className="capitalize">
-                          {repair.accessType || 'Ninguno'}
-                        </Badge>
-                      </div>
-
-                      {repair.accessType === 'pattern' && repair.accessPassword && (
-                        <div>
-                          <p className="text-sm font-medium mb-2">Patrón de Desbloqueo</p>
-                          <div className="flex flex-col items-center gap-2">
-                            {!showSensitiveData ? (
-                              <div className="text-xs text-muted-foreground bg-background px-3 py-2 rounded border">
-                                Patrón oculto por seguridad
-                              </div>
-                            ) : (
-                              <div className="w-fit mx-auto bg-background rounded-lg p-2">
-                                <PatternDrawer
-                                  value={repair.accessPassword}
-                                  onChange={() => {}}
-                                  disabled={true}
-                                  minimal={true}
-                                />
-                              </div>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              type="button"
-                              className="h-7 px-2"
-                              onClick={() => setShowSensitiveData(prev => !prev)}
-                            >
-                              {showSensitiveData ? <EyeOff className="h-3.5 w-3.5 mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
-                              {showSensitiveData ? 'Ocultar' : 'Ver'}
-                            </Button>
-                          </div>
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Seguridad y Acceso</h3>
+                      <div className="rounded-xl border bg-card p-5 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium">Tipo de Acceso</p>
+                          <Badge variant="outline" className="capitalize">
+                            {repair.accessType || 'Ninguno'}
+                          </Badge>
                         </div>
-                      )}
 
-                      {repair.accessType !== 'pattern' && repair.accessType !== 'none' && repair.accessPassword && (
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-sm font-medium">Contraseña / PIN</p>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              type="button"
-                              className="h-7 px-2"
-                              onClick={() => setShowSensitiveData(prev => !prev)}
-                            >
-                              {showSensitiveData ? <EyeOff className="h-3.5 w-3.5 mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
-                              {showSensitiveData ? 'Ocultar' : 'Ver'}
-                            </Button>
-                          </div>
-                          <code className="bg-background px-2 py-1 rounded border text-sm font-mono block w-full">
-                            {showSensitiveData ? repair.accessPassword : '•'.repeat(Math.max(repair.accessPassword.length, 6))}
-                          </code>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* Costos y Piezas */}
-              <TabsContent value="finance" className="mt-0 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Resumen Financiero */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <DollarSign className="h-5 w-5 text-primary" />
-                      Resumen de Costos
-                    </h3>
-                    <div className="bg-muted/30 p-4 rounded-lg border space-y-3">
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground">Mano de Obra:</span>
-                        <span className="font-medium">{formatCurrency(repair.laborCost || 0)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground">Costo de Piezas:</span>
-                        <span className="font-medium">
-                          {formatCurrency(
-                            (repair.parts || []).reduce((acc, part) => acc + (part.cost * part.quantity), 0)
-                          )}
-                        </span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="font-medium">Costo Estimado:</span>
-                        <span className="font-medium">{formatCurrency(repair.estimatedCost || 0)}</span>
-                      </div>
-                      <Separator className="my-3" />
-                      <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 dark:from-emerald-600 dark:to-emerald-700 p-4 rounded-lg shadow-lg">
-                        <div className="flex justify-between items-center">
-                          <div className="space-y-1">
-                            <span className="text-white/80 text-xs font-medium uppercase tracking-wide">Costo Final</span>
-                            <div className="flex items-baseline gap-2">
-                              <span className="font-bold text-white text-2xl">
-                                {repair.finalCost !== null && repair.finalCost !== undefined 
-                                  ? formatCurrency(repair.finalCost) 
-                                  : formatCurrency(repair.estimatedCost || 0)
-                                }
-                              </span>
-                              {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
-                                <Badge variant="secondary" className="bg-white/20 text-white border-white/30 text-xs">
-                                  {repair.finalCost > repair.estimatedCost ? '↑' : '↓'} Ajustado
-                                </Badge>
+                        {repair.accessType === 'pattern' && repair.accessPassword && (
+                          <div>
+                            <p className="text-sm font-medium mb-2">Patrón de Desbloqueo</p>
+                            <div className="flex flex-col items-center gap-2">
+                              {!showSensitiveData ? (
+                                <div className="text-xs text-muted-foreground bg-background px-3 py-2 rounded border">
+                                  Patrón oculto por seguridad
+                                </div>
+                              ) : (
+                                <div className="w-fit mx-auto bg-background rounded-lg p-2">
+                                  <PatternDrawer
+                                    value={repair.accessPassword}
+                                    onChange={() => {}}
+                                    disabled={true}
+                                    minimal={true}
+                                  />
+                                </div>
                               )}
-                            </div>
-                          </div>
-                          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                            <DollarSign className="h-6 w-6 text-white" />
-                          </div>
-                        </div>
-                        {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
-                          <div className="mt-3 pt-3 border-t border-white/20">
-                            <div className="flex items-center justify-between text-xs text-white/90">
-                              <span>Diferencia:</span>
-                              <span className="font-semibold">
-                                {repair.finalCost > repair.estimatedCost ? '+' : ''}
-                                {formatCurrency(repair.finalCost - repair.estimatedCost)}
-                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                type="button"
+                                className="h-7 px-2"
+                                onClick={() => setShowSensitiveData(prev => !prev)}
+                              >
+                                {showSensitiveData ? <EyeOff className="h-3.5 w-3.5 mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
+                                {showSensitiveData ? 'Ocultar' : 'Ver'}
+                              </Button>
                             </div>
                           </div>
                         )}
-                      </div>
-                      {repair.finalCost === null || repair.finalCost === undefined ? (
-                        <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-2 flex items-start gap-2">
-                          <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
-                          <span className="text-amber-700 dark:text-amber-400">
-                            El costo final aún no ha sido establecido. Se muestra el costo estimado.
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
 
-                  {/* Lista de Piezas */}
-                  <div className="md:col-span-2 space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <PackageIcon className="h-5 w-5 text-primary" />
-                      Piezas y Refacciones
+                        {repair.accessType !== 'pattern' && repair.accessType !== 'none' && repair.accessPassword && (
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="text-sm font-medium">Contraseña / PIN</p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                type="button"
+                                className="h-7 px-2"
+                                onClick={() => setShowSensitiveData(prev => !prev)}
+                              >
+                                {showSensitiveData ? <EyeOff className="h-3.5 w-3.5 mr-1" /> : <Eye className="h-3.5 w-3.5 mr-1" />}
+                                {showSensitiveData ? 'Ocultar' : 'Ver'}
+                              </Button>
+                            </div>
+                            <code className="bg-background px-2 py-1 rounded border text-sm font-mono block w-full">
+                              {showSensitiveData ? repair.accessPassword : '•'.repeat(Math.max(repair.accessPassword.length, 6))}
+                            </code>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* Costos y Piezas */}
+                  <TabsContent value="finance" className="mt-4 space-y-5">
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        Resumen de Costos
+                      </h3>
+                      <div className="rounded-xl border bg-card p-5 shadow-sm space-y-3">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Mano de Obra:</span>
+                          <span className="font-medium">{formatCurrency(repair.laborCost || 0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Costo de Piezas:</span>
+                          <span className="font-medium">{formatCurrency(partsTotal)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Costo Estimado:</span>
+                          <span className="font-medium">{formatCurrency(repair.estimatedCost || 0)}</span>
+                        </div>
+                        <Separator />
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold">Costo Final:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-lg text-emerald-600 dark:text-emerald-400">
+                              {formatCurrency(displayCost)}
+                            </span>
+                            {repair.finalCost !== null && repair.finalCost !== undefined && repair.finalCost !== repair.estimatedCost && (
+                              <Badge variant="outline" className="text-xs">
+                                {repair.finalCost > repair.estimatedCost ? '↑' : '↓'}{' '}
+                                {formatCurrency(Math.abs(repair.finalCost - repair.estimatedCost))}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        {repair.finalCost === null || repair.finalCost === undefined ? (
+                          <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded p-2 flex items-start gap-2">
+                            <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
+                            <span className="text-amber-700 dark:text-amber-400">
+                              El costo final aún no ha sido establecido. Se muestra el costo estimado.
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                        <PackageIcon className="h-4 w-4" />
+                        Piezas y Refacciones
+                      </h3>
+                      {(!repair.parts || repair.parts.length === 0) ? (
+                        <div className="bg-muted/20 border border-dashed rounded-xl p-8 text-center text-muted-foreground text-sm">
+                          No hay piezas registradas para esta reparación.
+                        </div>
+                      ) : (
+                        <div className="border rounded-xl overflow-x-auto shadow-sm">
+                          <table className="w-full text-sm min-w-[480px]">
+                            <thead className="bg-muted/50 text-muted-foreground font-medium">
+                              <tr>
+                                <th className="px-4 py-3 text-left">Pieza</th>
+                                <th className="px-4 py-3 text-center">Cant.</th>
+                                <th className="px-4 py-3 text-right">Costo Unit.</th>
+                                <th className="px-4 py-3 text-right">Total</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {repair.parts.map((part, index) => (
+                                <tr key={index} className="bg-background">
+                                  <td className="px-4 py-3">
+                                    <div className="font-medium">{part.name}</div>
+                                    <div className="text-xs text-muted-foreground">{part.partNumber}</div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">{part.quantity}</td>
+                                  <td className="px-4 py-3 text-right">{formatCurrency(part.cost)}</td>
+                                  <td className="px-4 py-3 text-right font-medium">
+                                    {formatCurrency(part.cost * part.quantity)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+
+                  {/* Historial y Notas */}
+                  <TabsContent value="history" className="mt-4 space-y-2">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Notas de la Reparación
                     </h3>
-                    {(!repair.parts || repair.parts.length === 0) ? (
-                      <div className="bg-muted/20 border border-dashed rounded-lg p-8 text-center text-muted-foreground">
-                        No hay piezas registradas para esta reparación.
+
+                    {(!repair.notes || repair.notes.length === 0) ? (
+                      <div className="bg-muted/20 border border-dashed rounded-xl p-8 text-center text-muted-foreground text-sm">
+                        No hay notas registradas.
                       </div>
                     ) : (
-                      <div className="border rounded-lg overflow-x-auto">
-                        <table className="w-full text-sm min-w-[600px]">
-                          <thead className="bg-muted/50 text-muted-foreground font-medium">
-                            <tr>
-                              <th className="px-4 py-3 text-left">Pieza</th>
-                              <th className="px-4 py-3 text-center">Cant.</th>
-                              <th className="px-4 py-3 text-right">Costo Unit.</th>
-                              <th className="px-4 py-3 text-right">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {repair.parts.map((part, index) => (
-                              <tr key={index} className="bg-background">
-                                <td className="px-4 py-3">
-                                  <div className="font-medium">{part.name}</div>
-                                  <div className="text-xs text-muted-foreground">{part.partNumber}</div>
-                                </td>
-                                <td className="px-4 py-3 text-center">{part.quantity}</td>
-                                <td className="px-4 py-3 text-right">{formatCurrency(part.cost)}</td>
-                                <td className="px-4 py-3 text-right font-medium">
-                                  {formatCurrency(part.cost * part.quantity)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <div className="space-y-3">
+                        {repair.notes.map((note, index) => (
+                          <div key={index} className="flex gap-4 rounded-xl border bg-card p-4 shadow-sm">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <User className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="space-y-1 flex-1 min-w-0">
+                              <div className="flex justify-between items-start gap-2">
+                                <span className="font-medium text-sm">{note.author}</span>
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {formatDate(note.timestamp)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-foreground/90">{note.text}</p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
-                  </div>
-                </div>
-              </TabsContent>
+                  </TabsContent>
 
-              {/* Historial y Notas */}
-              <TabsContent value="history" className="mt-0 space-y-6">
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-primary" />
-                    Notas de la Reparación
-                  </h3>
-                  
-                  {(!repair.notes || repair.notes.length === 0) ? (
-                    <div className="bg-muted/20 border border-dashed rounded-lg p-8 text-center text-muted-foreground">
-                      No hay notas registradas.
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {repair.notes.map((note, index) => (
-                        <div key={index} className="flex gap-4 p-4 bg-muted/30 rounded-lg border">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <User className="h-4 w-4 text-primary" />
-                          </div>
-                          <div className="space-y-1 flex-1">
-                            <div className="flex justify-between items-start">
-                              <span className="font-medium text-sm">{note.author}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {formatDate(note.timestamp)}
-                              </span>
-                            </div>
-                            <p className="text-sm text-foreground/90">{note.text}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
+                  {/* Imágenes */}
+                  <TabsContent value="images" className="mt-4 space-y-2">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4" />
+                      Galería de Imágenes
+                    </h3>
 
-              {/* Imágenes */}
-              <TabsContent value="images" className="mt-0 space-y-6">
-                <div className="flex justify-between items-center mb-4">
-                   <h3 className="text-lg font-semibold flex items-center gap-2">
-                    <ImageIcon className="h-5 w-5 text-primary" />
-                    Galería de Imágenes
-                  </h3>
-                </div>
-
-                {(!repair.images || repair.images.length === 0) ? (
-                  <div className="bg-muted/20 border border-dashed rounded-lg p-12 text-center text-muted-foreground">
-                    <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                    <p>No hay imágenes adjuntas a esta reparación.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {repair.images.map((image, index) => (
-                      <div key={index} className="group relative aspect-square rounded-lg overflow-hidden border bg-muted">
-                        <img 
-                          src={image.url} 
-                          alt={image.description || `Imagen ${index + 1}`}
-                          className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <Button variant="secondary" size="sm" asChild>
-                            <a href={image.url} target="_blank" rel="noopener noreferrer">
-                              Ver Completa
-                            </a>
-                          </Button>
-                        </div>
-                        {image.description && (
-                          <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/60 text-white text-xs truncate">
-                            {image.description}
-                          </div>
-                        )}
+                    {(!repair.images || repair.images.length === 0) ? (
+                      <div className="bg-muted/20 border border-dashed rounded-xl p-12 text-center text-muted-foreground">
+                        <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                        <p className="text-sm">No hay imágenes adjuntas a esta reparación.</p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {repair.images.map((image, index) => (
+                          <div key={index} className="group relative aspect-square rounded-xl overflow-hidden border bg-muted">
+                            <img
+                              src={image.url}
+                              alt={image.description || `Imagen ${index + 1}`}
+                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <Button variant="secondary" size="sm" asChild>
+                                <a href={image.url} target="_blank" rel="noopener noreferrer">
+                                  Ver Completa
+                                </a>
+                              </Button>
+                            </div>
+                            {image.description && (
+                              <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/60 text-white text-xs truncate">
+                                {image.description}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </main>
             </div>
-          </ScrollArea>
-        </Tabs>
-        
-        <DialogFooter className="p-4 border-t bg-background flex flex-wrap justify-between sm:justify-end gap-2">
+          </div>
+        </ScrollArea>
+
+        <DialogFooter className="px-4 py-3 border-t bg-background flex flex-wrap justify-between sm:justify-end gap-2 shrink-0">
           <Button variant="outline" onClick={onClose}>
             Cerrar
           </Button>

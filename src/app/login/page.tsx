@@ -196,13 +196,15 @@ export default function LoginPage() {
         <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-xl">
           <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
             <Link href={backHref} className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-600 text-white">
-                {branding.logoUrl ? (
-                  <img src={branding.logoUrl} alt={branding.marketplaceName} className="h-6 w-6 object-contain" />
-                ) : (
+              {branding.logoUrl ? (
+                <div className="flex h-10 items-center">
+                  <img src={branding.logoUrl} alt={branding.marketplaceName} className="h-10 w-auto max-w-[180px] object-contain" />
+                </div>
+              ) : (
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-600 text-white">
                   <Store className="h-5 w-5" />
-                )}
-              </div>
+                </div>
+              )}
               <div>
                 <div className="text-sm font-semibold leading-none text-white">{branding.marketplaceName}</div>
                 <div className="mt-1 text-xs text-slate-400">{branding.marketplaceTagline}</div>
@@ -238,15 +240,23 @@ export default function LoginPage() {
             <CardHeader className="space-y-4 pb-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg shadow-lg ${isCustomerContext ? 'bg-cyan-600 shadow-cyan-950/30' : 'bg-blue-600 shadow-blue-950/30'}`}>
-                    {branding.logoUrl ? (
-                      <img src={branding.logoUrl} alt={isCustomerContext ? branding.marketplaceName : branding.platformName} className="h-6 w-6 object-contain" />
-                    ) : isCustomerContext ? (
-                      <Store className="h-5 w-5 text-white" />
-                    ) : (
-                      <Cpu className="h-5 w-5 text-white" />
-                    )}
-                  </div>
+                  {branding.logoUrl ? (
+                    <div className="flex h-10 items-center">
+                      <img
+                        src={branding.logoUrl}
+                        alt={isCustomerContext ? branding.marketplaceName : branding.platformName}
+                        className="h-10 w-auto max-w-[180px] object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-lg shadow-lg ${isCustomerContext ? 'bg-cyan-600 shadow-cyan-950/30' : 'bg-blue-600 shadow-blue-950/30'}`}>
+                      {isCustomerContext ? (
+                        <Store className="h-5 w-5 text-white" />
+                      ) : (
+                        <Cpu className="h-5 w-5 text-white" />
+                      )}
+                    </div>
+                  )}
                   <div>
                     <p className="text-sm font-semibold text-slate-100">{isCustomerContext ? branding.marketplaceName : branding.platformName}</p>
                     <p className="mt-0.5 text-xs text-slate-500">{isCustomerContext ? 'Cuenta de cliente' : branding.loginEyebrow}</p>

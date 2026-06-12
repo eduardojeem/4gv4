@@ -25,7 +25,7 @@ async function handler(
     const orgId = context.organizationId
 
     // Load website_settings + org data in parallel for fallback hydration
-    let settingsQuery = adminSupabase.from('website_settings').select('key, value')
+    let settingsQuery = adminSupabase.from('website_settings').select('organization_id, key, value')
     if (orgId) {
       // Return rows for this org OR legacy rows with NULL / default org_id
       // (legacy rows are still valid until the backfill migration runs)
@@ -35,10 +35,14 @@ async function handler(
     const [
       { data: settings, error },
       { data: orgSettings },
+      { data: organization },
       { data: branch },
     ] = await Promise.all([
       settingsQuery,
       userSupabase.from('organization_settings').select('display_name').maybeSingle(),
+      orgId
+        ? adminSupabase.from('organizations').select('name, marketplace_public').eq('id', orgId).maybeSingle()
+        : Promise.resolve({ data: null }),
       userSupabase.from('branches').select('phone, email, address, city').eq('is_default', true).maybeSingle(),
     ])
 
@@ -49,7 +53,13 @@ async function handler(
 
     // Transformar array a objeto
     const settingsObj: Partial<WebsiteSettings> = {}
-    settings?.forEach((setting) => {
+    const sortedSettings = [...(settings ?? [])].sort((a, b) => {
+      const aPriority = a.organization_id === orgId ? 1 : 0
+      const bPriority = b.organization_id === orgId ? 1 : 0
+      return aPriority - bPriority
+    })
+
+    sortedSettings.forEach((setting) => {
       settingsObj[setting.key as keyof WebsiteSettings] = setting.value
     })
 
@@ -59,10 +69,11 @@ async function handler(
     const ci = normalized.company_info
     normalized.company_info = {
       ...ci,
-      name:    ci.name    || orgSettings?.display_name || '',
+      name:    ci.name    || orgSettings?.display_name || organization?.name || '',
       phone:   ci.phone   || branch?.phone   || '',
       email:   ci.email   || branch?.email   || '',
       address: ci.address || branch?.address || '',
+      marketplacePublic: organization?.marketplace_public !== false,
     }
 
     return NextResponse.json({

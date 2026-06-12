@@ -8,6 +8,7 @@ const syncSchema = z.object({
   phone: z.string().trim().max(50).optional().or(z.literal('')),
   address: z.string().trim().max(300).optional().or(z.literal('')),
   email: z.string().trim().max(254).optional().or(z.literal('')),
+  marketplacePublic: z.boolean().optional(),
 })
 
 async function handler(request: NextRequest, userId: string) {
@@ -17,7 +18,7 @@ async function handler(request: NextRequest, userId: string) {
     return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 })
   }
 
-  const { name, phone, address, email } = parsed.data
+  const { name, phone, address, email, marketplacePublic } = parsed.data
   const admin = createAdminSupabase()
 
   const { data: membership } = await admin
@@ -42,7 +43,10 @@ async function handler(request: NextRequest, userId: string) {
     .maybeSingle()
 
   await Promise.all([
-    admin.from('organizations').update({ name }).eq('id', orgId),
+    admin.from('organizations').update({
+      name,
+      ...(typeof marketplacePublic === 'boolean' ? { marketplace_public: marketplacePublic } : {}),
+    }).eq('id', orgId),
     admin.from('organization_settings').update({ display_name: name }).eq('organization_id', orgId),
     defaultBranch?.id
       ? admin.from('branches').update({

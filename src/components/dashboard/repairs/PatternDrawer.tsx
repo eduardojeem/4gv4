@@ -25,6 +25,7 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
   const [isDrawing, setIsDrawing] = useState(false)
   const [selectedPoints, setSelectedPoints] = useState<Point[]>([])
   const [currentPath, setCurrentPath] = useState<string>('')
+  const [incompleteHint, setIncompleteHint] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -177,17 +178,23 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
   // Handle mouse/touch end
   const handleEnd = useCallback(() => {
     if (!isDrawing) return
-    
+
     setIsDrawing(false)
-    
+
     // Generate pattern string
     if (selectedPoints.length >= 2) {
+      setIncompleteHint(false)
       const patternString = selectedPoints
         .map(p => `${p.row + 1}${p.col + 1}`)
         .join('-')
-      
+
       const description = generatePatternDescription(selectedPoints)
       onChange(`${description} (${patternString})`)
+    } else if (selectedPoints.length === 1) {
+      // Un solo punto no es un patrón válido: descartarlo y avisar,
+      // antes quedaba el punto marcado sin guardarse nada.
+      setSelectedPoints([])
+      setIncompleteHint(true)
     }
   }, [isDrawing, selectedPoints, onChange])
 
@@ -228,7 +235,7 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
     if (points.length === 2) return 'Línea simple'
     if (points.length === 3) return 'Patrón de 3 puntos'
     if (points.length === 4) return 'Patrón de 4 puntos'
-    if (points.length >= 5) return `Patrón complejo (${points.length} puntos)`
+    if (points.length >= 5) return `Patrón complejo de ${points.length} puntos`
     
     return 'Patrón personalizado'
   }
@@ -237,6 +244,7 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
   const clearPattern = useCallback(() => {
     setSelectedPoints([])
     setCurrentPath('')
+    setIncompleteHint(false)
     onChange('')
   }, [onChange])
 
@@ -279,7 +287,10 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
     const parsedPoints: Point[] = []
 
     // 1. Try format: "Description (11-12-13)" or "(11-12-13)"
-    const parenMatch = value.match(/\(([^)]+)\)/)
+    // Usar el ULTIMO grupo de parentesis: la descripcion puede contener
+    // parentesis propios, p.ej. "Patrón complejo (5 puntos) (11-21-31-32-33)"
+    const parenMatches = Array.from(value.matchAll(/\(([^)]+)\)/g))
+    const parenMatch = parenMatches.length > 0 ? parenMatches[parenMatches.length - 1] : null
     if (parenMatch) {
       const patternString = parenMatch[1]
       const pointCodes = patternString.split(/[-\s,]+/) // split by - or space or comma
@@ -408,6 +419,12 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
             )}
           </div>
         </div>
+
+        {incompleteHint && (
+          <div className="text-xs font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded p-2 border border-amber-200 dark:border-amber-900 text-center">
+            Une al menos 2 puntos para registrar el patrón
+          </div>
+        )}
 
         {selectedPoints.length > 0 ? (
           <div className="space-y-2">

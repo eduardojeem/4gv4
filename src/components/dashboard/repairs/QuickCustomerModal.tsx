@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/dialog'
 import { User, Phone, Mail, Loader2, UserPlus, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
-import { createClient } from '@/lib/supabase/client'
 
 interface QuickCustomerModalProps {
   open: boolean
@@ -67,8 +66,6 @@ export function QuickCustomerModal({
 
     setIsSubmitting(true)
     try {
-      const supabase = createClient()
-      
       const payload = {
         name: formData.name.trim(),
         phone: formData.phone.trim() || null,
@@ -76,19 +73,30 @@ export function QuickCustomerModal({
       }
 
       if (customerToEdit) {
-        // Update existing customer
-        const { data: customerRow, error } = await supabase
-          .from('customers')
-          .update(payload)
-          .eq('id', customerToEdit.id)
-          .select('id, name, phone, email')
-          .single()
+        const response = await fetch('/api/repairs/customers', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: customerToEdit.id,
+            ...payload,
+          }),
+        })
 
-        if (error) throw error
+        const body = await response.json().catch(() => null) as {
+          success?: boolean
+          data?: { id: string; name?: string | null; phone?: string | null; email?: string | null }
+          error?: string
+        } | null
+
+        if (!response.ok || !body?.success || !body.data) {
+          throw new Error(body?.error || 'Error al actualizar el cliente')
+        }
+
+        const customerRow = body.data
 
         const updatedCustomer = {
           id: customerRow.id,
-          name: customerRow.name,
+          name: customerRow.name || '',
           phone: customerRow.phone || '',
           email: customerRow.email || ''
         }
@@ -96,22 +104,27 @@ export function QuickCustomerModal({
         onCustomerUpdated?.(updatedCustomer)
         toast.success(`Cliente "${formData.name}" actualizado exitosamente`)
       } else {
-        // Create new customer
-        const { data: customerRow, error } = await supabase
-          .from('customers')
-          .insert({
-            ...payload,
-            customer_type: 'regular',
-            status: 'active',
-          })
-          .select('id, name, phone, email')
-          .single()
+        const response = await fetch('/api/repairs/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
 
-        if (error) throw error
+        const body = await response.json().catch(() => null) as {
+          success?: boolean
+          data?: { id: string; name?: string | null; phone?: string | null; email?: string | null }
+          error?: string
+        } | null
+
+        if (!response.ok || !body?.success || !body.data) {
+          throw new Error(body?.error || 'Error al crear el cliente')
+        }
+
+        const customerRow = body.data
 
         const newCustomer = {
           id: customerRow.id,
-          name: customerRow.name,
+          name: customerRow.name || '',
           phone: customerRow.phone || '',
           email: customerRow.email || ''
         }
@@ -121,9 +134,9 @@ export function QuickCustomerModal({
       }
       
       handleClose()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving customer:', error)
-      const message = error?.message || 'Error al guardar el cliente'
+      const message = error instanceof Error ? error.message : 'Error al guardar el cliente'
       
       if (message.includes('duplicate key') && message.includes('email')) {
         toast.error('Ya existe un cliente con ese email')

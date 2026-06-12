@@ -5,7 +5,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
-import { resolvePublicOrganization } from '@/lib/saas/public-tenant'
+import { resolvePublicStorefrontOrganization } from '@/lib/saas/public-tenant'
 
 type ProductRow = {
   id: string
@@ -41,7 +41,7 @@ export async function GET(
     const productId = decodeURIComponent(id)
 
     const supabase = createAdminSupabase() as SupabaseClient
-    const organization = await resolvePublicOrganization(request, supabase)
+    const organization = await resolvePublicStorefrontOrganization(request, supabase)
 
     if (!organization) {
       return NextResponse.json(
@@ -62,6 +62,9 @@ export async function GET(
       ? 'id, name, sku, description, brand, sale_price, wholesale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
       : 'id, name, sku, description, brand, sale_price, offer_price, has_offer, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name)'
 
+    // Supabase's inferred builder type here explodes into an overly large union.
+    // Keep the query typed at runtime and let the final payload shape stay explicit.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const productsTable = supabase.from('products') as any
 
     let byIdQuery = productsTable

@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
-  BarChart3,
   Banknote,
+  BarChart3,
+  Bug,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -20,6 +21,7 @@ import {
   LogOut,
   Mail,
   Menu,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -29,28 +31,32 @@ import {
   Trash2,
   Users,
   Wrench,
-  Bug,
   X,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAuth } from '@/contexts/auth-context'
 import { cn } from '@/lib/utils'
 
-// ---------------------------------------------------------------------------
-// Nav definition
-// ---------------------------------------------------------------------------
-
 type NavSection = 'overview' | 'tenants' | 'billing' | 'content' | 'system'
+type NavIcon = React.ComponentType<{ className?: string }>
 
 type NavChild = {
   title: string
   href: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: NavIcon
   description?: string
 }
 
@@ -61,74 +67,87 @@ type NavItem = NavChild & {
 }
 
 const sectionMeta: Record<NavSection, { label: string; color: string }> = {
-  overview: { label: 'Visión general', color: 'text-sky-400' },
-  tenants:  { label: 'Tenants',        color: 'text-blue-400' },
-  billing:  { label: 'Facturación',    color: 'text-emerald-400' },
-  content:  { label: 'Contenido web',  color: 'text-violet-400' },
-  system:   { label: 'Sistema',        color: 'text-orange-400' },
+  overview: { label: 'Vision general', color: 'text-sky-400' },
+  tenants: { label: 'Tenants', color: 'text-blue-400' },
+  billing: { label: 'Facturacion', color: 'text-emerald-400' },
+  content: { label: 'Contenido web', color: 'text-violet-400' },
+  system: { label: 'Sistema', color: 'text-orange-400' },
 }
 
 const sectionOrder: NavSection[] = ['overview', 'tenants', 'billing', 'content', 'system']
 
 const navItems: NavItem[] = [
-  { title: 'Dashboard',     href: '/superadmin',              icon: BarChart3,  description: 'Métricas globales del sistema',            section: 'overview' },
-  { title: 'Analíticas',    href: '/superadmin/analytics',    icon: Activity,   description: 'Crecimiento, ingresos y actividad SaaS',   section: 'overview' },
-  { title: 'Métricas SaaS', href: '/superadmin/saas-metrics', icon: Database,   description: 'Uso, consumo y salud comercial',           section: 'overview' },
-
+  { title: 'Dashboard', href: '/superadmin', icon: BarChart3, description: 'Metricas globales del sistema', section: 'overview' },
+  { title: 'Analiticas', href: '/superadmin/analytics', icon: Activity, description: 'Crecimiento, ingresos y actividad SaaS', section: 'overview' },
+  { title: 'Metricas SaaS', href: '/superadmin/saas-metrics', icon: Database, description: 'Uso, consumo y salud comercial', section: 'overview' },
   {
-    title: 'Organizaciones', href: '/superadmin/organizations', icon: Building2, description: 'Clientes y tenants del sistema', section: 'tenants',
+    title: 'Organizaciones',
+    href: '/superadmin/organizations',
+    icon: Building2,
+    description: 'Clientes y tenants del sistema',
+    section: 'tenants',
     children: [
-      { title: 'Todas las organizaciones', href: '/superadmin/organizations',          icon: Building2 },
-      { title: 'Nueva organización',       href: '/superadmin/organizations/create',  icon: Sparkles },
-      { title: 'Configuración tenants',    href: '/superadmin/organizations/settings', icon: Settings },
+      { title: 'Todas las organizaciones', href: '/superadmin/organizations', icon: Building2 },
+      { title: 'Nueva organizacion', href: '/superadmin/organizations/create', icon: Sparkles },
+      { title: 'Configuracion tenants', href: '/superadmin/organizations/settings', icon: Settings },
     ],
   },
   {
-    title: 'Usuarios', href: '/superadmin/users', icon: Users, description: 'Usuarios de todo el sistema', section: 'tenants',
+    title: 'Usuarios',
+    href: '/superadmin/users',
+    icon: Users,
+    description: 'Usuarios de todo el sistema',
+    section: 'tenants',
     children: [
-      { title: 'Todos los usuarios', href: '/superadmin/users',             icon: Users },
-      { title: 'Super admins',       href: '/superadmin/users/super-admins', icon: Crown },
+      { title: 'Todos los usuarios', href: '/superadmin/users', icon: Users },
+      { title: 'Super admins', href: '/superadmin/users/super-admins', icon: Crown },
     ],
   },
-
-  { title: 'Planes',              href: '/superadmin/plans',         icon: Sparkles,      badge: 'SaaS', description: 'Planes, límites y paquetes',          section: 'billing' },
-  { title: 'Suscripciones',       href: '/superadmin/subscriptions', icon: CreditCard,                  description: 'Suscripciones activas por tenant',    section: 'billing' },
-  { title: 'Historial de pagos',  href: '/superadmin/invoices',      icon: FileText,                    description: 'Comprobantes y pagos recibidos',      section: 'billing' },
-  { title: 'Resumen financiero',  href: '/superadmin/billing',       icon: Banknote,                    description: 'MRR, ARR y métricas de ingresos',     section: 'billing' },
-
+  { title: 'Planes', href: '/superadmin/plans', icon: Sparkles, badge: 'SaaS', description: 'Planes, limites y paquetes', section: 'billing' },
+  { title: 'Suscripciones', href: '/superadmin/subscriptions', icon: CreditCard, description: 'Suscripciones activas por tenant', section: 'billing' },
+  { title: 'Historial de pagos', href: '/superadmin/invoices', icon: FileText, description: 'Comprobantes y pagos recibidos', section: 'billing' },
+  { title: 'Resumen financiero', href: '/superadmin/billing', icon: Banknote, description: 'MRR, ARR y metricas de ingresos', section: 'billing' },
   {
-    title: 'Contenido web', href: '/superadmin/web-content', icon: Globe, description: 'Páginas públicas del sistema SaaS', section: 'content',
+    title: 'Contenido web',
+    href: '/superadmin/web-content',
+    icon: Globe,
+    description: 'Paginas publicas del sistema SaaS',
+    section: 'content',
     children: [
-      { title: 'Contenido general', href: '/superadmin/web-content',            icon: Globe },
-      { title: 'Marca SaaS',        href: '/superadmin/web-content/brand',      icon: Sparkles },
-      { title: 'Landing',           href: '/superadmin/web-content/landing',    icon: LayoutTemplate },
-      { title: 'Marketplace',       href: '/superadmin/web-content/marketplace', icon: Store },
+      { title: 'Contenido general', href: '/superadmin/web-content', icon: Globe },
+      { title: 'Marca SaaS', href: '/superadmin/web-content/brand', icon: Sparkles },
+      { title: 'Landing', href: '/superadmin/web-content/landing', icon: LayoutTemplate },
+      { title: 'Marketplace', href: '/superadmin/web-content/marketplace', icon: Store },
     ],
   },
-
   {
-    title: 'Monitoreo', href: '/superadmin/monitoring', icon: Activity, badge: 'Live', description: 'Salud, rendimiento y conexiones', section: 'system',
+    title: 'Monitoreo',
+    href: '/superadmin/monitoring',
+    icon: Activity,
+    badge: 'Live',
+    description: 'Salud, rendimiento y conexiones',
+    section: 'system',
     children: [
-      { title: 'Vista general',  href: '/superadmin/monitoring',            icon: Activity },
-      { title: 'Base de datos',  href: '/superadmin/database-monitoring',   icon: Database },
+      { title: 'Vista general', href: '/superadmin/monitoring', icon: Activity },
+      { title: 'Base de datos', href: '/superadmin/database-monitoring', icon: Database },
     ],
   },
-  { title: 'Audit Logs',    href: '/superadmin/audit-logs', icon: Shield,   description: 'Registro de auditoría y trazabilidad', section: 'system' },
-  { title: 'Emails',        href: '/superadmin/emails',     icon: Mail,     description: 'Plantillas transaccionales',           section: 'system' },
-  { title: 'Configuración', href: '/superadmin/settings',   icon: Settings, description: 'Parámetros globales del sistema',      section: 'system' },
+  { title: 'Audit Logs', href: '/superadmin/audit-logs', icon: Shield, description: 'Registro de auditoria y trazabilidad', section: 'system' },
+  { title: 'Emails', href: '/superadmin/emails', icon: Mail, description: 'Plantillas transaccionales', section: 'system' },
+  { title: 'Configuracion', href: '/superadmin/settings', icon: Settings, description: 'Parametros globales del sistema', section: 'system' },
   {
-    title: 'Mantenimiento', href: '/superadmin/maintenance', icon: Wrench, description: 'Caché, sesiones y purga de logs', section: 'system',
+    title: 'Mantenimiento',
+    href: '/superadmin/maintenance',
+    icon: Wrench,
+    description: 'Cache, sesiones y purga de logs',
+    section: 'system',
     children: [
-      { title: 'Tareas globales',  href: '/superadmin/maintenance',     icon: Wrench },
-      { title: 'Storage cleanup',  href: '/superadmin/storage-cleanup', icon: Trash2 },
+      { title: 'Tareas globales', href: '/superadmin/maintenance', icon: Wrench },
+      { title: 'Storage cleanup', href: '/superadmin/storage-cleanup', icon: Trash2 },
     ],
   },
-  { title: 'Diagnóstico', href: '/superadmin/diagnostic', icon: Bug, description: 'Pruebas rápidas de APIs y permisos', section: 'system' },
+  { title: 'Diagnostico', href: '/superadmin/diagnostic', icon: Bug, description: 'Pruebas rapidas de APIs y permisos', section: 'system' },
 ]
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function isItemActive(pathname: string, item: NavChild) {
   if (item.href === '/superadmin') return pathname === item.href
@@ -136,9 +155,9 @@ function isItemActive(pathname: string, item: NavChild) {
 }
 
 function getActiveItem(pathname: string) {
-  const allItems = navItems.flatMap((item) => [item, ...(item.children ?? [])])
+  const allItems = navItems.flatMap(item => [item, ...(item.children ?? [])])
   return allItems
-    .filter((item) => isItemActive(pathname, item))
+    .filter(item => isItemActive(pathname, item))
     .sort((a, b) => b.href.length - a.href.length)[0]
 }
 
@@ -146,22 +165,25 @@ function getBreadcrumbs(pathname: string): { title: string; href: string }[] {
   const active = getActiveItem(pathname)
   if (!active) return []
 
-  const parent = navItems.find((item) => item.children?.some((child) => child.href === active.href))
+  const parent = navItems.find(item => item.children?.some(child => child.href === active.href))
   const segments: { title: string; href: string }[] = []
 
-  if (parent && parent.href !== active.href) segments.push({ title: parent.title, href: parent.href })
-  segments.push({ title: active.title, href: active.href })
+  if (parent && parent.href !== active.href) {
+    segments.push({ title: parent.title, href: parent.href })
+  }
 
+  segments.push({ title: active.title, href: active.href })
   return segments
 }
 
 function getInitials(name: string) {
-  return name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+  return name
+    .split(' ')
+    .map(part => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
 }
-
-// ---------------------------------------------------------------------------
-// Individual child link
-// ---------------------------------------------------------------------------
 
 function ChildLink({
   child,
@@ -194,9 +216,77 @@ function ChildLink({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Nav item (leaf or parent-with-children)
-// ---------------------------------------------------------------------------
+function CollapsedNavMenu({
+  item,
+  pathname,
+  isActive,
+  sectionColor,
+  onNavigate,
+}: {
+  item: NavItem
+  pathname: string
+  isActive: boolean
+  sectionColor: string
+  onNavigate: (href: string) => void
+}) {
+  const Icon = item.icon
+
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={item.title}
+              aria-current={isItemActive(pathname, item) ? 'page' : undefined}
+              className={cn(
+                'relative flex h-9 w-full items-center justify-center rounded-lg transition-all duration-150',
+                isActive ? 'bg-white/10 text-white' : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'
+              )}
+            >
+              <Icon className={cn('h-4 w-4', isActive ? sectionColor : '')} />
+              {isActive && <span className="absolute left-0 h-5 w-0.5 rounded-r bg-white/50" />}
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="right" className="flex items-center gap-2">
+          <span>{item.title}</span>
+          {item.badge && <Badge variant="secondary" className="h-4 rounded px-1 text-[10px]">{item.badge}</Badge>}
+          <span className="text-slate-400">- {item.children?.length ?? 0} subs</span>
+        </TooltipContent>
+      </Tooltip>
+
+      <DropdownMenuContent side="right" align="start" className="w-64">
+        <DropdownMenuLabel className="flex items-center gap-2">
+          <Icon className="h-4 w-4" />
+          <span>{item.title}</span>
+          {item.badge && <Badge variant="outline" className="ml-auto h-4 rounded px-1 text-[10px]">{item.badge}</Badge>}
+        </DropdownMenuLabel>
+        <DropdownMenuItem asChild>
+          <Link href={item.href} onClick={() => onNavigate(item.href)}>
+            <Icon className="mr-2 h-4 w-4" />
+            <span>{item.title}</span>
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {item.children?.map((child) => {
+          const ChildIcon = child.icon
+          const childActive = isItemActive(pathname, child)
+
+          return (
+            <DropdownMenuItem key={child.href} asChild className={cn(childActive && 'bg-accent text-accent-foreground')}>
+              <Link href={child.href} onClick={() => onNavigate(child.href)}>
+                <ChildIcon className="mr-2 h-4 w-4" />
+                <span>{child.title}</span>
+              </Link>
+            </DropdownMenuItem>
+          )
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 function NavItemRow({
   item,
@@ -221,8 +311,19 @@ function NavItemRow({
   const hasChildren = Boolean(item.children?.length)
   const isCurrent = isItemActive(pathname, item)
 
-  // ── Collapsed mode: icon-only with tooltip ──────────────────────────────
   if (collapsed) {
+    if (hasChildren) {
+      return (
+        <CollapsedNavMenu
+          item={item}
+          pathname={pathname}
+          isActive={isActive}
+          sectionColor={sectionColor}
+          onNavigate={onNavigate}
+        />
+      )
+    }
+
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -241,18 +342,15 @@ function NavItemRow({
           </Link>
         </TooltipTrigger>
         <TooltipContent side="right" className="flex items-center gap-2">
-          {item.title}
+          <span>{item.title}</span>
           {item.badge && <Badge variant="secondary" className="h-4 rounded px-1 text-[10px]">{item.badge}</Badge>}
-          {hasChildren && <span className="text-slate-400">· {item.children!.length} subs</span>}
         </TooltipContent>
       </Tooltip>
     )
   }
 
-  // ── Expanded mode ────────────────────────────────────────────────────────
   return (
     <div>
-      {/* Parent row */}
       <div className="relative flex items-center gap-0.5">
         {isActive && !hasChildren && <span className="absolute -left-3 h-6 w-0.5 rounded-r bg-white/40" />}
         <Link
@@ -264,14 +362,18 @@ function NavItemRow({
             isActive && !hasChildren
               ? 'bg-white/10 text-white'
               : hasChildren && isExpanded
-              ? 'text-slate-200 hover:text-white'
-              : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
+                ? 'text-slate-200 hover:text-white'
+                : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
           )}
         >
-          <div className={cn(
-            'flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors',
-            isActive || (hasChildren && isExpanded) ? `bg-white/10 ${sectionColor}` : 'bg-white/5 text-slate-500 group-hover:text-slate-300'
-          )}>
+          <div
+            className={cn(
+              'flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors',
+              isActive || (hasChildren && isExpanded)
+                ? `bg-white/10 ${sectionColor}`
+                : 'bg-white/5 text-slate-500 group-hover:text-slate-300'
+            )}
+          >
             <Icon className="h-3.5 w-3.5" />
           </div>
           <span className="min-w-0 flex-1 truncate">{item.title}</span>
@@ -288,26 +390,22 @@ function NavItemRow({
           )}
         </Link>
 
-        {/* Expand/collapse for parent items */}
         {hasChildren && (
           <button
             type="button"
-            aria-label={isExpanded ? 'Colapsar sección' : 'Expandir sección'}
+            aria-label={isExpanded ? 'Colapsar seccion' : 'Expandir seccion'}
             aria-expanded={isExpanded}
             onClick={() => onToggleExpanded(item.title)}
-            className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-300'
-            )}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-300"
           >
-            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-250', isExpanded && 'rotate-180')} />
+            <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', isExpanded && 'rotate-180')} />
           </button>
         )}
       </div>
 
-      {/* Children tree */}
       {hasChildren && isExpanded && (
         <div className="ml-3 mt-1 space-y-1 border-l border-white/10 pl-2">
-          {item.children!.map((child) => (
+          {item.children?.map((child) => (
             <ChildLink
               key={child.href}
               child={child}
@@ -321,10 +419,6 @@ function NavItemRow({
   )
 }
 
-// ---------------------------------------------------------------------------
-// SidebarContent
-// ---------------------------------------------------------------------------
-
 type SidebarContentProps = {
   mode: 'desktop' | 'mobile'
   pathname: string
@@ -333,9 +427,9 @@ type SidebarContentProps = {
   userDisplayName: string
   userEmail: string | null
   onCollapse: () => void
-  onExpand: () => void
   onToggleExpanded: (title: string) => void
   onNavigate: (href: string) => void
+  onCloseMobile: () => void
   onLogout: () => void
 }
 
@@ -347,24 +441,23 @@ function SidebarContent({
   userDisplayName,
   userEmail,
   onCollapse,
-  onExpand,
   onToggleExpanded,
   onNavigate,
+  onCloseMobile,
   onLogout,
 }: SidebarContentProps) {
   const collapsed = mode === 'desktop' && isCollapsed
 
   return (
     <div className="flex h-full flex-col bg-slate-900">
-      {/* Brand */}
       <div className={cn('flex h-16 shrink-0 items-center border-b border-white/10', collapsed ? 'justify-center px-3' : 'justify-between px-4')}>
         <Link href="/superadmin" onClick={() => onNavigate('/superadmin')} className={cn('flex min-w-0 items-center gap-3', collapsed && 'mx-auto')}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500 shadow-lg shadow-indigo-500/30">
-            <Crown className="h-4 w-4 text-white" />
+          <div className="flex h-8 shrink-0 items-center">
+            <img src="/branding/servix-360-logo.png" alt="SERVIX 360" className={cn('w-auto object-contain', collapsed ? 'h-8 max-w-8' : 'h-8 max-w-[132px]')} />
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold leading-tight text-white">MiPOS</p>
+              <p className="truncate text-sm font-bold leading-tight text-white">SERVIX 360</p>
               <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-widest text-indigo-400">
                 Super Admin
               </p>
@@ -389,32 +482,27 @@ function SidebarContent({
         )}
 
         {mode === 'mobile' && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:bg-white/5" onClick={() => onNavigate('')}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:bg-white/5" onClick={onCloseMobile}>
             <X className="h-4 w-4" />
           </Button>
         )}
       </div>
 
-      {/* Nav */}
       <ScrollArea className="flex-1 py-2">
         <nav className={cn('space-y-1', collapsed ? 'px-2' : 'px-3')}>
           {sectionOrder.map((section) => {
-            const items = navItems.filter((item) => item.section === section)
+            const items = navItems.filter(item => item.section === section)
             if (!items.length) return null
-            const { label, color } = sectionMeta[section]
 
+            const { label, color } = sectionMeta[section]
             const sectionHasActive = items.some(
-              (item) => isItemActive(pathname, item) || item.children?.some((c) => isItemActive(pathname, c))
+              item => isItemActive(pathname, item) || item.children?.some(child => isItemActive(pathname, child))
             )
 
             return (
               <div key={section}>
-                {/* Section header */}
                 {!collapsed ? (
-                  <div className={cn(
-                    'mb-1 mt-3 flex items-center gap-2 rounded-md px-2 py-1',
-                    sectionHasActive ? 'bg-white/5' : ''
-                  )}>
+                  <div className={cn('mb-1 mt-3 flex items-center gap-2 rounded-md px-2 py-1', sectionHasActive && 'bg-white/5')}>
                     <div className={cn('h-1.5 w-1.5 rounded-full', color.replace('text-', 'bg-'))} />
                     <span className={cn('text-[10px] font-bold uppercase tracking-[0.2em]', color)}>
                       {label}
@@ -426,8 +514,7 @@ function SidebarContent({
 
                 <div className="space-y-0.5">
                   {items.map((item) => {
-                    const isActive = isItemActive(pathname, item) ||
-                      Boolean(item.children?.some((child) => isItemActive(pathname, child)))
+                    const isActive = isItemActive(pathname, item) || Boolean(item.children?.some(child => isItemActive(pathname, child)))
                     const isExpanded = expandedItems.has(item.title)
 
                     return (
@@ -451,7 +538,6 @@ function SidebarContent({
         </nav>
       </ScrollArea>
 
-      {/* User footer */}
       <div className="shrink-0 border-t border-white/10 p-3">
         {!collapsed ? (
           <div className="flex items-center gap-2.5 rounded-lg bg-white/5 px-3 py-2.5">
@@ -471,12 +557,12 @@ function SidebarContent({
                   size="icon"
                   onClick={onLogout}
                   className="h-7 w-7 shrink-0 text-slate-500 hover:bg-rose-500/10 hover:text-rose-400"
-                  aria-label="Cerrar sesión"
+                  aria-label="Cerrar sesion"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Cerrar sesión</TooltipContent>
+              <TooltipContent side="top">Cerrar sesion</TooltipContent>
             </Tooltip>
           </div>
         ) : (
@@ -500,7 +586,7 @@ function SidebarContent({
                   <LogOut className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">Cerrar sesión</TooltipContent>
+              <TooltipContent side="right">Cerrar sesion</TooltipContent>
             </Tooltip>
           </div>
         )}
@@ -508,10 +594,6 @@ function SidebarContent({
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Breadcrumb
-// ---------------------------------------------------------------------------
 
 function Breadcrumb({ pathname }: { pathname: string }) {
   const crumbs = getBreadcrumbs(pathname)
@@ -525,10 +607,10 @@ function Breadcrumb({ pathname }: { pathname: string }) {
         <Crown className="h-3 w-3" />
         SA
       </Link>
-      {crumbs.map((crumb, i) => (
+      {crumbs.map((crumb, index) => (
         <span key={crumb.href} className="flex min-w-0 items-center gap-1.5">
           <ChevronRight className="h-3 w-3 shrink-0 text-slate-300 dark:text-slate-600" />
-          {i === crumbs.length - 1 ? (
+          {index === crumbs.length - 1 ? (
             <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
               {crumb.title}
             </span>
@@ -546,10 +628,6 @@ function Breadcrumb({ pathname }: { pathname: string }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Main shell export
-// ---------------------------------------------------------------------------
-
 export function SuperAdminShell({
   children,
   userEmail,
@@ -560,49 +638,64 @@ export function SuperAdminShell({
   const pathname = usePathname() ?? '/superadmin'
   const router = useRouter()
   const { signOut, user } = useAuth()
+  const defaultExpandedItems = useMemo(
+    () => new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento']),
+    []
+  )
 
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento'])
 
-  // Hydrate from localStorage
-  useEffect(() => {
     try {
-      setIsCollapsed(window.localStorage.getItem('sa_sidebar_collapsed') === '1')
       const stored = window.localStorage.getItem('sa_sidebar_expanded')
-      if (stored) {
-        const parsed = JSON.parse(stored) as unknown
-        if (Array.isArray(parsed)) {
-          setExpandedItems(new Set(parsed.filter((v): v is string => typeof v === 'string')))
-        }
-      } else {
-        setExpandedItems(new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento']))
+      if (!stored) return new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento'])
+
+      const parsed = JSON.parse(stored) as unknown
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.filter((value): value is string => typeof value === 'string'))
       }
     } catch {
-      setExpandedItems(new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento']))
+      // Ignore malformed local state.
     }
-  }, [])
+
+    return new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento'])
+  })
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+
+    try {
+      return window.localStorage.getItem('sa_sidebar_collapsed') === '1'
+    } catch {
+      return false
+    }
+  })
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
-    try { window.localStorage.setItem('sa_sidebar_collapsed', isCollapsed ? '1' : '0') } catch { /* */ }
+    try {
+      window.localStorage.setItem('sa_sidebar_collapsed', isCollapsed ? '1' : '0')
+    } catch {
+      // Ignore persistence failure.
+    }
   }, [isCollapsed])
 
   useEffect(() => {
-    try { window.localStorage.setItem('sa_sidebar_expanded', JSON.stringify(Array.from(expandedItems))) } catch { /* */ }
+    try {
+      window.localStorage.setItem('sa_sidebar_expanded', JSON.stringify(Array.from(expandedItems)))
+    } catch {
+      // Ignore persistence failure.
+    }
   }, [expandedItems])
 
-  // Auto-expand parent when navigating to child
-  useEffect(() => {
-    const parents = navItems
-      .filter((item) => item.children?.some((child) => isItemActive(pathname, child)))
-      .map((item) => item.title)
-    if (!parents.length) return
-    setExpandedItems((current) => {
-      const next = new Set(current)
-      parents.forEach((p) => next.add(p))
-      return next
-    })
-  }, [pathname])
+  const effectiveExpandedItems = useMemo(() => {
+    const next = new Set(expandedItems.size ? expandedItems : defaultExpandedItems)
+
+    navItems
+      .filter(item => item.children?.some(child => isItemActive(pathname, child)))
+      .forEach(item => next.add(item.title))
+
+    return next
+  }, [defaultExpandedItems, expandedItems, pathname])
 
   const activeItem = useMemo(() => getActiveItem(pathname), [pathname])
   const activeBadge = (activeItem as NavItem | undefined)?.badge ?? null
@@ -611,7 +704,7 @@ export function SuperAdminShell({
   const handleLogout = useCallback(async () => {
     await signOut()
     router.push('/login')
-  }, [signOut, router])
+  }, [router, signOut])
 
   const handleToggleExpanded = useCallback((title: string) => {
     setExpandedItems((current) => {
@@ -622,41 +715,38 @@ export function SuperAdminShell({
     })
   }, [])
 
-  const handleNavigate = useCallback(() => setMobileOpen(false), [])
+  const handleNavigate = useCallback(() => {
+    setMobileOpen(false)
+  }, [])
 
   const sidebarProps: Omit<SidebarContentProps, 'mode'> = {
     pathname,
     isCollapsed,
-    expandedItems,
+    expandedItems: effectiveExpandedItems,
     userDisplayName,
     userEmail,
     onCollapse: () => setIsCollapsed(true),
-    onExpand: () => setIsCollapsed(false),
     onToggleExpanded: handleToggleExpanded,
     onNavigate: handleNavigate,
+    onCloseMobile: () => setMobileOpen(false),
     onLogout: handleLogout,
   }
 
   return (
     <TooltipProvider>
       <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-slate-950">
-
-        {/* Desktop sidebar */}
-        <aside className={cn(
-          'hidden shrink-0 transition-[width] duration-200 md:flex md:flex-col',
-          isCollapsed ? 'w-[60px]' : 'w-60'
-        )}>
+        <aside
+          className={cn(
+            'hidden shrink-0 transition-[width] duration-200 md:flex md:flex-col',
+            isCollapsed ? 'w-[60px]' : 'w-60'
+          )}
+        >
           <SidebarContent mode="desktop" {...sidebarProps} />
         </aside>
 
-        {/* Main area */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-
-          {/* Topbar */}
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex min-w-0 items-center gap-2">
-
-              {/* Expand sidebar button */}
               {isCollapsed && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -669,11 +759,10 @@ export function SuperAdminShell({
                       <PanelLeftOpen className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom">Expandir menú</TooltipContent>
+                  <TooltipContent side="bottom">Expandir menu</TooltipContent>
                 </Tooltip>
               )}
 
-              {/* Mobile hamburger */}
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden">
@@ -682,14 +771,13 @@ export function SuperAdminShell({
                 </SheetTrigger>
                 <SheetContent side="left" className="w-60 p-0">
                   <SheetHeader className="sr-only">
-                    <SheetTitle>Menú Super Admin</SheetTitle>
+                    <SheetTitle>Menu Super Admin</SheetTitle>
                   </SheetHeader>
                   <SidebarContent mode="mobile" {...sidebarProps} />
                 </SheetContent>
               </Sheet>
 
-              {/* Breadcrumb */}
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2 overflow-hidden">
                 <Breadcrumb pathname={pathname} />
                 {activeBadge && (
                   <Badge variant="outline" className="hidden h-5 shrink-0 rounded border-indigo-200 px-1.5 text-[10px] text-indigo-600 sm:inline-flex dark:border-indigo-800 dark:text-indigo-400">
@@ -699,7 +787,6 @@ export function SuperAdminShell({
               </div>
             </div>
 
-            {/* Right actions */}
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="hidden items-center gap-1 md:flex">
                 <Tooltip>
@@ -726,46 +813,75 @@ export function SuperAdminShell({
                 </Tooltip>
               </div>
 
-              {/* Mobile icon-only */}
-              <div className="flex items-center gap-1 md:hidden">
-                <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-                  <Link href="/admin" aria-label="Admin"><Shield className="h-4 w-4" /></Link>
-                </Button>
-                <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-                  <Link href="/dashboard" aria-label="Dashboard"><LayoutDashboard className="h-4 w-4" /></Link>
-                </Button>
+              <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 md:block" />
+              <ThemeToggle />
+              <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 md:block" />
+
+              <div className="hidden md:block">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Super Admin"
+                      className="flex cursor-default items-center gap-2 rounded-lg px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                        {getInitials(userDisplayName)}
+                      </div>
+                      <span className="hidden max-w-[110px] truncate text-xs font-medium text-slate-700 dark:text-slate-300 sm:block">
+                        {userDisplayName}
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p className="font-semibold">{userDisplayName}</p>
+                    {userEmail && <p className="text-xs text-muted-foreground">{userEmail}</p>}
+                    <p className="mt-0.5 flex items-center gap-1 text-[11px] text-indigo-400">
+                      <Crown className="h-2.5 w-2.5" />
+                      Super Admin
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
 
-              <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-              <ThemeToggle />
-              <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-
-              {/* User chip */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="Super Admin"
-                    className="flex cursor-default items-center gap-2 rounded-lg px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
-                      {getInitials(userDisplayName)}
-                    </div>
-                    <span className="hidden max-w-[110px] truncate text-xs font-medium text-slate-700 dark:text-slate-300 sm:block">
-                      {userDisplayName}
-                    </span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p className="font-semibold">{userDisplayName}</p>
-                  {userEmail && <p className="text-xs text-muted-foreground">{userEmail}</p>}
-                  <p className="mt-0.5 flex items-center gap-1 text-[11px] text-indigo-400"><Crown className="h-2.5 w-2.5" /> Super Admin</p>
-                </TooltipContent>
-              </Tooltip>
+              <div className="md:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Acciones Super Admin">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>
+                      <div className="flex flex-col">
+                        <span className="truncate text-sm">{userDisplayName}</span>
+                        {userEmail && <span className="truncate text-xs font-normal text-muted-foreground">{userEmail}</span>}
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin">
+                        <Shield className="mr-2 h-4 w-4" />
+                        <span>Admin</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/dashboard">
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        <span>Dashboard</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => { void handleLogout() }} className="text-red-600 focus:text-red-700">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Cerrar sesion</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </header>
 
-          {/* Page content */}
           <main className="flex-1 overflow-x-auto overflow-y-auto">
             <div className="min-w-0 p-4 sm:p-6">
               {children}

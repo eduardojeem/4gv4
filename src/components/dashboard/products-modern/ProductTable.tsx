@@ -276,6 +276,7 @@ export function ProductTable({
                           src={imageUrl!}
                           alt={product.name}
                           fill
+                          sizes="56px"
                           className="object-cover transition-transform duration-200 hover:scale-110"
                         />
                       ) : (

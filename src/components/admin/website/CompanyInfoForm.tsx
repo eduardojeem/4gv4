@@ -53,6 +53,48 @@ const HEADER_STYLE_HINT: Record<string, string> = {
   glass: 'Efecto cristal translúcido con desenfoque de fondo (glassmorphism).',
 }
 
+const HEADER_PREVIEW_STYLES: Record<string, {
+  header: string
+  topBar: string
+  icon: string
+  subtitle: string
+  activeLink: string
+  inactiveLink: string
+}> = {
+  accent: {
+    header: 'bg-primary text-primary-foreground',
+    topBar: 'border-white/10 bg-white/5 text-primary-foreground/90',
+    icon: 'bg-white text-primary',
+    subtitle: 'text-white/80',
+    activeLink: 'bg-white text-primary shadow-sm',
+    inactiveLink: 'text-white/80',
+  },
+  dark: {
+    header: 'bg-slate-950 text-white border-slate-900',
+    topBar: 'border-slate-900 bg-slate-900/30 text-slate-400',
+    icon: 'bg-primary text-primary-foreground',
+    subtitle: 'text-muted-foreground',
+    activeLink: 'bg-accent text-foreground',
+    inactiveLink: 'text-muted-foreground',
+  },
+  solid: {
+    header: 'bg-background text-foreground border-border/80',
+    topBar: 'border-border/30 bg-muted/40 text-muted-foreground',
+    icon: 'bg-primary text-primary-foreground',
+    subtitle: 'text-muted-foreground',
+    activeLink: 'bg-accent text-foreground',
+    inactiveLink: 'text-muted-foreground',
+  },
+  glass: {
+    header: 'bg-background/80 text-foreground border-b border-border/40 backdrop-blur-lg',
+    topBar: 'border-border/30 bg-muted/40 text-muted-foreground',
+    icon: 'bg-primary text-primary-foreground',
+    subtitle: 'text-muted-foreground',
+    activeLink: 'bg-accent text-foreground',
+    inactiveLink: 'text-muted-foreground',
+  },
+}
+
 export function CompanyInfoForm() {
   const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
   const [draft, setDraft] = useState<CompanyInfo | null>(null)
@@ -63,6 +105,7 @@ export function CompanyInfoForm() {
   const hasChanges = draft !== null
 
   const preview = BRAND_PREVIEW[formData.brandColor || 'blue'] ?? BRAND_PREVIEW.blue
+  const headerPreview = HEADER_PREVIEW_STYLES[formData.headerStyle || 'glass'] ?? HEADER_PREVIEW_STYLES.glass
 
   // Report unsaved changes to the tabs page so switching tabs can warn first.
   const dirtyCtx = useWebsiteEditorDirty()
@@ -148,6 +191,7 @@ export function CompanyInfoForm() {
       instagram: formData.instagram || '',
       facebook: formData.facebook || '',
       tiktok: formData.tiktok || '',
+      marketplacePublic: formData.marketplacePublic !== false,
     }
 
     const result = await updateSetting('company_info', sanitizedData)
@@ -166,6 +210,7 @@ export function CompanyInfoForm() {
           phone: sanitizedData.phone,
           address: sanitizedData.address,
           email: sanitizedData.email,
+          marketplacePublic: sanitizedData.marketplacePublic,
         }),
       }).catch(() => null)
     } else {
@@ -282,6 +327,33 @@ export function CompanyInfoForm() {
         </div>
       </SectionCard>
 
+      <SectionCard icon={Building2} title="Visibilidad publica" description="Controla si la empresa aparece en marketplace y si su sitio publico y ecommerce quedan accesibles">
+        <div className="flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="marketplacePublic" className="text-sm font-semibold">Visibilidad publica</Label>
+              <span
+                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  formData.marketplacePublic !== false
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
+                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                }`}
+              >
+                {formData.marketplacePublic !== false ? 'Publico' : 'Privado'}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Si esta activo, tu empresa aparece en el marketplace y tambien quedan accesibles su pagina publica y catalogo online.
+            </p>
+          </div>
+          <Switch
+            id="marketplacePublic"
+            checked={formData.marketplacePublic !== false}
+            onCheckedChange={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
+          />
+        </div>
+      </SectionCard>
+
       {/* Personalización visual */}
       <SectionCard icon={Sparkles} title="Personalización visual" description="Color de marca, estilo del header y barra superior">
         <div className="grid gap-8 lg:grid-cols-12">
@@ -369,62 +441,61 @@ export function CompanyInfoForm() {
                 <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
               </div>
 
-              <div className="relative h-44 overflow-hidden rounded-xl border bg-slate-900 shadow-lg">
+              <div
+                className="relative h-44 overflow-hidden rounded-xl border bg-background shadow-lg"
+                data-color-scheme={formData.brandColor || 'blue'}
+              >
                 <div
                   className="pointer-events-none absolute inset-0 select-none bg-cover bg-center opacity-30"
                   style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80")' }}
                 />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/30 via-background/10 to-background/80" />
 
                 {formData.showTopBar !== false && (
-                  <div className="relative z-10 flex select-none items-center justify-between border-b border-white/5 bg-black/40 px-3 py-1 text-[9px] font-medium text-white/90 backdrop-blur-sm">
+                  <div className={`relative z-10 flex select-none items-center justify-between border-b px-3 py-1 text-[9px] font-medium transition-colors ${headerPreview.topBar}`}>
                     <div className="flex items-center gap-2">
-                      <span>📞 {formData.phone || '+595...'}</span>
-                      <span className="hidden sm:inline">| ✉️ {formData.email || 'info@...'}</span>
+                      <span>Tel: {formData.phone || '+595...'}</span>
+                      <span className="hidden sm:inline">| Email: {formData.email || 'info@...'}</span>
                     </div>
-                    <span>🕒 {formData.hours?.weekdays || '8:00 - 18:00'}</span>
+                    <span>Horario: {formData.hours?.weekdays || '8:00 - 18:00'}</span>
                   </div>
                 )}
 
                 <div
-                  className={`relative z-10 flex select-none items-center justify-between border-b px-3 py-2 transition-all ${
-                    formData.headerStyle === 'accent'
-                      ? preview.header
-                      : formData.headerStyle === 'dark'
-                        ? 'bg-gray-950 text-white border-gray-900'
-                        : formData.headerStyle === 'solid'
-                          ? 'bg-white text-gray-800 border-gray-100 shadow-sm'
-                          : 'bg-white/10 text-white border-white/10 backdrop-blur-md'
-                  }`}
+                  className={`relative z-10 flex select-none items-center justify-between border-b px-3 py-2 transition-all ${headerPreview.header}`}
                 >
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2">
                     {formData.logoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={formData.logoUrl} alt="Logo" className="h-5 w-5 object-contain" />
+                      <img src={formData.logoUrl} alt="Logo" className="h-6 w-6 rounded object-contain" />
                     ) : (
-                      <span className="flex h-5 w-5 items-center justify-center rounded bg-white/20 text-[8px] font-extrabold text-white">4G</span>
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-lg text-[8px] font-extrabold ${headerPreview.icon}`}>4G</span>
                     )}
-                    <span className="text-[10px] font-extrabold tracking-tight">{formData.name || 'Empresa'}</span>
+                    <div className="leading-tight">
+                      <span className="block text-[10px] font-extrabold tracking-tight">{formData.name || 'Empresa'}</span>
+                      <span className={`block text-[8px] font-medium ${headerPreview.subtitle}`}>Reparacion y Service</span>
+                    </div>
                   </div>
 
-                  <div className="hidden items-center gap-2.5 text-[8px] font-bold uppercase tracking-wider opacity-90 sm:flex">
-                    <span>Inicio</span>
-                    <span>Productos</span>
-                    <span>Servicios</span>
+                  <div className="hidden items-center gap-1.5 text-[8px] font-semibold sm:flex">
+                    <span className={`rounded-md px-2 py-1 ${headerPreview.activeLink}`}>Inicio</span>
+                    <span className={`rounded-md px-2 py-1 ${headerPreview.inactiveLink}`}>Productos</span>
+                    <span className={`rounded-md px-2 py-1 ${headerPreview.inactiveLink}`}>Servicios</span>
                   </div>
 
                   <button
                     type="button"
                     className={`rounded-md px-2.5 py-1 text-[9px] font-bold shadow-sm transition-all ${
-                      formData.headerStyle === 'accent' ? 'bg-white text-gray-800 hover:bg-gray-50' : preview.cta
+                      formData.headerStyle === 'accent' ? 'bg-white text-primary hover:bg-white/90' : preview.cta
                     }`}
                   >
                     Contacto
                   </button>
                 </div>
 
-                <div className="absolute bottom-2 left-3 right-3 z-10 select-none rounded-lg border border-white/5 bg-black/60 p-3 backdrop-blur-sm">
-                  <h4 className="text-[9px] font-extrabold uppercase tracking-wide text-white">Contenido destacado</h4>
-                  <p className="mt-0.5 text-[8px] leading-relaxed text-white/70">
+                <div className="absolute bottom-2 left-3 right-3 z-10 select-none rounded-lg border border-border/50 bg-background/90 p-3 backdrop-blur-sm">
+                  <h4 className="text-[9px] font-extrabold uppercase tracking-wide text-foreground">Contenido destacado</h4>
+                  <p className="mt-0.5 text-[8px] leading-relaxed text-muted-foreground">
                     El color de marca se aplica a botones, enlaces, tarjetas de servicios y estados de tus reparaciones.
                   </p>
                   <div className="mt-2 flex gap-1.5">

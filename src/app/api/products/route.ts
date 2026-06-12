@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
 import type { AppRole } from '@/lib/auth/role-utils'
@@ -164,11 +165,25 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
         category_id: validated.category_id,
         supplier_id: validated.supplier_id,
         brand: validated.brand,
+        brand_id: validated.brand_id,
         stock_quantity: shouldZeroGlobalStock ? 0 : requestedStock,
         min_stock: validated.min_stock,
+        max_stock: validated.max_stock,
         purchase_price: validated.purchase_price,
         sale_price: validated.sale_price,
+        wholesale_price: validated.wholesale_price,
+        offer_price: validated.offer_price,
+        has_offer: validated.has_offer,
         is_active: validated.is_active,
+        visibility: validated.visibility,
+        warranty_months: validated.warranty_months,
+        warranty_info: validated.warranty_info,
+        return_window_days: validated.return_window_days,
+        exchange_window_days: validated.exchange_window_days,
+        return_policy: validated.return_policy,
+        exchange_policy: validated.exchange_policy,
+        images: validated.images,
+        image_url: validated.image_url,
         barcode: validated.barcode,
         unit_measure: validated.unit_measure
       })
@@ -191,7 +206,10 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
 
     if (branchScopedCreate && branchScope.branchId) {
       try {
-        const branchInventoryClient = supabase as unknown as Parameters<typeof upsertBranchInventoryStock>[0]['supabase']
+        // Tenant, permission, and branch scope were already validated above.
+        // Use service role only for this scoped write because branch_inventory
+        // RLS can otherwise reject the post-insert synchronization.
+        const branchInventoryClient = createAdminSupabase() as unknown as Parameters<typeof upsertBranchInventoryStock>[0]['supabase']
 
         if (defaultBranch?.id && defaultBranch.id !== branchScope.branchId) {
           await upsertBranchInventoryStock({
@@ -215,7 +233,7 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
           branchId: branchScope.branchId,
         })
 
-        await supabase
+        await createAdminSupabase()
           .from('products')
           .delete()
           .eq('id', product.id)
@@ -289,6 +307,29 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
     }
     
     const validated = validationResult.data
+    const { data: existingProduct, error: existingProductError } = await supabase
+      .from('products')
+      .select('id')
+      .eq('id', validated.id)
+      .eq('organization_id', organization.id)
+      .maybeSingle()
+
+    if (existingProductError) {
+      logger.error('Failed to verify product tenant before update', {
+        productId: validated.id,
+        organizationId: organization.id,
+        error: existingProductError.message,
+      })
+      throw existingProductError
+    }
+
+    if (!existingProduct) {
+      return NextResponse.json(
+        { success: false, error: 'Producto no encontrado' },
+        { status: 404 }
+      )
+    }
+
     const desiredStockQuantity = validated.stock_quantity
     const updatePayload: Record<string, unknown> = {
       name: validated.name,
@@ -296,10 +337,24 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
       category_id: validated.category_id,
       supplier_id: validated.supplier_id,
       brand: validated.brand,
+      brand_id: validated.brand_id,
       min_stock: validated.min_stock,
+      max_stock: validated.max_stock,
       purchase_price: validated.purchase_price,
       sale_price: validated.sale_price,
+      wholesale_price: validated.wholesale_price,
+      offer_price: validated.offer_price,
+      has_offer: validated.has_offer,
       is_active: validated.is_active,
+      visibility: validated.visibility,
+      warranty_months: validated.warranty_months,
+      warranty_info: validated.warranty_info,
+      return_window_days: validated.return_window_days,
+      exchange_window_days: validated.exchange_window_days,
+      return_policy: validated.return_policy,
+      exchange_policy: validated.exchange_policy,
+      images: validated.images,
+      image_url: validated.image_url,
       barcode: validated.barcode,
       unit_measure: validated.unit_measure
     }
@@ -332,7 +387,7 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
 
     if (branchScope.branchId && desiredStockQuantity !== undefined) {
       await upsertBranchInventoryStock({
-        supabase: supabase as unknown as Parameters<typeof upsertBranchInventoryStock>[0]['supabase'],
+        supabase: createAdminSupabase() as unknown as Parameters<typeof upsertBranchInventoryStock>[0]['supabase'],
         branchId: branchScope.branchId,
         productId: validated.id,
         stockQuantity: Number(desiredStockQuantity),

@@ -71,7 +71,38 @@ export const AccessTypeEnum = z.enum([
   'other'
 ], 'Selecciona un tipo de acceso valido')
 
-export const DeviceSchema = z.object({
+// Valida que el dato de acceso exista cuando el tipo lo requiere,
+// y que el PIN sea numerico (se permiten comas/espacios para listar varios).
+const validateDeviceAccess = (
+  device: { accessType?: string; accessPassword?: string },
+  ctx: z.RefinementCtx
+) => {
+  const type = device.accessType || 'none'
+  const pwd = (device.accessPassword || '').trim()
+
+  if (['pin', 'password', 'pattern'].includes(type) && !pwd) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['accessPassword'],
+      message:
+        type === 'pattern'
+          ? 'Dibuja el patron de desbloqueo (o cambia el tipo de acceso)'
+          : type === 'pin'
+            ? 'Ingresa el PIN del dispositivo (o cambia el tipo de acceso)'
+            : 'Ingresa la contrasena del dispositivo (o cambia el tipo de acceso)',
+    })
+  }
+
+  if (type === 'pin' && pwd && !/^[\d\s,/-]+$/.test(pwd)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['accessPassword'],
+      message: 'El PIN solo puede contener numeros (separa varios con comas)',
+    })
+  }
+}
+
+const DeviceBaseSchema = z.object({
   deviceType: DeviceTypeEnum,
 
   brand: z
@@ -109,7 +140,7 @@ export const DeviceSchema = z.object({
     .optional()
     .default([]),
 
-  technician: z.string().min(1, 'Selecciona un tecnico'),
+  technician: z.string().optional().or(z.literal('')).default(''),
 
   estimatedCost: z
     .number()
@@ -119,12 +150,14 @@ export const DeviceSchema = z.object({
     .or(z.literal(0))
 })
 
-export const DeviceSchemaQuick = DeviceSchema.omit({ issue: true }).extend({
+export const DeviceSchema = DeviceBaseSchema.superRefine(validateDeviceAccess)
+
+export const DeviceSchemaQuick = DeviceBaseSchema.omit({ issue: true }).extend({
   issue: z
     .string()
     .min(1, 'Describe brevemente el problema')
     .max(200, 'La descripcion del problema es demasiado larga (maximo 200 caracteres)')
-})
+}).superRefine(validateDeviceAccess)
 
 export const PriorityEnum = z.enum(['low', 'medium', 'high'], 'Selecciona una prioridad valida')
 export const UrgencyEnum = z.enum(['low', 'medium', 'high'], 'Selecciona una urgencia valida')

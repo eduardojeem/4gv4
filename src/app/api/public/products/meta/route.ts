@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
-import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
+import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 
 /**
  * GET /api/public/products/meta
@@ -10,7 +10,7 @@ import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/sa
 export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminSupabase()
-    const organization = await resolvePublicOrganization(request, supabase)
+    const organization = await resolvePublicStorefrontOrganization(request, supabase)
 
     if (!organization) {
       return NextResponse.json(

@@ -10,8 +10,12 @@ import { Resend } from 'resend'
 
 let client: Resend | null = null
 
+export function isResendConfigured() {
+  return Boolean(process.env.RESEND_API_KEY?.trim())
+}
+
 function getClient(): Resend | null {
-  const apiKey = process.env.RESEND_API_KEY
+  const apiKey = process.env.RESEND_API_KEY?.trim()
   if (!apiKey) return null
   if (!client) client = new Resend(apiKey)
   return client
@@ -39,7 +43,8 @@ export interface SendEmailResult {
 
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   const resend = getClient()
-  const from = params.from || process.env.EMAIL_FROM || DEFAULT_FROM
+  const from = params.from || process.env.EMAIL_FROM?.trim() || DEFAULT_FROM
+  const replyTo = params.replyTo || process.env.EMAIL_REPLY_TO?.trim()
 
   if (!resend) {
     console.warn('[email] RESEND_API_KEY no configurada — email omitido', {
@@ -55,7 +60,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       to: params.to,
       subject: params.subject,
       html: params.html,
-      replyTo: params.replyTo,
+      replyTo,
     })
 
     if (error) {

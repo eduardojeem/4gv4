@@ -4,7 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
-import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
+import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort') || 'name'
 
     const supabase = createAdminSupabase()
-    const organization = await resolvePublicOrganization(request, supabase)
+    const organization = await resolvePublicStorefrontOrganization(request, supabase)
 
     if (!organization) {
       return NextResponse.json(

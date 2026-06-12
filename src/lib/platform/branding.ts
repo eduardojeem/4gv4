@@ -18,9 +18,9 @@ export type PlatformBranding = {
 }
 
 export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
-  platformName: 'MiPOS SaaS',
-  platformTagline: 'POS, inventario y marketplace',
-  logoUrl: '',
+  platformName: 'SERVIX 360',
+  platformTagline: 'POS, inventario, marketplace y servicios',
+  logoUrl: '/branding/servix-360-logo.png',
   marketplaceName: 'Marketplace',
   marketplaceTagline: 'Empresas y productos',
   primaryCtaLabel: 'Crear empresa',
@@ -29,9 +29,9 @@ export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
   secondaryCtaHref: '/marketplace',
   loginEyebrow: 'Panel interno',
   loginSubtitle: 'Panel de administracion y staff',
-  seoTitle: 'MiPOS SaaS para tiendas, service y marketplace',
-  seoDescription: 'Sistema SaaS multiempresa para POS, inventario, ecommerce, reparaciones, delivery y marketplace.',
-  footerText: 'Plataforma SaaS para operar tiendas, catalogos y marketplace.',
+  seoTitle: 'SERVIX 360 para POS, inventario, marketplace y servicios',
+  seoDescription: 'Plataforma SaaS multiempresa para POS, inventario, ecommerce, reparaciones, servicios y marketplace.',
+  footerText: 'Una plataforma para operar POS, catalogos, servicios y marketplace.',
 }
 
 const BRANDING_KEY = 'saas_branding'
