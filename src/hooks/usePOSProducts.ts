@@ -4,13 +4,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/lib/supabase/types'
-import type { Product as UnifiedProduct, Category as UnifiedCategory } from '@/types/product-unified'
+import type { Product as UnifiedProduct } from '@/types/product-unified'
 import { config } from '@/lib/config'
 import { useProductRealTimeSync } from './useRealTimeSync'
 import { SALE_STATUS } from '@/lib/sales-status'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
+import { mapProductForPOS, type PosProductRow } from '@/app/dashboard/pos/lib/pos-product-mapper'
 
 type DbProductRow = Database['public']['Tables']['products']['Row']
 type DbCategoryRow = Database['public']['Tables']['categories']['Row']
@@ -46,10 +47,6 @@ interface SaleData {
   payment_method: 'cash' | 'card' | 'transfer'
   customer_id?: string
   notes?: string
-}
-
-type PosProductRow = Product & {
-  categories?: { name: string } | null
 }
 
 // ============================================================================
@@ -114,6 +111,7 @@ export function usePOSProducts() {
           ...newProducts[productIndex],
           name: updatedProduct.name,
           sale_price: updatedProduct.sale_price,
+          wholesale_price: updatedProduct.wholesale_price,
           stock_quantity: updatedProduct.stock_quantity,
           category_id: newCategoryId,
           category: newCategory,
@@ -133,6 +131,7 @@ export function usePOSProducts() {
           sku: updatedProduct.sku,
           barcode: updatedProduct.barcode || undefined,
           sale_price: updatedProduct.sale_price,
+          wholesale_price: updatedProduct.wholesale_price,
           stock_quantity: updatedProduct.stock_quantity,
           category_id: updatedProduct.category_id ?? null,
           category: prevProducts.find(p => p.category_id === updatedProduct.category_id)?.category,
@@ -196,7 +195,7 @@ export function usePOSProducts() {
           // vender cualquier producto aunque esté oculto del público.
           const { data: dbProducts, error } = await supabase
             .from('products')
-            .select('id, name, sku, barcode, sale_price, stock_quantity, category_id, description, is_active, image_url, images, categories(name)')
+            .select('id, name, sku, barcode, sale_price, wholesale_price, stock_quantity, category_id, description, is_active, image_url, images, unit_measure, categories(name)')
             .order('name')
             .limit(5000)
 
@@ -204,22 +203,7 @@ export function usePOSProducts() {
             throw error
           }
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const baseProducts = (dbProducts || []).map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            sku: p.sku || '',
-            barcode: p.barcode,
-            sale_price: Number(p.sale_price),
-            stock_quantity: p.stock_quantity,
-            category_id: p.category_id,
-            category: p.categories ? { id: p.category_id, name: p.categories.name } : undefined,
-            description: p.description,
-            image: (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : undefined) || p.image_url || undefined,
-            unit_measure: 'unidad',
-            is_active: p.is_active,
-            purchase_price: 0
-          } as unknown as UnifiedProduct))
+          const baseProducts = (dbProducts || []).map((product) => mapProductForPOS(product as unknown as PosProductRow))
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
@@ -279,21 +263,7 @@ export function usePOSProducts() {
         return null
       }
 
-      const baseProduct = {
-        id: data.id,
-        name: data.name,
-        sku: data.sku,
-        barcode: data.barcode || undefined,
-        sale_price: data.sale_price,
-        stock_quantity: data.stock_quantity,
-        category_id: data.category_id,
-        category: data.categories ? { id: data.category_id, name: data.categories.name } as UnifiedCategory : undefined,
-        description: data.description || undefined,
-        image: data.images?.[0] || data.image_url || undefined,
-        unit_measure: data.unit_measure || 'unidad',
-        is_active: data.is_active,
-        purchase_price: data.cost_price || 0
-      } as unknown as UnifiedProduct
+      const baseProduct = mapProductForPOS(data as unknown as PosProductRow)
 
       const [branchAwareProduct] = await (loadBranchInventoryStockMap as any)(supabase, selectedBranchId, [baseProduct.id])
         .then(({ stockMap, branchScoped }: any) => (applyBranchInventoryToProducts as any)([baseProduct], stockMap, branchScoped))
