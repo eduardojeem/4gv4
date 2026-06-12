@@ -274,6 +274,20 @@ export function PublicHeader() {
 
         {/* Right side: Theme toggle + CTA + User */}
         <div className="flex items-center gap-2.5">
+          {tenantPrefix && (
+            <Button
+              asChild
+              variant="default"
+              size="sm"
+              className="hidden gap-2 rounded-lg border border-cyan-500/80 bg-cyan-600 font-semibold text-white shadow-sm shadow-cyan-600/20 transition-colors hover:bg-cyan-500 hover:text-white lg:inline-flex"
+            >
+              <Link href="/marketplace" aria-label="Volver al marketplace">
+                <Store className="h-4 w-4" />
+                Marketplace
+              </Link>
+            </Button>
+          )}
+
           <PublicCartButton />
 
           {/* Theme toggle - visible on all screens */}
@@ -427,6 +441,15 @@ export function PublicHeader() {
 
           {/* Mobile CTAs */}
           <div className="flex flex-col gap-2 px-1">
+            {tenantPrefix && (
+              <Link
+                href="/marketplace"
+                className="flex items-center gap-3 rounded-lg border border-cyan-500/80 bg-cyan-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-cyan-600/20 transition-colors hover:bg-cyan-500"
+              >
+                <Store className="h-4 w-4" />
+                Volver al marketplace
+              </Link>
+            )}
             {user ? (
               <>
                 {canAccessDashboard && (
