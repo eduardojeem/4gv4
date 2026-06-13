@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 const TENANT_PUBLIC_SECTIONS = new Set([
   'inicio',
   'productos',
+  'ofertas',
   'mis-reparaciones',
   'track',
   'carrito',

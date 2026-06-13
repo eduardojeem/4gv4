@@ -1,6 +1,8 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Customer } from './use-customer-state'
 import { toast } from 'sonner'
+
+const SEGMENTS_ENDPOINT = '/api/customer-segments'
 
 export interface SegmentRule {
   id: string
@@ -54,11 +56,60 @@ export function useSegmentationUnified(
 ) {
   const { enableAI = true, autoUpdate = true, maxSegments = 20 } = options
 
-  // Estado de segmentos
-  const [segments, setSegments] = useState<Segment[]>(() => getDefaultSegments())
+  // Estado de segmentos (persistidos en customer_segments vía /api/customer-segments)
+  const [segments, setSegments] = useState<Segment[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  const seededRef = useRef(false)
+
+  // Carga inicial desde el backend. Si la organización no tiene segmentos,
+  // siembra los predeterminados una sola vez (útil en el primer uso).
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      try {
+        const res = await fetch(SEGMENTS_ENDPOINT)
+        if (!res.ok) throw new Error('No se pudieron cargar los segmentos')
+        const json = await res.json()
+        const loaded: Segment[] = Array.isArray(json.segments) ? json.segments : []
+
+        if (loaded.length === 0 && !seededRef.current) {
+          seededRef.current = true
+          const defaults = getDefaultSegments()
+          const created: Segment[] = []
+          for (const def of defaults) {
+            const { id: _id, createdAt: _c, updatedAt: _u, ...payload } = def
+            const r = await fetch(SEGMENTS_ENDPOINT, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            })
+            if (r.ok) {
+              const j = await r.json()
+              if (j.segment) created.push(j.segment)
+            }
+          }
+          if (!cancelled) setSegments(created)
+        } else if (!cancelled) {
+          setSegments(loaded)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Error cargando segmentos:', err)
+          toast.error('No se pudieron cargar los segmentos')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Evaluar si un cliente cumple con las reglas de un segmento
   const evaluateCustomerRules = useCallback((customer: Customer, rules: SegmentRule[]): boolean => {
@@ -149,81 +200,125 @@ export function useSegmentationUnified(
     }))
   }, [segments, calculateSegmentMetrics, getSegmentCustomers])
 
+  // Persiste un segmento nuevo (POST) y lo agrega al estado.
+  const persistNewSegment = useCallback(
+    async (
+      data: Omit<Segment, 'id' | 'createdAt' | 'updatedAt'>,
+      successMsg: string,
+    ): Promise<Segment | null> => {
+      try {
+        const res = await fetch(SEGMENTS_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        })
+        if (!res.ok) {
+          const j = await res.json().catch(() => null)
+          throw new Error(j?.error || 'Error al crear el segmento')
+        }
+        const { segment } = await res.json()
+        setSegments(prev => [...prev, segment])
+        toast.success(successMsg)
+        return segment as Segment
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'No se pudo crear el segmento')
+        return null
+      }
+    },
+    [],
+  )
+
   // Crear nuevo segmento
-  const createSegment = useCallback((segmentData: Omit<Segment, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (segments.length >= maxSegments) {
-      toast.error(`Máximo ${maxSegments} segmentos permitidos`)
-      return false
-    }
+  const createSegment = useCallback(
+    async (segmentData: Omit<Segment, 'id' | 'createdAt' | 'updatedAt'>) => {
+      if (segments.length >= maxSegments) {
+        toast.error(`Máximo ${maxSegments} segmentos permitidos`)
+        return false
+      }
+      const created = await persistNewSegment(segmentData, `Segmento "${segmentData.name}" creado exitosamente`)
+      return Boolean(created)
+    },
+    [segments.length, maxSegments, persistNewSegment],
+  )
 
-    const newSegment: Segment = {
-      ...segmentData,
-      id: `segment_${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
+  // Actualizar segmento (optimista con rollback ante error)
+  const updateSegment = useCallback(
+    async (segmentId: string, updates: Partial<Segment>) => {
+      const previous = segments
+      setSegments(prev =>
+        prev.map(s => (s.id === segmentId ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s)),
+      )
+      try {
+        const res = await fetch(`${SEGMENTS_ENDPOINT}/${segmentId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        })
+        if (!res.ok) throw new Error('Error al actualizar')
+        const { segment } = await res.json()
+        setSegments(prev => prev.map(s => (s.id === segmentId ? segment : s)))
+        toast.success('Segmento actualizado exitosamente')
+      } catch {
+        setSegments(previous)
+        toast.error('No se pudo actualizar el segmento')
+      }
+    },
+    [segments],
+  )
 
-    setSegments(prev => [...prev, newSegment])
-    toast.success(`Segmento "${newSegment.name}" creado exitosamente`)
-    return true
-  }, [segments.length, maxSegments])
-
-  // Actualizar segmento
-  const updateSegment = useCallback((segmentId: string, updates: Partial<Segment>) => {
-    setSegments(prev => prev.map(segment => 
-      segment.id === segmentId 
-        ? { ...segment, ...updates, updatedAt: new Date().toISOString() }
-        : segment
-    ))
-    toast.success('Segmento actualizado exitosamente')
-  }, [])
-
-  // Eliminar segmento
-  const deleteSegment = useCallback((segmentId: string) => {
-    setSegments(prev => prev.filter(segment => segment.id !== segmentId))
-    if (selectedSegmentId === segmentId) {
-      setSelectedSegmentId(null)
-    }
-    toast.success('Segmento eliminado exitosamente')
-  }, [selectedSegmentId])
+  // Eliminar segmento (optimista con rollback ante error)
+  const deleteSegment = useCallback(
+    async (segmentId: string) => {
+      const previous = segments
+      setSegments(prev => prev.filter(s => s.id !== segmentId))
+      if (selectedSegmentId === segmentId) setSelectedSegmentId(null)
+      try {
+        const res = await fetch(`${SEGMENTS_ENDPOINT}/${segmentId}`, { method: 'DELETE' })
+        if (!res.ok) throw new Error('Error al eliminar')
+        toast.success('Segmento eliminado exitosamente')
+      } catch {
+        setSegments(previous)
+        toast.error('No se pudo eliminar el segmento')
+      }
+    },
+    [segments, selectedSegmentId],
+  )
 
   // Duplicar segmento
-  const duplicateSegment = useCallback((segmentId: string) => {
-    const segment = segments.find(s => s.id === segmentId)
-    if (!segment) return false
-
-    const duplicatedSegment: Segment = {
-      ...segment,
-      id: `segment_${Date.now()}`,
-      name: `${segment.name} (Copia)`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-
-    setSegments(prev => [...prev, duplicatedSegment])
-    toast.success(`Segmento "${segment.name}" duplicado exitosamente`)
-    return true
-  }, [segments])
+  const duplicateSegment = useCallback(
+    async (segmentId: string) => {
+      const segment = segments.find(s => s.id === segmentId)
+      if (!segment) return false
+      const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = segment
+      const created = await persistNewSegment(
+        { ...rest, name: `${segment.name} (Copia)` },
+        `Segmento "${segment.name}" duplicado exitosamente`,
+      )
+      return Boolean(created)
+    },
+    [segments, persistNewSegment],
+  )
 
   // Activar/desactivar segmento
-  const toggleSegment = useCallback((segmentId: string) => {
-    setSegments(prev => prev.map(segment => 
-      segment.id === segmentId 
-        ? { ...segment, isActive: !segment.isActive, updatedAt: new Date().toISOString() }
-        : segment
-    ))
-  }, [])
+  const toggleSegment = useCallback(
+    (segmentId: string) => {
+      const segment = segments.find(s => s.id === segmentId)
+      if (!segment) return
+      updateSegment(segmentId, { isActive: !segment.isActive })
+    },
+    [segments, updateSegment],
+  )
 
-  // Generar segmentos con IA (simulado)
-  const generateAISegments = useCallback(() => {
+  // Generar segmentos sugeridos a partir de los datos de clientes
+  const generateAISegments = useCallback(async () => {
     if (!enableAI) {
       toast.error('IA no habilitada')
       return
     }
 
     const aiSegments = getAIGeneratedSegments(customers)
-    const newSegments = aiSegments.filter(aiSegment => 
-      !segments.some(existing => existing.name === aiSegment.name)
+    const newSegments = aiSegments.filter(
+      aiSegment => !segments.some(existing => existing.name === aiSegment.name),
     )
 
     if (newSegments.length === 0) {
@@ -231,9 +326,14 @@ export function useSegmentationUnified(
       return
     }
 
-    setSegments(prev => [...prev, ...newSegments])
-    toast.success(`${newSegments.length} segmentos generados por IA`)
-  }, [enableAI, customers, segments])
+    let count = 0
+    for (const seg of newSegments) {
+      const { id: _id, createdAt: _c, updatedAt: _u, ...payload } = seg
+      const created = await persistNewSegment(payload, '')
+      if (created) count++
+    }
+    if (count > 0) toast.success(`${count} segmentos generados`)
+  }, [enableAI, customers, segments, persistNewSegment])
 
   // Obtener insights de segmentación
   const getSegmentationInsights = useCallback(() => {
@@ -264,6 +364,7 @@ export function useSegmentationUnified(
   return {
     // Estado
     segments: segmentsWithMetrics,
+    loading,
     selectedSegmentId,
     isCreating,
     isEditing,

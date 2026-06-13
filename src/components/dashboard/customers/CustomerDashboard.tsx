@@ -22,15 +22,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { 
-  Users, 
-  TrendingUp, 
-  UserCheck, 
+  Users,
+  TrendingUp,
+  UserCheck,
   BarChart3,
-  PieChart,
-  Activity,
   Bell,
   CreditCard,
-  MessageSquare,
   Plus,
   RefreshCw
 } from 'lucide-react'
@@ -45,10 +42,7 @@ const CustomerFilters = dynamic(() => import("./CustomerFilters").then(m => m.Cu
 import { CustomerModal } from './CustomerModal'
 // Componente consolidado de analíticas
 const AnalyticsDashboard = lazy(() => import("./AnalyticsDashboard").then(m => ({ default: m.AnalyticsDashboard })))
-// Componente consolidado de segmentación
-const SegmentationSystem = lazy(() => import("./SegmentationSystem").then(m => ({ default: m.SegmentationSystem })))
-const CustomerCommunications = lazy(() => import("./advanced/CustomerCommunications").then(m => ({ default: m.CustomerCommunications })))
-const NotificationCenter = dynamic(() => import("./NotificationCenter").then(m => m.NotificationCenter), { ssr: false })
+const CustomerAlerts = dynamic(() => import("./CustomerAlerts").then(m => m.CustomerAlerts), { ssr: false })
 import { Customer } from '@/hooks/use-customer-state'
 import { Pagination } from '@/components/ui/pagination'
 import { prefetchCustomerPurchases, prefetchSimilarCustomers } from '@/hooks/useCustomerData'
@@ -73,9 +67,6 @@ type ViewState = 'list' | 'detail' | 'history' | 'edit'
 const dashboardTabs = [
   { value: "customers", icon: <Users className="h-4 w-4" />, label: "Clientes" },
   { value: "analytics", icon: <BarChart3 className="h-4 w-4" />, label: "Analíticas" },
-  { value: "segmentation", icon: <PieChart className="h-4 w-4" />, label: "Segmentos" },
-  { value: "communications", icon: <MessageSquare className="h-4 w-4" />, label: "Mensajes" },
-  { value: "metrics", icon: <Activity className="h-4 w-4" />, label: "Métricas" },
   { value: "notifications", icon: <Bell className="h-4 w-4" />, label: "Alertas" },
 ]
 
@@ -939,24 +930,14 @@ export function CustomerDashboard() {
               </Suspense>
             </TabsContent>
 
-            <TabsContent value="segmentation" className="mt-0">
-              <Suspense fallback={<div className="p-4"><Skeleton className="h-24 w-full" /></div>}>
-                <SegmentationSystem customers={customers} mode="advanced" showAIInsights={true} />
-              </Suspense>
-            </TabsContent>
-
-            <TabsContent value="communications" className="mt-0">
-              <Suspense fallback={<div className="p-4"><Skeleton className="h-24 w-full" /></div>}>
-                <CustomerCommunications customers={customers} />
-              </Suspense>
-            </TabsContent>
-
-            <TabsContent value="metrics" className="mt-0">
-              <AnalyticsDashboard customers={customers} mode="realtime" compact={true} />
-            </TabsContent>
-
             <TabsContent value="notifications" className="mt-0">
-              <NotificationCenter customers={customers} />
+              <CustomerAlerts
+                customers={customers}
+                onViewCustomer={(customer) => {
+                  setActiveTab('customers')
+                  handleViewDetail(customer)
+                }}
+              />
             </TabsContent>
 
 

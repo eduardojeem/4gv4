@@ -11,7 +11,7 @@ export function PublicFooter() {
   const company = settings?.company_info
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantPrefix =
-    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito'].includes(pathSegments[1])
+    pathSegments.length > 1 && ['inicio', 'productos', 'ofertas', 'mis-reparaciones', 'track', 'carrito'].includes(pathSegments[1])
       ? `/${pathSegments[0]}`
       : ''
 

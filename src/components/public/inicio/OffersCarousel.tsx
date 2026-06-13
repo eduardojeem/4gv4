@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, Package, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
+import { ArrowRight, Package, ChevronLeft, ChevronRight, Pause, Play, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
+import type { OffersSectionSettings } from '@/types/website-settings'
+import { cn } from '@/lib/utils'
 import useSWR from 'swr'
 
 export interface OfferCard {
@@ -25,6 +27,44 @@ export interface OfferCard {
 interface OffersCarouselProps {
   companyName: string
   fallbackOffers: OfferCard[]
+  settings: OffersSectionSettings
+}
+
+const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], {
+  section: string
+  eyebrow: string
+  price: string
+  button: string
+  activeDot: string
+}> = {
+  rose: {
+    section: 'border-rose-200 bg-gradient-to-b from-rose-50/90 to-background dark:border-rose-900/40 dark:from-rose-950/25',
+    eyebrow: 'text-rose-700 dark:text-rose-300',
+    price: 'text-rose-700 dark:text-rose-300',
+    button: 'bg-rose-600 text-white hover:bg-rose-700',
+    activeDot: 'bg-rose-600',
+  },
+  amber: {
+    section: 'border-amber-200 bg-gradient-to-b from-amber-50/90 to-background dark:border-amber-900/40 dark:from-amber-950/25',
+    eyebrow: 'text-amber-700 dark:text-amber-300',
+    price: 'text-amber-700 dark:text-amber-300',
+    button: 'bg-amber-600 text-white hover:bg-amber-700',
+    activeDot: 'bg-amber-600',
+  },
+  orange: {
+    section: 'border-orange-200 bg-gradient-to-b from-orange-50/90 to-background dark:border-orange-900/40 dark:from-orange-950/25',
+    eyebrow: 'text-orange-700 dark:text-orange-300',
+    price: 'text-orange-700 dark:text-orange-300',
+    button: 'bg-orange-600 text-white hover:bg-orange-700',
+    activeDot: 'bg-orange-600',
+  },
+  emerald: {
+    section: 'border-emerald-200 bg-gradient-to-b from-emerald-50/90 to-background dark:border-emerald-900/40 dark:from-emerald-950/25',
+    eyebrow: 'text-emerald-700 dark:text-emerald-300',
+    price: 'text-emerald-700 dark:text-emerald-300',
+    button: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    activeDot: 'bg-emerald-600',
+  },
 }
 
 const offersFetcher = async (url: string): Promise<OfferCard[]> => {
@@ -58,11 +98,10 @@ const offersFetcher = async (url: string): Promise<OfferCard[]> => {
     }))
 }
 
-export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselProps) {
+export function OffersCarousel({ companyName, fallbackOffers, settings }: OffersCarouselProps) {
   const pathname = usePathname()
-  const pathSegments = pathname.split('/').filter(Boolean)
-  const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
   const tenantSlug = getTenantSlugFromPathname(pathname)
+  const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
   const { data: offerCards, error, isLoading } = useSWR(
     withOrgQuery('/api/public/products?per_page=50&sort=newest&has_offer=true', tenantSlug),
@@ -72,6 +111,7 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
 
   const offersFetchFailed = Boolean(error)
   const displayedOffers = offersFetchFailed ? fallbackOffers : (offerCards ?? [])
+  const accent = OFFER_ACCENTS[settings.accentColor] ?? OFFER_ACCENTS.rose
 
   const [activeOfferIndex, setActiveOfferIndex] = useState(0)
   const [isCarouselPaused, setIsCarouselPaused] = useState(false)
@@ -90,14 +130,6 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
     media.addEventListener('change', update)
     return () => media.removeEventListener('change', update)
   }, [])
-
-  useEffect(() => {
-    if (displayedOffers.length === 0) {
-      setActiveOfferIndex(0)
-      return
-    }
-    setActiveOfferIndex((prev) => Math.min(prev, displayedOffers.length - 1))
-  }, [displayedOffers.length])
 
   useEffect(() => {
     const handleVisibility = () => setIsDocumentVisible(document.visibilityState === 'visible')
@@ -166,14 +198,17 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
   }, [displayedOffers.length, prefersReducedMotion])
 
   return (
-    <section ref={sectionRef} className="border-t bg-background py-14 md:py-20">
+    <section ref={sectionRef} className={cn('border-y py-14 md:py-20', accent.section)}>
       <div className="container">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.16em] text-muted-foreground">Tienda</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Ofertas y productos destacados</h2>
+            <p className={cn('flex items-center gap-2 text-sm font-bold uppercase tracking-[0.16em]', accent.eyebrow)}>
+              <Tag className="h-4 w-4" />
+              {settings.eyebrow}
+            </p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{settings.title}</h2>
             <p className="mt-3 max-w-2xl text-muted-foreground">
-              Precios actualizados, servicios populares y equipos recomendados por nuestros tecnicos.
+              {settings.subtitle}
             </p>
           </div>
           <Button asChild variant="outline" className="w-full sm:w-auto">
@@ -190,10 +225,14 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
               <div key={idx} className="h-64 animate-pulse rounded-2xl border bg-muted/40" />
             ))}
           </div>
-        ) : !offersFetchFailed && displayedOffers.length === 0 ? (
+        ) : displayedOffers.length === 0 ? (
           <div className="rounded-2xl border border-dashed bg-muted/20 p-8 text-center">
             <p className="text-base font-semibold">No hay ofertas activas en este momento</p>
-            <p className="mt-2 text-sm text-muted-foreground">Cuando actives productos con precio en oferta, apareceran aqui automaticamente.</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {offersFetchFailed
+                ? 'No pudimos cargar las ofertas. Intenta nuevamente en unos minutos.'
+                : 'Cuando actives productos con precio en oferta, apareceran aqui automaticamente.'}
+            </p>
           </div>
         ) : (
           <div
@@ -259,7 +298,7 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
                         {offer.originalPriceLabel && (
                           <p className="text-xs text-muted-foreground line-through">{offer.originalPriceLabel}</p>
                         )}
-                        <p className="text-lg font-bold text-primary">{offer.priceLabel}</p>
+                        <p className={cn('text-lg font-bold', accent.price)}>{offer.priceLabel}</p>
                       </div>
                     </div>
                     <p className="line-clamp-2 text-sm text-muted-foreground">{offer.description}</p>
@@ -267,7 +306,7 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
                       <span className={`text-xs font-medium ${offer.inStock ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {offer.inStock ? 'Disponible' : 'Sin stock'}
                       </span>
-                      <Button asChild size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700">
+                      <Button asChild size="sm" className={accent.button}>
                         <Link href={offer.ctaHref.startsWith('/productos') ? `${tenantPrefix}${offer.ctaHref}` : offer.ctaHref}>Ver detalle</Link>
                       </Button>
                     </div>
@@ -315,7 +354,7 @@ export function OffersCarousel({ companyName, fallbackOffers }: OffersCarouselPr
                         role="tab"
                         aria-selected={idx === activeOfferIndex}
                         onClick={() => goToOffer(idx)}
-                        className={`h-2.5 rounded-full transition-all ${idx === activeOfferIndex ? 'w-8 bg-primary' : 'w-2.5 bg-muted-foreground/30'}`}
+                        className={cn('h-2.5 rounded-full transition-all', idx === activeOfferIndex ? `w-8 ${accent.activeDot}` : 'w-2.5 bg-muted-foreground/30')}
                         aria-label={`Ir a oferta ${idx + 1}`}
                       />
                     ))}

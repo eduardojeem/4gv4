@@ -1,0 +1,72 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import {
+  CAMPAIGN_COLUMNS,
+  organizationRequiredResponse,
+  campaignToClient,
+  campaignToDb,
+} from '@/lib/communications/mappers'
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const auth = await requireStaff()
+  const authResponse = getAuthResponse(auth)
+  if (authResponse) return authResponse
+  const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
+  const organization = await getCurrentOrganizationContext(staffAuth.user.id)
+  if (!organization) return organizationRequiredResponse()
+
+  try {
+    const { id } = await params
+    const body = (await request.json()) as Record<string, unknown>
+    const payload = campaignToDb(body)
+
+    const supabase = createAdminSupabase()
+    const { data, error } = await supabase
+      .from('communication_campaigns')
+      .update(payload)
+      .eq('id', id)
+      .eq('organization_id', organization.id)
+      .select(CAMPAIGN_COLUMNS)
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!data) return NextResponse.json({ error: 'Campaña no encontrada' }, { status: 404 })
+    return NextResponse.json({ campaign: campaignToClient(data) })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error interno del servidor'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const auth = await requireStaff()
+  const authResponse = getAuthResponse(auth)
+  if (authResponse) return authResponse
+  const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
+  const organization = await getCurrentOrganizationContext(staffAuth.user.id)
+  if (!organization) return organizationRequiredResponse()
+
+  try {
+    const { id } = await params
+    const supabase = createAdminSupabase()
+    const { error } = await supabase
+      .from('communication_campaigns')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', organization.id)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error interno del servidor'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}

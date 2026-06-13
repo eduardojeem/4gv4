@@ -5,11 +5,13 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebsiteSettingKey } from '@/types/website-settings'
 import { validateSetting } from '@/lib/validation/website-settings'
 import { sanitizeWebsiteSettings } from '@/lib/sanitization/html'
+import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
 
 const VALID_KEYS: WebsiteSettingKey[] = [
   'company_info',
   'hero_stats',
   'hero_content',
+  'offers_section',
   'services',
   'testimonials',
   'maintenance_mode',
@@ -121,27 +123,12 @@ async function handler(
     // Usar datos validados
     value = validation.data
 
-    // Resolver organizationId para RLS (con fallback seguro en super_admin si aplica)
-    let orgId = context.organizationId
+    const orgId = await resolveWebsiteAdminOrganizationId(context)
     if (!orgId) {
-      const { data: membership } = await supabase
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', context.user.id)
-        .eq('status', 'active')
-        .limit(1)
-        .maybeSingle()
-
-      orgId = membership?.organization_id || null
-
-      if (!orgId) {
-        const { data: defaultOrg } = await supabase
-          .from('organizations')
-          .select('id')
-          .eq('slug', 'default')
-          .maybeSingle()
-        orgId = defaultOrg?.id || null
-      }
+      return NextResponse.json(
+        { success: false, error: 'No active organization found for website settings' },
+        { status: 403 }
+      )
     }
 
     // Upsert manual por (organization_id, key): evita depender del ON CONFLICT
@@ -149,14 +136,16 @@ async function handler(
     // multi-tenant — una fila de settings por organización.
     const adminSupabase = createAdminSupabase()
 
-    let existingQuery = adminSupabase
+    const existingQuery = adminSupabase
       .from('website_settings')
-      .select('id, value')
+      .select('key, value')
       .eq('key', key)
-    existingQuery = orgId
-      ? existingQuery.eq('organization_id', orgId)
-      : existingQuery.is('organization_id', null)
-    const { data: existingRow } = await existingQuery.maybeSingle()
+      .eq('organization_id', orgId)
+    const { data: existingRow, error: existingError } = await existingQuery.maybeSingle()
+
+    if (existingError) {
+      throw existingError
+    }
 
     const writePayload = {
       value,
@@ -164,9 +153,14 @@ async function handler(
       updated_at: new Date().toISOString(),
     }
 
-    const { error } = existingRow
-      ? await adminSupabase.from('website_settings').update(writePayload).eq('id', existingRow.id)
-      : await adminSupabase.from('website_settings').insert({ key, organization_id: orgId, ...writePayload })
+    const { data: persistedRow, error } = await adminSupabase
+      .from('website_settings')
+      .upsert(
+        { key, organization_id: orgId, ...writePayload },
+        { onConflict: 'organization_id,key' }
+      )
+      .select('value')
+      .single()
 
     if (error) {
       console.error('Failed to update website setting', { 
@@ -209,6 +203,7 @@ async function handler(
     return NextResponse.json({
       success: true,
       message: 'Setting updated successfully',
+      data: persistedRow.value,
       remaining: rateLimit.remaining
     }, {
       headers: {

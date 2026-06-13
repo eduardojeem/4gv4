@@ -25,6 +25,13 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       satisfaction: '0%',
       avgTime: '24h'
     },
+    offers_section: {
+      enabled: true,
+      eyebrow: 'Ofertas especiales',
+      title: 'Precios que vale la pena aprovechar',
+      subtitle: 'Productos seleccionados con descuentos vigentes por tiempo limitado.',
+      accentColor: 'rose'
+    },
     services: [],
     testimonials: [],
     process_steps: [
@@ -72,6 +79,7 @@ export function applyWebsiteSettingsDefaults(
   const companyInfo = (settings.company_info || {}) as Partial<WebsiteSettings['company_info']>
   const heroContent = (settings.hero_content || {}) as Partial<WebsiteSettings['hero_content']>
   const heroStats = (settings.hero_stats || {}) as Partial<WebsiteSettings['hero_stats']>
+  const offersSection = (settings.offers_section || {}) as Partial<WebsiteSettings['offers_section']>
   const maintenanceMode = (settings.maintenance_mode || {}) as Partial<WebsiteSettings['maintenance_mode']>
 
   return {
@@ -90,6 +98,10 @@ export function applyWebsiteSettingsDefaults(
     hero_stats: {
       ...defaults.hero_stats,
       ...heroStats
+    },
+    offers_section: {
+      ...defaults.offers_section,
+      ...offersSection
     },
     services: Array.isArray(settings.services) ? settings.services : defaults.services,
     testimonials: Array.isArray(settings.testimonials) ? settings.testimonials : defaults.testimonials,

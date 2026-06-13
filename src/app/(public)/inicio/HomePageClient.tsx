@@ -145,12 +145,15 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
       {/* ── Sales-first sections ── */}
       <CategoryShowcase />
 
-      <div id="ofertas">
-        <OffersCarousel
-          companyName={company_info.name || '4G Movil'}
-          fallbackOffers={fallbackOffers}
-        />
-      </div>
+      {settings.offers_section.enabled && (
+        <div id="ofertas">
+          <OffersCarousel
+            companyName={company_info.name || '4G Movil'}
+            fallbackOffers={fallbackOffers}
+            settings={settings.offers_section}
+          />
+        </div>
+      )}
 
       <FeaturedProducts />
 

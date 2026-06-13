@@ -64,27 +64,37 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
 
     // Draw grid dots
     points.forEach((point, index) => {
-      const isSelected = selectedPoints.some(p => p.row === point.row && p.col === point.col)
-      
+      const selectedIndex = selectedPoints.findIndex(p => p.row === point.row && p.col === point.col)
+      const isSelected = selectedIndex !== -1
+      const isStart = isSelected && selectedIndex === 0
+      const isEnd = isSelected && selectedIndex === selectedPoints.length - 1 && selectedPoints.length > 1
+
       ctx.beginPath()
       ctx.arc(point.x, point.y, DOT_RADIUS, 0, 2 * Math.PI)
-      
-      if (isSelected) {
-        ctx.fillStyle = '#3b82f6' // Blue for selected
+
+      if (isStart) {
+        ctx.fillStyle = '#22c55e' // Verde: inicio
+        ctx.strokeStyle = '#15803d'
+        ctx.lineWidth = 3
+      } else if (isEnd) {
+        ctx.fillStyle = '#ef4444' // Rojo: fin
+        ctx.strokeStyle = '#b91c1c'
+        ctx.lineWidth = 3
+      } else if (isSelected) {
+        ctx.fillStyle = '#3b82f6' // Azul: intermedios
         ctx.strokeStyle = '#1d4ed8'
         ctx.lineWidth = 3
       } else {
-        ctx.fillStyle = '#e5e7eb' // Gray for unselected
+        ctx.fillStyle = '#e5e7eb' // Gris: sin seleccionar
         ctx.strokeStyle = '#9ca3af'
         ctx.lineWidth = 2
       }
-      
+
       ctx.fill()
       ctx.stroke()
 
       // Draw number in selected dots
       if (isSelected) {
-        const selectedIndex = selectedPoints.findIndex(p => p.row === point.row && p.col === point.col)
         ctx.fillStyle = 'white'
         ctx.font = 'bold 12px sans-serif'
         ctx.textAlign = 'center'
@@ -346,6 +356,9 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
     }
   }, [value, points])
 
+  // Secuencia numérica estilo teclado (1-9) del patrón dibujado
+  const sequenceNumbers = selectedPoints.map(p => p.row * GRID_SIZE + p.col + 1)
+
   if (minimal) {
     return (
       <div className="flex flex-col items-center">
@@ -358,8 +371,8 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
               "cursor-default",
               disabled && "opacity-90"
             )}
-            style={{ 
-              width: '200px', 
+            style={{
+              width: '200px',
               height: '200px',
               touchAction: 'none'
             }}
@@ -368,6 +381,19 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
         {value && (
           <div className="mt-2 text-sm font-medium text-center text-muted-foreground">
             {value.split('(')[0].trim()}
+          </div>
+        )}
+        {sequenceNumbers.length >= 2 && (
+          <div className="mt-2 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" /> Inicio
+            </span>
+            <span className="font-mono font-semibold tracking-wider text-foreground">
+              {sequenceNumbers.join(' → ')}
+            </span>
+            <span className="inline-flex items-center gap-1 text-red-600 font-medium">
+              <span className="h-2 w-2 rounded-full bg-red-500" /> Fin
+            </span>
           </div>
         )}
       </div>
@@ -431,6 +457,19 @@ export function PatternDrawer({ value, onChange, disabled, minimal = false }: Pa
             <div className="text-xs font-medium text-purple-700">
               Patrón dibujado: {selectedPoints.length} punto{selectedPoints.length !== 1 ? 's' : ''}
             </div>
+            {sequenceNumbers.length >= 2 && (
+              <div className="flex items-center justify-center gap-2 text-xs">
+                <span className="inline-flex items-center gap-1 text-emerald-600 font-medium">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" /> Inicio
+                </span>
+                <span className="font-mono font-semibold tracking-wider text-foreground">
+                  {sequenceNumbers.join(' → ')}
+                </span>
+                <span className="inline-flex items-center gap-1 text-red-600 font-medium">
+                  <span className="h-2 w-2 rounded-full bg-red-500" /> Fin
+                </span>
+              </div>
+            )}
             {value && (
               <div className="text-xs text-muted-foreground bg-purple-50 rounded p-2 border border-purple-200 break-all">
                 {value}

@@ -10,35 +10,42 @@ export const CompanyInfoSchema = z.object({
   name: z.string()
     .min(2, 'Nombre debe tener al menos 2 caracteres')
     .max(100, 'Nombre no puede exceder 100 caracteres')
-    .optional(),
+    .optional()
+    .or(z.literal('')),
   phone: z.string()
-    .min(9, 'Teléfono debe tener al menos 9 dígitos')
     .max(20, 'Teléfono no puede exceder 20 caracteres')
-    .regex(/^[\d\s\+\-\(\)]+$/, 'Teléfono contiene caracteres inválidos')
-    .optional(),
+    .optional()
+    .or(z.literal('')),
   email: z.string()
-    .email('Email inválido')
     .max(100, 'Email no puede exceder 100 caracteres')
-    .optional(),
+    .optional()
+    .or(z.literal('')),
   address: z.string()
-    .min(10, 'Dirección debe tener al menos 10 caracteres')
     .max(200, 'Dirección no puede exceder 200 caracteres')
-    .optional(),
+    .optional()
+    .or(z.literal('')),
   hours: z.object({
-    weekdays: z.string().max(50, 'Horario no puede exceder 50 caracteres'),
-    saturday: z.string().max(50, 'Horario no puede exceder 50 caracteres'),
-    sunday: z.string().max(50, 'Horario no puede exceder 50 caracteres'),
+    weekdays: z.string().max(100).optional().or(z.literal('')),
+    saturday: z.string().max(100).optional().or(z.literal('')),
+    sunday: z.string().max(100).optional().or(z.literal('')),
   }).optional(),
   logoUrl: z.string()
-    .url('URL de logo inválida')
-    .max(300, 'URL muy larga')
+    .max(500, 'URL muy larga')
     .optional()
     .or(z.literal('')),
   brandColor: z.enum(['blue','green','purple','orange','red','indigo','teal','rose','amber','emerald','cyan','sky'])
     .optional(),
   headerStyle: z.enum(['glass', 'solid', 'accent', 'dark']).optional(),
-  headerColor: z.string().max(50).optional(),
-  showTopBar: z.boolean().optional()
+  headerColor: z.string().max(50).optional().or(z.literal('')),
+  showTopBar: z.boolean().optional(),
+  whatsapp: z.string().max(50).optional().or(z.literal('')),
+  ruc: z.string().max(50).optional().or(z.literal('')),
+  businessType: z.string().max(50).optional().or(z.literal('')),
+  instagram: z.string().max(100).optional().or(z.literal('')),
+  facebook: z.string().max(100).optional().or(z.literal('')),
+  tiktok: z.string().max(100).optional().or(z.literal('')),
+  marketplacePublic: z.boolean().optional(),
+  servicesPageEnabled: z.boolean().optional(),
 }).passthrough()
 
 // Esquema para contenido del hero
@@ -68,6 +75,14 @@ export const HeroStatsSchema = z.object({
     .min(1, 'Estadística de tiempo requerida')
     .max(20, 'Estadística no puede exceder 20 caracteres')
     .regex(/^[\d\w\+\-\%\s]+$/, 'Formato de estadística inválido'),
+})
+
+export const OffersSectionSchema = z.object({
+  enabled: z.boolean(),
+  eyebrow: z.string().min(2).max(60),
+  title: z.string().min(3).max(120),
+  subtitle: z.string().min(5).max(240),
+  accentColor: z.enum(['rose', 'amber', 'orange', 'emerald']),
 })
 
 // Esquema para un servicio individual
@@ -226,6 +241,7 @@ export const WebsiteSettingsSchema = z.object({
   company_info: CompanyInfoSchema,
   hero_content: HeroContentSchema,
   hero_stats: HeroStatsSchema,
+  offers_section: OffersSectionSchema,
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
   process_steps: ProcessStepsSchema,
@@ -240,6 +256,7 @@ export const SETTING_SCHEMAS = {
   company_info: CompanyInfoSchema,
   hero_content: HeroContentSchema,
   hero_stats: HeroStatsSchema,
+  offers_section: OffersSectionSchema,
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
   process_steps: ProcessStepsSchema,
@@ -250,7 +267,7 @@ export const SETTING_SCHEMAS = {
 /**
  * Valida un setting específico
  */
-export function validateSetting(key: string, value: any) {
+export function validateSetting(key: string, value: unknown) {
   const schema = SETTING_SCHEMAS[key as keyof typeof SETTING_SCHEMAS]
   
   if (!schema) {

@@ -12,6 +12,7 @@
 
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -58,7 +59,15 @@ interface CustomerDetailProps {
   compact?: boolean
 }
 
-function SalesHistoryList({ customerId }: { customerId: string }) {
+function SalesHistoryList({
+  customerId,
+  limit,
+  onShowAll,
+}: {
+  customerId: string
+  limit?: number
+  onShowAll?: () => void
+}) {
   const { data: sales, isLoading } = useCustomerPurchases(customerId)
 
   if (isLoading) {
@@ -79,26 +88,25 @@ function SalesHistoryList({ customerId }: { customerId: string }) {
           <History className="h-12 w-12 text-gray-400" />
         </div>
         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Sin historial de ventas</h3>
-        <p className="text-gray-500 mb-4">Este cliente aún no tiene transacciones registradas.</p>
-        <Button variant="outline" size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Registrar primera venta
-        </Button>
+        <p className="text-gray-500">Este cliente aún no tiene transacciones registradas.</p>
       </div>
     )
   }
 
-  const recentSales = sales.slice(0, 5)
+  const visibleSales = typeof limit === 'number' ? sales.slice(0, limit) : sales
+  const hiddenCount = sales.length - visibleSales.length
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h4 className="font-medium text-gray-900 dark:text-white">Últimas Transacciones</h4>
+        <h4 className="font-medium text-gray-900 dark:text-white">
+          {typeof limit === 'number' ? 'Últimas Transacciones' : 'Todas las Transacciones'}
+        </h4>
         <Badge variant="secondary">{sales.length} total</Badge>
       </div>
-      
+
       <div className="space-y-3">
-        {recentSales.map((sale: { id: string | number; created_at?: string; date?: string; total?: number; payment_status?: string }, index: number) => (
+        {visibleSales.map((sale: { id: string | number; created_at?: string; date?: string; total?: number; payment_status?: string }, index: number) => (
           <motion.div 
             key={sale.id}
             initial={{ opacity: 0, y: 20 }}
@@ -145,11 +153,11 @@ function SalesHistoryList({ customerId }: { customerId: string }) {
         ))}
       </div>
 
-      {sales.length > 5 && (
+      {hiddenCount > 0 && onShowAll && (
         <div className="text-center pt-4 border-t border-gray-200 dark:border-gray-700">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={onShowAll}>
             <History className="h-4 w-4 mr-2" />
-            Ver historial completo ({sales.length - 5} más)
+            Ver historial completo ({hiddenCount} más)
           </Button>
         </div>
       )}
@@ -185,7 +193,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
     fetchProfileId()
   }, [activeTab, resolvedProfileId, resolvedEmail])
 
-  const { data: authorizedPersons, isLoading: authorizedLoading } = useAuthorizedPersons(
+  const { data: authorizedPersons, isLoading: authorizedLoading, error: authorizedError } = useAuthorizedPersons(
     resolvedProfileId,
     activeTab === 'authorized'
   )
@@ -199,9 +207,13 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
     })
   }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    // Aquí podrías agregar un toast de confirmación
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('Copiado al portapapeles')
+    } catch {
+      toast.error('No se pudo copiar')
+    }
   }
 
 
@@ -305,7 +317,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.email)}>
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`mailto:${currentCustomer.email}`)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`mailto:${encodeURIComponent(currentCustomer.email)}`)}>
                               <ExternalLink className="h-3 w-3" />
                             </Button>
                           </>
@@ -321,7 +333,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.phone)}>
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`tel:${currentCustomer.phone}`)}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`tel:${encodeURIComponent(currentCustomer.phone)}`)}>
                               <PhoneCall className="h-3 w-3" />
                             </Button>
                             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`https://wa.me/${currentCustomer.phone?.replace(/[^\d]/g, '')}`)}>
@@ -340,7 +352,7 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyToClipboard(currentCustomer.address || currentCustomer.city)}>
                               <Copy className="h-3 w-3" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`https://maps.google.com/?q=${currentCustomer.address || currentCustomer.city}`, '_blank')}>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(currentCustomer.address || currentCustomer.city)}`, '_blank')}>
                               <MapPin className="h-3 w-3" />
                             </Button>
                           </>
@@ -388,7 +400,11 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-6">
-                  <SalesHistoryList customerId={currentCustomer.id} />
+                  <SalesHistoryList
+                    customerId={currentCustomer.id}
+                    limit={5}
+                    onShowAll={() => setActiveTab('history')}
+                  />
                 </CardContent>
               </Card>
             </div>
@@ -426,27 +442,35 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-600">Crédito</span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full"
-                              style={{ width: `${(currentCustomer.credit_score || 0) * 10}%` }}
-                            />
+                        {currentCustomer.credit_score ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full"
+                                style={{ width: `${currentCustomer.credit_score * 10}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-medium">{currentCustomer.credit_score}/10</span>
                           </div>
-                          <span className="text-sm font-medium">{currentCustomer.credit_score || 0}/10</span>
-                        </div>
+                        ) : (
+                          <span className="text-sm text-gray-400 italic">Sin datos</span>
+                        )}
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-600">Satisfacción</span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full"
-                              style={{ width: `${(currentCustomer.satisfaction_score || 0) * 10}%` }}
-                            />
+                        {currentCustomer.satisfaction_score ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full"
+                                style={{ width: `${currentCustomer.satisfaction_score * 10}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-medium">{currentCustomer.satisfaction_score}/10</span>
                           </div>
-                          <span className="text-sm font-medium">{currentCustomer.satisfaction_score || 0}/10</span>
-                        </div>
+                        ) : (
+                          <span className="text-sm text-gray-400 italic">Sin datos</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -466,32 +490,15 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                       ) : (
                         <p className="text-sm text-gray-500 italic">Sin etiquetas</p>
                       )}
-                      <Button variant="outline" size="sm" className="h-6 text-xs">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-xs"
+                        onClick={() => onEdit(currentCustomer)}
+                      >
                         <Plus className="h-3 w-3 mr-1" />
                         Agregar
                       </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Preferencias de Contacto</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                        <div className="h-2 w-2 rounded-full bg-green-500" />
-                        <span className="text-xs font-medium">Email</span>
-                      </div>
-                      <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                        <div className="h-2 w-2 rounded-full bg-green-500" />
-                        <span className="text-xs font-medium">WhatsApp</span>
-                      </div>
-                      <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                        <div className="h-2 w-2 rounded-full bg-blue-500" />
-                        <span className="text-xs font-medium">SMS</span>
-                      </div>
-                      <div className="flex items-center gap-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                        <div className="h-2 w-2 rounded-full bg-purple-500" />
-                        <span className="text-xs font-medium">Llamada</span>
-                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -516,7 +523,12 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                   <p className="text-sm text-amber-800 dark:text-amber-200">
                     {currentCustomer.notes || "Sin notas adicionales."}
                   </p>
-                  <Button variant="ghost" size="sm" className="mt-3 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/20">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-3 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/20"
+                    onClick={() => onEdit(currentCustomer)}
+                  >
                     <Edit className="h-3 w-3 mr-1" />
                     Editar nota
                   </Button>
@@ -558,9 +570,16 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
               </CardTitle>
             </CardHeader>
             <CardContent className="p-6">
-              {(authorizedPersons as unknown as { error?: string })?.error && (
-                <div className="mb-4 p-3 border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-md text-sm">
-                  Error al cargar autorizados.
+              {authorizedError && (
+                <div className="mb-4 p-3 border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 rounded-md text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  No se pudieron cargar los autorizados. Reintentá en unos segundos.
+                </div>
+              )}
+              {!authorizedError && !authorizedLoading && !resolvedProfileId && (
+                <div className="mb-4 p-3 border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 rounded-md text-sm text-amber-800 dark:text-amber-300 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  Este cliente no tiene un perfil vinculado (falta email), por eso no se pueden mostrar autorizados.
                 </div>
               )}
               {authorizedLoading ? (
@@ -637,9 +656,9 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
                     {currentCustomer.notes || "No hay notas registradas para este cliente."}
                   </p>
                 </div>
-                <Button className="w-full">
+                <Button className="w-full" onClick={() => onEdit(currentCustomer)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Agregar Nueva Nota
+                  {currentCustomer.notes ? 'Editar nota' : 'Agregar nota'}
                 </Button>
               </div>
             </CardContent>

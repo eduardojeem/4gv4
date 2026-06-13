@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { WebsiteSettings } from '@/types/website-settings'
 import { applyWebsiteSettingsDefaults, getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { resolveWebsiteAdminOrganizationId } from '@/lib/website/admin-organization'
 
 /**
  * GET /api/admin/website/settings
@@ -22,15 +23,19 @@ async function handler(
     const userSupabase  = await createClient()
 
     // Resolve the org_id so we can filter correctly
-    const orgId = context.organizationId
+    const orgId = await resolveWebsiteAdminOrganizationId(context)
+    if (!orgId) {
+      return NextResponse.json(
+        { success: false, error: 'No active organization found for website settings' },
+        { status: 403 }
+      )
+    }
 
     // Load website_settings + org data in parallel for fallback hydration
-    let settingsQuery = adminSupabase.from('website_settings').select('organization_id, key, value')
-    if (orgId) {
-      // Return rows for this org OR legacy rows with NULL / default org_id
-      // (legacy rows are still valid until the backfill migration runs)
-      settingsQuery = settingsQuery.or(`organization_id.eq.${orgId},organization_id.is.null`)
-    }
+    const settingsQuery = adminSupabase
+      .from('website_settings')
+      .select('organization_id, key, value')
+      .eq('organization_id', orgId)
 
     const [
       { data: settings, error },
@@ -53,13 +58,7 @@ async function handler(
 
     // Transformar array a objeto
     const settingsObj: Partial<WebsiteSettings> = {}
-    const sortedSettings = [...(settings ?? [])].sort((a, b) => {
-      const aPriority = a.organization_id === orgId ? 1 : 0
-      const bPriority = b.organization_id === orgId ? 1 : 0
-      return aPriority - bPriority
-    })
-
-    sortedSettings.forEach((setting) => {
+    settings?.forEach((setting) => {
       settingsObj[setting.key as keyof WebsiteSettings] = setting.value
     })
 
@@ -110,13 +109,22 @@ async function initHandler(
   context: AdminAuthContext
 ) {
   try {
-    const supabase = await createClient()
+    const adminSupabase = createAdminSupabase()
+    const orgId = await resolveWebsiteAdminOrganizationId(context)
+    if (!orgId) {
+      return NextResponse.json(
+        { success: false, error: 'No active organization found for website settings' },
+        { status: 403 }
+      )
+    }
+
     const defaults = getWebsiteSettingsDefaults()
     const allKeys = Object.keys(defaults) as Array<keyof WebsiteSettings>
 
-    const { data: existingRows, error: existingError } = await supabase
+    const { data: existingRows, error: existingError } = await adminSupabase
       .from('website_settings')
       .select('key')
+      .eq('organization_id', orgId)
 
     if (existingError) {
       throw existingError
@@ -134,15 +142,16 @@ async function initHandler(
     }
 
     const rowsToInsert = missingKeys.map((key) => ({
+      organization_id: orgId,
       key,
       value: defaults[key],
       updated_by: context.user.id,
       updated_at: new Date().toISOString()
     }))
 
-    const { error: upsertError } = await supabase
+    const { error: upsertError } = await adminSupabase
       .from('website_settings')
-      .upsert(rowsToInsert, { onConflict: 'key' })
+      .upsert(rowsToInsert, { onConflict: 'organization_id,key' })
 
     if (upsertError) {
       throw upsertError

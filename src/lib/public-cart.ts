@@ -17,7 +17,7 @@ export function getPublicCartStorageKey(tenantSlug: string | null | undefined) {
 
 export function getTenantSlugFromPathname(pathname: string) {
   const [maybeSlug, section] = pathname.split('/').filter(Boolean)
-  return maybeSlug && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito', 'cliente'].includes(section || '')
+  return maybeSlug && ['inicio', 'productos', 'ofertas', 'mis-reparaciones', 'track', 'carrito', 'cliente'].includes(section || '')
     ? maybeSlug
     : null
 }

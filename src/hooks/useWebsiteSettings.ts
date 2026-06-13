@@ -83,7 +83,7 @@ export function useWebsiteSettings() {
   const pathname = usePathname()
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantSlug =
-    pathSegments.length > 1 && ['inicio', 'productos', 'servicios', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil'].includes(pathSegments[1])
+    pathSegments.length > 1 && ['inicio', 'productos', 'ofertas', 'servicios', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil'].includes(pathSegments[1])
       ? pathSegments[0]
       : ''
   const cacheKey = tenantSlug ? `${WEBSITE_SETTINGS_CACHE_KEY}?org=${encodeURIComponent(tenantSlug)}` : WEBSITE_SETTINGS_CACHE_KEY
@@ -169,6 +169,12 @@ export function useAdminWebsiteSettings() {
         const msg = body?.error || res.statusText || 'Failed to update setting'
         throw new Error(msg)
       }
+
+      const persistedValue = body?.data ?? value
+      await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY, (current?: WebsiteSettings) => {
+        if (!current) return current ?? null
+        return { ...current, [key]: persistedValue } as WebsiteSettings
+      }, false)
 
       // Revalidate to ensure server truth
       await mutate(ADMIN_WEBSITE_SETTINGS_CACHE_KEY)

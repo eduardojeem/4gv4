@@ -57,30 +57,50 @@ function mapPromotionRow(row: PromotionRow) {
   }
 }
 
-function getDatabaseErrorMessage(error: unknown) {
+function getDatabaseErrorResponse(error: unknown) {
   if (!error || typeof error !== 'object') return null
   const maybeError = error as { code?: unknown; message?: unknown }
   const code = typeof maybeError.code === 'string' ? maybeError.code : ''
   const message = typeof maybeError.message === 'string' ? maybeError.message : ''
+  const normalizedMessage = message.toLowerCase()
 
-  if (code === '42501' || message.toLowerCase().includes('row-level security')) {
-    return 'No tenes permiso para crear promociones en esta organizacion.'
+  if (code === '42501' && normalizedMessage.includes('get_default_branch_id')) {
+    return {
+      message: 'La configuracion de sucursales impide crear promociones. Aplica las migraciones pendientes.',
+      status: 500,
+    }
   }
 
-  if (code === '42703' || code === 'PGRST204' || message.toLowerCase().includes('schema cache')) {
-    return 'La tabla de promociones no tiene todas las columnas requeridas. Aplica las migraciones pendientes.'
+  if (code === '42501' || normalizedMessage.includes('row-level security')) {
+    return {
+      message: 'No tenes permiso para crear promociones en esta organizacion.',
+      status: 403,
+    }
+  }
+
+  if (code === '42703' || code === 'PGRST204' || normalizedMessage.includes('schema cache')) {
+    return {
+      message: 'La tabla de promociones no tiene todas las columnas requeridas. Aplica las migraciones pendientes.',
+      status: 500,
+    }
   }
 
   if (code === '23505') {
-    return 'Ya existe una promocion con ese codigo.'
+    return { message: 'Ya existe una promocion con ese codigo.', status: 409 }
   }
 
   if (code === '23502') {
-    return 'La tabla de promociones tiene una columna obligatoria incompatible con el formulario. Aplica las migraciones pendientes.'
+    return {
+      message: 'La tabla de promociones tiene una columna obligatoria incompatible con el formulario. Aplica las migraciones pendientes.',
+      status: 500,
+    }
   }
 
   if (process.env.NODE_ENV !== 'production' && (code || message)) {
-    return `Error de base de datos (${code || 'sin codigo'}): ${message || 'sin detalle'}`
+    return {
+      message: `Error de base de datos (${code || 'sin codigo'}): ${message || 'sin detalle'}`,
+      status: 500,
+    }
   }
 
   return null
@@ -252,10 +272,10 @@ export const POST = withTenantAuth({ permission: 'promotions.create' }, async (r
     return NextResponse.json(mapPromotionRow(created as PromotionRow), { status: 201 })
   } catch (error) {
     logger.error('Promotions POST API error', { error })
-    const databaseErrorMessage = getDatabaseErrorMessage(error)
+    const databaseError = getDatabaseErrorResponse(error)
     return NextResponse.json(
-      { error: databaseErrorMessage ?? 'Error interno del servidor' },
-      { status: databaseErrorMessage ? 400 : 500 }
+      { error: databaseError?.message ?? 'Error interno del servidor' },
+      { status: databaseError?.status ?? 500 }
     )
   }
 })

@@ -70,10 +70,56 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
   const suspendedCustomers = customers.filter(c => c.status === 'suspended').length
   const vipCustomers = customers.filter(c => c.segment === 'vip').length
 
-  // Mock mensual basado en fechas de registro para compatibilidad visual
+  // Ingresos reales por mes desde la tabla `sales` (clave "YYYY-M").
+  // Si la consulta falla, monthlyData cae al estimado homogéneo anterior.
+  const months = timeRange === '12months' ? 12 : timeRange === '6months' ? 6 : 3
+  const [realMonthly, setRealMonthly] = useState<Map<string, { revenue: number; count: number }> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const fetchSales = async () => {
+      try {
+        const start = new Date()
+        start.setMonth(start.getMonth() - (months - 1))
+        start.setDate(1)
+        start.setHours(0, 0, 0, 0)
+
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from('sales')
+          .select('total_amount, created_at')
+          .gte('created_at', start.toISOString())
+
+        if (cancelled) return
+        if (error || !data) {
+          setRealMonthly(null)
+          return
+        }
+
+        const map = new Map<string, { revenue: number; count: number }>()
+        for (const row of data) {
+          const created = (row as any).created_at as string | null
+          if (!created) continue
+          const d = new Date(created)
+          const key = `${d.getFullYear()}-${d.getMonth()}`
+          const cur = map.get(key) || { revenue: 0, count: 0 }
+          cur.revenue += Number((row as any).total_amount) || 0
+          cur.count += 1
+          map.set(key, cur)
+        }
+        setRealMonthly(map)
+      } catch {
+        if (!cancelled) setRealMonthly(null)
+      }
+    }
+    fetchSales()
+    return () => {
+      cancelled = true
+    }
+  }, [months])
+
   const monthlyData = useMemo(() => {
     const now = new Date()
-    const months = timeRange === '12months' ? 12 : timeRange === '6months' ? 6 : 3
     const data: Array<{ monthShort: string; totalRevenue: number; avgOrderValue: number; newCustomers: number }> = []
     for (let i = months - 1; i >= 0; i--) {
       const d = new Date(now)
@@ -83,13 +129,23 @@ export function useCustomerMetrics(customers: Customer[], options?: UseCustomerM
         const reg = new Date(c.registration_date)
         return reg.getMonth() === d.getMonth() && reg.getFullYear() === d.getFullYear()
       }).length
-      // Simple distribución homogénea del revenue
-      const totalRevenueMonth = totalRevenue / months
-      const avgOrderValue = totalCustomers > 0 ? totalRevenueMonth / Math.max(1, totalCustomers / months) : 0
+
+      const real = realMonthly?.get(`${d.getFullYear()}-${d.getMonth()}`)
+      let totalRevenueMonth: number
+      let avgOrderValue: number
+      if (realMonthly) {
+        // Datos reales de ventas del mes
+        totalRevenueMonth = real?.revenue || 0
+        avgOrderValue = real && real.count > 0 ? real.revenue / real.count : 0
+      } else {
+        // Fallback: distribución homogénea del revenue estimado
+        totalRevenueMonth = totalRevenue / months
+        avgOrderValue = totalCustomers > 0 ? totalRevenueMonth / Math.max(1, totalCustomers / months) : 0
+      }
       data.push({ monthShort, totalRevenue: totalRevenueMonth, avgOrderValue, newCustomers })
     }
     return data
-  }, [customers, totalRevenue, totalCustomers, timeRange])
+  }, [customers, totalRevenue, totalCustomers, months, realMonthly])
 
   const segmentDistribution = useMemo(() => {
     const map: Record<string, number> = {}

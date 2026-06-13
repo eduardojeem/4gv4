@@ -332,7 +332,7 @@ export default function DashboardPage() {
 
   const quickActions = [
     { title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const },
-    { title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs', tone: 'amber' as const },
+    { title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs?new=true', tone: 'amber' as const },
     { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers', tone: 'violet' as const },
     { title: 'Nuevo producto', icon: Package, href: '/dashboard/products', tone: 'emerald' as const },
     { title: 'Ver reportes', icon: BarChart3, href: '/dashboard/reports', tone: 'cyan' as const },
@@ -386,6 +386,16 @@ export default function DashboardPage() {
             <Link href="/dashboard/pos">
               <Plus className="h-3.5 w-3.5" />
               Nueva venta
+            </Link>
+          </Button>
+          <Button
+            asChild
+            size="sm"
+            className="gap-2 bg-amber-500 text-slate-950 hover:bg-amber-400"
+          >
+            <Link href="/dashboard/repairs?new=true">
+              <Wrench className="h-3.5 w-3.5" />
+              Nueva reparación
             </Link>
           </Button>
           <Button

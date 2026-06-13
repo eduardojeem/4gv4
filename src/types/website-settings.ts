@@ -35,6 +35,14 @@ export interface HeroContent {
   subtitle: string
 }
 
+export interface OffersSectionSettings {
+  enabled: boolean
+  eyebrow: string
+  title: string
+  subtitle: string
+  accentColor: 'rose' | 'amber' | 'orange' | 'emerald'
+}
+
 export interface Service {
   id: string
   title: string
@@ -120,6 +128,7 @@ export interface WebsiteSettings {
   company_info: CompanyInfo
   hero_stats: HeroStats
   hero_content: HeroContent
+  offers_section: OffersSectionSettings
   services: Service[]
   testimonials: Testimonial[]
   process_steps: ProcessStep[]

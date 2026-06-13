@@ -140,21 +140,25 @@ export function CompanyInfoForm() {
 
     const nextErrors: Record<string, string> = {}
 
+    // Solo el nombre es obligatorio
     if (!formData.name || formData.name.trim().length < 2) {
       nextErrors.name = 'El nombre debe tener al menos 2 caracteres.'
     }
 
+    // Email: validar solo si se proporcionó
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.email)) {
+    if (formData.email && formData.email.trim() && !emailRegex.test(formData.email)) {
       nextErrors.email = 'Ingresá un email válido.'
     }
 
-    if (formData.phone.replace(/\D/g, '').length < 9) {
-      nextErrors.phone = 'El teléfono debe tener al menos 9 dígitos.'
+    // Teléfono: validar solo si se proporcionó
+    if (formData.phone && formData.phone.trim() && formData.phone.replace(/\D/g, '').length < 6) {
+      nextErrors.phone = 'El teléfono debe tener al menos 6 dígitos.'
     }
 
-    if (formData.address.trim().length < 10) {
-      nextErrors.address = 'La dirección debe tener al menos 10 caracteres.'
+    // Dirección: validar solo si se proporcionó
+    if (formData.address && formData.address.trim() && formData.address.trim().length < 4) {
+      nextErrors.address = 'La dirección debe tener al menos 4 caracteres.'
     }
 
     // Logo: allow relative/storage paths ("/...") and validate only absolute URLs.
@@ -200,7 +204,9 @@ export function CompanyInfoForm() {
         description: 'Los cambios se reflejarán en el portal público',
         icon: <Check className="h-4 w-4" />,
       })
-      setDraft(null)
+      // Wait a tick for SWR to revalidate before clearing draft
+      // This prevents the form from briefly showing stale data (e.g. logo disappearing)
+      setTimeout(() => setDraft(null), 300)
 
       fetch('/api/admin/website/sync-company', {
         method: 'PUT',

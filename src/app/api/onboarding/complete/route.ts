@@ -230,7 +230,7 @@ export async function POST(request: Request) {
           key: 'company_info',
           value: websiteCompanyInfo,
         },
-        { onConflict: 'key' }
+        { onConflict: 'organization_id,key' }
       ),
   ])
 

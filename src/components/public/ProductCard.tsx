@@ -82,7 +82,7 @@ export function ProductCard(props: ProductCardProps) {
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantPrefix =
     pathSegments.length > 1 &&
-    ['inicio', 'productos', 'mis-reparaciones', 'carrito', 'track', 'cliente'].includes(
+    ['inicio', 'productos', 'ofertas', 'mis-reparaciones', 'carrito', 'track', 'cliente'].includes(
       pathSegments[1]
     )
       ? `/${pathSegments[0]}`

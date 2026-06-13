@@ -357,7 +357,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
   if (vipInactive.length > 0) {
     const totalLostRevenue = vipInactive.reduce((sum, c) => sum + c.avg_order_value, 0)
     notifications.push({
-      id: 'vip-inactive-' + Date.now(),
+      id: 'vip-inactive',
       type: 'warning',
       category: 'customer',
       title: 'Clientes VIP en Riesgo de Pérdida',
@@ -421,7 +421,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
   if (newToday.length > 0) {
     const highValueNewCustomers = newToday.filter(c => c.credit_limit > 1000000)
     notifications.push({
-      id: 'new-customers-' + Date.now(),
+      id: 'new-customers',
       type: 'celebration',
       category: 'customer',
       title: '🎉 Nuevos Clientes Registrados',
@@ -480,7 +480,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
 
   if (recentBigSpenders.length > 0) {
     notifications.push({
-      id: 'big-spenders-' + Date.now(),
+      id: 'big-spenders',
       type: 'opportunity',
       category: 'sales',
       title: '💰 Clientes de Alto Valor Activos',
@@ -526,7 +526,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
   
   if (highSatisfaction.length > 10) {
     notifications.push({
-      id: 'high-satisfaction-' + Date.now(),
+      id: 'high-satisfaction',
       type: 'opportunity',
       category: 'marketing',
       title: '⭐ Oportunidad de Testimonios y Referencias',
@@ -589,7 +589,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
     const avgOverdue = overdueDays.reduce((sum, days) => sum + days, 0) / overdueDays.length
     
     notifications.push({
-      id: 'pending-balance-' + Date.now(),
+      id: 'pending-balance',
       type: criticalPendingBalance.length > 0 ? 'urgent' : 'warning',
       category: 'finance',
       title: '💳 Gestión de Cobranzas Requerida',
@@ -659,7 +659,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
 
   if (anomalousCustomers.length > 0) {
     notifications.push({
-      id: 'anomalous-behavior-' + Date.now(),
+      id: 'anomalous-behavior',
       type: 'info',
       category: 'analytics',
       title: '🔍 Patrones de Comportamiento Detectados',
@@ -702,7 +702,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
   // 5. Notificaciones del sistema (simuladas)
   notifications.push(
     {
-      id: 'system-backup-' + Date.now(),
+      id: 'system-backup',
       type: 'info',
       category: 'system',
       title: 'Respaldo Completado',
@@ -716,7 +716,7 @@ function generateSmartNotifications(customers: Customer[]): Notification[] {
       actionRequired: false
     },
     {
-      id: 'performance-alert-' + Date.now(),
+      id: 'performance-alert',
       type: 'warning',
       category: 'system',
       title: 'Rendimiento del Sistema',
@@ -812,10 +812,25 @@ export function NotificationCenter({ customers }: NotificationCenterProps) {
       intervalRef.current = setInterval(() => {
         const smartNotifications = generateSmartNotifications(customers)
         setNotifications(prev => {
-          // Merge new notifications with existing ones, avoiding duplicates
-          const existingIds = new Set(prev.map(n => n.id))
-          const newNotifications = smartNotifications.filter(n => !existingIds.has(n.id))
-          return [...newNotifications, ...prev]
+          const byId = new Map(smartNotifications.map(n => [n.id, n]))
+          // Actualiza el contenido de las alertas existentes preservando los
+          // flags del usuario (leído/archivado/etc.). Antes los IDs llevaban
+          // Date.now(), por lo que cada refresco creaba duplicados infinitos.
+          const merged = prev.map(existing => {
+            const fresh = byId.get(existing.id)
+            if (!fresh) return existing
+            byId.delete(existing.id)
+            return {
+              ...fresh,
+              isRead: existing.isRead,
+              isArchived: existing.isArchived,
+              isBookmarked: existing.isBookmarked,
+              isStarred: existing.isStarred,
+            }
+          })
+          // Las que quedaron en el map son realmente nuevas
+          const newOnes = smartNotifications.filter(n => byId.has(n.id))
+          return [...newOnes, ...merged]
         })
       }, refreshInterval)
     }

@@ -35,4 +35,20 @@ describe('applyWebsiteSettingsDefaults', () => {
     expect(result.maintenance_mode.message).toBe('Estamos realizando mejoras en nuestro sitio. Volveremos pronto.')
     expect(result.maintenance_mode.estimatedEnd).toBe('')
   })
+
+  it('enables the offers section by default and preserves tenant customization', () => {
+    const defaults = applyWebsiteSettingsDefaults({} as Partial<WebsiteSettings>)
+    const customized = applyWebsiteSettingsDefaults({
+      offers_section: {
+        enabled: false,
+        title: 'Liquidacion de temporada',
+      },
+    } as Partial<WebsiteSettings>)
+
+    expect(defaults.offers_section.enabled).toBe(true)
+    expect(defaults.offers_section.accentColor).toBe('rose')
+    expect(customized.offers_section.enabled).toBe(false)
+    expect(customized.offers_section.title).toBe('Liquidacion de temporada')
+    expect(customized.offers_section.subtitle).toBe(defaults.offers_section.subtitle)
+  })
 })

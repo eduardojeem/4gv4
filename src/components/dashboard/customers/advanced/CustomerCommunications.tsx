@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   MessageSquare,
@@ -38,9 +39,12 @@ import {
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Customer } from '@/hooks/use-customer-state'
+import { useCustomerCommunications } from '@/hooks/use-customer-communications'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 interface CustomerCommunicationsProps {
   customers: Customer[]
@@ -51,8 +55,8 @@ interface CommunicationTemplate {
   name: string
   subject: string
   content: string
-  type: 'email' | 'sms' | 'whatsapp'
-  category: 'marketing' | 'service' | 'notification' | 'reminder'
+  type: string
+  category: string
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -66,24 +70,21 @@ interface Campaign {
   targetSegment: string
   scheduledAt: string | null
   sentAt: string | null
-  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed'
+  status: string
   recipientCount: number
   sentCount: number
-  openRate: number
-  clickRate: number
   createdAt: string
 }
 
 interface CommunicationHistory {
   id: string
-  customerId: string
+  customerId: string | null
   customerName: string
-  type: 'email' | 'sms' | 'whatsapp' | 'call'
+  type: string
   subject: string
-  content: string
-  status: 'sent' | 'delivered' | 'read' | 'failed'
+  status: string
   sentAt: string
-  readAt?: string
+  toEmail?: string
 }
 
 export function CustomerCommunications({ customers }: CustomerCommunicationsProps) {
@@ -94,136 +95,56 @@ export function CustomerCommunications({ customers }: CustomerCommunicationsProp
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all')
 
-  // Templates predefinidos
-  const templates: CommunicationTemplate[] = [
-    {
-      id: '1',
-      name: 'Bienvenida Nuevos Clientes',
-      subject: '¡Bienvenido a nuestra familia!',
-      content: 'Hola {nombre}, gracias por confiar en nosotros. Estamos aquí para ayudarte en todo lo que necesites.',
-      type: 'email',
-      category: 'service',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: '2',
-      name: 'Recordatorio de Pago',
-      subject: 'Recordatorio: Cuota pendiente',
-      content: 'Hola {nombre}, te recordamos que tienes una cuota pendiente por {monto}. Puedes pagarla en nuestras oficinas.',
-      type: 'sms',
-      category: 'reminder',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: '3',
-      name: 'Promoción Especial',
-      subject: '🎉 Oferta especial solo para ti',
-      content: 'Hola {nombre}, tenemos una promoción especial en productos seleccionados. ¡No te la pierdas!',
-      type: 'whatsapp',
-      category: 'marketing',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    },
-    {
-      id: '4',
-      name: 'Reparación Lista',
-      subject: 'Tu dispositivo está listo',
-      content: 'Hola {nombre}, tu {dispositivo} ya está reparado y listo para recoger. Horario: Lun-Vie 8-18hs.',
-      type: 'sms',
-      category: 'notification',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  ]
+  // Datos reales persistidos (plantillas, campañas, historial de envíos)
+  const {
+    templates,
+    campaigns,
+    history: communicationHistory,
+    sendCampaign: sendCampaignApi,
+    createTemplate,
+    createCampaign,
+  } = useCustomerCommunications()
 
-  // Campañas de ejemplo
-  const campaigns: Campaign[] = [
-    {
-      id: '1',
-      name: 'Campaña de Bienvenida Q4',
-      description: 'Campaña automática para nuevos clientes del último trimestre',
-      templateId: '1',
-      targetSegment: 'new',
-      scheduledAt: null,
-      sentAt: new Date().toISOString(),
-      status: 'sent',
-      recipientCount: 45,
-      sentCount: 45,
-      openRate: 78.5,
-      clickRate: 12.3,
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: '2',
-      name: 'Recordatorios de Pago Diciembre',
-      description: 'Recordatorios automáticos para clientes con cuotas vencidas',
-      templateId: '2',
-      targetSegment: 'overdue',
-      scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      sentAt: null,
-      status: 'scheduled',
-      recipientCount: 23,
-      sentCount: 0,
-      openRate: 0,
-      clickRate: 0,
-      createdAt: new Date().toISOString()
-    }
-  ]
+  // Formularios de creación
+  const [tplForm, setTplForm] = useState({ name: '', subject: '', content: '', category: 'marketing' })
+  const [campForm, setCampForm] = useState({ name: '', description: '', templateId: '' })
 
-  // Historial de comunicaciones
-  const communicationHistory: CommunicationHistory[] = [
-    {
-      id: '1',
-      customerId: 'cust1',
-      customerName: 'Juan Pérez',
-      type: 'email',
-      subject: 'Bienvenida',
-      content: 'Email de bienvenida enviado',
-      status: 'read',
-      sentAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      readAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString()
-    },
-    {
-      id: '2',
-      customerId: 'cust2',
-      customerName: 'María González',
-      type: 'sms',
-      subject: 'Recordatorio de pago',
-      content: 'SMS de recordatorio enviado',
-      status: 'delivered',
-      sentAt: new Date(Date.now() - 30 * 60 * 1000).toISOString()
-    },
-    {
-      id: '3',
-      customerId: 'cust3',
-      customerName: 'Carlos López',
-      type: 'whatsapp',
-      subject: 'Promoción especial',
-      content: 'Mensaje de WhatsApp enviado',
-      status: 'sent',
-      sentAt: new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  const submitTemplate = async () => {
+    if (!tplForm.name.trim()) {
+      toast.error('El nombre de la plantilla es obligatorio')
+      return
     }
-  ]
+    const created = await createTemplate(tplForm)
+    if (created) {
+      setTplForm({ name: '', subject: '', content: '', category: 'marketing' })
+      setIsCreatingTemplate(false)
+    }
+  }
+
+  const submitCampaign = async () => {
+    if (!campForm.name.trim()) {
+      toast.error('El nombre de la campaña es obligatorio')
+      return
+    }
+    const created = await createCampaign({ ...campForm, status: 'draft' })
+    if (created) {
+      setCampForm({ name: '', description: '', templateId: '' })
+      setIsCreatingCampaign(false)
+    }
+  }
 
   const stats = useMemo(() => {
     const totalCampaigns = campaigns.length
     const activeCampaigns = campaigns.filter(c => c.status === 'sending' || c.status === 'scheduled').length
     const totalSent = campaigns.reduce((sum, c) => sum + c.sentCount, 0)
-    const avgOpenRate = campaigns.length > 0 
-      ? campaigns.reduce((sum, c) => sum + c.openRate, 0) / campaigns.length 
-      : 0
+    const totalRecipients = campaigns.reduce((sum, c) => sum + c.recipientCount, 0)
+    const deliveryRate = totalRecipients > 0 ? (totalSent / totalRecipients) * 100 : 0
 
     return {
       totalCampaigns,
       activeCampaigns,
       totalSent,
-      avgOpenRate,
+      deliveryRate,
       totalTemplates: templates.length,
       activeTemplates: templates.filter(t => t.isActive).length
     }
@@ -260,16 +181,23 @@ export function CustomerCommunications({ customers }: CustomerCommunicationsProp
     }
   }
 
-  const sendCampaign = (campaignId: string) => {
-    toast.info('Enviando campaña...', {
-      description: 'Los mensajes se están enviando a los destinatarios'
-    })
-    
-    setTimeout(() => {
-      toast.success('Campaña enviada exitosamente', {
-        description: 'Todos los mensajes han sido enviados'
-      })
-    }, 2000)
+  // Envío real: resuelve los clientes con email válido y confirma antes de enviar.
+  const sendCampaign = async (campaignId: string) => {
+    const recipients = customers
+      .filter(c => c.email && EMAIL_RE.test(c.email))
+      .map(c => ({ id: c.id, name: c.name, email: c.email }))
+
+    if (recipients.length === 0) {
+      toast.error('No hay clientes con email válido para esta campaña')
+      return
+    }
+
+    const ok = window.confirm(
+      `Se enviará un email real a ${recipients.length} cliente(s) con email registrado. ¿Continuar?`,
+    )
+    if (!ok) return
+
+    await sendCampaignApi(campaignId, recipients)
   }
 
   const TemplateCard = ({ template }: { template: CommunicationTemplate }) => (
@@ -347,30 +275,19 @@ export function CustomerCommunications({ customers }: CustomerCommunicationsProp
             </div>
           </div>
 
-          {campaign.status === 'sent' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Tasa de Apertura</p>
-                <p className="font-semibold text-green-600">{campaign.openRate}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Tasa de Clic</p>
-                <p className="font-semibold text-blue-600">{campaign.clickRate}%</p>
-              </div>
-            </div>
+          {campaign.status === 'sent' && campaign.sentAt && (
+            <p className="text-xs text-muted-foreground">
+              Enviada el {format(new Date(campaign.sentAt), "d 'de' MMM, HH:mm", { locale: es })}
+            </p>
           )}
 
           <div className="flex gap-2">
-            {campaign.status === 'scheduled' && (
+            {(campaign.status === 'scheduled' || campaign.status === 'draft') && (
               <Button size="sm" onClick={() => sendCampaign(campaign.id)}>
                 <Send className="h-4 w-4 mr-1" />
                 Enviar Ahora
               </Button>
             )}
-            <Button variant="outline" size="sm">
-              <Eye className="h-4 w-4 mr-1" />
-              Ver Detalles
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -391,9 +308,9 @@ export function CustomerCommunications({ customers }: CustomerCommunicationsProp
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Upload className="h-4 w-4 mr-2" />
-            Importar Contactos
+          <Button variant="outline" onClick={() => setIsCreatingTemplate(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nueva Plantilla
           </Button>
           <Button onClick={() => setIsCreatingCampaign(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -444,8 +361,8 @@ export function CustomerCommunications({ customers }: CustomerCommunicationsProp
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-orange-700">Tasa de Apertura</p>
-                <p className="text-2xl font-bold text-orange-900">{stats.avgOpenRate.toFixed(1)}%</p>
+                <p className="text-sm font-medium text-orange-700">Tasa de Entrega</p>
+                <p className="text-2xl font-bold text-orange-900">{stats.deliveryRate.toFixed(1)}%</p>
               </div>
               <Eye className="h-8 w-8 text-orange-600" />
             </div>
@@ -605,6 +522,108 @@ export function CustomerCommunications({ customers }: CustomerCommunicationsProp
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Diálogo: Nueva Plantilla */}
+      <Dialog open={isCreatingTemplate} onOpenChange={setIsCreatingTemplate}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nueva Plantilla de Email</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nombre</Label>
+              <Input
+                value={tplForm.name}
+                onChange={(e) => setTplForm({ ...tplForm, name: e.target.value })}
+                placeholder="Ej: Bienvenida nuevos clientes"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Asunto</Label>
+              <Input
+                value={tplForm.subject}
+                onChange={(e) => setTplForm({ ...tplForm, subject: e.target.value })}
+                placeholder="Ej: ¡Bienvenido a {nombre}!"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Contenido</Label>
+              <Textarea
+                value={tplForm.content}
+                onChange={(e) => setTplForm({ ...tplForm, content: e.target.value })}
+                placeholder="Hola {nombre}, gracias por confiar en nosotros..."
+                rows={5}
+              />
+              <p className="text-xs text-muted-foreground">
+                Usá <code>{'{nombre}'}</code> para personalizar con el nombre del cliente.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Categoría</Label>
+              <Select value={tplForm.category} onValueChange={(v) => setTplForm({ ...tplForm, category: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="marketing">Marketing</SelectItem>
+                  <SelectItem value="service">Servicio</SelectItem>
+                  <SelectItem value="notification">Notificación</SelectItem>
+                  <SelectItem value="reminder">Recordatorio</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreatingTemplate(false)}>Cancelar</Button>
+            <Button onClick={submitTemplate}>Crear Plantilla</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo: Nueva Campaña */}
+      <Dialog open={isCreatingCampaign} onOpenChange={setIsCreatingCampaign}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nueva Campaña de Email</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nombre</Label>
+              <Input
+                value={campForm.name}
+                onChange={(e) => setCampForm({ ...campForm, name: e.target.value })}
+                placeholder="Ej: Promoción de fin de mes"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Descripción</Label>
+              <Input
+                value={campForm.description}
+                onChange={(e) => setCampForm({ ...campForm, description: e.target.value })}
+                placeholder="Breve descripción de la campaña"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Plantilla</Label>
+              <Select value={campForm.templateId} onValueChange={(v) => setCampForm({ ...campForm, templateId: v })}>
+                <SelectTrigger>
+                  <SelectValue placeholder={templates.length ? 'Elegí una plantilla' : 'Creá una plantilla primero'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Al enviar, la campaña irá a todos los clientes con email registrado (te pediremos confirmación).
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreatingCampaign(false)}>Cancelar</Button>
+            <Button onClick={submitCampaign}>Crear Campaña</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
