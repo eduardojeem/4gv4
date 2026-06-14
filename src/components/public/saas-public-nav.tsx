@@ -7,6 +7,7 @@ import { ArrowRight, Building2, Menu, Store, X, LogIn, LayoutDashboard } from 'l
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 const navLinks = [
   { label: 'Caracteristicas', href: '/saas#caracteristicas' },
@@ -76,6 +77,8 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
         </nav>
 
         <div className="flex items-center gap-2">
+          <ThemeToggle />
+
           <Button asChild variant="outline" size="sm" className={`hidden gap-2 sm:inline-flex ${
             isDark ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white' : ''
           }`}>

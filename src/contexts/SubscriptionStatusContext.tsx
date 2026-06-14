@@ -1,6 +1,10 @@
 'use client'
 
 import { createContext, useContext } from 'react'
+import { repairPhotoLimit, canExportReports, type PlanCode, type ModuleTrial } from '@/lib/saas/plan-features'
+
+export type { PlanCode, ModuleTrial }
+export { repairPhotoLimit, canExportReports }
 
 export type SubscriptionStatusData = {
   status: string | null
@@ -8,15 +12,35 @@ export type SubscriptionStatusData = {
   isTrialing: boolean
   trialDaysLeft: number | null
   periodDaysLeft: number | null
+  /** Código del plan activo de la organización. */
+  planCode: PlanCode
+  /** Nombre comercial del plan (para mostrar en avisos). */
+  planName: string
+  /** Módulos habilitados por el plan (fuente: tabla `plans.modules`). */
+  modules: string[]
+  /** true si la org quedó en FREE por impago (baja de cortesía) → mostrar aviso de reactivación. */
+  downgradedFromExpiry: boolean
+  /** Trials de módulos activos (no vencidos), con días restantes. */
+  moduleTrials: ModuleTrial[]
+  /** Módulos que la org ya probó alguna vez (activos o vencidos) → no se puede volver a probar. */
+  trialedModules: string[]
 }
 
-const SubscriptionStatusContext = createContext<SubscriptionStatusData>({
+const DEFAULTS: SubscriptionStatusData = {
   status: null,
   isBlocked: false,
   isTrialing: false,
   trialDaysLeft: null,
   periodDaysLeft: null,
-})
+  planCode: 'FREE',
+  planName: 'Free',
+  modules: [],
+  downgradedFromExpiry: false,
+  moduleTrials: [],
+  trialedModules: [],
+}
+
+const SubscriptionStatusContext = createContext<SubscriptionStatusData>(DEFAULTS)
 
 export function SubscriptionStatusProvider({
   value,
@@ -34,4 +58,10 @@ export function SubscriptionStatusProvider({
 
 export function useSubscriptionStatus() {
   return useContext(SubscriptionStatusContext)
+}
+
+/** Hook de conveniencia: ¿el plan actual incluye este módulo? */
+export function usePlanModule(module: string): boolean {
+  const { modules } = useSubscriptionStatus()
+  return modules.includes(module)
 }

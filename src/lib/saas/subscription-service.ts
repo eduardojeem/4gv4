@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import type { ModuleTrial } from './plan-features'
 
 export type ResourceType = 'users' | 'branches' | 'cashRegisters' | 'products' | 'categories'
 export type PlanCode = 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE'
@@ -80,11 +81,13 @@ export interface OrganizationSubscriptionState {
   payments: SubscriptionPayment[]
 }
 
+// Fallback de seguridad. La fuente de verdad es la tabla `plans` (sincronizada desde
+// subscription_plans por trigger); estos valores solo se usan si la DB no devuelve límites.
 export const DEFAULT_LIMITS: Record<PlanCode, Record<string, number | null>> = {
-  FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null },
-  BASIC: { users: 10, branches: 2, cashRegisters: 3, products: 500, categories: null },
-  PRO: { users: 25, branches: 5, cashRegisters: 10, products: 5000, categories: null },
-  ENTERPRISE: { users: null, branches: null, cashRegisters: null, products: null, categories: null },
+  FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null, repairs: 10 },
+  BASIC: { users: 10, branches: 2, cashRegisters: 3, products: 500, categories: null, repairs: 100 },
+  PRO: { users: 25, branches: 5, cashRegisters: 10, products: 5000, categories: null, repairs: null },
+  ENTERPRISE: { users: null, branches: null, cashRegisters: null, products: null, categories: null, repairs: null },
 }
 
 const DEFAULT_PLAN: PlanRecord = {
@@ -226,9 +229,23 @@ async function countRows(table: string, organizationId: string) {
   return count || 0
 }
 
+// Las "butacas" del plan cuentan solo staff. Los clientes (role 'customer') se registran
+// desde la pública y no deben consumir el límite de usuarios del plan.
+async function countStaffMembers(organizationId: string) {
+  const supabase = createAdminSupabase()
+  const { count, error } = await supabase
+    .from('organization_members')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .neq('role', 'customer')
+
+  if (error) return 0
+  return count || 0
+}
+
 export async function getOrganizationUsage(organizationId: string): Promise<OrganizationUsage> {
   const [users, branches, cashRegisters, products, categories] = await Promise.all([
-    countRows('organization_members', organizationId),
+    countStaffMembers(organizationId),
     countRows('branches', organizationId),
     countRows('cash_registers', organizationId),
     countRows('products', organizationId),
@@ -312,6 +329,63 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
   }
 }
 
+/** Info liviana del plan activo (código, nombre, módulos) para gating en el cliente. */
+export async function getOrganizationPlanInfo(
+  organizationId: string
+): Promise<{
+  code: PlanCode
+  name: string
+  modules: string[]
+  downgradedFromExpiry: boolean
+  moduleTrials: ModuleTrial[]
+  trialedModules: string[]
+}> {
+  const supabase = createAdminSupabase()
+  const [{ data: sub }, { data: org }, { data: trials }] = await Promise.all([
+    supabase.from('subscriptions').select('plan, payment_status').eq('organization_id', organizationId).maybeSingle(),
+    supabase.from('organizations').select('plan').eq('id', organizationId).maybeSingle(),
+    supabase
+      .from('organization_module_trials')
+      .select('module, expires_at')
+      .eq('organization_id', organizationId),
+  ])
+
+  const code = normalizePlanCode(sub?.plan || org?.plan)
+  const { data: plan } = await supabase
+    .from('plans')
+    .select('name, modules')
+    .eq('code', code)
+    .maybeSingle()
+
+  const planModules = Array.isArray(plan?.modules) ? plan.modules.map(String) : []
+
+  // Trials: separar activos (no vencidos) de los ya usados.
+  const now = Date.now()
+  const trialRows = (trials ?? []) as Array<{ module: string; expires_at: string }>
+  const trialedModules = trialRows.map((t) => t.module)
+  const moduleTrials: ModuleTrial[] = trialRows
+    .filter((t) => new Date(t.expires_at).getTime() > now)
+    .map((t) => ({
+      module: t.module,
+      expiresAt: t.expires_at,
+      daysLeft: Math.max(0, Math.ceil((new Date(t.expires_at).getTime() - now) / 86400000)),
+    }))
+
+  // Módulos efectivos = los del plan + los que están en trial activo.
+  const modules = Array.from(new Set([...planModules, ...moduleTrials.map((t) => t.module)]))
+
+  // Baja de cortesía: quedó en FREE por impago (la automatización marca payment_status='unpaid').
+  const downgradedFromExpiry = code === 'FREE' && sub?.payment_status === 'unpaid'
+  return {
+    code,
+    name: typeof plan?.name === 'string' ? plan.name : code,
+    modules,
+    downgradedFromExpiry,
+    moduleTrials,
+    trialedModules,
+  }
+}
+
 const BLOCKED_STATUSES = new Set(['past_due', 'suspended', 'cancelled', 'canceled', 'expired', 'unpaid'])
 
 export async function getSubscriptionStatus(organizationId: string): Promise<{
@@ -379,6 +453,45 @@ export async function canCreateResource(
   }
 }
 
+/**
+ * Reparaciones tienen un límite MENSUAL (ej. free 10/mes, basic 100/mes), no por total.
+ * Cuenta las reparaciones creadas en el mes calendario en curso para la organización.
+ */
+export async function canCreateRepair(
+  organizationId: string
+): Promise<{ allowed: boolean; current: number; limit: number | null; plan: PlanRecord; blocked?: boolean }> {
+  const [state, subscriptionStatus] = await Promise.all([
+    getCurrentOrganizationSubscription(organizationId),
+    getSubscriptionStatus(organizationId),
+  ])
+
+  if (subscriptionStatus.isBlocked) {
+    return { allowed: false, current: 0, limit: null, plan: state.currentPlan, blocked: true }
+  }
+
+  const raw = state.currentPlan.limits?.repairs
+  const limit = raw === null || typeof raw === 'undefined'
+    ? null
+    : (Number.isFinite(toNumber(raw, Number.NaN)) ? toNumber(raw, Number.NaN) : null)
+
+  // Plan ilimitado (limit null) -> siempre permitido, sin contar.
+  if (limit === null) {
+    return { allowed: true, current: 0, limit: null, plan: state.currentPlan }
+  }
+
+  const supabase = createAdminSupabase()
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const { count } = await supabase
+    .from('repairs')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .gte('created_at', monthStart)
+
+  const current = count || 0
+  return { allowed: current < limit, current, limit, plan: state.currentPlan }
+}
+
 export type PlanFeatureItem = {
   label: string
   iconName: string
@@ -399,7 +512,7 @@ export async function getChangePlanData(organizationId: string): Promise<{
 }> {
   const supabase = createAdminSupabase()
 
-  const [{ data: subscriptionData }, { data: orgData }, { data: commercialData }, usage] = await Promise.all([
+  const [{ data: subscriptionData }, { data: orgData }, { data: commercialData }, { data: technicalData }, usage] = await Promise.all([
     supabase.from('subscriptions').select('plan, status').eq('organization_id', organizationId).maybeSingle(),
     supabase.from('organizations').select('plan').eq('id', organizationId).maybeSingle(),
     supabase
@@ -407,14 +520,26 @@ export async function getChangePlanData(organizationId: string): Promise<{
       .select('tier, name, price, price_note, description, is_popular, limits, highlights, features, is_active')
       .eq('is_active', true)
       .order('price', { ascending: true }),
+    supabase.from('plans').select('code, limits').eq('is_active', true),
     getOrganizationUsage(organizationId),
   ])
 
   const currentCode = (subscriptionData?.plan || orgData?.plan || 'FREE') as string
 
+  // Límites técnicos desde la DB (fuente única); DEFAULT_LIMITS solo como fallback.
+  const technicalLimitsByCode = new Map(
+    ((technicalData ?? []) as Array<Record<string, unknown>>).map((row) => [
+      normalizePlanCode(row.code),
+      (typeof row.limits === 'object' && row.limits ? row.limits : {}) as Record<string, unknown>,
+    ])
+  )
+
   const plans = ((commercialData ?? []) as Array<Record<string, unknown>>).map((row): CommercialPlan => {
     const code = normalizePlanCode(row.tier) as PlanCode
-    const limits: Record<string, unknown> = DEFAULT_LIMITS[code] || DEFAULT_LIMITS.FREE
+    const limits: Record<string, unknown> = {
+      ...(DEFAULT_LIMITS[code] || DEFAULT_LIMITS.FREE),
+      ...(technicalLimitsByCode.get(code) || {}),
+    }
     return {
       code,
       slug: typeof row.tier === 'string' ? row.tier : code.toLowerCase(),
@@ -445,22 +570,23 @@ export async function changePlan(
 ): Promise<{ success: true } | { success: false; error: string; conflictingResources?: Array<{ resource: string; current: number; limit: number }> }> {
   const supabase = createAdminSupabase()
   const code = normalizePlanCode(newPlanCode) as PlanCode
-  const newLimits = DEFAULT_LIMITS[code]
 
-  if (!newLimits) {
-    return { success: false, error: 'Plan no válido.' }
-  }
+  // Fuente única: límites del plan destino desde la DB (con fallback a DEFAULT_LIMITS).
+  const targetPlan = await getPlanLimits(code)
 
   const usage = await getOrganizationUsage(organizationId)
   const resourceLabels: Record<string, string> = {
     users: 'Usuarios', branches: 'Sucursales', cashRegisters: 'Cajas', products: 'Productos',
   }
 
+  // Solo validamos recursos que se cuentan por total (no los límites mensuales como repairs).
+  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'products', 'categories']
   const conflictingResources: Array<{ resource: string; current: number; limit: number }> = []
 
-  for (const [key, limit] of Object.entries(newLimits)) {
+  for (const key of countResources) {
+    const limit = getPlanLimit(targetPlan, key)
     if (limit === null) continue
-    const current = usage[key as keyof OrganizationUsage] ?? 0
+    const current = usage[key] ?? 0
     if (current > limit) {
       conflictingResources.push({ resource: resourceLabels[key] || key, current, limit })
     }

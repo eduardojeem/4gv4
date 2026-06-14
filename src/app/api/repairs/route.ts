@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
 import { withBranchFilter } from '@/lib/branches/client'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { canCreateRepair } from '@/lib/saas/subscription-service'
 
 const REPAIR_SELECT_VARIANTS = [
   `
@@ -62,6 +63,23 @@ export async function POST(request: NextRequest) {
       parts?: Array<Record<string, unknown>>
       notes?: Array<Record<string, unknown>>
       [key: string]: unknown
+    }
+
+    // Límite mensual de reparaciones según el plan (free 10/mes, basic 100/mes, pro+ ilimitado).
+    const planGate = await canCreateRepair(organization.id)
+    if (!planGate.allowed) {
+      return NextResponse.json(
+        {
+          error: planGate.blocked
+            ? 'Tu suscripción está suspendida. Regularizá el pago para seguir creando reparaciones.'
+            : `Tu plan ${planGate.plan.name} permite hasta ${planGate.limit} reparaciones por mes. Actualizá el plan para crear más.`,
+          code: planGate.blocked ? 'SUBSCRIPTION_BLOCKED' : 'PLAN_LIMIT_REACHED',
+          resource: 'repairs',
+          current: planGate.current,
+          limit: planGate.limit,
+        },
+        { status: 402 }
+      )
     }
 
     const supabase = createAdminSupabase()

@@ -42,7 +42,7 @@ const businessSolutions: BusinessSolution[] = [
     title: 'Servicios tecnicos',
     summary: 'Recepcion de equipos, diagnostico, tecnico asignado, estados y seguimiento por ticket.',
     fit: 'Ideal para talleres que necesitan trazabilidad.',
-    modules: ['Reparaciones', 'WhatsApp', 'Clientes', 'Historial'],
+    modules: ['Reparaciones', 'Clientes', 'Historial', 'Seguimiento'],
     result: 'Clientes informados y menos consultas manuales.',
     plan: 'PRO',
     icon: Wrench,

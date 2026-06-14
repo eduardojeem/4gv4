@@ -1,7 +1,7 @@
 import { Wrench, Package, Shield, Smartphone, Monitor, Battery, Cpu, Zap, Headset, Laptop, Clock, Sparkles, Droplet, Camera } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-export type BrandColor = 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo' | 'teal' | 'rose' | 'amber' | 'emerald' | 'cyan' | 'sky'
+export type BrandColor = 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo' | 'teal' | 'rose' | 'amber' | 'emerald' | 'cyan' | 'sky' | 'custom'
 
 export interface BrandTheme {
   hero: string
@@ -27,6 +27,7 @@ export const brandMap: Record<BrandColor, BrandTheme> = {
   emerald: { hero: 'from-emerald-600 via-teal-600 to-green-700',  text200: 'text-emerald-100', text300: 'text-emerald-200', cta: 'from-emerald-600 to-teal-700',    ctaText: 'text-emerald-100',ctaBtn: 'text-emerald-900', stepBg: 'bg-emerald-100', stepText: 'text-emerald-600' },
   cyan:    { hero: 'from-cyan-600 via-sky-600 to-blue-700',       text200: 'text-cyan-100',    text300: 'text-cyan-200',    cta: 'from-cyan-600 to-sky-700',        ctaText: 'text-cyan-100',   ctaBtn: 'text-cyan-900',    stepBg: 'bg-cyan-100',    stepText: 'text-cyan-600' },
   sky:     { hero: 'from-sky-500 via-blue-500 to-indigo-600',     text200: 'text-sky-100',     text300: 'text-sky-200',     cta: 'from-sky-500 to-blue-700',        ctaText: 'text-sky-100',    ctaBtn: 'text-sky-900',     stepBg: 'bg-sky-100',     stepText: 'text-sky-600' },
+  custom:  { hero: 'from-primary via-primary to-primary',          text200: 'text-white/80',     text300: 'text-white/70',     cta: 'from-primary to-primary',          ctaText: 'text-white/80',     ctaBtn: 'text-primary',     stepBg: 'bg-primary/10',   stepText: 'text-primary' },
 }
 
 export const colorMap: Record<string, { bg: string; text: string; hover: string }> = {

@@ -15,8 +15,22 @@ import { CreditPaymentDialog, PaymentMethod, PaymentConfirmResult } from '@/comp
 import { CreditQuickActions } from '@/components/dashboard/credits/CreditQuickActions'
 import { CreditDetailDialog } from '@/components/dashboard/credits/CreditDetailDialog'
 import { RouteGuard } from '@/components/auth/permission-guard'
+import { PlanGate } from '@/components/admin/PlanGate'
 
 export default function CreditsDashboardPage() {
+  return (
+    <PlanGate
+      module="credits"
+      requiredPlan="el plan que incluya Créditos"
+      title="Módulo de créditos no incluido"
+      description="Tu organización necesita habilitar Créditos y cuotas en su plan para gestionar financiación y cobranza."
+    >
+      <CreditsDashboardContent />
+    </PlanGate>
+  )
+}
+
+function CreditsDashboardContent() {
   const {
     loading,
     isPending,

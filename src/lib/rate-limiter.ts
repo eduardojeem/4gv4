@@ -17,26 +17,28 @@ import { Redis } from '@upstash/redis'
 // Upstash client — lazily created, shared across requests in the same process.
 // ---------------------------------------------------------------------------
 
-let _upstashRatelimiter: Ratelimit | null = null
+const _upstashRatelimiters = new Map<string, Ratelimit>()
 
 function getUpstashRatelimiter(max: number, windowMs: number): Ratelimit | null {
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) return null
 
-  // Cache a single instance. For now we only have one config (register
-  // endpoint), so a single cached instance is fine.
-  if (!_upstashRatelimiter) {
+  const configKey = `${max}:${windowMs}`
+  let ratelimiter = _upstashRatelimiters.get(configKey)
+
+  if (!ratelimiter) {
     const redis = new Redis({ url, token })
-    _upstashRatelimiter = new Ratelimit({
+    ratelimiter = new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(max, `${windowMs}ms`),
       analytics: false,
-      prefix: '4gv4:rl',
+      prefix: `4gv4:rl:${configKey}`,
     })
+    _upstashRatelimiters.set(configKey, ratelimiter)
   }
 
-  return _upstashRatelimiter
+  return ratelimiter
 }
 
 // ---------------------------------------------------------------------------

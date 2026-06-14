@@ -7,7 +7,6 @@ import { HeroSection } from '@/components/public/inicio/HeroSection'
 import { CategoryShowcase } from '@/components/public/inicio/CategoryShowcase'
 import { FeaturedProducts } from '@/components/public/inicio/FeaturedProducts'
 import { OffersCarousel } from '@/components/public/inicio/OffersCarousel'
-import type { OfferCard } from '@/components/public/inicio/OffersCarousel'
 import { ServicesGrid } from '@/components/public/inicio/ServicesGrid'
 import { ProcessSteps } from '@/components/public/inicio/ProcessSteps'
 import { ContactCTA } from '@/components/public/inicio/ContactCTA'
@@ -57,63 +56,6 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
     [settings.process_steps]
   )
 
-  const companyName = company_info.name
-  const fallbackOffers: OfferCard[] = useMemo(() => {
-    const serviceCards = safeServices.slice(0, 8).map((service, index) => ({
-      id: `service-${service.id || index}`,
-      title: service.title,
-      description: service.description || 'Servicio tecnico profesional',
-      priceLabel: 'Consulta precio',
-      originalPriceLabel: undefined,
-      tag: 'Servicio',
-      ctaHref: '/inicio#contacto',
-      image: null,
-      brand: companyName || null,
-      inStock: true,
-    }))
-
-    if (serviceCards.length > 0) return serviceCards
-
-    return [
-      {
-        id: 'fallback-1',
-        title: 'Cambio de pantalla',
-        description: 'Repuestos de calidad con garantia escrita.',
-        priceLabel: 'Desde $49.990',
-        originalPriceLabel: undefined,
-        tag: 'Oferta',
-        ctaHref: '/inicio#contacto',
-        image: null,
-        brand: companyName || null,
-        inStock: true,
-      },
-      {
-        id: 'fallback-2',
-        title: 'Bateria nueva',
-        description: 'Recupera autonomia y rendimiento de carga.',
-        priceLabel: 'Desde $29.990',
-        originalPriceLabel: undefined,
-        tag: 'Top venta',
-        ctaHref: '/inicio#contacto',
-        image: null,
-        brand: companyName || null,
-        inStock: true,
-      },
-      {
-        id: 'fallback-3',
-        title: 'Limpieza interna',
-        description: 'Mantenimiento preventivo y optimizacion.',
-        priceLabel: 'Desde $19.990',
-        originalPriceLabel: undefined,
-        tag: 'Promo',
-        ctaHref: '/inicio#contacto',
-        image: null,
-        brand: companyName || null,
-        inStock: true,
-      },
-    ]
-  }, [safeServices, companyName])
-
   const phone = company_info.phone
   const email = company_info.email
   const { phoneClean, contactHref } = useMemo(() => {
@@ -149,7 +91,6 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
         <div id="ofertas">
           <OffersCarousel
             companyName={company_info.name || '4G Movil'}
-            fallbackOffers={fallbackOffers}
             settings={settings.offers_section}
           />
         </div>

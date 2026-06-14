@@ -1,9 +1,8 @@
 "use client"
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { DateRange } from 'react-day-picker'
 import { endOfDay, startOfDay, subDays } from 'date-fns'
-import { toast } from 'sonner'
 import {
   Area,
   AreaChart,
@@ -22,10 +21,7 @@ import {
   Activity,
   Building2,
   CalendarRange,
-  ChevronDown,
-  Download,
   Gauge,
-  LayoutDashboard,
   RefreshCw,
   ShieldAlert,
   ShoppingBag,
@@ -36,15 +32,8 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
@@ -75,7 +64,6 @@ import {
   type AnalyticsMetricCard,
   type AnalyticsPreset,
   type AnalyticsTableRow,
-  type SimpleSeriesPoint,
   useAdminAnalytics,
 } from '@/hooks/use-admin-analytics'
 import {
@@ -86,6 +74,7 @@ import {
   MiniStat,
   SectionFrame,
 } from './analytics-widgets'
+import { ChartExporter } from '@/components/reports/ChartExporter'
 
 const PRESET_OPTIONS: Array<{ value: AnalyticsPreset; label: string }> = [
   { value: 'today', label: 'Hoy' },
@@ -136,144 +125,6 @@ function formatCompact(value: number): string {
   }).format(value)
 }
 
-function buildCsv(snapshot: ReturnType<typeof useAdminAnalytics>['snapshot']): string {
-  const sections: string[] = []
-
-  sections.push('Resumen general')
-  sections.push('Metrica,Valor')
-  snapshot.headlineCards.forEach((metric) => {
-    sections.push(`${metric.label},${metric.rawValue}`)
-  })
-
-  sections.push('')
-  sections.push('Productos top')
-  sections.push('Nombre,Metrica,Secundario,Detalle')
-  snapshot.topProducts.forEach((row) => {
-    sections.push([row.label, row.metric, row.secondary, row.detail || ''].join(','))
-  })
-
-  sections.push('')
-  sections.push('Clientes top')
-  sections.push('Nombre,Metrica,Secundario,Detalle')
-  snapshot.customerLeaders.forEach((row) => {
-    sections.push([row.label, row.metric, row.secondary, row.detail || ''].join(','))
-  })
-
-  sections.push('')
-  sections.push('Tecnicos top')
-  sections.push('Nombre,Metrica,Secundario,Detalle')
-  snapshot.technicians.forEach((row) => {
-    sections.push([row.label, row.metric, row.secondary, row.detail || ''].join(','))
-  })
-
-  return sections.join('\n')
-}
-
-async function exportAnalyticsExcel(snapshot: ReturnType<typeof useAdminAnalytics>['snapshot']) {
-  const XLSX = await import('xlsx')
-  const workbook = XLSX.utils.book_new()
-
-  const summarySheet = XLSX.utils.json_to_sheet(
-    snapshot.headlineCards.map((metric) => ({
-      metrica: metric.label,
-      valor: metric.value,
-      delta: formatPercent(metric.delta),
-      contexto: metric.helper,
-    }))
-  )
-
-  const productsSheet = XLSX.utils.json_to_sheet(
-    snapshot.topProducts.map((row) => ({
-      producto: row.label,
-      ingresos: row.metric,
-      volumen: row.secondary,
-      detalle: row.detail || '',
-    }))
-  )
-
-  const customersSheet = XLSX.utils.json_to_sheet(
-    snapshot.customerLeaders.map((row) => ({
-      cliente: row.label,
-      total: row.metric,
-      compras: row.secondary,
-      detalle: row.detail || '',
-    }))
-  )
-
-  const techniciansSheet = XLSX.utils.json_to_sheet(
-    snapshot.technicians.map((row) => ({
-      tecnico: row.label,
-      reparaciones: row.metric,
-      facturacion: row.secondary,
-      detalle: row.detail || '',
-    }))
-  )
-
-  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Resumen')
-  XLSX.utils.book_append_sheet(workbook, productsSheet, 'Productos')
-  XLSX.utils.book_append_sheet(workbook, customersSheet, 'Clientes')
-  XLSX.utils.book_append_sheet(workbook, techniciansSheet, 'Tecnicos')
-
-  XLSX.writeFile(workbook, `analytics_admin_${new Date().toISOString().slice(0, 10)}.xlsx`)
-}
-
-async function exportAnalyticsPdf(snapshot: ReturnType<typeof useAdminAnalytics>['snapshot']) {
-  const { default: jsPDF } = await import('jspdf')
-  const { default: autoTable } = await import('jspdf-autotable')
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
-  const getLastTableY = () => {
-    const tableAwareDoc = doc as typeof doc & { lastAutoTable?: { finalY?: number } }
-    return tableAwareDoc.lastAutoTable?.finalY ?? 96
-  }
-
-  doc.setFontSize(22)
-  doc.text('Analytics admin', 40, 50)
-  doc.setFontSize(11)
-  doc.text(`Periodo ${snapshot.periodLabel}`, 40, 72)
-
-  autoTable(doc, {
-    startY: 96,
-    head: [['Metrica', 'Valor', 'Delta', 'Contexto']],
-    body: snapshot.headlineCards.map((metric) => [
-      metric.label,
-      metric.value,
-      formatPercent(metric.delta),
-      metric.helper,
-    ]),
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: [37, 99, 235] },
-  })
-
-  autoTable(doc, {
-    startY: getLastTableY() + 24,
-    head: [['Producto', 'Ingresos', 'Volumen', 'Detalle']],
-    body: snapshot.topProducts.map((row) => [row.label, row.metric, row.secondary, row.detail || '']),
-    styles: { fontSize: 8 },
-    headStyles: { fillColor: [13, 148, 136] },
-  })
-
-  doc.addPage()
-  doc.setFontSize(18)
-  doc.text('Clientes y tecnicos', 40, 50)
-
-  autoTable(doc, {
-    startY: 78,
-    head: [['Cliente', 'Total', 'Compras', 'Detalle']],
-    body: snapshot.customerLeaders.map((row) => [row.label, row.metric, row.secondary, row.detail || '']),
-    styles: { fontSize: 8 },
-    headStyles: { fillColor: [245, 158, 11] },
-  })
-
-  autoTable(doc, {
-    startY: getLastTableY() + 24,
-    head: [['Tecnico', 'Entregadas', 'Facturacion', 'Detalle']],
-    body: snapshot.technicians.map((row) => [row.label, row.metric, row.secondary, row.detail || '']),
-    styles: { fontSize: 8 },
-    headStyles: { fillColor: [124, 58, 237] },
-  })
-
-  doc.save(`analytics_admin_${new Date().toISOString().slice(0, 10)}.pdf`)
-}
 
 function HeroQuickStat({
   label,
@@ -283,9 +134,9 @@ function HeroQuickStat({
   value: string
 }) {
   return (
-    <div className="rounded-2xl border border-white/40 bg-white/70 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
-      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className="mt-2 text-lg font-semibold tracking-tight text-foreground">{value}</p>
+    <div className="rounded-lg border border-gray-200 px-4 py-3 dark:border-slate-800">
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-50">{value}</p>
     </div>
   )
 }
@@ -298,7 +149,7 @@ function SectionBadge({
   return (
     <Badge
       variant="outline"
-      className="rounded-full border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300"
+      className="border-blue-200 text-blue-600 dark:border-blue-900 dark:text-blue-400"
     >
       {children}
     </Badge>
@@ -317,7 +168,7 @@ function ChartTooltip({
   if (!active || !payload?.length) return null
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-background/95 px-4 py-3 shadow-xl backdrop-blur">
+    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-md dark:border-slate-800 dark:bg-slate-900">
       <p className="text-sm font-semibold text-foreground">{label}</p>
       <div className="mt-3 space-y-2">
         {payload.map((item) => (
@@ -346,7 +197,7 @@ function NumberTooltip({
   if (!active || !payload?.length) return null
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-background/95 px-4 py-3 shadow-xl backdrop-blur">
+    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-md dark:border-slate-800 dark:bg-slate-900">
       <p className="text-sm font-semibold text-foreground">{label}</p>
       <div className="mt-3 space-y-2">
         {payload.map((item) => (
@@ -451,7 +302,6 @@ export default function AnalyticsDashboard() {
     branchOptions,
     error,
     loading,
-    refresh,
     forceRefresh,
     refreshing,
   } = useAdminAnalytics(filters)
@@ -468,38 +318,32 @@ export default function AnalyticsDashboard() {
     }
   }
 
-  const handleCsvExport = () => {
-    try {
-      const blob = new Blob([buildCsv(snapshot)], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `analytics_admin_${new Date().toISOString().slice(0, 10)}.csv`
-      link.click()
-      URL.revokeObjectURL(url)
-      toast.success('CSV generado')
-    } catch {
-      toast.error('Error al generar CSV')
-    }
-  }
+  // Refs a cada gráfico para capturarlos como imagen en las descargas (PDF/Excel con gráficos).
+  const salesTrendRef = useRef<HTMLDivElement>(null)
+  const hourlyRef = useRef<HTMLDivElement>(null)
+  const branchRef = useRef<HTMLDivElement>(null)
+  const categoriesRef = useRef<HTMLDivElement>(null)
+  const repairsRef = useRef<HTMLDivElement>(null)
+  const financeRef = useRef<HTMLDivElement>(null)
 
-  const handleExcelExport = async () => {
-    try {
-      await exportAnalyticsExcel(snapshot)
-      toast.success('Excel generado')
-    } catch {
-      toast.error('Error al generar Excel')
-    }
-  }
-
-  const handlePdfExport = async () => {
-    try {
-      await exportAnalyticsPdf(snapshot)
-      toast.success('PDF generado')
-    } catch {
-      toast.error('Error al generar PDF')
-    }
-  }
+  const exportChartRefs = [salesTrendRef, hourlyRef, branchRef, categoriesRef, repairsRef, financeRef]
+  const exportChartTitles = [
+    'Ventas del período',
+    'Ventas por hora',
+    'Movimiento por sucursal',
+    'Categorías top',
+    'Estados de reparación',
+    'Ingresos vs egresos',
+  ]
+  const exportChartData = [
+    snapshot.salesTrend,
+    snapshot.hourlySales,
+    snapshot.salesByBranch,
+    snapshot.topCategories,
+    snapshot.repairStatus,
+    snapshot.financeComparison,
+  ]
+  const exportMetrics = Object.fromEntries(snapshot.headlineCards.map((c) => [c.label, c.value]))
 
   const lastUpdatedLabel = snapshot.generatedAt
     ? new Date(snapshot.generatedAt).toLocaleTimeString('es-PY', {
@@ -523,131 +367,98 @@ export default function AnalyticsDashboard() {
 
   return (
     <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-[32px] border border-border/70 bg-card/95 shadow-sm shadow-black/5">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.14),transparent_34%),radial-gradient(circle_at_top_right,rgba(14,165,233,0.10),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.24),transparent_55%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.22),transparent_34%),radial-gradient(circle_at_top_right,rgba(14,165,233,0.16),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.04),transparent_55%)]" />
-        <div className="relative space-y-6 p-6 lg:p-8">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-            <div className="max-w-3xl space-y-4">
-              <Badge className="rounded-full bg-foreground px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-background">
-                Resumen del negocio
-              </Badge>
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-700 shadow-sm dark:text-sky-300">
-                    <LayoutDashboard className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-                      ¿Cómo va el negocio?
-                    </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Ventas, inventario, cajas, reparaciones y clientes — todo en un solo lugar.
-                    </p>
-                  </div>
-                </div>
-                <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
-                  Seleccioná un periodo para ver los números. Se compara automáticamente con el periodo anterior para que veas si vas mejor o peor.
-                </p>
-              </div>
-            </div>
+      {/* Header */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">¿Cómo va el negocio?</h2>
+          <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+            Ventas, inventario, cajas, reparaciones y clientes. Se compara automáticamente con el periodo anterior.
+          </p>
+        </div>
 
-            <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[420px]">
-              {snapshot.quickStats.map((stat) => (
-                <HeroQuickStat key={stat.id} label={stat.label} value={stat.formattedValue} />
+        <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
+          {snapshot.quickStats.map((stat) => (
+            <HeroQuickStat key={stat.id} label={stat.label} value={stat.formattedValue} />
+          ))}
+        </div>
+      </div>
+
+      {/* Filtros y acciones */}
+      <Card className="border border-gray-200 dark:border-slate-800 shadow-sm">
+        <CardContent className="space-y-4 p-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              {PRESET_OPTIONS.map((option) => (
+                <Button
+                  key={option.value}
+                  variant={preset === option.value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handlePresetChange(option.value)}
+                >
+                  {option.label}
+                </Button>
               ))}
             </div>
+
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <DatePickerWithRange
+                date={dateRange}
+                onDateChange={handleDateChange}
+                className="w-full"
+              />
+
+              <Select value={branch} onValueChange={setBranch}>
+                <SelectTrigger className="w-full min-w-[180px] md:w-[220px]">
+                  <Building2 className="mr-2 h-4 w-4 text-gray-500 dark:text-gray-400" />
+                  <SelectValue placeholder="Sucursal operativa" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las sucursales</SelectItem>
+                  {branchOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Button variant="outline" onClick={forceRefresh}>
+                <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+                Actualizar
+              </Button>
+            </div>
           </div>
 
-          <div className="rounded-[28px] border border-white/40 bg-white/70 p-4 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
-                {PRESET_OPTIONS.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={preset === option.value ? 'default' : 'outline'}
-                    size="sm"
-                    className={cn(
-                      'rounded-full',
-                      preset === option.value
-                        ? 'bg-foreground text-background hover:bg-foreground/90'
-                        : 'border-border/70 bg-background/70'
-                    )}
-                    onClick={() => handlePresetChange(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                <DatePickerWithRange
-                  date={dateRange}
-                  onDateChange={handleDateChange}
-                  className="w-full"
-                />
-
-                <Select value={branch} onValueChange={setBranch}>
-                  <SelectTrigger className="w-full min-w-[180px] rounded-full border-border/70 bg-background/80 md:w-[220px]">
-                    <Building2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                    <SelectValue placeholder="Sucursal operativa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las sucursales</SelectItem>
-                    {branchOptions.map((option) => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {option.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Button
-                  variant="outline"
-                  className="rounded-full border-border/70 bg-background/80"
-                  onClick={forceRefresh}
-                >
-                  <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-                  Actualizar
-                </Button>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="rounded-full">
-                      <Download className="h-4 w-4" />
-                      Exportar
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuLabel>Descargas</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={handleCsvExport}>CSV ejecutivo</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => void handleExcelExport()}>Excel multihoja</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => void handlePdfExport()}>PDF ejecutivo</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-col gap-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="inline-flex items-center gap-2">
-                  <CalendarRange className="h-4 w-4" />
-                  {snapshot.periodLabel}
-                </span>
-                <span className="inline-flex items-center gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  Se compara con el periodo anterior
-                </span>
-              </div>
+          <div className="flex flex-col gap-3 border-t border-gray-200 pt-3 text-sm text-gray-500 dark:border-slate-800 dark:text-gray-400 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-2">
-                <Activity className="h-4 w-4" />
-                Ultima actualizacion {lastUpdatedLabel}
+                <CalendarRange className="h-4 w-4" />
+                {snapshot.periodLabel}
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Se compara con el periodo anterior
               </span>
             </div>
+            <span className="inline-flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Ultima actualizacion {lastUpdatedLabel}
+            </span>
           </div>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
+
+      {/* Descargas con gráficos y detalle */}
+      <div className="flex flex-wrap justify-end gap-2">
+        <ChartExporter
+          title="Analytics — 4G Celulares"
+          data={snapshot.salesTrend}
+          metrics={exportMetrics}
+          chartRefs={exportChartRefs}
+          chartTitles={exportChartTitles}
+          chartData={exportChartData}
+        />
+      </div>
 
       <MetricGrid cards={snapshot.headlineCards} />
 
@@ -667,7 +478,7 @@ export default function AnalyticsDashboard() {
                   <MiniStat label="vs. periodo anterior" value={formatPercent(snapshot.finance.growth)} tone={snapshot.finance.growth !== null && snapshot.finance.growth >= 0 ? 'success' : 'warning'} />
                 </div>
 
-                <div className="h-[320px]" role="img" aria-label="Gráfico de tendencia de ventas POS y reparaciones">
+                <div ref={salesTrendRef} className="h-[320px]" role="img" aria-label="Gráfico de tendencia de ventas POS y reparaciones">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={snapshot.salesTrend}>
                       <defs>
@@ -691,12 +502,12 @@ export default function AnalyticsDashboard() {
                 </div>
               </div>
 
-              <div className="rounded-[24px] border border-border/70 bg-background/60 p-4">
+              <div className="rounded-lg border border-gray-200 dark:border-slate-800 p-4">
                 <div className="mb-4">
                   <p className="text-sm font-semibold text-foreground">¿A qué hora se vende más?</p>
                   <p className="text-sm text-muted-foreground">Útil para planificar turnos y horarios de caja.</p>
                 </div>
-                <div className="h-[320px]" role="img" aria-label="Gráfico de ventas por hora del día">
+                <div ref={hourlyRef} className="h-[320px]" role="img" aria-label="Gráfico de ventas por hora del día">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={snapshot.hourlySales}>
                       <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />
@@ -758,7 +569,7 @@ export default function AnalyticsDashboard() {
             <MiniStat label="Dinero retirado" value={formatCurrency(snapshot.operations.withdrawals)} tone="warning" />
           </div>
 
-          <div className="mt-6 h-[220px]">
+          <div ref={branchRef} className="mt-6 h-[220px]">
             {snapshot.salesByBranch.length ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={snapshot.salesByBranch}>
@@ -793,11 +604,11 @@ export default function AnalyticsDashboard() {
               </div>
 
               <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-                <div className="h-[220px]">
+                <div ref={categoriesRef} className="h-[220px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={snapshot.topCategories as any}
+                        data={snapshot.topCategories}
                         dataKey="value"
                         nameKey="label"
                         innerRadius={52}
@@ -815,7 +626,7 @@ export default function AnalyticsDashboard() {
 
                 <div className="space-y-3">
                   {snapshot.lowStockProducts.slice(0, 4).map((row) => (
-                    <div key={row.id} className="rounded-2xl border border-border/70 bg-background/60 p-4">
+                    <div key={row.id} className="rounded-lg border border-gray-200 dark:border-slate-800 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-medium text-foreground">{row.label}</p>
@@ -858,7 +669,7 @@ export default function AnalyticsDashboard() {
           <div className="mt-5 space-y-3">
             {snapshot.customerLeaders.slice(0, 4).length ? (
               snapshot.customerLeaders.slice(0, 4).map((row) => (
-                <div key={row.id} className="rounded-2xl border border-border/70 bg-background/60 p-4">
+                <div key={row.id} className="rounded-lg border border-gray-200 dark:border-slate-800 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-medium text-foreground">{row.label}</p>
@@ -892,7 +703,7 @@ export default function AnalyticsDashboard() {
           </div>
 
           <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
-            <div className="h-[260px]">
+            <div ref={repairsRef} className="h-[260px]">
               {snapshot.repairStatus.length ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={snapshot.repairStatus} layout="vertical">
@@ -913,7 +724,7 @@ export default function AnalyticsDashboard() {
 
             <div className="space-y-3">
               {snapshot.technicians.slice(0, 4).map((row) => (
-                <div key={row.id} className="rounded-2xl border border-border/70 bg-background/60 p-4">
+                <div key={row.id} className="rounded-lg border border-gray-200 dark:border-slate-800 p-4">
                   <p className="font-medium text-foreground">{row.label}</p>
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <span className="text-sm text-muted-foreground">{row.metric}</span>
@@ -939,7 +750,7 @@ export default function AnalyticsDashboard() {
             <MiniStat label="Margen" value={`${snapshot.finance.margin.toFixed(1)}%`} tone={snapshot.finance.margin >= 20 ? 'success' : snapshot.finance.margin >= 10 ? 'warning' : 'danger'} />
           </div>
 
-          <div className="mt-6 h-[280px]">
+          <div ref={financeRef} className="mt-6 h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={snapshot.financeComparison}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="rgba(148,163,184,0.22)" />

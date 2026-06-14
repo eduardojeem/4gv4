@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
+import { deriveTechnicalModules } from '@/lib/saas/plan-modules'
 
 type UpdatePlanBody = {
   name?: unknown
@@ -78,14 +79,6 @@ function technicalLimits(plan: { tier?: unknown; limits?: unknown }) {
     products: parseLimit(plan.limits, 'products', fallback.products),
     categories: parseLimit(plan.limits, 'categories', fallback.categories),
   }
-}
-
-function technicalModules(tier: unknown) {
-  const code = canonicalPlanCode(tier)
-  if (code === 'FREE') return ['inventory', 'pos', 'crm']
-  if (code === 'BASIC') return ['inventory', 'pos', 'crm', 'ecommerce']
-  if (code === 'PRO') return ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'whatsapp', 'analytics']
-  return ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'whatsapp', 'analytics']
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -170,7 +163,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       name: plan.name,
       limits: technicalLimits(plan),
       is_active: plan.is_active !== false,
-      modules: technicalModules(plan.tier),
+      modules: deriveTechnicalModules(canonicalCode, plan.features),
     }
 
     await admin

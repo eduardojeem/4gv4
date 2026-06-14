@@ -1,6 +1,9 @@
 ﻿import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireAuth, getAuthResponse } from '@/lib/auth/require-auth'
+import { requireAuth, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
+import { repairPhotoLimit } from '@/lib/saas/plan-features'
 
 // Tipos MIME permitidos para subida
 const ALLOWED_MIME_TYPES = [
@@ -36,6 +39,25 @@ export async function POST(request: Request) {
     const ALLOWED_BUCKETS = ['repair-images', 'product-images', 'avatars']
     if (!ALLOWED_BUCKETS.includes(bucket)) {
       return NextResponse.json({ error: 'Invalid bucket' }, { status: 400 })
+    }
+
+    // Gating por plan: las fotos de reparación requieren plan Basic+ (Free = sin fotos).
+    if (bucket === 'repair-images') {
+      const { user } = auth as Extract<AuthResult, { authenticated: true }>
+      const organization = await getCurrentOrganizationContext(user.id)
+      if (organization) {
+        const planInfo = await getOrganizationPlanInfo(organization.id)
+        if (repairPhotoLimit(planInfo.code) === 0) {
+          return NextResponse.json(
+            {
+              error: `Tu plan ${planInfo.name} no incluye fotos en reparaciones. Subí a Basic o superior.`,
+              code: 'PLAN_LIMIT_REACHED',
+              resource: 'repairPhotos',
+            },
+            { status: 402 }
+          )
+        }
+      }
     }
 
     // Validar tipo MIME

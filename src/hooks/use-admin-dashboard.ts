@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { SystemSettings } from '@/lib/validations/system-settings'
-import { saveSystemSettingsViaSupabase } from '@/lib/system-settings-client'
 import { DEFAULT_SYSTEM_COLOR_SCHEME } from '@/lib/theme/color-schemes'
 
 export type { SystemSettings } from '@/lib/validations/system-settings'
@@ -339,11 +338,7 @@ export function useAdminDashboard() {
       })
 
       const responseData = await response.json().catch(() => ({}))
-      let persistedSettings = responseData?.data
-      if ((!response.ok || !responseData?.success || !responseData?.data) && response.status === 404) {
-        console.warn('System settings API returned 404, falling back to direct Supabase upsert')
-        persistedSettings = await saveSystemSettingsViaSupabase(supabase, validated)
-      } else if (!response.ok || !responseData?.success || !responseData?.data) {
+      if (!response.ok || !responseData?.success || !responseData?.data) {
         const errorMessage =
           responseData?.error || `No se pudo guardar la configuración (${response.status})`
         console.error('Error updating settings via API:', errorMessage)
@@ -371,7 +366,7 @@ export function useAdminDashboard() {
       
       // 5. Actualizar estado local
       const { mapDBToSettings } = await import('@/lib/validations/system-settings')
-      const updatedSettings = mapDBToSettings(persistedSettings)
+      const updatedSettings = mapDBToSettings(responseData.data)
       setSettings(updatedSettings)
       
       return { success: true }
@@ -392,7 +387,7 @@ export function useAdminDashboard() {
     } finally {
       setIsLoading(false)
     }
-  }, [supabase, settings])
+  }, [settings])
 
   const performSystemAction = useCallback(async (action: string) => {
     try {

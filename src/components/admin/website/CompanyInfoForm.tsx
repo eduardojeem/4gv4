@@ -44,6 +44,7 @@ const BRAND_PREVIEW: Record<string, { header: string; cta: string; dot: string }
   emerald: { header: 'bg-emerald-600 text-white border-emerald-500', cta: 'bg-emerald-600 hover:bg-emerald-700 text-white', dot: 'bg-emerald-500' },
   cyan: { header: 'bg-cyan-600 text-white border-cyan-500', cta: 'bg-cyan-600 hover:bg-cyan-700 text-white', dot: 'bg-cyan-500' },
   sky: { header: 'bg-sky-600 text-white border-sky-500', cta: 'bg-sky-600 hover:bg-sky-700 text-white', dot: 'bg-sky-500' },
+  custom: { header: 'bg-primary text-white border-primary/50', cta: 'bg-primary hover:bg-primary/90 text-primary-foreground', dot: 'bg-primary' },
 }
 
 const HEADER_STYLE_HINT: Record<string, string> = {
@@ -186,6 +187,7 @@ export function CompanyInfoForm() {
       hours: formData.hours || { weekdays: '', saturday: '', sunday: '' },
       logoUrl: formData.logoUrl || '',
       brandColor: formData.brandColor || 'blue',
+      customBrandColor: formData.customBrandColor || '',
       headerStyle: formData.headerStyle || 'glass',
       headerColor: formData.headerColor || '',
       showTopBar: formData.showTopBar !== undefined ? formData.showTopBar : true,
@@ -270,10 +272,10 @@ export function CompanyInfoForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 pb-24 md:pb-6">
+    <form onSubmit={handleSubmit} className="space-y-8 md:space-y-10 pb-24 md:pb-8">
       {/* Identidad */}
       <SectionCard icon={Building2} title="Identidad" description="Nombre y logo de la empresa">
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-8 md:grid-cols-3 md:gap-10">
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="companyName" className="text-sm font-medium">Nombre de la empresa</Label>
             <Input
@@ -362,7 +364,7 @@ export function CompanyInfoForm() {
 
       {/* Personalización visual */}
       <SectionCard icon={Sparkles} title="Personalización visual" description="Color de marca, estilo del header y barra superior">
-        <div className="grid gap-8 lg:grid-cols-12">
+        <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
           {/* Config */}
           <div className="space-y-6 lg:col-span-7">
             <div className="space-y-3">
@@ -392,6 +394,52 @@ export function CompanyInfoForm() {
                     </button>
                   )
                 })}
+                {/* Custom Color */}
+                {(() => {
+                  const isSelected = formData.brandColor === 'custom'
+                  return (
+                    <div className="relative group">
+                      <button
+                        type="button"
+                        onClick={() => handleChange('brandColor', 'custom')}
+                        className={`w-full h-full relative flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all hover:scale-105 active:scale-95 ${
+                          isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-foreground/30'
+                        }`}
+                      >
+                        <span 
+                          className="h-6 w-6 rounded-full shadow-inner transition-transform group-hover:scale-110 border" 
+                          style={{ backgroundColor: formData.customBrandColor || '#000000' }} 
+                        />
+                        <span className={`mt-1.5 text-[10px] font-medium ${isSelected ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
+                          Hex / Libre
+                        </span>
+                        {isSelected && (
+                          <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
+                            ✓
+                          </span>
+                        )}
+                      </button>
+                      
+                      {isSelected && (
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 z-50 mt-2 w-[140px] rounded-lg border bg-popover p-3 shadow-xl animate-in fade-in zoom-in-95">
+                          <input
+                            type="color"
+                            value={formData.customBrandColor || '#000000'}
+                            onChange={(e) => handleChange('customBrandColor', e.target.value)}
+                            className="h-8 w-full cursor-pointer rounded border border-input p-0.5"
+                          />
+                          <input
+                            type="text"
+                            value={formData.customBrandColor || '#000000'}
+                            onChange={(e) => handleChange('customBrandColor', e.target.value)}
+                            className="mt-2 flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            placeholder="#FF5733"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
 
@@ -449,7 +497,8 @@ export function CompanyInfoForm() {
 
               <div
                 className="relative h-44 overflow-hidden rounded-xl border bg-background shadow-lg"
-                data-color-scheme={formData.brandColor || 'blue'}
+                data-color-scheme={formData.brandColor === 'custom' ? undefined : (formData.brandColor || 'blue')}
+                style={formData.brandColor === 'custom' && formData.customBrandColor ? { '--primary': formData.customBrandColor } as React.CSSProperties : undefined}
               >
                 <div
                   className="pointer-events-none absolute inset-0 select-none bg-cover bg-center opacity-30"
@@ -520,7 +569,7 @@ export function CompanyInfoForm() {
 
       {/* Contacto */}
       <SectionCard icon={Phone} title="Información de contacto" description="Datos mostrados en el portal público">
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-8 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="phone" className="flex items-center gap-2 text-sm font-medium">
               <Phone className="h-4 w-4 text-muted-foreground" />
@@ -561,7 +610,7 @@ export function CompanyInfoForm() {
 
       {/* Horarios */}
       <SectionCard icon={Clock} title="Horarios de atención" description="Horarios mostrados a los clientes">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="weekdays" className="text-sm font-medium">Lunes - Viernes</Label>
             <Input id="weekdays" value={formData.hours.weekdays} onChange={(e) => handleChange('hours.weekdays', e.target.value)} placeholder="8:00 - 18:00" maxLength={50} className="h-11" />
@@ -579,7 +628,7 @@ export function CompanyInfoForm() {
 
       {/* Legal */}
       <SectionCard icon={Building2} title="Legal y negocio" description="RUC, tipo de actividad y datos fiscales">
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-8 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="ruc" className="text-sm font-medium">
               RUC / Tax ID <span className="text-xs font-normal text-muted-foreground">— opcional</span>
@@ -606,7 +655,7 @@ export function CompanyInfoForm() {
 
       {/* Redes sociales */}
       <SectionCard icon={MessageCircle} title="Redes sociales" description="Enlaza el perfil de la empresa en cada red — opcional">
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-8 md:grid-cols-3">
           {[
             { id: 'instagram', label: 'Instagram', prefix: 'instagram.com/', value: formData.instagram, placeholder: 'tu_usuario' },
             { id: 'facebook', label: 'Facebook', prefix: 'facebook.com/', value: formData.facebook, placeholder: 'tu_pagina' },

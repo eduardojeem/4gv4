@@ -9,7 +9,8 @@ export interface CompanyInfo {
     sunday: string
   }
   logoUrl?: string
-  brandColor?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo' | 'teal' | 'rose' | 'amber' | 'emerald' | 'cyan' | 'sky'
+  brandColor?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo' | 'teal' | 'rose' | 'amber' | 'emerald' | 'cyan' | 'sky' | 'custom'
+  customBrandColor?: string
   headerStyle?: 'glass' | 'solid' | 'accent' | 'dark'
   headerColor?: string
   showTopBar?: boolean
@@ -22,7 +23,6 @@ export interface CompanyInfo {
   servicesPageEnabled?: boolean
   marketplacePublic?: boolean
 }
-
 export interface HeroStats {
   repairs: string
   satisfaction: string
@@ -40,7 +40,7 @@ export interface OffersSectionSettings {
   eyebrow: string
   title: string
   subtitle: string
-  accentColor: 'rose' | 'amber' | 'orange' | 'emerald'
+  accentColor: 'brand' | 'rose' | 'amber' | 'orange' | 'emerald'
 }
 
 export interface Service {

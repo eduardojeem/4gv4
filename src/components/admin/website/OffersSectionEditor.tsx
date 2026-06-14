@@ -23,10 +23,11 @@ const ACCENTS: Array<{
   swatch: string
   preview: string
 }> = [
-  { value: 'rose', label: 'Rosa', swatch: 'bg-rose-500', preview: 'border-rose-200 bg-rose-50 dark:border-rose-900/40 dark:bg-rose-950/20' },
-  { value: 'amber', label: 'Ambar', swatch: 'bg-amber-500', preview: 'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20' },
-  { value: 'orange', label: 'Naranja', swatch: 'bg-orange-500', preview: 'border-orange-200 bg-orange-50 dark:border-orange-900/40 dark:bg-orange-950/20' },
-  { value: 'emerald', label: 'Esmeralda', swatch: 'bg-emerald-500', preview: 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/20' },
+  { value: 'brand', label: 'Color de marca', swatch: 'bg-primary', preview: 'bg-gradient-to-br from-primary/15 via-background to-background border-primary/30' },
+  { value: 'rose', label: 'Rosa', swatch: 'bg-gradient-to-br from-rose-400 to-rose-600', preview: 'bg-gradient-to-br from-rose-500/15 via-background to-background border-rose-200/50 dark:border-rose-900/30' },
+  { value: 'amber', label: 'Ámbar', swatch: 'bg-gradient-to-br from-amber-400 to-amber-600', preview: 'bg-gradient-to-br from-amber-500/15 via-background to-background border-amber-200/50 dark:border-amber-900/30' },
+  { value: 'orange', label: 'Naranja', swatch: 'bg-gradient-to-br from-orange-400 to-orange-600', preview: 'bg-gradient-to-br from-orange-500/15 via-background to-background border-orange-200/50 dark:border-orange-900/30' },
+  { value: 'emerald', label: 'Esmeralda', swatch: 'bg-gradient-to-br from-emerald-400 to-emerald-600', preview: 'bg-gradient-to-br from-emerald-500/15 via-background to-background border-emerald-200/50 dark:border-emerald-900/30' },
 ]
 
 export function OffersSectionEditor() {
@@ -76,43 +77,50 @@ export function OffersSectionEditor() {
   const selectedAccent = ACCENTS.find((accent) => accent.value === current.accentColor) ?? ACCENTS[0]
 
   return (
-    <div className="max-w-4xl space-y-6 pb-24 md:pb-6">
-      <Card className={cn('overflow-hidden border-2', selectedAccent.preview, !current.enabled && 'opacity-60')}>
-        <div className="flex items-center justify-between border-b border-current/10 px-5 py-3">
-          <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+    <div className="max-w-4xl space-y-8 md:space-y-10 pb-24 md:pb-8">
+      <Card className={cn('relative overflow-hidden border shadow-sm transition-all', selectedAccent.preview, !current.enabled && 'opacity-60 grayscale')}>
+        {/* Decorative elements to match public site */}
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-foreground/5 blur-3xl" />
+
+        <div className="relative flex items-center justify-between border-b border-foreground/5 px-5 py-3 backdrop-blur-sm">
+          <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             <Eye className="h-3.5 w-3.5" />
-            Vista previa
+            Vista previa pública
           </span>
-          <span className="text-xs font-medium">{current.enabled ? 'Visible en la tienda' : 'Oculta'}</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            {current.enabled ? 'Visible' : 'Oculta'}
+          </span>
         </div>
-        <div className="p-6">
-          <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em]">
+        <div className="relative p-6 sm:p-10">
+          <span className="mb-4 flex w-max items-center gap-2 rounded-full border border-foreground/10 bg-background/50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] backdrop-blur-md">
             <Tag className="h-3.5 w-3.5" />
             {current.eyebrow}
           </span>
-          <h2 className="mt-3 text-2xl font-bold tracking-tight">{current.title}</h2>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{current.subtitle}</p>
+          <h2 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">{current.title}</h2>
+          <p className="mt-3 max-w-2xl text-base text-muted-foreground sm:text-lg">{current.subtitle}</p>
         </div>
       </Card>
 
       <SectionCard
         icon={ShoppingBag}
         title="Visibilidad y contenido"
-        description="Controla como aparece la seccion de ofertas en la portada publica"
+        description="Controla como aparece la seccion de ofertas en la portada y en su pagina publica"
       >
-        <div className="space-y-5">
-          <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 p-4">
-            <div className="flex items-center gap-3">
-              {current.enabled ? <Eye className="h-5 w-5 text-emerald-600" /> : <EyeOff className="h-5 w-5 text-muted-foreground" />}
+        <div className="space-y-8">
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/50 bg-background/50 p-5 shadow-sm backdrop-blur-sm sm:p-6 transition-all hover:border-border">
+            <div className="flex items-center gap-4">
+              <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors", current.enabled ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground')}>
+                {current.enabled ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
+              </div>
               <div>
-                <p className="text-sm font-semibold">Mostrar seccion de ofertas</p>
-                <p className="text-xs text-muted-foreground">Al desactivarla, desaparece de la portada publica.</p>
+                <p className="text-sm font-bold">Mostrar sección de ofertas</p>
+                <p className="text-xs text-muted-foreground">Controla si los clientes pueden ver este bloque en el inicio.</p>
               </div>
             </div>
             <Switch checked={current.enabled} onCheckedChange={(value) => patch('enabled', value)} />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-6 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="offers-eyebrow">Etiqueta superior</Label>
               <Input id="offers-eyebrow" value={current.eyebrow} onChange={(event) => patch('eyebrow', event.target.value)} maxLength={60} />
@@ -129,36 +137,51 @@ export function OffersSectionEditor() {
           </div>
 
           <div className="space-y-3">
-            <Label>Color diferenciado</Label>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {ACCENTS.map((accent) => (
-                <button
-                  key={accent.value}
-                  type="button"
-                  onClick={() => patch('accentColor', accent.value)}
-                  className={cn(
-                    'flex items-center gap-2 rounded-xl border p-3 text-left text-sm font-medium transition-colors',
-                    current.accentColor === accent.value ? 'border-foreground bg-muted' : 'hover:bg-muted/50'
-                  )}
-                >
-                  <span className={cn('h-4 w-4 rounded-full', accent.swatch)} />
-                  {accent.label}
-                </button>
-              ))}
+            <Label className="font-semibold">Color del Acento</Label>
+            <p className="text-xs text-muted-foreground">Define el matiz de los bordes y brillos de esta sección especial.</p>
+            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
+              {ACCENTS.map((accent) => {
+                const isSelected = current.accentColor === accent.value
+                return (
+                  <button
+                    key={accent.value}
+                    type="button"
+                    onClick={() => patch('accentColor', accent.value)}
+                    className={cn(
+                      'group relative flex flex-col items-center justify-center rounded-2xl border p-4 transition-all hover:scale-105 active:scale-95',
+                      isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm' : 'border-border/50 hover:border-foreground/30 bg-background'
+                    )}
+                  >
+                    <span className={cn('h-8 w-8 rounded-full shadow-inner transition-transform group-hover:scale-110', accent.swatch)} />
+                    <span className={cn('mt-3 text-[11px] font-bold uppercase tracking-wider', isSelected ? 'text-primary' : 'text-muted-foreground')}>
+                      {accent.label}
+                    </span>
+                    {isSelected && (
+                      <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>
       </SectionCard>
 
-      <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold">Productos que aparecen como ofertas</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            La seccion se completa automaticamente con productos que tengan precio de oferta activo.
+      <div className="group relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background p-6 sm:p-8 sm:flex-row sm:items-center sm:justify-between transition-all hover:border-primary/40 hover:shadow-md">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/10 blur-2xl transition-all group-hover:bg-primary/20" />
+        <div className="relative">
+          <p className="text-base font-bold">Productos en oferta activa</p>
+          <p className="mt-1.5 max-w-lg text-sm text-muted-foreground">
+            El sistema recopila automáticamente cualquier producto de tu catálogo que tenga configurado un &quot;precio de oferta&quot;. No necesitás añadirlos manualmente aquí.
           </p>
         </div>
-        <Button asChild variant="outline" className="shrink-0">
-          <Link href="/dashboard/products">Administrar productos</Link>
+        <Button asChild variant="default" className="relative shrink-0 rounded-full shadow-lg">
+          <Link href="/dashboard/products">
+            <ShoppingBag className="mr-2 h-4 w-4" />
+            Gestionar productos
+          </Link>
         </Button>
       </div>
 

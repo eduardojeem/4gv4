@@ -95,8 +95,8 @@ export const features: SaaSFeature[] = [
     tone: 'text-violet-600 bg-violet-50 dark:bg-violet-950/30',
   },
   {
-    title: 'WhatsApp y clientes',
-    description: 'Contacto comercial, avisos de reparación y base CRM para compradores.',
+    title: 'Clientes y CRM',
+    description: 'Base de compradores, avisos de reparación y seguimiento comercial.',
     icon: MessageCircle,
     tone: 'text-green-600 bg-green-50 dark:bg-green-950/30',
   },
@@ -133,7 +133,7 @@ export const businessTypes: SaaSBusinessType[] = [
   {
     title: 'Servicios técnicos',
     description: 'Órdenes de reparación, estados, técnicos, historial y seguimiento por ticket.',
-    metrics: 'Reparaciones + WhatsApp',
+    metrics: 'Reparaciones + seguimiento',
     icon: Wrench,
     color: 'text-amber-600 dark:text-amber-400',
     accentBg: 'bg-amber-50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30',
@@ -193,7 +193,7 @@ export const plans: SaaSPlan[] = [
     description: 'Para tiendas con reparaciones, catálogo público y comunicación activa.',
     cta: 'Elegir Pro',
     limits: ['10 usuarios', '5.000 productos', '5 sucursales', 'Automatizaciones'],
-    modules: ['POS', 'Inventario', 'Repairs', 'Ecommerce', 'WhatsApp'],
+    modules: ['POS', 'Inventario', 'Repairs', 'Ecommerce'],
   },
   {
     name: 'ENTERPRISE',

@@ -53,6 +53,8 @@ import { PatternDrawer } from './repairs/PatternDrawer'
 import { AppError } from '@/lib/errors'
 // import { uploadFile } from '@/lib/supabase-storage'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
+import { useSubscriptionStatus, repairPhotoLimit } from '@/contexts/SubscriptionStatusContext'
+import { UpgradeHint } from '@/components/admin/PlanGate'
 import { RepairCostCalculator } from './repairs/RepairCostCalculator'
 import { Repair } from '@/types/repairs'
 
@@ -114,6 +116,8 @@ export function RepairFormDialogV2({
   onSubmit
 }: RepairFormDialogV2Props) {
   const formId = 'repair-form-dialog-form'
+  const { planCode } = useSubscriptionStatus()
+  const photoLimit = repairPhotoLimit(planCode)
   const [quickMode, setQuickMode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false)
@@ -943,11 +947,20 @@ export function RepairFormDialogV2({
                               }
                               return urls
                             }
+                            // Plan FREE: sin fotos. BASIC: máx 3. PRO/ENTERPRISE: ilimitado (tope técnico 6).
+                            if (photoLimit === 0) {
+                              return (
+                                <UpgradeHint
+                                  requiredPlan="Basic"
+                                  message="Las fotos de reparación están disponibles desde el plan Basic."
+                                />
+                              )
+                            }
                             return (
                               <ImageUploader
                                 images={field.value || []}
                                 onChange={field.onChange}
-                                maxImages={6}
+                                maxImages={photoLimit === null ? 6 : Math.min(6, photoLimit)}
                                 maxSize={5242880}
                                 onUploadFiles={onUploadFiles}
                               />

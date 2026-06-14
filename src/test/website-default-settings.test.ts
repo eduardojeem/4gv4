@@ -42,6 +42,7 @@ describe('applyWebsiteSettingsDefaults', () => {
       offers_section: {
         enabled: false,
         title: 'Liquidacion de temporada',
+        accentColor: 'brand',
       },
     } as Partial<WebsiteSettings>)
 
@@ -49,6 +50,7 @@ describe('applyWebsiteSettingsDefaults', () => {
     expect(defaults.offers_section.accentColor).toBe('rose')
     expect(customized.offers_section.enabled).toBe(false)
     expect(customized.offers_section.title).toBe('Liquidacion de temporada')
+    expect(customized.offers_section.accentColor).toBe('brand')
     expect(customized.offers_section.subtitle).toBe(defaults.offers_section.subtitle)
   })
 })

@@ -189,6 +189,8 @@ async function loadUsers(request: NextRequest, context: AdminAuthContext) {
       .from('organization_members')
       .select('user_id, role, status')
       .eq('organization_id', context.organizationId)
+      // Excluir clientes (registrados desde la pública): pertenecen a Clientes/CRM, no a gestión de usuarios.
+      .neq('role', 'customer')
 
     if (membersError) throw membersError
 

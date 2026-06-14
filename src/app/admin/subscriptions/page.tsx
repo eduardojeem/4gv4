@@ -32,6 +32,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { BillingProfileForm } from '@/components/admin/subscriptions/BillingProfileForm'
 import { PagoparPaymentButton } from '@/components/admin/subscriptions/PagoparPaymentButton'
 import { PlansComparison, type PlanRow } from '@/components/admin/subscriptions/PlansComparison'
+import { PromoCodeRedeemer } from '@/components/admin/subscriptions/PromoCodeRedeemer'
 
 const statusLabels: Record<string, string> = {
   active: 'Activo',
@@ -247,6 +248,8 @@ export default async function AdminSubscriptionsPage() {
         </div>
       )}
 
+      <PromoCodeRedeemer canRedeem={['owner', 'admin'].includes(organization.role)} />
+
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -297,6 +300,10 @@ export default async function AdminSubscriptionsPage() {
               <p className="text-sm text-muted-foreground">{feature(state.currentPlan, 'analytics')}</p>
             </div>
             <div className="rounded-lg border p-4">
+              <div className="mb-2 flex items-center gap-2 font-medium"><CreditCard className="h-4 w-4" />Créditos y cuotas</div>
+              <p className="text-sm text-muted-foreground">{feature(state.currentPlan, 'credits')}</p>
+            </div>
+            <div className="rounded-lg border p-4">
               <div className="mb-2 flex items-center gap-2 font-medium"><CalendarDays className="h-4 w-4" />Modulos activos</div>
               {state.currentPlan.modules.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5 mt-1">
@@ -325,6 +332,7 @@ export default async function AdminSubscriptionsPage() {
           products: limitText(getPlanLimit(plan, 'products')),
           marketplace: feature(plan, 'marketplace'),
           analytics: feature(plan, 'analytics'),
+          credits: feature(plan, 'credits'),
         }))}
       />
 

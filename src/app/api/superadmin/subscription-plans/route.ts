@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
+import { deriveTechnicalModules } from '@/lib/saas/plan-modules'
 
 // ---------------------------------------------------------------------------
 // GET — Stats por plan: cantidad de orgs y MRR estimado
@@ -119,6 +120,11 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await admin
+    .from('plans')
+    .update({ modules: deriveTechnicalModules(tier, plan.features) })
+    .eq('code', tier.toUpperCase())
 
   await admin.from('tenant_audit_log').insert({
     user_id: user.id,

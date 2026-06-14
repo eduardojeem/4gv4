@@ -20,6 +20,7 @@ import { PieChart } from 'recharts/es6/chart/PieChart';
 import { Pie } from 'recharts/es6/polar/Pie';
 import { Cell } from 'recharts/es6/component/Cell';
 import { ChartExporter } from '@/components/reports/ChartExporter'
+import { useSubscriptionStatus, canExportReports } from '@/contexts/SubscriptionStatusContext'
 import {
   TrendingUp,
   TrendingDown,
@@ -41,6 +42,14 @@ import { isCompletedSaleStatus } from '@/lib/sales-status'
 import { createClient } from '@/lib/supabase/client'
 import { RealtimeChannel } from '@supabase/supabase-js'
 import { ReportsProductsTab } from '@/components/reports/ReportsProductsTab'
+
+// Sanitiza una celda CSV: previene inyección de fórmulas y escapa comas/comillas/saltos.
+function csvCell(value: unknown): string {
+  let text = value === null || value === undefined ? '' : String(value)
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
+  if (/[",\n\r]/.test(text)) text = `"${text.replace(/"/g, '""')}"`
+  return text
+}
 
 interface SalesData {
   date: string
@@ -74,6 +83,8 @@ interface KpiDelta {
 }
 
 export default function ReportsPage() {
+  const { planCode } = useSubscriptionStatus()
+  const canExport = canExportReports(planCode) // exportar/descargar: Basic en adelante
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date()
@@ -567,7 +578,7 @@ export default function ReportsPage() {
     if (type === 'ventas') {
       const headers = ['Fecha','Ventas','Órdenes','Clientes']
       const rows = salesData.map(d => [d.date, d.sales, d.orders, d.customers])
-      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+      const csv = [headers.join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\n')
       const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -577,7 +588,7 @@ export default function ReportsPage() {
     } else if (type === 'reparaciones') {
       const headers = ['Fecha','Cantidad']
       const rows = repairsTrend.map(d => [d.date, d.count])
-      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+      const csv = [headers.join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\n')
       const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -600,10 +611,10 @@ export default function ReportsPage() {
       {errorMsg && (
         <div className="p-3 border rounded text-red-600 bg-red-50">{errorMsg}</div>
       )}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-100 dark:border-blue-900 rounded-xl px-5 py-4 shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">Reportes y Analytics</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Reportes y Analytics</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Análisis detallado de ventas y rendimiento
           </p>
         </div>
@@ -621,149 +632,128 @@ export default function ReportsPage() {
             </SelectContent>
           </Select>
           
-          <ChartExporter
-            title="Reporte de Gestión - 4G Celulares"
-            data={salesData}
-            metrics={{
-              'Ventas Totales': formatFullPrice(totalSales),
-              'Órdenes': totalOrders,
-              'Clientes': totalCustomers,
-              'Valor Promedio': formatFullPrice(avgOrderValue),
-              'Ganancia Estimada': formatFullPrice(totalProfit),
-              'Reparaciones Totales': repairsMetrics.total,
-              'Tasa de Finalización': `${repairsMetrics.completionRate.toFixed(0)}%`
-            }}
-            chartRefs={[salesChartRef, repairsChartRef, repairsStatusRef, productsChartRef, productTrendRef, categoriesChartRef]}
-            chartTitles={['Tendencia de Ventas', 'Tendencia de Reparaciones', 'Distribución por Estado', 'Productos Más Vendidos', 'Tendencia del Producto', 'Distribución por Categorías']}
-            chartData={[salesData, repairsTrend, repairsStatusDist, visibleProducts, selectedProductTrend, categoryComputed.visible]}
-          />
+          {canExport ? (
+            <ChartExporter
+              title="Reporte de Gestión - 4G Celulares"
+              data={salesData}
+              metrics={{
+                'Ventas Totales': formatFullPrice(totalSales),
+                'Órdenes': totalOrders,
+                'Clientes': totalCustomers,
+                'Valor Promedio': formatFullPrice(avgOrderValue),
+                'Ganancia Estimada': formatFullPrice(totalProfit),
+                'Reparaciones Totales': repairsMetrics.total,
+                'Tasa de Finalización': `${repairsMetrics.completionRate.toFixed(0)}%`
+              }}
+              chartRefs={[salesChartRef, repairsChartRef, repairsStatusRef, productsChartRef, productTrendRef, categoriesChartRef]}
+              chartTitles={['Tendencia de Ventas', 'Tendencia de Reparaciones', 'Distribución por Estado', 'Productos Más Vendidos', 'Tendencia del Producto', 'Distribución por Categorías']}
+              chartData={[salesData, repairsTrend, repairsStatusDist, visibleProducts, selectedProductTrend, categoryComputed.visible]}
+            />
+          ) : (
+            <Button variant="outline" disabled title="Exportar disponible desde el plan Basic" className="gap-2">
+              <Download className="h-4 w-4" />
+              Exportar
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950/40 dark:to-emerald-900/40 border border-emerald-200 dark:border-emerald-700 shadow-sm">
-          <CardContent className="p-6">
+        <Card className="border-l-4 border-l-emerald-500 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Ventas Totales</p>
-                <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-200">
-                  {formatFullPrice(totalSales)}
-                </p>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Ventas Totales</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-50">{formatFullPrice(totalSales)}</p>
               </div>
-              <div className="h-10 w-10 bg-emerald-100 dark:bg-emerald-900/60 rounded-full flex items-center justify-center shadow-sm">
-                <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />
-              </div>
+              <DollarSign className="h-5 w-5 text-emerald-500" />
             </div>
-            <div className="flex items-center mt-2">
+            <div className="mt-2 flex items-center">
               {(kpiDelta.sales ?? 0) >= 0 ? (
                 <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
               ) : (
                 <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
               )}
-              <span className={`text-sm font-medium ${(kpiDelta.sales ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.sales)}</span>
-              <span className="text-sm text-emerald-900/70 dark:text-emerald-100/80 ml-1">
-                vs periodo anterior
-              </span>
+              <span className={`text-sm font-medium ${(kpiDelta.sales ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.sales)}</span>
+              <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">vs periodo anterior</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-blue-50 to-sky-50 dark:from-blue-950/40 dark:to-sky-950/40 border border-blue-200 dark:border-blue-800 shadow-sm">
-          <CardContent className="p-6">
+        <Card className="border-l-4 border-l-blue-500 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Órdenes</p>
-                <p className="text-2xl font-bold text-blue-700 dark:text-blue-200">
-                  {totalOrders}
-                </p>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Órdenes</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-50">{totalOrders}</p>
               </div>
-              <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/60 rounded-full flex items-center justify-center shadow-sm">
-                <ShoppingCart className="h-5 w-5 text-blue-600 dark:text-blue-300" />
-              </div>
+              <ShoppingCart className="h-5 w-5 text-blue-500" />
             </div>
-            <div className="flex items-center mt-2">
+            <div className="mt-2 flex items-center">
               {(kpiDelta.orders ?? 0) >= 0 ? (
                 <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
               ) : (
                 <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
               )}
-              <span className={`text-sm font-medium ${(kpiDelta.orders ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.orders)}</span>
-              <span className="text-sm text-slate-700/80 dark:text-slate-100/80 ml-1">
-                vs periodo anterior
-              </span>
+              <span className={`text-sm font-medium ${(kpiDelta.orders ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.orders)}</span>
+              <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">vs periodo anterior</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/40 dark:to-purple-950/40 border border-violet-200 dark:border-violet-800 shadow-sm">
-          <CardContent className="p-6">
+        <Card className="border-l-4 border-l-violet-500 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Clientes</p>
-                <p className="text-2xl font-bold text-violet-700 dark:text-violet-200">
-                  {totalCustomers}
-                </p>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Clientes</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-50">{totalCustomers}</p>
               </div>
-              <div className="h-10 w-10 bg-purple-100 dark:bg-purple-900/60 rounded-full flex items-center justify-center shadow-sm">
-                <Users className="h-5 w-5 text-purple-600 dark:text-purple-300" />
-              </div>
+              <Users className="h-5 w-5 text-violet-500" />
             </div>
-            <div className="flex items-center mt-2">
+            <div className="mt-2 flex items-center">
               {(kpiDelta.customers ?? 0) >= 0 ? (
                 <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
               ) : (
                 <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
               )}
-              <span className={`text-sm font-medium ${(kpiDelta.customers ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.customers)}</span>
-              <span className="text-sm text-slate-700/80 dark:text-slate-100/80 ml-1">
-                vs periodo anterior
-              </span>
+              <span className={`text-sm font-medium ${(kpiDelta.customers ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.customers)}</span>
+              <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">vs periodo anterior</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 border border-amber-200 dark:border-amber-800 shadow-sm">
-          <CardContent className="p-6">
+        <Card className="border-l-4 border-l-amber-500 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Valor Promedio</p>
-                <p className="text-2xl font-bold text-amber-700 dark:text-amber-200">
-                  {formatFullPrice(avgOrderValue)}
-                </p>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Valor Promedio</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-50">{formatFullPrice(avgOrderValue)}</p>
               </div>
-              <div className="h-10 w-10 bg-orange-100 dark:bg-orange-900/60 rounded-full flex items-center justify-center shadow-sm">
-                <Package className="h-5 w-5 text-orange-600 dark:text-orange-300" />
-              </div>
+              <Package className="h-5 w-5 text-amber-500" />
             </div>
-            <div className="flex items-center mt-2">
+            <div className="mt-2 flex items-center">
               {(kpiDelta.aov ?? 0) >= 0 ? (
                 <TrendingUp className="h-4 w-4 text-emerald-500 mr-1" />
               ) : (
                 <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
               )}
-              <span className={`text-sm font-medium ${(kpiDelta.aov ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.aov)}</span>
-              <span className="text-sm text-slate-700/80 dark:text-slate-100/80 ml-1">
-                vs periodo anterior
-              </span>
+              <span className={`text-sm font-medium ${(kpiDelta.aov ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{formatDelta(kpiDelta.aov)}</span>
+              <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">vs periodo anterior</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-indigo-50 to-pink-50 dark:from-indigo-950/40 dark:to-pink-950/40 border border-indigo-200 dark:border-indigo-800 shadow-sm">
-          <CardContent className="p-6">
+        <Card className="border-l-4 border-l-indigo-500 shadow-sm">
+          <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Ganancia Est.</p>
-                <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-200">
-                  {formatFullPrice(totalProfit)}
-                </p>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Ganancia Est.</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-50">{formatFullPrice(totalProfit)}</p>
               </div>
-              <div className="h-10 w-10 bg-pink-100 dark:bg-pink-900/60 rounded-full flex items-center justify-center shadow-sm">
-                <DollarSign className="h-5 w-5 text-pink-600 dark:text-pink-300" />
-              </div>
+              <DollarSign className="h-5 w-5 text-indigo-500" />
             </div>
-            <div className="flex items-center mt-2">
-               <span className="text-sm text-slate-700/80 dark:text-slate-100/80">
+            <div className="mt-2 flex items-center">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
                 Margen: {totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(1) : 0}%
               </span>
             </div>
@@ -880,7 +870,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button variant="outline" onClick={() => exportReport('reparaciones')}>Exportar Reparaciones (CSV)</Button>
+            <Button variant="outline" onClick={() => exportReport('reparaciones')} disabled={!canExport} title={!canExport ? 'Exportar disponible desde el plan Basic' : undefined}>Exportar Reparaciones (CSV)</Button>
           </div>
         </TabsContent>
 
@@ -1020,14 +1010,14 @@ export default function ReportsPage() {
                     const headers = ['Categoría', categoryMetricBy === 'sales' ? 'Ventas' : 'Cantidad', 'Participación %']
                     const denom = categoryMetricBy === 'sales' ? (totalSales || 1) : (totalQty || 1)
                     const rows = visible.map(c => [c.name, String(categoryMetricBy === 'sales' ? c.sales : c.quantity), (((categoryMetricBy === 'sales' ? c.sales : c.quantity) / denom) * 100).toFixed(1)])
-                    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+                    const csv = [headers.join(','), ...rows.map(r => r.map(csvCell).join(','))].join('\n')
                     const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' })
                     const url = window.URL.createObjectURL(blob)
                     const a = document.createElement('a')
                     a.href = url
                     a.download = `categorias-${new Date().toISOString().slice(0,10)}.csv`
                     a.click(); window.URL.revokeObjectURL(url)
-                  }}>Exportar Categorías (CSV)</Button>
+                  }} disabled={!canExport} title={!canExport ? 'Exportar disponible desde el plan Basic' : undefined}>Exportar Categorías (CSV)</Button>
                 </div>
               </>
             )
@@ -1041,23 +1031,23 @@ export default function ReportsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-4 border rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border-blue-100 dark:border-blue-900">
-                  <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                <div className="rounded-lg border border-gray-200 p-4 text-center dark:border-slate-800">
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                     {customersNewCount}
                   </p>
-                  <p className="text-sm text-muted-foreground">Clientes Nuevos</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Clientes Nuevos</p>
                 </div>
-                <div className="text-center p-4 border rounded-lg bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/40 dark:to-green-950/40 border-emerald-100 dark:border-emerald-900">
-                  <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+                <div className="rounded-lg border border-gray-200 p-4 text-center dark:border-slate-800">
+                  <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
                     {retentionRate.toFixed(0)}%
                   </p>
-                  <p className="text-sm text-muted-foreground">Tasa de Retención</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Tasa de Retención</p>
                 </div>
-                <div className="text-center p-4 border rounded-lg bg-gradient-to-br from-purple-50 to-fuchsia-50 dark:from-purple-950/40 dark:to-fuchsia-950/40 border-purple-100 dark:border-purple-900">
-                  <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+                <div className="rounded-lg border border-gray-200 p-4 text-center dark:border-slate-800">
+                  <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">
                     {avgPurchasesPerCustomer.toFixed(1)}
                   </p>
-                  <p className="text-sm text-muted-foreground">Compras Promedio</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Compras Promedio</p>
                 </div>
               </div>
             </CardContent>

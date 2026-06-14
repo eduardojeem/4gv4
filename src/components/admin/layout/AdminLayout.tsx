@@ -275,10 +275,10 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
               'flex items-center rounded-xl border border-transparent text-muted-foreground shadow-sm transition-all duration-200 hover:border-border hover:bg-background hover:text-foreground',
               collapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'
             )}
-            title="Volver al Dashboard"
+            title="Volver a Inicio"
           >
             <ArrowLeft className={cn('flex-shrink-0', collapsed ? 'h-5 w-5' : 'h-4 w-4')} />
-            {!collapsed && <span className="text-sm font-medium">Volver al Dashboard</span>}
+            {!collapsed && <span className="text-sm font-medium">Volver a Inicio</span>}
           </Link>
         </div>
       </aside>
@@ -299,7 +299,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
 
               <div className="min-w-0 flex-1">
                 <Breadcrumbs items={[
-                  { label: 'Dashboard', href: '/dashboard' },
+                  { label: 'Inicio', href: '/dashboard' },
                   { label: 'Admin', href: '/admin' },
                   { label: currentItem?.label ?? 'Seccion' },
                 ]} />
@@ -335,7 +335,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                 <Button asChild variant="outline" size="sm" className="hidden h-9 gap-1.5 border-border/80 shadow-sm sm:inline-flex">
                   <Link href="/dashboard" className="flex items-center gap-1.5">
                     <LayoutDashboard className="h-4 w-4 shrink-0" />
-                    <span className="hidden font-medium lg:inline">Dashboard</span>
+                    <span className="hidden font-medium lg:inline">Inicio</span>
                   </Link>
                 </Button>
               )}
@@ -385,6 +385,20 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator className="my-2" />
+                  <DropdownMenuItem asChild>
+                    <Link
+                      href="/dashboard"
+                      className="flex w-full cursor-pointer items-center rounded-md px-3 py-2.5 transition-colors focus:bg-accent focus:text-accent-foreground"
+                    >
+                      <div className="mr-3 flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <LayoutDashboard className="h-4 w-4" />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium">Inicio</span>
+                        <span className="text-xs text-muted-foreground">Volver al panel principal</span>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link
                       href="/dashboard/profile"
@@ -465,7 +479,7 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                 <Button asChild variant="outline" size="sm" className="h-9 shrink-0 gap-1.5 border-border/80 shadow-sm">
                   <Link href="/dashboard" className="flex items-center gap-1.5">
                     <LayoutDashboard className="h-4 w-4 shrink-0" />
-                    <span className="font-medium">Dashboard</span>
+                    <span className="font-medium">Inicio</span>
                   </Link>
                 </Button>
               )}

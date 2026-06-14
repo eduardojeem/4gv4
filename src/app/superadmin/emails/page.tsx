@@ -1,171 +1,215 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { EmailsDashboard, type EmailTemplate, type EmailActivity, type EmailEnvCheck } from '@/components/superadmin/EmailsDashboard'
+import {
+  EmailsDashboard,
+  type EmailConfigCheck,
+  type EmailMessage,
+  type EmailTemplate,
+} from '@/components/superadmin/EmailsDashboard'
 
-const SUPABASE_EMAIL_TEMPLATES: EmailTemplate[] = [
+const AUTH_TEMPLATES: EmailTemplate[] = [
   {
-    id: 'invite',
-    name: 'Invitación de usuario',
-    description: 'Email que recibe un nuevo owner cuando se crea su organización desde el superadmin.',
+    id: 'auth-invite',
+    name: 'Invitacion de owner',
+    description: 'Invita al owner creado desde Super Admin mediante Supabase Auth.',
     category: 'onboarding',
+    source: 'supabase',
     trigger: 'auth.admin.inviteUserByEmail()',
-    subject: 'Te invitaron a {{ .SiteURL }}',
+    subject: 'Invitacion para acceder a la plataforma',
     variables: ['.Email', '.ConfirmationURL', '.SiteURL', '.Token'],
     enabled: true,
     sentFrom: '/superadmin/organizations/create',
   },
   {
-    id: 'signup',
-    name: 'Confirmación de registro',
-    description: 'Email automático al usuario que se registra desde el formulario público para confirmar su dirección.',
+    id: 'auth-signup',
+    name: 'Confirmacion de registro',
+    description: 'Confirma la direccion del usuario registrado desde el flujo publico.',
     category: 'auth',
+    source: 'supabase',
     trigger: 'supabase.auth.signUp()',
-    subject: 'Confirmá tu cuenta en {{ .SiteURL }}',
+    subject: 'Confirma tu cuenta',
     variables: ['.Email', '.ConfirmationURL', '.SiteURL', '.Token'],
     enabled: true,
     sentFrom: '/register',
   },
   {
-    id: 'magic_link',
-    name: 'Magic link',
-    description: 'Link directo de inicio de sesión sin contraseña enviado al solicitar acceso por email.',
-    category: 'auth',
-    trigger: 'supabase.auth.signInWithOtp()',
-    subject: 'Tu link de acceso a {{ .SiteURL }}',
-    variables: ['.Email', '.ConfirmationURL', '.SiteURL', '.Token'],
-    enabled: true,
-    sentFrom: '/login',
-  },
-  {
-    id: 'recovery',
-    name: 'Recuperación de contraseña',
-    description: 'Email enviado cuando un usuario solicita resetear su contraseña.',
-    category: 'auth',
+    id: 'auth-recovery',
+    name: 'Recuperacion de contrasena',
+    description: 'Permite recuperar el acceso mediante Supabase Auth.',
+    category: 'security',
+    source: 'supabase',
     trigger: 'supabase.auth.resetPasswordForEmail()',
-    subject: 'Recuperá tu contraseña en {{ .SiteURL }}',
+    subject: 'Recupera tu contrasena',
     variables: ['.Email', '.ConfirmationURL', '.SiteURL', '.Token'],
     enabled: true,
     sentFrom: '/auth/reset-password',
   },
+]
+
+const RESEND_TEMPLATES: EmailTemplate[] = [
   {
-    id: 'email_change',
-    name: 'Cambio de email',
-    description: 'Confirmación enviada cuando un usuario cambia su email registrado.',
-    category: 'security',
-    trigger: 'supabase.auth.updateUser({ email })',
-    subject: 'Confirmá el cambio de email',
-    variables: ['.Email', '.NewEmail', '.ConfirmationURL'],
+    id: 'resend-welcome',
+    name: 'Bienvenida de empresa',
+    description: 'Se envia al completar el registro y aprovisionamiento de una empresa.',
+    category: 'onboarding',
+    source: 'resend',
+    trigger: 'renderWelcomeEmail()',
+    subject: 'Bienvenido a la plataforma',
+    variables: ['ownerName', 'companyName', 'plan', 'loginUrl'],
     enabled: true,
-    sentFrom: '/dashboard/profile',
+    sentFrom: '/api/auth/register-company',
+  },
+  {
+    id: 'resend-order',
+    name: 'Confirmacion de pedido',
+    description: 'Confirma pedidos realizados desde la tienda publica.',
+    category: 'transactional',
+    source: 'resend',
+    trigger: 'renderOrderConfirmationEmail()',
+    subject: 'Pedido confirmado',
+    variables: ['customerName', 'orderCode', 'items', 'total'],
+    enabled: true,
+    sentFrom: '/api/orders',
+  },
+  {
+    id: 'resend-payment-reminder',
+    name: 'Recordatorio de pago',
+    description: 'Notifica creditos activos o vencidos a clientes.',
+    category: 'billing',
+    source: 'resend',
+    trigger: 'renderPaymentReminderEmail()',
+    subject: 'Recordatorio de pago',
+    variables: ['customerName', 'amount', 'dueDate', 'daysOverdue'],
+    enabled: true,
+    sentFrom: '/api/credits/send-reminder',
+  },
+  {
+    id: 'resend-campaign',
+    name: 'Campana de clientes',
+    description: 'Plantilla dinamica usada en campanas segmentadas por tenant.',
+    category: 'marketing',
+    source: 'resend',
+    trigger: 'communication_campaigns',
+    subject: 'Definido por la campana',
+    variables: ['{nombre}'],
+    enabled: true,
+    sentFrom: '/api/communications/campaigns/[id]/send',
   },
 ]
 
 async function getEmailsData() {
   const admin = createAdminSupabase()
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
-  // Eventos relacionados con emails desde audit_log
-  const { data: invitations } = await admin
-    .from('audit_log')
-    .select('id, action, created_at, new_values, user_id')
-    .in('action', ['create', 'role_change'])
-    .eq('resource', 'organizations')
-    .order('created_at', { ascending: false })
-    .limit(10)
+  const [
+    messagesResult,
+    sentResult,
+    failedResult,
+    organizationsResult,
+  ] = await Promise.all([
+    admin
+      .from('communication_messages')
+      .select('id, organization_id, channel, status, sent_at, created_at')
+      .order('sent_at', { ascending: false })
+      .limit(100),
+    admin
+      .from('communication_messages')
+      .select('id', { count: 'exact', head: true })
+      .gte('sent_at', since)
+      .in('status', ['sent', 'delivered', 'read']),
+    admin
+      .from('communication_messages')
+      .select('id', { count: 'exact', head: true })
+      .gte('sent_at', since)
+      .eq('status', 'failed'),
+    admin.from('organizations').select('id, name'),
+  ])
 
-  const { data: logins } = await admin
-    .from('audit_log')
-    .select('id, action, created_at, user_id')
-    .in('action', ['login', 'login_failed', 'password_change'])
-    .order('created_at', { ascending: false })
-    .limit(20)
+  const warnings = [
+    messagesResult.error?.message,
+    sentResult.error?.message,
+    failedResult.error?.message,
+    organizationsResult.error?.message,
+  ].filter((message): message is string => Boolean(message))
 
-  // Cruza con profiles
-  const userIds = Array.from(new Set([
-    ...(invitations ?? []).map((i) => i.user_id).filter(Boolean),
-    ...(logins ?? []).map((l) => l.user_id).filter(Boolean),
-  ])) as string[]
-  let profilesById = new Map<string, { email: string | null; full_name: string | null }>()
-  if (userIds.length > 0) {
-    const { data: profiles } = await admin.from('profiles').select('id, email, full_name').in('id', userIds)
-    profilesById = new Map(
-      ((profiles ?? []) as Array<{ id: string; email: string | null; full_name: string | null }>)
-        .map((p) => [p.id, { email: p.email, full_name: p.full_name }])
-    )
-  }
+  const organizationNames = new Map(
+    (organizationsResult.data ?? []).map((organization) => [organization.id, organization.name])
+  )
 
-  const recentActivity: EmailActivity[] = [
-    ...((invitations ?? []) as Array<{ id: string; action: string; created_at: string | null; new_values: unknown; user_id: string | null }>).map((i) => {
-      const profile = i.user_id ? profilesById.get(i.user_id) : null
-      const newVals = i.new_values as Record<string, unknown> | null
-      return {
-        id: i.id,
-        type: i.action === 'create' ? 'invite' as const : 'role_change' as const,
-        action: i.action,
-        createdAt: i.created_at,
-        actorName: profile?.full_name ?? null,
-        actorEmail: profile?.email ?? null,
-        target: typeof newVals?.name === 'string' ? newVals.name : null,
-      }
-    }),
-    ...((logins ?? []) as Array<{ id: string; action: string; created_at: string | null; user_id: string | null }>).map((l) => {
-      const profile = l.user_id ? profilesById.get(l.user_id) : null
-      return {
-        id: l.id,
-        type: l.action === 'login' ? 'login' as const
-          : l.action === 'login_failed' ? 'login_failed' as const
-          : 'password_change' as const,
-        action: l.action,
-        createdAt: l.created_at,
-        actorName: profile?.full_name ?? null,
-        actorEmail: profile?.email ?? null,
-        target: null,
-      }
-    }),
-  ].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, 25)
+  const messages: EmailMessage[] = (messagesResult.data ?? []).map((message) => ({
+    id: message.id,
+    organizationId: message.organization_id,
+    organizationName: organizationNames.get(message.organization_id) ?? 'Organizacion desconocida',
+    recipientName: null,
+    recipientEmail: '',
+    subject: null,
+    channel: message.channel,
+    status: message.status,
+    providerId: null,
+    error: null,
+    sentAt: message.sent_at ?? message.created_at,
+  }))
 
-  // Env / config checks
-  const envChecks: EmailEnvCheck[] = [
+  const configChecks: EmailConfigCheck[] = [
     {
-      key: 'NEXT_PUBLIC_SUPABASE_URL',
-      label: 'Supabase URL',
-      configured: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-      description: 'Endpoint usado para construir links de confirmación',
+      key: 'RESEND_API_KEY',
+      label: 'Proveedor Resend',
+      configured: Boolean(process.env.RESEND_API_KEY?.trim()),
+      critical: true,
+      description: 'Habilita los emails transaccionales propios de la aplicacion.',
+    },
+    {
+      key: 'EMAIL_FROM',
+      label: 'Remitente verificado',
+      configured: Boolean(process.env.EMAIL_FROM?.trim()),
+      critical: false,
+      description: 'Evita utilizar el remitente de pruebas onboarding@resend.dev.',
+    },
+    {
+      key: 'EMAIL_REPLY_TO',
+      label: 'Email de respuesta',
+      configured: Boolean(process.env.EMAIL_REPLY_TO?.trim()),
+      critical: false,
+      description: 'Direccion que recibira las respuestas de clientes.',
+    },
+    {
+      key: 'NEXT_PUBLIC_APP_URL',
+      label: 'URL publica de la app',
+      configured: Boolean(process.env.NEXT_PUBLIC_APP_URL?.trim() || process.env.APP_URL?.trim()),
+      critical: true,
+      description: 'Se usa para generar enlaces validos dentro de los emails.',
     },
     {
       key: 'SUPABASE_SERVICE_ROLE_KEY',
-      label: 'Service role key',
-      configured: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-      description: 'Necesaria para invitar usuarios desde el superadmin',
-    },
-    {
-      key: 'NEXT_PUBLIC_SITE_URL',
-      label: 'Site URL público',
-      configured: Boolean(process.env.NEXT_PUBLIC_SITE_URL),
-      description: 'URL base usada en plantillas — afecta los redirects de email',
+      label: 'Invitaciones Supabase',
+      configured: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()),
+      critical: true,
+      description: 'Necesaria para invitar owners desde Super Admin.',
     },
   ]
 
-  // Stats últimas 24h
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000
-  const last24h = recentActivity.filter((a) => a.createdAt && new Date(a.createdAt).getTime() >= dayAgo)
-  const invitesLast24h = last24h.filter((a) => a.type === 'invite').length
-  const loginsLast24h = last24h.filter((a) => a.type === 'login').length
-  const failedLogins24h = last24h.filter((a) => a.type === 'login_failed').length
+  const sent24h = sentResult.count ?? 0
+  const failed24h = failedResult.count ?? 0
+  const total24h = sent24h + failed24h
 
   return {
-    templates: SUPABASE_EMAIL_TEMPLATES,
-    activity: recentActivity,
-    envChecks,
+    templates: [...AUTH_TEMPLATES, ...RESEND_TEMPLATES].map((template) => ({
+      ...template,
+      enabled: template.source === 'resend'
+        ? Boolean(process.env.RESEND_API_KEY?.trim())
+        : Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()),
+    })),
+    messages,
+    configChecks,
+    warnings,
     stats: {
-      totalTemplates: SUPABASE_EMAIL_TEMPLATES.length,
-      enabledTemplates: SUPABASE_EMAIL_TEMPLATES.filter((t) => t.enabled).length,
-      invitesLast24h,
-      loginsLast24h,
-      failedLogins24h,
+      sent24h,
+      failed24h,
+      successRate: total24h > 0 ? Math.round((sent24h / total24h) * 100) : null,
+      totalMessages: messages.length,
     },
   }
 }
 
 export default async function SuperAdminEmailsPage() {
-  const data = await getEmailsData()
-  return <EmailsDashboard data={data} />
+  return <EmailsDashboard data={await getEmailsData()} />
 }

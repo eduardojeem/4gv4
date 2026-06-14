@@ -29,6 +29,7 @@ export type PlanRow = {
   products: string
   marketplace: string
   analytics: string
+  credits: string
 }
 
 type Props = {
@@ -94,6 +95,10 @@ function PlanCard({ plan, isCurrent }: { plan: PlanRow; isCurrent: boolean }) {
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Analytics</span>
           <FeatureValue value={plan.analytics} />
+        </div>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Créditos</span>
+          <FeatureValue value={plan.credits} />
         </div>
       </div>
 
@@ -173,6 +178,7 @@ export function PlansComparison({ plans, currentPlanCode }: Props) {
                 <TableHead>Productos</TableHead>
                 <TableHead>Marketplace</TableHead>
                 <TableHead>Analytics</TableHead>
+                <TableHead>Créditos</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -194,6 +200,7 @@ export function PlansComparison({ plans, currentPlanCode }: Props) {
                     <TableCell>{plan.products}</TableCell>
                     <TableCell>{plan.marketplace}</TableCell>
                     <TableCell>{plan.analytics}</TableCell>
+                    <TableCell>{plan.credits}</TableCell>
                     <TableCell className="text-right">
                       {!isCurrent && (
                         <Button asChild size="sm" variant="outline">

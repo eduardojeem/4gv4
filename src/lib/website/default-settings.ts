@@ -29,7 +29,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       enabled: true,
       eyebrow: 'Ofertas especiales',
       title: 'Precios que vale la pena aprovechar',
-      subtitle: 'Productos seleccionados con descuentos vigentes por tiempo limitado.',
+      subtitle: 'Productos seleccionados con descuentos activos en el catálogo.',
       accentColor: 'rose'
     },
     services: [],

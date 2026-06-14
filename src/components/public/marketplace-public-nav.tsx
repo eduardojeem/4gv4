@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { useAuth } from '@/contexts/auth-context'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -105,6 +106,8 @@ export function MarketplacePublicNav() {
 
         {/* Right actions */}
         <div className="flex items-center gap-2">
+          <ThemeToggle />
+
           {/* SaaS CTA — desktop */}
           <Link
             href="/saas"

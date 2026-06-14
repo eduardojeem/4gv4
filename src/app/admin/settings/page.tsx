@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from 'react'
 import {
-  Settings, Save, RotateCcw, AlertCircle, HelpCircle,
+  Save, RotateCcw, AlertCircle, HelpCircle,
   Loader2, Globe, Package, Bell, Shield, Palette, Building2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -42,7 +42,7 @@ export default function AdminSettingsPage() {
     saveSettings,
     resetSettings
   } = useSharedSettings()
-  const { isAdmin, isSuperAdmin, loading: authLoading } = useAuth()
+  const { isSuperAdmin, loading: authLoading } = useAuth()
   const { setTheme, setColorScheme } = useTheme()
 
   const [activeTab, setActiveTab] = useState('company')
@@ -195,10 +195,12 @@ export default function AdminSettingsPage() {
             <Bell className="h-3.5 w-3.5" />
             Alertas
           </TabsTrigger>
-          <TabsTrigger value="security" className="text-xs gap-1.5">
-            <Shield className="h-3.5 w-3.5" />
-            Seguridad
-          </TabsTrigger>
+          {isSuperAdmin && (
+            <TabsTrigger value="security" className="text-xs gap-1.5">
+              <Shield className="h-3.5 w-3.5" />
+              Seguridad global
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Company Tab */}
@@ -222,7 +224,7 @@ export default function AdminSettingsPage() {
                   <Input id="companyRuc" value={settings.companyRuc} onChange={(e) => updateSetting('companyRuc', e.target.value)} placeholder="80012345-6" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyEmail">Email</Label>
+                  <Label htmlFor="companyEmail">Email <span className="text-destructive">*</span></Label>
                   <Input id="companyEmail" type="email" value={settings.companyEmail} onChange={(e) => updateSetting('companyEmail', e.target.value)} />
                 </div>
                 <div className="space-y-2">
@@ -451,7 +453,7 @@ export default function AdminSettingsPage() {
         </TabsContent>
 
         {/* Security Tab */}
-        <TabsContent value="security" className="space-y-5 mt-0">
+        {isSuperAdmin && <TabsContent value="security" className="space-y-5 mt-0">
           <Card className="border shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -488,7 +490,7 @@ export default function AdminSettingsPage() {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </div>
   )

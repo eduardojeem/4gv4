@@ -18,26 +18,36 @@ type SubscriptionPlan = {
   price_note: string | null
   description: string | null
   is_popular: boolean
-  limits: any
+  limits: {
+    users?: string
+    products?: string
+    branches?: string
+    repairs?: string
+  }
   highlights: string[]
   features: PlanFeature[]
   color_config: any
 }
 
-// Full feature list to ensure consistent rows in the table
-const availableFeatures = [
+// Ensure exact match with admin panel
+const PLAN_LIMITS = [
+  { key: 'users', label: 'Límite de usuarios' },
+  { key: 'products', label: 'Límite de productos' },
+  { key: 'branches', label: 'Sucursales permitidas' },
+  { key: 'repairs', label: 'Reparaciones por mes' },
+]
+
+const PLAN_FEATURES = [
   { key: 'pos', label: 'Punto de Venta (POS)' },
   { key: 'inventory', label: 'Inventario' },
-  { key: 'users', label: 'Usuarios' },
-  { key: 'branches', label: 'Sucursales' },
-  { key: 'repairs', label: 'Reparaciones' },
-  { key: 'crm', label: 'Gestión de clientes' },
-  { key: 'whatsapp', label: 'WhatsApp' },
-  { key: 'ecommerce', label: 'Ecommerce / Marketplace' },
+  { key: 'users', label: 'Gestión de usuarios' },
+  { key: 'branches', label: 'Sucursales múltiples' },
+  { key: 'repairs', label: 'Módulo de Reparaciones' },
+  { key: 'crm', label: 'CRM / Clientes' },
+  { key: 'ecommerce', label: 'Ecommerce & Marketplace' },
   { key: 'analytics', label: 'Analytics avanzado' },
   { key: 'reports', label: 'Reportes exportables' },
-  { key: 'api', label: 'API access' },
-  { key: 'support', label: 'Soporte' },
+  { key: 'support', label: 'Soporte prioritario' },
 ]
 
 export function SaaSPlansSection({ initialPlans = [] }: { initialPlans?: SubscriptionPlan[] }) {
@@ -48,6 +58,14 @@ export function SaaSPlansSection({ initialPlans = [] }: { initialPlans?: Subscri
   const getPrice = (price: number) => {
     if (!price || price === 0) return 0
     return yearly ? Math.floor(price * 0.8) : price
+  }
+
+  const formatLimit = (val?: string) => {
+    if (!val) return <Minus className="mx-auto h-5 w-5 text-slate-300 dark:text-slate-600" />
+    if (val.toLowerCase() === 'ilimitado' || val === '∞') {
+      return <span className="text-emerald-500 font-bold text-lg">∞</span>
+    }
+    return <span className="text-slate-700 dark:text-slate-300 font-medium">{val}</span>
   }
 
   return (
@@ -162,20 +180,22 @@ export function SaaSPlansSection({ initialPlans = [] }: { initialPlans?: Subscri
 
                 <div className="mt-6 flex items-baseline gap-x-1">
                   <span className="text-4xl font-bold tracking-tight text-slate-900 dark:text-white">
-                    ${getPrice(plan.price)}
-                  </span>
-                  <span className="text-sm font-semibold leading-6 text-slate-600 dark:text-slate-400">
-                    /{yearly ? 'mes' : 'mes'}
+                    {new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(getPrice(plan.price))}
                   </span>
                 </div>
                 {yearly && plan.price > 0 && (
                   <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                    Facturado anualmente (${Math.floor(plan.price * 0.8 * 12)})
+                    Facturado anualmente
                   </p>
                 )}
                 {!yearly && plan.price === 0 && (
                   <p className="mt-1 text-xs text-slate-400">
                     {plan.price_note || 'Siempre gratis'}
+                  </p>
+                )}
+                {!yearly && plan.price > 0 && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    {plan.price_note || '/mes'}
                   </p>
                 )}
 
@@ -234,7 +254,7 @@ export function SaaSPlansSection({ initialPlans = [] }: { initialPlans?: Subscri
             >
               <div className="rounded-3xl border border-slate-200 bg-white/50 backdrop-blur-xl shadow-sm dark:border-slate-800 dark:bg-slate-950/50">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse min-w-[800px]">
                     <caption className="sr-only">Comparación detallada de características por plan</caption>
                     <colgroup>
                       <col className="w-1/4" />
@@ -242,7 +262,7 @@ export function SaaSPlansSection({ initialPlans = [] }: { initialPlans?: Subscri
                     </colgroup>
                     <thead>
                       <tr>
-                        <th className="p-6 text-sm font-semibold text-slate-900 dark:text-white">Características</th>
+                        <th className="p-6 text-sm font-semibold text-slate-900 dark:text-white"></th>
                         {initialPlans.map((plan) => (
                           <th key={plan.id} className="p-6 text-center">
                             <span className="text-sm font-semibold text-slate-900 dark:text-white">{plan.name}</span>
@@ -251,13 +271,39 @@ export function SaaSPlansSection({ initialPlans = [] }: { initialPlans?: Subscri
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {availableFeatures.map((feat) => (
+                      
+                      {/* Límites */}
+                      <tr className="bg-slate-50/80 dark:bg-slate-900/80">
+                        <th colSpan={initialPlans.length + 1} className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Límites del sistema
+                        </th>
+                      </tr>
+                      {PLAN_LIMITS.map((limit) => (
+                        <tr key={limit.key} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                          <th scope="row" className="p-6 text-sm font-medium text-slate-600 dark:text-slate-400">
+                            {limit.label}
+                          </th>
+                          {initialPlans.map((plan) => (
+                            <td key={plan.id} className="p-6 text-center text-sm">
+                              {formatLimit(plan.limits?.[limit.key as keyof typeof plan.limits])}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+
+                      {/* Módulos */}
+                      <tr className="bg-slate-50/80 dark:bg-slate-900/80 border-t-2 border-slate-200 dark:border-slate-800">
+                        <th colSpan={initialPlans.length + 1} className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          Módulos & Features
+                        </th>
+                      </tr>
+                      {PLAN_FEATURES.map((feat) => (
                         <tr key={feat.key} className="transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                           <th scope="row" className="p-6 text-sm font-medium text-slate-600 dark:text-slate-400">
                             {feat.label}
                           </th>
                           {initialPlans.map((plan) => {
-                            const featureData = plan.features.find((f) => f.label === feat.label)
+                            const featureData = plan.features?.find((f) => f.label === feat.label)
                             const val = featureData ? featureData.value : false
 
                             return (
@@ -288,3 +334,4 @@ export function SaaSPlansSection({ initialPlans = [] }: { initialPlans?: Subscri
     </section>
   )
 }
+

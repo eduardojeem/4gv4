@@ -33,8 +33,9 @@ export const CompanyInfoSchema = z.object({
     .max(500, 'URL muy larga')
     .optional()
     .or(z.literal('')),
-  brandColor: z.enum(['blue','green','purple','orange','red','indigo','teal','rose','amber','emerald','cyan','sky'])
+  brandColor: z.enum(['blue','green','purple','orange','red','indigo','teal','rose','amber','emerald','cyan','sky','custom'])
     .optional(),
+  customBrandColor: z.string().optional().or(z.literal('')),
   headerStyle: z.enum(['glass', 'solid', 'accent', 'dark']).optional(),
   headerColor: z.string().max(50).optional().or(z.literal('')),
   showTopBar: z.boolean().optional(),
@@ -82,7 +83,7 @@ export const OffersSectionSchema = z.object({
   eyebrow: z.string().min(2).max(60),
   title: z.string().min(3).max(120),
   subtitle: z.string().min(5).max(240),
-  accentColor: z.enum(['rose', 'amber', 'orange', 'emerald']),
+  accentColor: z.enum(['brand', 'rose', 'amber', 'orange', 'emerald']),
 })
 
 // Esquema para un servicio individual

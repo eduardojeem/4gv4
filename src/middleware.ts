@@ -257,30 +257,34 @@ export async function middleware(request: NextRequest) {
   // Rutas protegidas (dashboard) - requieren autenticacion y rol no-cliente
   if (isProtectedRoute) {
     if (!user) {
-      return redirectToLogin(request, supabaseResponse)
+      // No logueado → redirigir al SaaS landing
+      return redirectWithCookies(request, supabaseResponse, '/saas')
     }
 
     if (isClientOrViewer) {
-      return rewriteForbiddenResponse(request, supabaseResponse, 'dashboard')
+      // Cliente sin permiso al dashboard → redirigir a su tienda pública
+      return redirectWithCookies(request, supabaseResponse, `/${DEFAULT_PUBLIC_ORG_SLUG}/inicio`)
     }
   }
 
   // Rutas admin - requieren autenticacion y rol admin/super_admin
   if (isAdminRoute) {
     if (!user) {
-      return redirectToLogin(request, supabaseResponse)
+      return redirectWithCookies(request, supabaseResponse, '/saas')
     }
     if (!isAdmin) {
-      return rewriteForbiddenResponse(request, supabaseResponse, 'admin')
+      // No es admin → redirigir al dashboard (tiene acceso como vendedor/técnico)
+      return redirectWithCookies(request, supabaseResponse, '/dashboard')
     }
   }
 
   if (isSuperAdminRoute || isInternalOpsRoute) {
     if (!user) {
-      return redirectToLogin(request, supabaseResponse)
+      return redirectWithCookies(request, supabaseResponse, '/saas')
     }
     if (!isSuperAdmin) {
-      return rewriteForbiddenResponse(request, supabaseResponse, 'admin')
+      // No es super_admin → redirigir al dashboard
+      return redirectWithCookies(request, supabaseResponse, '/dashboard')
     }
   }
 

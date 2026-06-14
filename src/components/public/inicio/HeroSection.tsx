@@ -1,10 +1,12 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, MessageCircle, ShoppingBag, Wrench } from 'lucide-react'
+import { ArrowRight, MessageCircle, ShoppingBag, Wrench, CheckCircle, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import type { CompanyInfo, HeroStats, HeroContent } from '@/types/website-settings'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
 
@@ -17,70 +19,178 @@ interface HeroSectionProps {
   contactHref: string
 }
 
+// ── Animated counter that counts up when in view ───────────────────────────
+function AnimatedStat({ value, label }: { value: string; label: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect() } },
+      { threshold: 0.5 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  return (
+    <div ref={ref} className={cn('transition-all duration-700', visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4')}>
+      <div className="text-xl font-black text-white tracking-tight whitespace-nowrap">{value}</div>
+      <div className="mt-1 text-xs text-white/60 font-medium leading-snug">{label}</div>
+    </div>
+  )
+}
+
+// ── Trust badges ──────────────────────────────────────────────────────────
+const TRUST_BADGES = [
+  { icon: CheckCircle, label: 'Garantía escrita' },
+  { icon: Star,         label: 'Repuestos originales' },
+  { icon: Wrench,       label: 'Técnicos certificados' },
+]
+
 export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneClean, contactHref }: HeroSectionProps) {
   const pathname = usePathname()
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
 
   return (
-    <section className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} py-20 text-white md:py-32`}>
-      <div className="absolute inset-0 bg-grid-white/[0.05] bg-[size:20px_20px]" />
+    <section className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} py-20 text-white md:py-28`}>
+      {/* Background decoration */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 -top-24 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
+        <div className="absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-black/10 blur-3xl" />
+        {/* Dot grid */}
+        <svg className="absolute inset-0 h-full w-full opacity-[0.07]" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="hero-dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="2" r="1.5" fill="white" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#hero-dots)" />
+        </svg>
+      </div>
+
       <div className="container relative">
-        <div className="mx-auto max-w-4xl text-center">
-          {companyInfo.logoUrl && (
-            <div className="mb-6 flex justify-center">
-              <Image src={companyInfo.logoUrl} alt={companyInfo.name || 'Logo'} width={72} height={72} className="rounded-xl shadow-lg" />
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+
+          {/* ── Left column: text ── */}
+          <div className="flex flex-col items-start">
+            {/* Logo if available */}
+            {companyInfo.logoUrl && (
+              <div className="mb-6">
+                <Image
+                  src={companyInfo.logoUrl}
+                  alt={companyInfo.name || 'Logo'}
+                  width={64}
+                  height={64}
+                  className="rounded-2xl shadow-xl ring-2 ring-white/20"
+                />
+              </div>
+            )}
+
+            {/* Badge */}
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold backdrop-blur-sm ring-1 ring-white/20">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+              {heroContent.badge}
             </div>
-          )}
-          <div className="mb-6 inline-block rounded-full bg-white/10 px-4 py-2 text-sm font-semibold backdrop-blur-sm">
-            {heroContent.badge}
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
-            {heroContent.title}
-          </h1>
-          <p className={`mt-6 text-lg ${brand.text200} sm:text-xl`}>
-            {heroContent.subtitle}
-          </p>
-          <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:justify-center">
-            <Button asChild size="lg" className={`bg-white ${brand.ctaBtn} hover:bg-white/90`}>
-              <Link href={`${tenantPrefix}/productos`}>
-                <ShoppingBag className="mr-2 h-5 w-5" />
-                Ver productos
-                <ArrowRight className="ml-2 h-5 w-5" />
+
+            {/* Title */}
+            <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+              {heroContent.title}
+            </h1>
+
+            {/* Subtitle */}
+            <p className={`mt-5 text-lg leading-relaxed ${brand.text200} max-w-lg`}>
+              {heroContent.subtitle}
+            </p>
+
+            {/* Trust badges */}
+            <div className="mt-6 flex flex-wrap gap-3">
+              {TRUST_BADGES.map(({ icon: Icon, label }) => (
+                <div key={label} className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 ring-1 ring-white/15 backdrop-blur-sm">
+                  <Icon className="h-3.5 w-3.5 text-emerald-300" />
+                  {label}
+                </div>
+              ))}
+            </div>
+
+            {/* CTAs */}
+            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+              <Button asChild size="lg" className={`rounded-xl bg-white ${brand.ctaBtn} font-bold shadow-lg shadow-black/20 hover:bg-white/90`}>
+                <Link href={`${tenantPrefix}/productos`}>
+                  <ShoppingBag className="mr-2 h-5 w-5" />
+                  Ver productos
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="rounded-xl border-white/25 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20">
+                <a href={contactHref} target={phoneClean ? '_blank' : undefined} rel={phoneClean ? 'noopener noreferrer' : undefined}>
+                  <MessageCircle className="mr-2 h-5 w-5" />
+                  Escribinos
+                </a>
+              </Button>
+            </div>
+
+            {/* Repair tracking link */}
+            <div className="mt-5">
+              <Link
+                href={`${tenantPrefix}/mis-reparaciones`}
+                className={`inline-flex items-center gap-1.5 text-sm font-medium ${brand.text200} underline-offset-4 transition-colors hover:text-white hover:underline`}
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                ¿Tenés una reparación? Rastreá tu equipo
               </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="border-white/20 bg-white/10 text-white hover:bg-white/20">
-              <a href={contactHref} target={phoneClean ? "_blank" : undefined} rel={phoneClean ? "noopener noreferrer" : undefined}>
-                <MessageCircle className="mr-2 h-5 w-5" />
-                Escribinos
-              </a>
-            </Button>
+            </div>
           </div>
 
-          {/* Repair tracking — secondary path for the mixed (sales + service) model */}
-          <div className="mt-5">
-            <Link
-              href={`${tenantPrefix}/mis-reparaciones`}
-              className={`inline-flex items-center gap-1.5 text-sm font-medium ${brand.text200} underline-offset-4 transition-colors hover:text-white hover:underline`}
-            >
-              <Wrench className="h-4 w-4" />
-              ¿Tenés una reparación? Rastreá tu equipo
-            </Link>
-          </div>
+          {/* ── Right column: stats panel ── */}
+          <div className="flex justify-center lg:justify-end">
+            <div className="relative w-full max-w-sm">
+              {/* Main stats card */}
+              <div className="relative overflow-hidden rounded-3xl bg-white/10 p-8 shadow-2xl ring-1 ring-white/20 backdrop-blur-md">
+                {/* Inner glow */}
+                <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
 
-          {/* Stats */}
-          <div className="mt-16 grid gap-8 text-center sm:grid-cols-3">
-            <div>
-              <div className="text-4xl font-bold">{heroStats.repairs}</div>
-              <div className={`mt-1 text-sm ${brand.text200}`}>Reparaciones realizadas</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold">{heroStats.satisfaction}</div>
-              <div className={`mt-1 text-sm ${brand.text200}`}>Clientes satisfechos</div>
-            </div>
-            <div>
-              <div className="text-4xl font-bold">{heroStats.avgTime}</div>
-              <div className={`mt-1 text-sm ${brand.text200}`}>Tiempo promedio</div>
+                {/* Stats grid */}
+                <div className="grid grid-cols-3 gap-3 border-b border-white/15 pb-6">
+                  <AnimatedStat value={heroStats.repairs}      label="Reparaciones" />
+                  <AnimatedStat value={heroStats.satisfaction} label="Satisfacción"  />
+                  <AnimatedStat value={heroStats.avgTime}      label="Tiempo prom."  />
+                </div>
+
+                {/* Quick links */}
+                <div className="mt-6 space-y-3">
+                  <Link
+                    href={`${tenantPrefix}/productos`}
+                    className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                  >
+                    <span>Ver catálogo de productos</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    href={`${tenantPrefix}/ofertas`}
+                    className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                  >
+                    <span>Ofertas activas</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    href={`${tenantPrefix}/mis-reparaciones`}
+                    className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                  >
+                    <span>Rastrear reparación</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Floating badge */}
+              <div className="absolute -bottom-4 -left-4 flex items-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2.5 shadow-xl shadow-emerald-900/30">
+                <span className="flex h-2 w-2 rounded-full bg-white" />
+                <span className="text-sm font-bold text-white">Atendemos hoy</span>
+              </div>
             </div>
           </div>
         </div>

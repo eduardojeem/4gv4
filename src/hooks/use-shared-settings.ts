@@ -1,10 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { saveSystemSettingsViaSupabase } from '@/lib/system-settings-client'
 import { DEFAULT_SYSTEM_COLOR_SCHEME } from '@/lib/theme/color-schemes'
-import type { SystemSettingsPartial } from '@/lib/validations/system-settings'
 import { normalizeSupabaseError } from '@/utils/supabase-error'
 
 // Interface matching the database table 'system_settings'
@@ -115,52 +112,6 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
 }
 
 // ============================================================================
-// Cache
-// ============================================================================
-
-const STORAGE_KEY_PREFIX = 'app-shared-settings'
-let sharedSettingsCache: SharedSettings | null = null
-let cacheTimestamp = 0
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
-function getStorageKey(): string {
-  try {
-    // Scope localStorage cache to the authenticated user so different users
-    // on the same browser never see each other's company data.
-    const supabaseKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
-    if (supabaseKey) {
-      const raw = localStorage.getItem(supabaseKey)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        const userId = parsed?.user?.id
-        if (userId) return `${STORAGE_KEY_PREFIX}-${userId}`
-      }
-    }
-  } catch { /* ignore */ }
-  return STORAGE_KEY_PREFIX
-}
-
-function isCacheFresh(): boolean {
-  return sharedSettingsCache !== null && (Date.now() - cacheTimestamp) < CACHE_TTL
-}
-
-function getInitialSettings(): SharedSettings {
-  if (sharedSettingsCache) return sharedSettingsCache
-
-  // Try localStorage on first load (scoped per user)
-  try {
-    const saved = localStorage.getItem(getStorageKey())
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      sharedSettingsCache = parsed
-      return parsed
-    }
-  } catch { /* ignore */ }
-
-  return DEFAULT_SHARED_SETTINGS
-}
-
-// ============================================================================
 // Mapper
 // ============================================================================
 
@@ -200,81 +151,40 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
 // ============================================================================
 
 export function useSharedSettings() {
-  const [settings, setSettings] = useState<SharedSettings>(getInitialSettings)
-  const [originalSettings, setOriginalSettings] = useState<SharedSettings>(getInitialSettings)
-  const [isLoading, setIsLoading] = useState(!isCacheFresh())
+  const [settings, setSettings] = useState<SharedSettings>(DEFAULT_SHARED_SETTINGS)
+  const [originalSettings, setOriginalSettings] = useState<SharedSettings>(DEFAULT_SHARED_SETTINGS)
+  const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [settingsSource, setSettingsSource] = useState<SharedSettingsSource>(
-    sharedSettingsCache ? 'cache' : 'default'
+    'default'
   )
 
-  const supabase = useMemo(() => createClient(), [])
-
   // Track original settings as JSON for efficient comparison
-  const originalRef = useRef<string>(JSON.stringify(getInitialSettings()))
+  const originalRef = useRef<string>(JSON.stringify(DEFAULT_SHARED_SETTINGS))
 
   // Load settings from Supabase (stale-while-revalidate pattern)
   const loadSettings = useCallback(async () => {
-    // If cache is fresh, skip network fetch
-    if (isCacheFresh()) {
-      setSettings(sharedSettingsCache!)
-      setOriginalSettings(sharedSettingsCache!)
-      originalRef.current = JSON.stringify(sharedSettingsCache!)
-      setSettingsSource('cache')
-      setIsLoading(false)
-      return
-    }
-
-    // Show cached data immediately while fetching fresh data
-    if (sharedSettingsCache) {
-      setSettings(sharedSettingsCache)
-      setOriginalSettings(sharedSettingsCache)
-      setSettingsSource('cache')
-    }
-
     setIsLoading(true)
     setError(null)
 
     try {
-      // Fetch system_settings + org-scoped company data in parallel.
-      // system_settings is a global table (single row 'system'), so we overlay
-      // the company fields with org-scoped data from organization_settings / branches.
-      const [
-        { data, error: fetchError },
-        { data: orgSettings },
-        { data: defaultBranch },
-      ] = await Promise.all([
-        supabase.from('system_settings').select('*').eq('id', 'system').maybeSingle(),
-        supabase.from('organization_settings').select('display_name').maybeSingle(),
-        supabase.from('branches').select('phone, email, address, city').eq('is_default', true).maybeSingle(),
-      ])
+      const response = await fetch('/api/settings/shared', { cache: 'no-store' })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result?.success || !result?.data) {
+        throw new Error(result?.error || `No se pudo cargar la configuración (${response.status})`)
+      }
 
-      if (fetchError) throw fetchError
-
-      if (data) {
-        const mapped = mapToAppSettings(data as SystemSettingsRow)
-
-        // Overlay company fields with org-scoped sources (higher priority than global system_settings)
-        if (orgSettings?.display_name) mapped.companyName = orgSettings.display_name
-        if (defaultBranch?.email) mapped.companyEmail = defaultBranch.email
-        if (defaultBranch?.phone) mapped.companyPhone = defaultBranch.phone
-        if (defaultBranch?.address) mapped.companyAddress = defaultBranch.address
-        if (defaultBranch?.city) mapped.city = defaultBranch.city
-
-        sharedSettingsCache = mapped
-        cacheTimestamp = Date.now()
+      if (result.data) {
+        const mapped = mapToAppSettings(result.data as SystemSettingsRow)
         setSettings(mapped)
         setOriginalSettings(mapped)
         originalRef.current = JSON.stringify(mapped)
         setSettingsSource('remote')
-        localStorage.setItem(getStorageKey(), JSON.stringify(mapped))
         return
       }
 
       // No data in DB — use defaults
-      sharedSettingsCache = DEFAULT_SHARED_SETTINGS
-      cacheTimestamp = Date.now()
       setSettings(DEFAULT_SHARED_SETTINGS)
       setOriginalSettings(DEFAULT_SHARED_SETTINGS)
       originalRef.current = JSON.stringify(DEFAULT_SHARED_SETTINGS)
@@ -284,66 +194,20 @@ export function useSharedSettings() {
       console.error('Error loading settings:', error)
       setError(`Error al cargar configuraciones: ${error.message}`)
 
-      // Fallback to localStorage
-      const saved = localStorage.getItem(getStorageKey())
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved)
-          sharedSettingsCache = parsed
-          setSettings(parsed)
-          setOriginalSettings(parsed)
-          originalRef.current = JSON.stringify(parsed)
-          setSettingsSource('cache')
-        } catch {
-          setSettings(DEFAULT_SHARED_SETTINGS)
-          setOriginalSettings(DEFAULT_SHARED_SETTINGS)
-          originalRef.current = JSON.stringify(DEFAULT_SHARED_SETTINGS)
-          setSettingsSource('default')
-        }
-      } else {
-        setSettings(DEFAULT_SHARED_SETTINGS)
-        setOriginalSettings(DEFAULT_SHARED_SETTINGS)
-        originalRef.current = JSON.stringify(DEFAULT_SHARED_SETTINGS)
-        setSettingsSource('default')
-      }
+      setSettings(DEFAULT_SHARED_SETTINGS)
+      setOriginalSettings(DEFAULT_SHARED_SETTINGS)
+      originalRef.current = JSON.stringify(DEFAULT_SHARED_SETTINGS)
+      setSettingsSource('default')
     } finally {
       setIsLoading(false)
     }
-  }, [supabase])
+  }, [])
 
-  // Initial load + realtime subscription
+  // Load from the current tenant context. A global realtime subscription would
+  // overwrite tenant-specific values with platform defaults.
   useEffect(() => {
     loadSettings()
-
-    const channel = supabase
-      .channel('system_settings_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'system_settings',
-          filter: 'id=eq.system'
-        },
-        (payload) => {
-          if (payload.new) {
-            const mapped = mapToAppSettings(payload.new as SystemSettingsRow)
-            sharedSettingsCache = mapped
-            cacheTimestamp = Date.now()
-            setSettings(mapped)
-            setOriginalSettings(mapped)
-            originalRef.current = JSON.stringify(mapped)
-            setSettingsSource('remote')
-            localStorage.setItem(getStorageKey(), JSON.stringify(mapped))
-          }
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [loadSettings, supabase])
+  }, [loadSettings])
 
   // Efficient change detection using ref instead of JSON.stringify on every render
   const hasChanges = useMemo(() => {
@@ -376,27 +240,11 @@ export function useSharedSettings() {
       })
 
       const result = await response.json().catch(() => ({}))
-      let persistedSettings = result?.data
-
-      if ((!response.ok || !result?.success || !result?.data) && response.status === 404) {
-        persistedSettings = await saveSystemSettingsViaSupabase(supabase, settings as SystemSettingsPartial)
-      } else if (!response.ok || !result?.success || !result?.data) {
+      if (!response.ok || !result?.success || !result?.data) {
         throw new Error(result?.error || `No se pudo guardar la configuración (${response.status})`)
       }
 
-      const mapped = mapToAppSettings(persistedSettings as SystemSettingsRow)
-
-      // Sync company fields back to org-scoped tables (fire-and-forget, non-blocking)
-      fetch('/api/admin/website/sync-company', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: settings.companyName,
-          email: settings.companyEmail,
-          phone: settings.companyPhone,
-          address: settings.companyAddress,
-        }),
-      }).catch(() => { /* non-blocking */ })
+      const mapped = mapToAppSettings(result.data as SystemSettingsRow)
 
       // Apply org-scoped company values to what we store in state/cache
       const withOrgData = { ...mapped }
@@ -406,15 +254,11 @@ export function useSharedSettings() {
       if (settings.companyAddress) withOrgData.companyAddress = settings.companyAddress
       if (settings.city) withOrgData.city = settings.city
 
-      sharedSettingsCache = withOrgData
-      cacheTimestamp = Date.now()
       setSettings(withOrgData)
       setOriginalSettings(withOrgData)
       originalRef.current = JSON.stringify(withOrgData)
       setError(null)
       setSettingsSource('remote')
-      localStorage.setItem(getStorageKey(), JSON.stringify(withOrgData))
-
       return { success: true }
     } catch (err: unknown) {
       const error = normalizeSupabaseError(err)
@@ -423,7 +267,7 @@ export function useSharedSettings() {
     } finally {
       setIsSaving(false)
     }
-  }, [settings, supabase])
+  }, [settings])
 
   const resetSettings = useCallback(() => {
     setSettings(originalSettings)

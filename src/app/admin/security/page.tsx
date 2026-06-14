@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import { Activity, Loader2, Shield } from 'lucide-react'
 import { SecurityPanel } from '@/components/admin/system/security-panel'
+import { PlanGate } from '@/components/admin/PlanGate'
 
 export default function SecurityPage() {
   return (
@@ -24,16 +25,22 @@ export default function SecurityPage() {
           </div>
         </div>
       </section>
-      <Suspense fallback={
-        <div className="rounded-lg border bg-card p-8">
-          <div className="flex items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Cargando panel de seguridad...
+      <PlanGate
+        module="security"
+        title="Seguridad avanzada no está incluida en tu plan"
+        description="Actualiza tu plan para monitorear accesos, eventos sensibles y acciones administrativas."
+      >
+        <Suspense fallback={
+          <div className="rounded-lg border bg-card p-8">
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Cargando panel de seguridad...
+            </div>
           </div>
-        </div>
-      }>
-        <SecurityPanel />
-      </Suspense>
+        }>
+          <SecurityPanel />
+        </Suspense>
+      </PlanGate>
     </div>
   )
 }

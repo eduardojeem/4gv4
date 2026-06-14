@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -24,10 +25,12 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   Settings,
   Shield,
   Sparkles,
   Store,
+  TicketPercent,
   Trash2,
   Users,
   Wrench,
@@ -35,6 +38,14 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -105,6 +116,7 @@ const navItems: NavItem[] = [
   },
   { title: 'Planes', href: '/superadmin/plans', icon: Sparkles, badge: 'SaaS', description: 'Planes, limites y paquetes', section: 'billing' },
   { title: 'Suscripciones', href: '/superadmin/subscriptions', icon: CreditCard, description: 'Suscripciones activas por tenant', section: 'billing' },
+  { title: 'Promociones', href: '/superadmin/promo-codes', icon: TicketPercent, badge: 'Nuevo', description: 'Descuentos y activaciones SaaS', section: 'billing' },
   { title: 'Historial de pagos', href: '/superadmin/invoices', icon: FileText, description: 'Comprobantes y pagos recibidos', section: 'billing' },
   { title: 'Resumen financiero', href: '/superadmin/billing', icon: Banknote, description: 'MRR, ARR y metricas de ingresos', section: 'billing' },
   {
@@ -203,13 +215,12 @@ function ChildLink({
       onClick={() => onNavigate(child.href)}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'group flex h-9 items-center gap-2 rounded-md pl-7 pr-2 text-[13px] transition-colors',
+        'group flex h-9 items-center gap-2 rounded-md pl-8 pr-2 text-[13px] transition-colors',
         active
-          ? 'bg-white/10 font-semibold text-white ring-1 ring-white/10'
+          ? 'bg-white/10 font-semibold text-white ring-1 ring-inset ring-white/10'
           : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'
       )}
     >
-      <span className={cn('h-1.5 w-1.5 rounded-full', active ? 'bg-white/60' : 'bg-white/20 group-hover:bg-white/40')} />
       <ChildIcon className={cn('h-3.5 w-3.5 shrink-0 transition-colors', active ? 'text-white' : 'text-slate-600 group-hover:text-slate-300')} />
       <span className="truncate">{child.title}</span>
     </Link>
@@ -352,17 +363,17 @@ function NavItemRow({
   return (
     <div>
       <div className="relative flex items-center gap-0.5">
-        {isActive && !hasChildren && <span className="absolute -left-3 h-6 w-0.5 rounded-r bg-white/40" />}
+        {isActive && !hasChildren && <span className={cn('absolute -left-3 h-6 w-0.5 rounded-r', sectionColor.replace('text-', 'bg-'))} />}
         <Link
           href={item.href}
           onClick={() => onNavigate(item.href)}
           aria-current={isCurrent ? 'page' : undefined}
           className={cn(
             'group flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-all duration-150',
-            isActive && !hasChildren
-              ? 'bg-white/10 text-white'
+            isActive
+              ? 'bg-white/10 text-white ring-1 ring-inset ring-white/10'
               : hasChildren && isExpanded
-                ? 'text-slate-200 hover:text-white'
+                ? 'bg-white/[0.03] text-slate-200 hover:text-white'
                 : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
           )}
         >
@@ -393,10 +404,13 @@ function NavItemRow({
         {hasChildren && (
           <button
             type="button"
-            aria-label={isExpanded ? 'Colapsar seccion' : 'Expandir seccion'}
+            aria-label={isExpanded ? `Colapsar ${item.title}` : `Expandir ${item.title}`}
             aria-expanded={isExpanded}
             onClick={() => onToggleExpanded(item.title)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-white/5 hover:text-slate-300"
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/5 hover:text-slate-300',
+              isExpanded ? 'text-slate-300' : 'text-slate-600'
+            )}
           >
             <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', isExpanded && 'rotate-180')} />
           </button>
@@ -424,10 +438,11 @@ type SidebarContentProps = {
   pathname: string
   isCollapsed: boolean
   expandedItems: Set<string>
+  collapsedSections: Set<NavSection>
   userDisplayName: string
   userEmail: string | null
-  onCollapse: () => void
   onToggleExpanded: (title: string) => void
+  onToggleSection: (section: NavSection) => void
   onNavigate: (href: string) => void
   onCloseMobile: () => void
   onLogout: () => void
@@ -438,10 +453,11 @@ function SidebarContent({
   pathname,
   isCollapsed,
   expandedItems,
+  collapsedSections,
   userDisplayName,
   userEmail,
-  onCollapse,
   onToggleExpanded,
+  onToggleSection,
   onNavigate,
   onCloseMobile,
   onLogout,
@@ -449,11 +465,18 @@ function SidebarContent({
   const collapsed = mode === 'desktop' && isCollapsed
 
   return (
-    <div className="flex h-full flex-col bg-slate-900">
+    <div className="flex h-full flex-col bg-slate-950">
       <div className={cn('flex h-16 shrink-0 items-center border-b border-white/10', collapsed ? 'justify-center px-3' : 'justify-between px-4')}>
         <Link href="/superadmin" onClick={() => onNavigate('/superadmin')} className={cn('flex min-w-0 items-center gap-3', collapsed && 'mx-auto')}>
           <div className="flex h-8 shrink-0 items-center">
-            <img src="/branding/servix-360-logo.png" alt="SERVIX 360" className={cn('w-auto object-contain', collapsed ? 'h-8 max-w-8' : 'h-8 max-w-[132px]')} />
+            <Image
+              src="/branding/servix-360-logo.png"
+              alt="SERVIX 360"
+              width={132}
+              height={32}
+              priority
+              className={cn('w-auto object-contain', collapsed ? 'h-8 max-w-8' : 'h-8 max-w-[132px]')}
+            />
           </div>
           {!collapsed && (
             <div className="min-w-0">
@@ -465,28 +488,29 @@ function SidebarContent({
           )}
         </Link>
 
-        {mode === 'desktop' && !collapsed && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-slate-500 hover:bg-white/5 hover:text-slate-300"
-                onClick={onCollapse}
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Colapsar</TooltipContent>
-          </Tooltip>
-        )}
-
         {mode === 'mobile' && (
           <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:bg-white/5" onClick={onCloseMobile}>
             <X className="h-4 w-4" />
           </Button>
         )}
       </div>
+
+      {!collapsed && (
+        <div className="shrink-0 border-b border-white/10 px-3 py-3">
+          <div className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/20">
+                <Crown className="h-3.5 w-3.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-slate-200">Control global</p>
+                <p className="truncate text-[10px] text-slate-500">Plataforma, tenants y sistema</p>
+              </div>
+              <span className="h-2 w-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/10" title="Panel disponible" />
+            </div>
+          </div>
+        </div>
+      )}
 
       <ScrollArea className="flex-1 py-2">
         <nav className={cn('space-y-1', collapsed ? 'px-2' : 'px-3')}>
@@ -498,39 +522,51 @@ function SidebarContent({
             const sectionHasActive = items.some(
               item => isItemActive(pathname, item) || item.children?.some(child => isItemActive(pathname, child))
             )
+            const sectionCollapsed = collapsedSections.has(section) && !sectionHasActive
 
             return (
-              <div key={section}>
+              <div key={section} className="py-0.5">
                 {!collapsed ? (
-                  <div className={cn('mb-1 mt-3 flex items-center gap-2 rounded-md px-2 py-1', sectionHasActive && 'bg-white/5')}>
+                  <button
+                    type="button"
+                    onClick={() => onToggleSection(section)}
+                    aria-expanded={!sectionCollapsed}
+                    className={cn(
+                      'mb-1 mt-2 flex h-7 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-white/5',
+                      sectionHasActive && 'bg-white/5'
+                    )}
+                  >
                     <div className={cn('h-1.5 w-1.5 rounded-full', color.replace('text-', 'bg-'))} />
-                    <span className={cn('text-[10px] font-bold uppercase tracking-[0.2em]', color)}>
+                    <span className={cn('min-w-0 flex-1 truncate text-[10px] font-bold uppercase tracking-[0.18em]', color)}>
                       {label}
                     </span>
-                  </div>
+                    <ChevronDown className={cn('h-3 w-3 text-slate-600 transition-transform', sectionCollapsed && '-rotate-90')} />
+                  </button>
                 ) : (
                   <div className="mx-2 my-3 h-px bg-white/10" />
                 )}
 
-                <div className="space-y-0.5">
-                  {items.map((item) => {
-                    const isActive = isItemActive(pathname, item) || Boolean(item.children?.some(child => isItemActive(pathname, child)))
-                    const isExpanded = expandedItems.has(item.title)
+                <div className={cn('grid transition-[grid-template-rows,opacity] duration-200', sectionCollapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100')}>
+                  <div className="min-h-0 space-y-0.5 overflow-hidden">
+                    {items.map((item) => {
+                      const isActive = isItemActive(pathname, item) || Boolean(item.children?.some(child => isItemActive(pathname, child)))
+                      const isExpanded = expandedItems.has(item.title)
 
-                    return (
-                      <NavItemRow
-                        key={item.href}
-                        item={item}
-                        collapsed={collapsed}
-                        isActive={isActive}
-                        isExpanded={isExpanded}
-                        sectionColor={color}
-                        pathname={pathname}
-                        onToggleExpanded={onToggleExpanded}
-                        onNavigate={onNavigate}
-                      />
-                    )
-                  })}
+                      return (
+                        <NavItemRow
+                          key={item.href}
+                          item={item}
+                          collapsed={collapsed}
+                          isActive={isActive}
+                          isExpanded={isExpanded}
+                          sectionColor={color}
+                          pathname={pathname}
+                          onToggleExpanded={onToggleExpanded}
+                          onNavigate={onNavigate}
+                        />
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             )
@@ -540,7 +576,7 @@ function SidebarContent({
 
       <div className="shrink-0 border-t border-white/10 p-3">
         {!collapsed ? (
-          <div className="flex items-center gap-2.5 rounded-lg bg-white/5 px-3 py-2.5">
+          <div className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/20 text-xs font-bold text-indigo-300 ring-1 ring-indigo-500/30">
               {getInitials(userDisplayName)}
             </div>
@@ -638,17 +674,14 @@ export function SuperAdminShell({
   const pathname = usePathname() ?? '/superadmin'
   const router = useRouter()
   const { signOut, user } = useAuth()
-  const defaultExpandedItems = useMemo(
-    () => new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento']),
-    []
-  )
+  const defaultExpandedItems = useMemo(() => new Set<string>(), [])
 
   const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento'])
+    if (typeof window === 'undefined') return new Set()
 
     try {
       const stored = window.localStorage.getItem('sa_sidebar_expanded')
-      if (!stored) return new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento'])
+      if (!stored) return new Set()
 
       const parsed = JSON.parse(stored) as unknown
       if (Array.isArray(parsed)) {
@@ -658,7 +691,24 @@ export function SuperAdminShell({
       // Ignore malformed local state.
     }
 
-    return new Set(['Organizaciones', 'Usuarios', 'Contenido web', 'Monitoreo', 'Mantenimiento'])
+    return new Set()
+  })
+  const [collapsedSections, setCollapsedSections] = useState<Set<NavSection>>(() => {
+    if (typeof window === 'undefined') return new Set()
+
+    try {
+      const stored = window.localStorage.getItem('sa_sidebar_collapsed_sections')
+      if (!stored) return new Set()
+
+      const parsed = JSON.parse(stored) as unknown
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.filter((value): value is NavSection => sectionOrder.includes(value as NavSection)))
+      }
+    } catch {
+      // Ignore malformed local state.
+    }
+
+    return new Set()
   })
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -670,6 +720,28 @@ export function SuperAdminShell({
     }
   })
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  const handleToggleSidebar = useCallback(() => {
+    setIsCollapsed(collapsed => !collapsed)
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setSearchOpen(open => !open)
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
+        event.preventDefault()
+        handleToggleSidebar()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleToggleSidebar])
 
   useEffect(() => {
     try {
@@ -687,6 +759,14 @@ export function SuperAdminShell({
     }
   }, [expandedItems])
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('sa_sidebar_collapsed_sections', JSON.stringify(Array.from(collapsedSections)))
+    } catch {
+      // Ignore persistence failure.
+    }
+  }, [collapsedSections])
+
   const effectiveExpandedItems = useMemo(() => {
     const next = new Set(expandedItems.size ? expandedItems : defaultExpandedItems)
 
@@ -699,6 +779,7 @@ export function SuperAdminShell({
 
   const activeItem = useMemo(() => getActiveItem(pathname), [pathname])
   const activeBadge = (activeItem as NavItem | undefined)?.badge ?? null
+  const ActiveIcon = activeItem?.icon ?? Crown
   const userDisplayName = user?.profile?.name || userEmail || 'Super admin'
 
   const handleLogout = useCallback(async () => {
@@ -715,18 +796,34 @@ export function SuperAdminShell({
     })
   }, [])
 
+  const handleToggleSection = useCallback((section: NavSection) => {
+    setCollapsedSections((current) => {
+      const next = new Set(current)
+      if (next.has(section)) next.delete(section)
+      else next.add(section)
+      return next
+    })
+  }, [])
+
   const handleNavigate = useCallback(() => {
     setMobileOpen(false)
+    setSearchOpen(false)
   }, [])
+
+  const handleCommandNavigate = useCallback((href: string) => {
+    handleNavigate()
+    router.push(href)
+  }, [handleNavigate, router])
 
   const sidebarProps: Omit<SidebarContentProps, 'mode'> = {
     pathname,
     isCollapsed,
     expandedItems: effectiveExpandedItems,
+    collapsedSections,
     userDisplayName,
     userEmail,
-    onCollapse: () => setIsCollapsed(true),
     onToggleExpanded: handleToggleExpanded,
+    onToggleSection: handleToggleSection,
     onNavigate: handleNavigate,
     onCloseMobile: () => setMobileOpen(false),
     onLogout: handleLogout,
@@ -734,42 +831,54 @@ export function SuperAdminShell({
 
   return (
     <TooltipProvider>
-      <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-slate-950">
+      <div className="relative flex h-dvh overflow-hidden bg-slate-950 md:gap-2 md:p-2">
+        <a
+          href="#superadmin-content"
+          className="sr-only z-[100] rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-950 shadow-lg focus:not-sr-only focus:absolute focus:left-4 focus:top-4"
+        >
+          Saltar al contenido
+        </a>
+
         <aside
           className={cn(
-            'hidden shrink-0 transition-[width] duration-200 md:flex md:flex-col',
-            isCollapsed ? 'w-[60px]' : 'w-60'
+            'hidden shrink-0 overflow-hidden transition-[width] duration-200 md:flex md:flex-col md:rounded-xl md:border md:border-white/10 md:shadow-2xl md:shadow-black/20',
+            isCollapsed ? 'w-[60px]' : 'w-64'
           )}
         >
           <SidebarContent mode="desktop" {...sidebarProps} />
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex min-w-0 items-center gap-2">
-              {isCollapsed && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="hidden h-8 w-8 text-slate-500 hover:text-slate-700 md:flex dark:hover:text-slate-300"
-                      onClick={() => setIsCollapsed(false)}
-                    >
-                      <PanelLeftOpen className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Expandir menu</TooltipContent>
-                </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={handleToggleSidebar}
+              aria-label={isCollapsed ? 'Expandir menu lateral' : 'Colapsar menu lateral'}
+              aria-expanded={!isCollapsed}
+              className={cn(
+                'absolute top-7 z-40 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-400 shadow-lg shadow-black/30 transition-[left,background-color,color,border-color] duration-200 hover:border-slate-500 hover:bg-slate-800 hover:text-white md:flex',
+                isCollapsed ? 'left-[56px]' : 'left-[252px]'
               )}
+            >
+              {isCollapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="flex items-center gap-2">
+            <span>{isCollapsed ? 'Expandir menu' : 'Colapsar menu'}</span>
+            <kbd className="rounded border px-1 py-0.5 text-[10px]">Ctrl B</kbd>
+          </TooltipContent>
+        </Tooltip>
 
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-slate-50 md:rounded-xl md:border md:border-white/10 md:shadow-2xl md:shadow-black/20 dark:bg-slate-950">
+          <header className="relative z-20 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-3 shadow-sm shadow-slate-950/[0.02] backdrop-blur-xl sm:px-4 dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-black/10">
+            <div className="flex min-w-0 items-center gap-2">
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden">
                     <Menu className="h-5 w-5" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="left" className="w-60 p-0">
+                <SheetContent side="left" className="w-72 p-0">
                   <SheetHeader className="sr-only">
                     <SheetTitle>Menu Super Admin</SheetTitle>
                   </SheetHeader>
@@ -777,53 +886,65 @@ export function SuperAdminShell({
                 </SheetContent>
               </Sheet>
 
-              <div className="flex min-w-0 items-center gap-2 overflow-hidden">
-                <Breadcrumb pathname={pathname} />
-                {activeBadge && (
-                  <Badge variant="outline" className="hidden h-5 shrink-0 rounded border-indigo-200 px-1.5 text-[10px] text-indigo-600 sm:inline-flex dark:border-indigo-800 dark:text-indigo-400">
-                    {activeBadge}
-                  </Badge>
-                )}
+              <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 sm:flex dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <ActiveIcon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
+                      {activeItem?.title ?? 'Super Admin'}
+                    </p>
+                    {activeBadge && (
+                      <Badge variant="outline" className="hidden h-5 shrink-0 rounded border-indigo-200 px-1.5 text-[10px] text-indigo-600 sm:inline-flex dark:border-indigo-800 dark:text-indigo-400">
+                        {activeBadge}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="hidden sm:block">
+                    <Breadcrumb pathname={pathname} />
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5">
-              <div className="hidden items-center gap-1 md:flex">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 px-2.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
-                      <Link href="/admin">
-                        <Shield className="h-3.5 w-3.5" />
-                        Admin
-                      </Link>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Ir al panel Admin</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button asChild variant="ghost" size="sm" className="h-8 gap-1.5 px-2.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
-                      <Link href="/dashboard">
-                        <LayoutDashboard className="h-3.5 w-3.5" />
-                        Dashboard
-                      </Link>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Ir al Dashboard</TooltipContent>
-                </Tooltip>
-              </div>
+              <button
+                type="button"
+                onClick={() => setSearchOpen(true)}
+                className="hidden h-9 w-52 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-left text-xs text-slate-500 transition-colors hover:border-slate-300 hover:bg-white lg:flex dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-slate-800/70"
+                aria-label="Buscar secciones"
+              >
+                <Search className="h-3.5 w-3.5" />
+                <span className="flex-1">Buscar secciones...</span>
+                <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400 dark:border-slate-600 dark:bg-slate-900">
+                  Ctrl K
+                </kbd>
+              </button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 lg:hidden"
+                onClick={() => setSearchOpen(true)}
+                aria-label="Buscar secciones"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
 
               <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 md:block" />
               <ThemeToggle />
               <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 md:block" />
 
               <div className="hidden md:block">
-                <Tooltip>
-                  <TooltipTrigger asChild>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      aria-label="Super Admin"
-                      className="flex cursor-default items-center gap-2 rounded-lg px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      aria-label="Abrir menu de Super Admin"
+                      className="flex h-9 items-center gap-2 rounded-lg px-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                     >
                       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
                         {getInitials(userDisplayName)}
@@ -831,17 +952,38 @@ export function SuperAdminShell({
                       <span className="hidden max-w-[110px] truncate text-xs font-medium text-slate-700 dark:text-slate-300 sm:block">
                         {userDisplayName}
                       </span>
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
                     </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <p className="font-semibold">{userDisplayName}</p>
-                    {userEmail && <p className="text-xs text-muted-foreground">{userEmail}</p>}
-                    <p className="mt-0.5 flex items-center gap-1 text-[11px] text-indigo-400">
-                      <Crown className="h-2.5 w-2.5" />
-                      Super Admin
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuLabel>
+                      <p className="truncate text-sm">{userDisplayName}</p>
+                      {userEmail && <p className="truncate text-xs font-normal text-muted-foreground">{userEmail}</p>}
+                      <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-indigo-500">
+                        <Crown className="h-3 w-3" />
+                        Acceso global Super Admin
+                      </p>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin">
+                        <Shield className="mr-2 h-4 w-4" />
+                        Panel Admin
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/dashboard">
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        Dashboard operativo
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => { void handleLogout() }} className="text-red-600 focus:text-red-700">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Cerrar sesion
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               <div className="md:hidden">
@@ -882,9 +1024,54 @@ export function SuperAdminShell({
             </div>
           </header>
 
-          <main className="flex-1 overflow-x-auto overflow-y-auto">
-            <div className="min-w-0 p-4 sm:p-6">
-              {children}
+          <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
+            <CommandInput placeholder="Buscar organizaciones, facturacion, monitoreo..." />
+            <CommandList>
+              <CommandEmpty>No se encontraron secciones.</CommandEmpty>
+              {sectionOrder.map((section) => {
+                const items = navItems.filter(item => item.section === section)
+                return (
+                  <CommandGroup key={section} heading={sectionMeta[section].label}>
+                    {items.flatMap(item => [item, ...(item.children ?? [])]).map((item, index) => {
+                      const ItemIcon = item.icon
+                      return (
+                        <CommandItem
+                          key={`${section}-${item.href}-${index}`}
+                          value={`${item.title} ${item.description ?? ''}`}
+                          onSelect={() => handleCommandNavigate(item.href)}
+                          className="gap-3"
+                        >
+                          <ItemIcon className="h-4 w-4 text-slate-500" />
+                          <span className="flex-1">{item.title}</span>
+                          {isItemActive(pathname, item) && (
+                            <Badge variant="secondary" className="text-[10px]">Actual</Badge>
+                          )}
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                )
+              })}
+            </CommandList>
+          </CommandDialog>
+
+          <main
+            id="superadmin-content"
+            className="relative flex-1 overflow-x-auto overflow-y-auto bg-slate-100/70 outline-none dark:bg-slate-950"
+            tabIndex={-1}
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-0 h-52 bg-gradient-to-b from-white via-white/40 to-transparent dark:from-slate-900/70 dark:via-slate-900/20"
+            />
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute right-0 top-0 h-64 w-64 rounded-full bg-indigo-200/20 blur-3xl dark:bg-indigo-950/20"
+            />
+            <div className="relative min-w-0 px-4 py-5 sm:px-6 sm:py-7 xl:px-8 xl:py-8">
+              <div className="mx-auto w-full max-w-[1680px]">
+                {children}
+              </div>
             </div>
           </main>
         </div>

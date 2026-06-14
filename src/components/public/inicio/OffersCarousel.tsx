@@ -26,7 +26,6 @@ export interface OfferCard {
 
 interface OffersCarouselProps {
   companyName: string
-  fallbackOffers: OfferCard[]
   settings: OffersSectionSettings
 }
 
@@ -37,6 +36,13 @@ const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], {
   button: string
   activeDot: string
 }> = {
+  brand: {
+    section: 'border-primary/30 bg-gradient-to-b from-primary/10 to-background',
+    eyebrow: 'text-primary',
+    price: 'text-primary',
+    button: 'bg-primary text-primary-foreground hover:bg-primary/90',
+    activeDot: 'bg-primary',
+  },
   rose: {
     section: 'border-rose-200 bg-gradient-to-b from-rose-50/90 to-background dark:border-rose-900/40 dark:from-rose-950/25',
     eyebrow: 'text-rose-700 dark:text-rose-300',
@@ -88,17 +94,19 @@ const offersFetcher = async (url: string): Promise<OfferCard[]> => {
       id: String(product.id),
       title: String(product.name || 'Producto destacado'),
       description: String(product.description || 'Disponible para entrega inmediata y retiro en tienda.'),
-      priceLabel: typeof product.offer_price === 'number' ? `${product.offer_price.toLocaleString('es-CL')}` : 'Consultar precio',
-      originalPriceLabel: typeof product.sale_price === 'number' ? `${product.sale_price.toLocaleString('es-CL')}` : undefined,
+      priceLabel: typeof product.offer_price === 'number' ? new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(product.offer_price) : 'Consultar precio',
+      originalPriceLabel: typeof product.sale_price === 'number' ? new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(product.sale_price) : undefined,
       tag: 'Oferta activa',
-      ctaHref: product.id ? `/productos/${product.id}` : '/productos',
+      ctaHref: product.id != null && product.id !== '' ? `/productos/${String(product.id)}` : '/productos',
       image: product.image || (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null),
       brand: product.brand || null,
-      inStock: Number(product.in_stock) > 0 || Boolean(product.in_stock),
+      inStock: typeof product.in_stock === 'boolean'
+        ? product.in_stock
+        : Number(product.stock_quantity ?? product.in_stock) > 0,
     }))
 }
 
-export function OffersCarousel({ companyName, fallbackOffers, settings }: OffersCarouselProps) {
+export function OffersCarousel({ companyName, settings }: OffersCarouselProps) {
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
@@ -110,7 +118,7 @@ export function OffersCarousel({ companyName, fallbackOffers, settings }: Offers
   )
 
   const offersFetchFailed = Boolean(error)
-  const displayedOffers = offersFetchFailed ? fallbackOffers : (offerCards ?? [])
+  const displayedOffers = offerCards ?? []
   const accent = OFFER_ACCENTS[settings.accentColor] ?? OFFER_ACCENTS.rose
 
   const [activeOfferIndex, setActiveOfferIndex] = useState(0)
@@ -273,7 +281,7 @@ export function OffersCarousel({ companyName, fallbackOffers, settings }: Offers
                     {offer.image ? (
                       <Image
                         src={offer.image}
-                        alt={offer.title}
+                        alt={offer.title || 'Imagen de oferta'}
                         fill
                         className="object-cover"
                         sizes="(max-width: 768px) 88vw, (max-width: 1200px) 62vw, 36vw"
@@ -307,7 +315,7 @@ export function OffersCarousel({ companyName, fallbackOffers, settings }: Offers
                         {offer.inStock ? 'Disponible' : 'Sin stock'}
                       </span>
                       <Button asChild size="sm" className={accent.button}>
-                        <Link href={offer.ctaHref.startsWith('/productos') ? `${tenantPrefix}${offer.ctaHref}` : offer.ctaHref}>Ver detalle</Link>
+                        <Link href={(offer.ctaHref ?? '/productos').startsWith('/productos') ? `${tenantPrefix}${offer.ctaHref ?? '/productos'}` : (offer.ctaHref ?? `${tenantPrefix}/productos`)}>Ver detalle</Link>
                       </Button>
                     </div>
                   </div>

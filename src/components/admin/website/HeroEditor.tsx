@@ -27,6 +27,10 @@ export function HeroEditor() {
   const hasChanges = heroContentDraft !== null || heroStatsDraft !== null
 
   const brand = getBrandTheme(settings?.company_info?.brandColor)
+  const customBrandStyle =
+    settings?.company_info?.brandColor === 'custom' && settings.company_info.customBrandColor
+      ? { '--primary': settings.company_info.customBrandColor } as React.CSSProperties
+      : undefined
 
   // Report unsaved changes so the tabs page can warn before switching away.
   const dirtyCtx = useWebsiteEditorDirty()
@@ -110,7 +114,10 @@ export function HeroEditor() {
           </span>
           <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
         </div>
-        <div className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} px-6 py-10 text-center text-white`}>
+        <div
+          className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} px-6 py-10 text-center text-white`}
+          style={customBrandStyle}
+        >
           <div className="mx-auto max-w-2xl">
             <span className="inline-block rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur-sm">
               {heroContent.badge || 'Tu badge'}

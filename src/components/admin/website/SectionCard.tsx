@@ -30,7 +30,7 @@ export function SectionCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-6">{children}</CardContent>
+      <CardContent className="p-6 pt-6 sm:p-8 sm:pt-8">{children}</CardContent>
     </Card>
   )
 }

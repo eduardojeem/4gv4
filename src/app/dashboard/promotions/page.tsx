@@ -30,6 +30,7 @@ import {
   PromotionAnalytics
 } from '@/components/dashboard/promotions'
 import { RouteGuard } from '@/components/auth/permission-guard'
+import { PlanGate } from '@/components/admin/PlanGate'
 import { usePermissions } from '@/hooks/use-permissions'
 
 // Dynamic import to avoid SSR issues with Calendar component
@@ -137,6 +138,11 @@ export default function PromotionsPage() {
 
   return (
     <RouteGuard route="/dashboard/promotions">
+      <PlanGate
+        module="promotions"
+        title="Promociones no está incluido en tu plan"
+        description="Actualiza tu plan para crear descuentos, campañas y códigos promocionales."
+      >
       <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
         {/* Header */}
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -275,6 +281,7 @@ export default function PromotionsPage() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
+      </PlanGate>
     </RouteGuard>
   )
 }

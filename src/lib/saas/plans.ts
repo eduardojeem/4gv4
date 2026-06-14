@@ -7,8 +7,10 @@ export type SaaSModule =
   | 'crm'
   | 'ecommerce'
   | 'delivery'
-  | 'whatsapp'
   | 'analytics'
+  | 'credits'
+  | 'promotions'
+  | 'security'
 
 export interface PlanLimits {
   users: number | null
@@ -38,14 +40,14 @@ export const PLAN_LIMITS: Record<SaaSPlan, PlanLimits> = {
     products: 10000,
     branches: 5,
     storageMb: 51200,
-    modules: ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'whatsapp', 'analytics'],
+    modules: ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'analytics', 'promotions', 'security'],
   },
   ENTERPRISE: {
     users: null,
     products: null,
     branches: null,
     storageMb: null,
-    modules: ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'whatsapp', 'analytics'],
+    modules: ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'analytics', 'promotions', 'security'],
   },
 }
 

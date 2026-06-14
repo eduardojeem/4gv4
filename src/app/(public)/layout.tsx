@@ -40,11 +40,16 @@ export default async function PublicLayout({
 }) {
   const settings = await fetchWebsiteSettings()
   const brandColor = settings?.company_info?.brandColor || 'blue'
+  const customBrandColor = settings?.company_info?.customBrandColor
 
   return (
     <MaintenanceGuard>
       <CartProviderWithDrawer>
-        <div className="flex min-h-screen flex-col" data-color-scheme={brandColor}>
+        <div 
+          className="flex min-h-screen flex-col" 
+          data-color-scheme={brandColor === 'custom' ? undefined : brandColor}
+          style={brandColor === 'custom' && customBrandColor ? { '--primary': customBrandColor } as React.CSSProperties : undefined}
+        >
           <SkipToContentLink />
           <PublicHeader />
           <main id="main-content" className="flex-1">{children}</main>

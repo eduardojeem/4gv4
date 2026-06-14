@@ -27,6 +27,21 @@ function categoryId(category: string) {
   return `servicios-${category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
 }
 
+const CARD_BG: Record<string, string> = {
+  blue:    'from-blue-500 to-indigo-600',
+  green:   'from-green-500 to-emerald-600',
+  purple:  'from-purple-500 to-fuchsia-600',
+  orange:  'from-orange-500 to-amber-500',
+  red:     'from-red-500 to-rose-600',
+  indigo:  'from-indigo-500 to-blue-700',
+  teal:    'from-teal-500 to-emerald-600',
+  rose:    'from-rose-500 to-pink-600',
+  amber:   'from-amber-400 to-orange-500',
+  emerald: 'from-emerald-500 to-teal-600',
+  cyan:    'from-cyan-500 to-sky-600',
+  sky:     'from-sky-500 to-blue-600',
+}
+
 export function ServicesPageClient({ services, companyName, whatsapp }: ServicesPageClientProps) {
   const activeServices = useMemo(
     () => services.filter((service) => service.active !== false),
@@ -134,88 +149,88 @@ export function ServicesPageClient({ services, companyName, whatsapp }: Services
                 <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                   {categoryServices.map((service, index) => {
                     const Icon = iconMap[service.icon] || Wrench
-                    const colors = colorMap[service.color] || colorMap.blue
+                    const cardGradient = CARD_BG[service.color] || CARD_BG.blue
                     const benefits = Array.isArray(service.benefits) ? service.benefits.filter(Boolean) : []
 
                     return (
                       <article
                         key={service.id || index}
                         className={cn(
-                          'group relative flex min-h-full flex-col overflow-hidden rounded-2xl border bg-card p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10',
-                          service.featured && 'border-primary/35 ring-1 ring-primary/20'
+                          'group relative flex min-h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl',
+                          service.featured && 'ring-2 ring-primary/30'
                         )}
                       >
                         {service.featured && (
-                          <div className="absolute right-0 top-0 rounded-bl-2xl bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground">
-                            <span className="flex items-center gap-1">
-                              <Star className="h-3 w-3 fill-current" />
-                              Destacado
-                            </span>
+                          <div className="absolute right-3 top-3 z-10 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-foreground shadow">
+                            Destacado
                           </div>
                         )}
 
-                        <div className={cn(
-                          'flex h-12 w-12 items-center justify-center rounded-xl transition-colors',
-                          colors.bg,
-                          colors.text,
-                          colors.hover,
-                          'group-hover:text-white'
-                        )}>
-                          <Icon className="h-6 w-6" />
+                        {/* Coloured header */}
+                        <div className={cn('flex items-center gap-3 bg-gradient-to-br p-5 text-white', cardGradient)}>
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20 shadow-inner backdrop-blur-sm">
+                            <Icon className="h-6 w-6" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold leading-tight">{service.title}</h3>
+                          </div>
                         </div>
 
-                        <h3 className="mt-5 pr-16 text-lg font-bold leading-snug text-card-foreground">
-                          {service.title}
-                        </h3>
-                        {service.description && (
-                          <p className="mt-2 text-sm leading-6 text-muted-foreground">{service.description}</p>
-                        )}
+                        <div className="flex flex-1 flex-col gap-4 p-5">
+                          {service.description && (
+                            <p className="text-sm leading-6 text-muted-foreground flex-1">{service.description}</p>
+                          )}
 
-                        {(service.price || service.duration) && (
-                          <div className="mt-5 flex flex-wrap gap-2 border-y border-border/70 py-3">
-                            {service.price && (
-                              <div>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Precio</p>
-                                <p className="text-base font-extrabold text-primary">
-                                  {typeof service.price === 'number'
-                                    ? `Gs. ${service.price.toLocaleString('es-PY')}`
-                                    : service.price}
-                                </p>
-                                {service.priceNote && <p className="text-[11px] text-muted-foreground">{service.priceNote}</p>}
-                              </div>
-                            )}
-                            {service.duration && (
-                              <div className="ml-auto flex items-center gap-1.5 self-center rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-muted-foreground">
-                                <Clock3 className="h-3.5 w-3.5 text-primary" />
-                                {service.duration}
-                              </div>
-                            )}
+                          {(service.price || service.duration) && (
+                            <div className="flex flex-wrap gap-2 border-y border-border/70 py-3">
+                              {service.price && (
+                                <div>
+                                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Precio</p>
+                                  <p className="text-base font-extrabold text-primary">
+                                    {typeof service.price === 'number'
+                                      ? `Gs. ${service.price.toLocaleString('es-PY')}`
+                                      : service.price}
+                                  </p>
+                                  {service.priceNote && <p className="text-[11px] text-muted-foreground">{service.priceNote}</p>}
+                                </div>
+                              )}
+                              {service.duration && (
+                                <div className="ml-auto flex items-center gap-1.5 self-center rounded-lg bg-muted px-2.5 py-1.5 text-xs font-semibold text-muted-foreground">
+                                  <Clock3 className="h-3.5 w-3.5 text-primary" />
+                                  {service.duration}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {benefits.length > 0 && (
+                            <ul className="space-y-2 text-sm text-muted-foreground">
+                              {benefits.slice(0, 4).map((benefit) => (
+                                <li key={benefit} className="flex gap-2">
+                                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                  <span>{benefit}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+
+                          <div className="mt-auto pt-2">
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                'w-full gap-2 rounded-xl font-bold transition-colors shadow-sm',
+                                `group-hover:border-transparent group-hover:bg-gradient-to-br ${cardGradient} group-hover:text-white`
+                              )}
+                              onClick={() => handleContactService(service.title)}
+                              disabled={!canContact}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              {canContact ? 'Consultar servicio' : 'Consulta no disponible'}
+                            </Button>
+                            <p className="mt-2 text-center text-[11px] text-muted-foreground">
+                              Respuesta directa de {companyName}
+                            </p>
                           </div>
-                        )}
-
-                        {benefits.length > 0 && (
-                          <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-                            {benefits.slice(0, 4).map((benefit) => (
-                              <li key={benefit} className="flex gap-2">
-                                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                                <span>{benefit}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-
-                        <div className="mt-auto pt-6">
-                          <Button
-                            className="w-full gap-2 font-bold shadow-sm shadow-primary/15"
-                            onClick={() => handleContactService(service.title)}
-                            disabled={!canContact}
-                          >
-                            <MessageCircle className="h-4 w-4" />
-                            {canContact ? 'Consultar servicio' : 'Consulta no disponible'}
-                          </Button>
-                          <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                            Respuesta directa del equipo de {companyName}
-                          </p>
                         </div>
                       </article>
                     )

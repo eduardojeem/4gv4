@@ -3,23 +3,17 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { motion  } from '../../../../components/ui/motion'
 import Link from 'next/link'
-import { XLSX, jsPDF, showDisabledFeatureMessage } from '@/components/stubs/HeavyDependencyStubs';
-// Comentado temporalmente para optimización de bundle
-// import autoTable from 'jspdf-autotable'
+import { useSubscriptionStatus, canExportReports } from '@/contexts/SubscriptionStatusContext'
 import {
   BarChart3,
-  Download,
   Filter,
-  Calendar,
   TrendingUp,
-  TrendingDown,
   Package,
   AlertTriangle,
   FileText,
   PieChart,
   Activity,
   RefreshCw,
-  Sparkles,
   ArrowLeft
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
@@ -31,7 +25,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
 import { ResponsiveContainer } from 'recharts/es6/component/ResponsiveContainer';
 import { BarChart } from 'recharts/es6/chart/BarChart';
 import { Bar } from 'recharts/es6/cartesian/Bar';
@@ -42,11 +35,9 @@ import { Tooltip } from 'recharts/es6/component/Tooltip';
 import { PieChart as RechartsPieChart } from 'recharts/es6/chart/PieChart';
 import { Pie } from 'recharts/es6/polar/Pie';
 import { Cell } from 'recharts/es6/component/Cell';
-import { LineChart } from 'recharts/es6/chart/LineChart';
-import { Line } from 'recharts/es6/cartesian/Line';
 import { Area } from 'recharts/es6/cartesian/Area';
 import { AreaChart } from 'recharts/es6/chart/AreaChart';
-import { format, subDays, subMonths, startOfMonth, endOfMonth } from 'date-fns'
+import { format, subMonths } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 import { createClient } from '@/lib/supabase/client'
@@ -55,6 +46,8 @@ import { isCompletedSaleStatus } from '@/lib/sales-status'
 // Datos mock eliminados
 
 export default function ProductReportsPage() {
+  const { planCode } = useSubscriptionStatus()
+  const canExport = canExportReports(planCode) // exportar: Basic en adelante
   const supabase = useMemo(() => createClient(), [])
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
@@ -210,7 +203,10 @@ export default function ProductReportsPage() {
   const filteredData = useMemo(() => {
     return products.filter(product => {
       const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory
-      const matchesStatus = selectedStatus === 'all' || product.status === selectedStatus
+      const matchesStatus = selectedStatus === 'all'
+        || (selectedStatus === 'low_stock'
+          ? product.stock_quantity <= product.min_stock
+          : product.status === selectedStatus)
       const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            product.sku.toLowerCase().includes(searchTerm.toLowerCase())
       
@@ -239,30 +235,36 @@ export default function ProductReportsPage() {
 
   // Función mejorada para exportar datos
   const exportData = useCallback(async (fileFormat: 'csv' | 'excel' | 'pdf') => {
+    if (!canExport) return // exportar disponible desde Basic
     setIsExporting(true)
-    
+
     try {
-      // Simular procesamiento con progreso
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const filename = `reporte-productos-${timestamp}`
-      
+      const money = (n: number) => `Gs ${Math.round(n).toLocaleString('es-PY')}`
+
       if (fileFormat === 'csv') {
         const BOM = '\uFEFF' // UTF-8 BOM para Excel
+        // Sanitiza cada celda: evita inyección de fórmulas y escapa comas/comillas/saltos.
+        const cell = (value: unknown): string => {
+          let text = value === null || value === undefined ? '' : String(value)
+          if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
+          if (/[",\n\r]/.test(text)) text = `"${text.replace(/"/g, '""')}"`
+          return text
+        }
         const headers = ['Producto', 'SKU', 'Categoría', 'Stock', 'Precio Venta', 'Ventas Totales', 'Ingresos', 'Margen %']
         const csvContent = [
           headers.join(','),
           ...filteredData.map(product => [
-            `"${product.name}"`,
+            product.name,
             product.sku,
-            `"${product.category}"`,
+            product.category,
             product.stock_quantity,
             product.sale_price,
             product.total_sales,
             product.revenue,
             product.margin.toFixed(1)
-          ].join(','))
+          ].map(cell).join(','))
         ].join('\n')
         
         const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -274,7 +276,7 @@ export default function ProductReportsPage() {
         window.URL.revokeObjectURL(url)
         
       } else if (fileFormat === 'excel') {
-        // Crear workbook con múltiples hojas
+        const XLSX = await import('xlsx')
         const wb = XLSX.utils.book_new()
         
         // Hoja principal con datos de productos
@@ -328,8 +330,8 @@ export default function ProductReportsPage() {
           [],
           ['Métrica', 'Valor'],
           ['Total de Productos', metrics.totalProducts],
-          ['Ingresos Totales', `$${(metrics.totalRevenue / 1000000).toFixed(2)}M`],
-          ['Ganancia Total', `$${(metrics.totalProfit / 1000000).toFixed(2)}M`],
+          ['Ingresos Totales', money(metrics.totalRevenue)],
+          ['Ganancia Total', money(metrics.totalProfit)],
           ['Ventas Totales', metrics.totalSales],
           ['Margen Promedio', `${metrics.averageMargin.toFixed(1)}%`],
           ['Productos con Stock Bajo', metrics.lowStockProducts]
@@ -349,72 +351,57 @@ export default function ProductReportsPage() {
         XLSX.writeFile(wb, `${filename}.xlsx`)
         
       } else if (fileFormat === 'pdf') {
-        try {
-          const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
-          
-          // Header
-          doc.setFontSize(18)
-          doc.setTextColor(31, 78, 121)
-          doc.text('REPORTE DE PRODUCTOS - 4G CELULARES', 40, 40)
-          
-          // Información del reporte
-          doc.setFontSize(10)
-          doc.setTextColor(100, 100, 100)
-          doc.text(`Generado el: ${new Date().toLocaleDateString('es-ES')} a las ${new Date().toLocaleTimeString('es-ES')}`, 40, 60)
-          doc.text(`Filtros: Categoría: ${selectedCategory === 'all' ? 'Todas' : selectedCategory}, Estado: ${selectedStatus === 'all' ? 'Todos' : selectedStatus}`, 40, 75)
-          doc.text(`Total de productos: ${filteredData.length}`, 40, 90)
-          
-          // Resumen de métricas
-          doc.setFontSize(12)
-          doc.setTextColor(31, 78, 121)
-          doc.text('RESUMEN EJECUTIVO', 40, 115)
-          
-          doc.setFontSize(9)
-          doc.setTextColor(0, 0, 0)
-          const summaryY = 135
-          doc.text(`Ingresos Totales: $${(metrics.totalRevenue / 1000000).toFixed(2)}M`, 40, summaryY)
-          doc.text(`Ganancia Total: $${(metrics.totalProfit / 1000000).toFixed(2)}M`, 200, summaryY)
-          doc.text(`Margen Promedio: ${metrics.averageMargin.toFixed(1)}%`, 360, summaryY)
-          doc.text(`Stock Bajo: ${metrics.lowStockProducts} productos`, 500, summaryY)
-          
-          // Línea separadora
-          doc.setDrawColor(200, 200, 200)
-          doc.line(40, 150, doc.internal.pageSize.width - 40, 150)
-          
-          // Preparar datos para la tabla
-          const tableHeaders = ['Producto', 'SKU', 'Categoría', 'Stock', 'Precio', 'Ventas', 'Ingresos', 'Margen %']
-          const tableData = filteredData.slice(0, 50).map(product => [
-            product.name.length > 20 ? product.name.substring(0, 20) + '...' : product.name,
+        const { default: jsPDF } = await import('jspdf')
+        const { default: autoTable } = await import('jspdf-autotable')
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+
+        doc.setFontSize(18)
+        doc.setTextColor(31, 78, 121)
+        doc.text('Reporte de productos - 4G Celulares', 40, 40)
+
+        doc.setFontSize(10)
+        doc.setTextColor(100, 100, 100)
+        doc.text(`Generado el: ${new Date().toLocaleDateString('es-PY')} a las ${new Date().toLocaleTimeString('es-PY')}`, 40, 60)
+        doc.text(`Filtros: Categoría: ${selectedCategory === 'all' ? 'Todas' : selectedCategory}, Estado: ${selectedStatus === 'all' ? 'Todos' : selectedStatus}`, 40, 75)
+
+        doc.setFontSize(9)
+        doc.setTextColor(0, 0, 0)
+        doc.text(`Ingresos: ${money(metrics.totalRevenue)}`, 40, 95)
+        doc.text(`Ganancia: ${money(metrics.totalProfit)}`, 240, 95)
+        doc.text(`Margen prom.: ${metrics.averageMargin.toFixed(1)}%`, 440, 95)
+        doc.text(`Stock bajo: ${metrics.lowStockProducts}`, 600, 95)
+
+        autoTable(doc, {
+          startY: 115,
+          head: [['Producto', 'SKU', 'Categoría', 'Stock', 'Precio', 'Ventas', 'Ingresos', 'Margen %']],
+          body: filteredData.slice(0, 200).map(product => [
+            product.name,
             product.sku,
             product.category,
-            product.stock_quantity,
-            `$${(product.sale_price / 1000).toFixed(0)}K`,
-            product.total_sales,
-            `$${(product.revenue / 1000000).toFixed(1)}M`,
+            String(product.stock_quantity),
+            money(product.sale_price),
+            String(product.total_sales),
+            money(product.revenue),
             `${product.margin.toFixed(1)}%`
-          ])
-          
-          // PDF export disabled — requires jspdf-autotable with real jsPDF
-          setPdfFeedback('⚠️ La exportación PDF está temporalmente deshabilitada. Usá CSV o Excel.')
-          setTimeout(() => setPdfFeedback(null), 5000)
-          
-        } catch (error) {
-          console.error('❌ Error al generar PDF de productos:', error)
-          throw error
-        }
+          ]),
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [37, 99, 235] },
+        })
+
+        doc.save(`${filename}.pdf`)
       }
-      
-      console.log(`✅ Reporte exportado exitosamente en formato ${fileFormat.toUpperCase()}`)
-      
+
     } catch (error) {
-      console.error('❌ Error al exportar:', error)
+      console.error('Error al exportar:', error)
+      setPdfFeedback('No se pudo generar el archivo. Intentá de nuevo.')
+      setTimeout(() => setPdfFeedback(null), 5000)
     } finally {
       setIsExporting(false)
     }
-  }, [filteredData, metrics, selectedCategory, selectedStatus])
+  }, [filteredData, metrics, selectedCategory, selectedStatus, canExport])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950">
+    <div className="min-h-screen">
       {pdfFeedback && (
         <div className="fixed bottom-4 right-4 z-50 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm shadow-lg max-w-sm">
           {pdfFeedback}
@@ -424,7 +411,7 @@ export default function ProductReportsPage() {
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white/80 dark:bg-slate-950/90 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-700/80 sticky top-0 z-50"
+        className="border-b border-gray-200 dark:border-slate-800 bg-background sticky top-0 z-40"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
@@ -434,27 +421,22 @@ export default function ProductReportsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2 bg-white/90 dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200"
+                  className="gap-2"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Volver a Reportes
                 </Button>
               </Link>
               
-              <motion.div
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-400 dark:to-purple-500 rounded-2xl shadow-lg dark:shadow-blue-500/20"
-              >
-                <BarChart3 className="h-8 w-8 text-white" />
-              </motion.div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/30">
+                <BarChart3 className="h-5 w-5 text-blue-500" />
+              </div>
               <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
                   Reportes de Productos
                 </h1>
-                <p className="text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-2">
-                  <Package className="h-4 w-4 text-blue-500 dark:text-blue-400" />
+                <p className="mt-1 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  <Package className="h-4 w-4 text-blue-500" />
                   Análisis detallado de inventario, ventas y rentabilidad
                 </p>
               </div>
@@ -468,9 +450,9 @@ export default function ProductReportsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => exportData('csv')}
-                  disabled={isExporting}
-                  className="gap-2 bg-white/90 dark:bg-slate-800/90 hover:bg-green-50 dark:hover:bg-green-900/30 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200"
-                  title="Exportar datos como CSV"
+                  disabled={isExporting || !canExport}
+                  className="gap-2"
+                  title={!canExport ? 'Exportar disponible desde el plan Basic' : 'Exportar datos como CSV'}
                 >
                   {isExporting ? (
                     <RefreshCw className="h-4 w-4 animate-spin" />
@@ -484,9 +466,9 @@ export default function ProductReportsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => exportData('excel')}
-                  disabled={isExporting}
-                  className="gap-2 bg-white/90 dark:bg-slate-800/90 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200"
-                  title="Exportar como Excel con múltiples hojas"
+                  disabled={isExporting || !canExport}
+                  className="gap-2"
+                  title={!canExport ? 'Exportar disponible desde el plan Basic' : 'Exportar como Excel con múltiples hojas'}
                 >
                   {isExporting ? (
                     <RefreshCw className="h-4 w-4 animate-spin" />
@@ -500,9 +482,9 @@ export default function ProductReportsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => exportData('pdf')}
-                  disabled={isExporting}
-                  className="gap-2 bg-white/90 dark:bg-slate-800/90 hover:bg-red-50 dark:hover:bg-red-900/30 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200"
-                  title="Exportar reporte completo en PDF"
+                  disabled={isExporting || !canExport}
+                  className="gap-2"
+                  title={!canExport ? 'Exportar disponible desde el plan Basic' : 'Exportar reporte completo en PDF'}
                 >
                   {isExporting ? (
                     <RefreshCw className="h-4 w-4 animate-spin" />
@@ -602,7 +584,7 @@ export default function ProductReportsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <Card>
+            <Card className="border-l-4 border-l-blue-500 shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -620,13 +602,13 @@ export default function ProductReportsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <Card>
+            <Card className="border-l-4 border-l-emerald-500 shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Ingresos</p>
                     <p className="text-2xl font-bold">
-                      ${(metrics.totalRevenue / 1000000).toFixed(1)}M
+                      Gs {Math.round(metrics.totalRevenue).toLocaleString('es-PY')}
                     </p>
                   </div>
                   <GSIcon className="h-8 w-8" />
@@ -640,13 +622,13 @@ export default function ProductReportsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <Card>
+            <Card className="border-l-4 border-l-violet-500 shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">Ganancia</p>
                     <p className="text-2xl font-bold">
-                      ${(metrics.totalProfit / 1000000).toFixed(1)}M
+                      Gs {Math.round(metrics.totalProfit).toLocaleString('es-PY')}
                     </p>
                   </div>
                   <TrendingUp className="h-8 w-8 text-emerald-500" />
@@ -660,7 +642,7 @@ export default function ProductReportsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
           >
-            <Card>
+            <Card className="border-l-4 border-l-amber-500 shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -678,7 +660,7 @@ export default function ProductReportsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
           >
-            <Card>
+            <Card className="border-l-4 border-l-cyan-500 shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -696,7 +678,7 @@ export default function ProductReportsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
           >
-            <Card>
+            <Card className="border-l-4 border-l-red-500 shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -869,15 +851,15 @@ export default function ProductReportsPage() {
                         .map((product) => (
                         <tr key={product.id} className="border-b hover:bg-muted/50">
                           <td className="p-2 font-medium">{product.name}</td>
-                          <td className="p-2">${product.sale_price.toLocaleString()}</td>
-                          <td className="p-2">${product.purchase_price.toLocaleString()}</td>
+                          <td className="p-2">Gs {product.sale_price.toLocaleString('es-PY')}</td>
+                          <td className="p-2">Gs {product.purchase_price.toLocaleString('es-PY')}</td>
                           <td className="p-2">
                             <Badge variant={product.margin > 30 ? 'default' : product.margin > 15 ? 'secondary' : 'destructive'}>
                               {product.margin.toFixed(1)}%
                             </Badge>
                           </td>
                           <td className="p-2 font-medium text-green-600">
-                            ${(product.profit / 1000000).toFixed(2)}M
+                            Gs {Math.round(product.profit).toLocaleString('es-PY')}
                           </td>
                           <td className="p-2">{product.total_sales}</td>
                         </tr>

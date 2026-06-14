@@ -14,20 +14,37 @@ import { cn } from '@/lib/utils'
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 
-const toneMap: Record<Tone, string> = {
-  success: 'border-emerald-500/20 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300',
-  warning: 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-  danger: 'border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300',
-  info: 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300',
-  neutral: 'border-border bg-muted/60 text-muted-foreground',
+// Acento de borde/ícono alineado al lenguaje del dashboard admin (border-l-4 + color -500).
+const toneBorderMap: Record<Tone, string> = {
+  success: 'border-l-emerald-500',
+  warning: 'border-l-amber-500',
+  danger: 'border-l-red-500',
+  info: 'border-l-blue-500',
+  neutral: 'border-l-slate-400',
+}
+
+const toneIconMap: Record<Tone, string> = {
+  success: 'text-emerald-500',
+  warning: 'text-amber-500',
+  danger: 'text-red-500',
+  info: 'text-blue-500',
+  neutral: 'text-slate-400',
 }
 
 const toneTextMap: Record<Tone, string> = {
-  success: 'text-emerald-700 dark:text-emerald-300',
-  warning: 'text-amber-700 dark:text-amber-300',
-  danger: 'text-rose-700 dark:text-rose-300',
-  info: 'text-sky-700 dark:text-sky-300',
-  neutral: 'text-foreground',
+  success: 'text-emerald-600 dark:text-emerald-400',
+  warning: 'text-amber-600 dark:text-amber-400',
+  danger: 'text-red-600 dark:text-red-400',
+  info: 'text-blue-600 dark:text-blue-400',
+  neutral: 'text-gray-900 dark:text-gray-50',
+}
+
+const insightDotMap: Record<Tone, string> = {
+  success: 'bg-emerald-500',
+  warning: 'bg-amber-500',
+  danger: 'bg-red-500',
+  info: 'bg-blue-500',
+  neutral: 'bg-slate-400',
 }
 
 export function DeltaBadge({
@@ -39,7 +56,7 @@ export function DeltaBadge({
 }) {
   if (value === null || Number.isNaN(value)) {
     return (
-      <Badge variant="outline" className={cn('gap-1 rounded-full px-2.5 py-1 text-[11px]', className)}>
+      <Badge variant="outline" className={cn('gap-1 text-[11px]', className)}>
         <ArrowRight className="h-3.5 w-3.5" />
         Sin base
       </Badge>
@@ -51,10 +68,10 @@ export function DeltaBadge({
     <Badge
       variant="outline"
       className={cn(
-        'gap-1 rounded-full px-2.5 py-1 text-[11px]',
+        'gap-1 text-[11px]',
         positive
-          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-          : 'border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300',
+          ? 'border-emerald-200 text-emerald-600 dark:border-emerald-900 dark:text-emerald-400'
+          : 'border-red-200 text-red-600 dark:border-red-900 dark:text-red-400',
         className
       )}
     >
@@ -81,27 +98,17 @@ export function MetricCard({
   icon: LucideIcon
 }) {
   return (
-    <Card className="relative overflow-hidden rounded-[24px] border-border/70 bg-card/95 shadow-sm shadow-black/5">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_42%)]" />
-      <CardContent className="relative flex h-full flex-col gap-5 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div
-            className={cn(
-              'flex h-12 w-12 items-center justify-center rounded-2xl border shadow-sm backdrop-blur',
-              toneMap[tone]
-            )}
-          >
-            <Icon className="h-5 w-5" />
-          </div>
+    <Card className={cn('border border-gray-200 dark:border-slate-800 border-l-4 shadow-sm', toneBorderMap[tone])}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{title}</p>
+          <Icon className={cn('h-5 w-5 shrink-0', toneIconMap[tone])} />
+        </div>
+        <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-50">{value}</p>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-500 dark:text-gray-400">{helper}</p>
           <DeltaBadge value={delta} />
         </div>
-
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
-          <p className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{value}</p>
-        </div>
-
-        <p className="text-sm leading-6 text-muted-foreground">{helper}</p>
       </CardContent>
     </Card>
   )
@@ -117,9 +124,9 @@ export function MiniStat({
   tone?: Tone
 }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-background/60 px-4 py-3 backdrop-blur">
-      <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-      <p className={cn('mt-2 text-base font-semibold', toneTextMap[tone])}>
+    <div className="rounded-lg border border-gray-200 px-4 py-3 dark:border-slate-800">
+      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+      <p className={cn('mt-1 text-base font-semibold', toneTextMap[tone])}>
         {value}
       </p>
     </div>
@@ -144,13 +151,13 @@ export function SectionFrame({
   children: ReactNode
 }) {
   return (
-    <Card className={cn('rounded-[28px] border-border/70 bg-card/95 shadow-sm shadow-black/5', className)}>
-      <CardHeader className="flex flex-col gap-4 border-b border-border/70 pb-5 sm:flex-row sm:items-start sm:justify-between">
+    <Card className={cn('border border-gray-200 dark:border-slate-800 shadow-sm', className)}>
+      <CardHeader className="flex flex-col gap-4 border-b border-gray-200 pb-5 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           {badge}
           <div>
-            <CardTitle className="text-lg tracking-tight text-foreground">{title}</CardTitle>
-            <CardDescription className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+            <CardTitle className="text-base text-gray-900 dark:text-gray-50">{title}</CardTitle>
+            <CardDescription className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">
               {description}
             </CardDescription>
           </div>
@@ -174,19 +181,13 @@ export function InsightItem({
   tone: Tone
 }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-background/60 p-4 backdrop-blur">
+    <div className="rounded-lg border border-gray-200 p-4 dark:border-slate-800">
       <div className="flex items-center gap-3">
-        <span className={cn('h-2.5 w-2.5 rounded-full', tone === 'success'
-          ? 'bg-emerald-500'
-          : tone === 'warning'
-            ? 'bg-amber-500'
-            : tone === 'danger'
-              ? 'bg-rose-500'
-              : 'bg-sky-500')} />
-        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <span className={cn('h-2.5 w-2.5 rounded-full', insightDotMap[tone])} />
+        <p className="text-sm font-semibold text-gray-900 dark:text-gray-50">{title}</p>
       </div>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">{description}</p>
-      <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{context}</p>
+      <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">{description}</p>
+      <p className="mt-3 text-xs font-medium text-gray-400 dark:text-gray-500">{context}</p>
     </div>
   )
 }
@@ -199,9 +200,9 @@ export function EmptyState({
   description: string
 }) {
   return (
-    <div className="flex min-h-[240px] flex-col items-center justify-center rounded-[24px] border border-dashed border-border bg-background/40 px-6 py-10 text-center">
-      <p className="text-base font-semibold text-foreground">{title}</p>
-      <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{description}</p>
+    <div className="flex min-h-[240px] flex-col items-center justify-center rounded-lg border border-dashed border-gray-200 px-6 py-10 text-center dark:border-slate-800">
+      <p className="text-base font-semibold text-gray-900 dark:text-gray-50">{title}</p>
+      <p className="mt-2 max-w-md text-sm leading-6 text-gray-500 dark:text-gray-400">{description}</p>
     </div>
   )
 }
@@ -209,32 +210,32 @@ export function EmptyState({
 export function AnalyticsLoadingState() {
   return (
     <div className="space-y-6">
-      <div className="rounded-[30px] border border-border/70 bg-card/95 p-6 shadow-sm shadow-black/5">
+      <div className="rounded-lg border border-gray-200 p-6 shadow-sm dark:border-slate-800">
         <Skeleton className="h-5 w-32" />
         <Skeleton className="mt-4 h-10 w-80 max-w-full" />
         <Skeleton className="mt-3 h-4 w-full max-w-2xl" />
         <div className="mt-6 grid gap-3 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-16 rounded-2xl" />
+            <Skeleton key={index} className="h-16 rounded-lg" />
           ))}
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, index) => (
-          <Skeleton key={index} className="h-44 rounded-[24px]" />
+          <Skeleton key={index} className="h-44 rounded-lg" />
         ))}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-12">
-        <Skeleton className="h-[420px] rounded-[28px] xl:col-span-8" />
-        <Skeleton className="h-[420px] rounded-[28px] xl:col-span-4" />
-        <Skeleton className="h-[360px] rounded-[28px] xl:col-span-4" />
-        <Skeleton className="h-[360px] rounded-[28px] xl:col-span-4" />
-        <Skeleton className="h-[360px] rounded-[28px] xl:col-span-4" />
-        <Skeleton className="h-[360px] rounded-[28px] xl:col-span-6" />
-        <Skeleton className="h-[360px] rounded-[28px] xl:col-span-6" />
-        <Skeleton className="h-[420px] rounded-[28px] xl:col-span-12" />
+        <Skeleton className="h-[420px] rounded-lg xl:col-span-8" />
+        <Skeleton className="h-[420px] rounded-lg xl:col-span-4" />
+        <Skeleton className="h-[360px] rounded-lg xl:col-span-4" />
+        <Skeleton className="h-[360px] rounded-lg xl:col-span-4" />
+        <Skeleton className="h-[360px] rounded-lg xl:col-span-4" />
+        <Skeleton className="h-[360px] rounded-lg xl:col-span-6" />
+        <Skeleton className="h-[360px] rounded-lg xl:col-span-6" />
+        <Skeleton className="h-[420px] rounded-lg xl:col-span-12" />
       </div>
     </div>
   )
