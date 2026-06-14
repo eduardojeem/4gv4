@@ -35,9 +35,9 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
     if (loading) return
     if (!user) {
       router.replace('/login')
-    } else if (user.role === 'cliente') {
-      router.replace('/default/inicio')
     }
+    // Note: users with role='cliente' but org membership are allowed by middleware.
+    // Do NOT redirect them here — the middleware already verified access.
   }, [user, loading, router])
 
   useEffect(() => {

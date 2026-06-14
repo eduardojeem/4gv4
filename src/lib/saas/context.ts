@@ -26,6 +26,7 @@ export async function getCurrentOrganizationContext(userId: string): Promise<Org
       .select('role, organizations!inner(id, name, slug, plan, logo_url)')
       .eq('user_id', userId)
       .eq('status', 'active')
+      .neq('role', 'customer')
       .order('created_at', { ascending: true })
       .limit(1)
 

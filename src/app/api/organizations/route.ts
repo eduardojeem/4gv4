@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
     .select('organization_id, role, status, organizations!inner(id, name, slug, plan, logo_url)')
     .eq('user_id', user.id)
     .eq('status', 'active')
+    .neq('role', 'customer')
     .order('created_at', { ascending: true })
 
   if (error) {
