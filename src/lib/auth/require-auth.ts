@@ -77,7 +77,8 @@ export async function requireAdmin(): Promise<AuthResult> {
 
 /**
  * Verifies that the current request is made by staff (admin, vendedor, or tecnico).
- * Returns 401 if not authenticated, 403 if role is 'cliente'.
+ * Also checks organization_members for users with profiles.role='cliente' but org staff role.
+ * Returns 401 if not authenticated, 403 if role is 'cliente' without org membership.
  */
 export async function requireStaff(): Promise<AuthResult> {
   const result = await requireAuth()
@@ -85,19 +86,52 @@ export async function requireStaff(): Promise<AuthResult> {
   if (!result.authenticated) return result
 
   const staffRoles: AppRole[] = ['super_admin', 'admin', 'vendedor', 'tecnico']
-  if (!staffRoles.includes(result.role)) {
-    return {
-      authenticated: false,
-      response: NextResponse.json(
-        {
-          error: 'Permisos insuficientes. Se requiere rol de personal.',
-          code: 'STAFF_ROLE_REQUIRED',
-          role: result.role,
-        },
-        { status: 403 }
-      ),
-    }
+  if (staffRoles.includes(result.role)) {
+    return result
   }
 
-  return result
+  // Profile role is 'cliente' — check if user has a staff membership in an organization
+  try {
+    const { createAdminSupabase } = await import('@/lib/supabase/admin')
+    const admin = createAdminSupabase()
+    const { data: membership } = await admin
+      .from('organization_members')
+      .select('role')
+      .eq('user_id', result.user.id)
+      .eq('status', 'active')
+      .in('role', ['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'])
+      .limit(1)
+      .maybeSingle()
+
+    if (membership?.role) {
+      // Map org role to app role for downstream use
+      const orgToAppRole: Record<string, AppRole> = {
+        owner: 'admin',
+        admin: 'admin',
+        manager: 'vendedor',
+        cashier: 'vendedor',
+        seller: 'vendedor',
+        technician: 'tecnico',
+      }
+      return {
+        authenticated: true,
+        user: result.user,
+        role: orgToAppRole[membership.role] || 'vendedor',
+      }
+    }
+  } catch {
+    // If check fails, fall through to denial
+  }
+
+  return {
+    authenticated: false,
+    response: NextResponse.json(
+      {
+        error: 'Permisos insuficientes. Se requiere rol de personal.',
+        code: 'STAFF_ROLE_REQUIRED',
+        role: result.role,
+      },
+      { status: 403 }
+    ),
+  }
 }
