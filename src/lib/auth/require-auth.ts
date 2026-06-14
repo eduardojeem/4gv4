@@ -58,21 +58,45 @@ export async function requireAdmin(): Promise<AuthResult> {
 
   if (!result.authenticated) return result
 
-  if (result.role !== 'admin' && result.role !== 'super_admin') {
-    return {
-      authenticated: false,
-      response: NextResponse.json(
-        {
-          error: 'Permisos insuficientes. Se requiere rol de administrador.',
-          code: 'ADMIN_ROLE_REQUIRED',
-          role: result.role,
-        },
-        { status: 403 }
-      ),
-    }
+  if (result.role === 'admin' || result.role === 'super_admin') {
+    return result
   }
 
-  return result
+  // Profile role is not admin — check organization_members for owner/admin role
+  try {
+    const { createAdminSupabase } = await import('@/lib/supabase/admin')
+    const admin = createAdminSupabase()
+    const { data: membership } = await admin
+      .from('organization_members')
+      .select('role')
+      .eq('user_id', result.user.id)
+      .eq('status', 'active')
+      .in('role', ['owner', 'admin'])
+      .limit(1)
+      .maybeSingle()
+
+    if (membership?.role) {
+      return {
+        authenticated: true,
+        user: result.user,
+        role: 'admin',
+      }
+    }
+  } catch {
+    // If check fails, fall through to denial
+  }
+
+  return {
+    authenticated: false,
+    response: NextResponse.json(
+      {
+        error: 'Permisos insuficientes. Se requiere rol de administrador.',
+        code: 'ADMIN_ROLE_REQUIRED',
+        role: result.role,
+      },
+      { status: 403 }
+    ),
+  }
 }
 
 /**

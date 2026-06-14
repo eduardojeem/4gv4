@@ -69,25 +69,47 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
       const supabase = await createClient()
 
       if (!allowedRoles.includes(auth.user.role)) {
-        logger.warn('Forbidden admin API access attempt', {
-          path: request.nextUrl.pathname,
-          userId: auth.user.id,
-          userRole: auth.user.role,
-          requiredRoles: allowedRoles,
-        })
-
+        // Check organization_members as fallback for users with profiles.role='cliente' but org admin role
+        let hasOrgAdminAccess = false
         try {
-          await supabase.from('audit_log').insert({
-            user_id: auth.user.id,
-            action: 'unauthorized_admin_access_attempt',
-            resource: 'admin_api',
-            resource_id: request.nextUrl.pathname,
-            new_values: {
-              path: request.nextUrl.pathname,
-              method: request.method,
-              userRole: auth.user.role,
-            },
+          const { createAdminSupabase } = await import('@/lib/supabase/admin')
+          const adminClient = createAdminSupabase()
+          const { data: membership } = await adminClient
+            .from('organization_members')
+            .select('role')
+            .eq('user_id', auth.user.id)
+            .eq('status', 'active')
+            .in('role', ['owner', 'admin'])
+            .limit(1)
+            .maybeSingle()
+
+          if (membership?.role) {
+            hasOrgAdminAccess = true
+            // Override the role for downstream handlers
+            auth.user.role = 'admin'
+          }
+        } catch {}
+
+        if (!hasOrgAdminAccess) {
+          logger.warn('Forbidden admin API access attempt', {
+            path: request.nextUrl.pathname,
+            userId: auth.user.id,
+            userRole: auth.user.role,
+            requiredRoles: allowedRoles,
           })
+
+          try {
+            await supabase.from('audit_log').insert({
+              user_id: auth.user.id,
+              action: 'unauthorized_admin_access_attempt',
+              resource: 'admin_api',
+              resource_id: request.nextUrl.pathname,
+              new_values: {
+                path: request.nextUrl.pathname,
+                method: request.method,
+                userRole: auth.user.role,
+              },
+            })
         } catch (err) {
           logger.error('Failed to log unauthorized access attempt', { error: err })
         }
@@ -99,6 +121,7 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
           },
           { status: 403 }
         )
+        }
       }
 
       if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
