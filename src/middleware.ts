@@ -257,22 +257,29 @@ export async function middleware(request: NextRequest) {
   // If profile says 'cliente' but user owns/manages an organization, grant dashboard access
   if (isClientOrViewer && user && isActiveUser) {
     try {
-      const { data: orgMembership } = await withTimeout(
-        (supabase
-          .from('organization_members')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .in('role', ['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'])
-          .limit(1)
-          .maybeSingle() as unknown as Promise<SupabaseSingleResponse<{ role: string }>>),
-        PROXY_PROFILE_TIMEOUT_MS,
-        { data: null, error: null }
-      )
-
-      if (orgMembership?.role) {
-        // User has an org membership with a staff role — allow dashboard access
-        isClientOrViewer = false
+      // Use direct DB query bypassing RLS — middleware runs before the user
+      // has a "session context" that satisfies is_org_member policies.
+      const adminUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (adminUrl && serviceKey) {
+        const { createClient: createAdminClient } = await import('@supabase/supabase-js')
+        const adminSupabase = createAdminClient(adminUrl, serviceKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        })
+        const { data: orgRows } = await withTimeout(
+          adminSupabase
+            .from('organization_members')
+            .select('role')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .in('role', ['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'])
+            .limit(1),
+          PROXY_PROFILE_TIMEOUT_MS,
+          { data: null }
+        )
+        if (orgRows && orgRows.length > 0) {
+          isClientOrViewer = false
+        }
       }
     } catch {
       // If query fails, keep original isClientOrViewer value
