@@ -250,9 +250,34 @@ export async function middleware(request: NextRequest) {
 
   const effectiveRole = normalizedRole ?? 'cliente'
   const isActiveUser = roleIsActive && profileIsActive
-  const isClientOrViewer = !isActiveUser || effectiveRole === 'cliente'
+  let isClientOrViewer = !isActiveUser || effectiveRole === 'cliente'
   const isAdmin = isActiveUser && (effectiveRole === 'admin' || effectiveRole === 'super_admin')
   const isSuperAdmin = isActiveUser && effectiveRole === 'super_admin'
+
+  // If profile says 'cliente' but user owns/manages an organization, grant dashboard access
+  if (isClientOrViewer && user && isActiveUser) {
+    try {
+      const { data: orgMembership } = await withTimeout(
+        (supabase
+          .from('organization_members')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .in('role', ['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'])
+          .limit(1)
+          .maybeSingle() as unknown as Promise<SupabaseSingleResponse<{ role: string }>>),
+        PROXY_PROFILE_TIMEOUT_MS,
+        { data: null, error: null }
+      )
+
+      if (orgMembership?.role) {
+        // User has an org membership with a staff role — allow dashboard access
+        isClientOrViewer = false
+      }
+    } catch {
+      // If query fails, keep original isClientOrViewer value
+    }
+  }
 
   // Rutas protegidas (dashboard) - requieren autenticacion y rol no-cliente
   if (isProtectedRoute) {
