@@ -5,6 +5,7 @@ import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
+import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -94,12 +95,6 @@ export async function GET(request: NextRequest) {
       queryBuilder = queryBuilder.gt('stock_quantity', 0)
     }
 
-    if (hasOffer) {
-      queryBuilder = queryBuilder
-        .eq('has_offer', true)
-        .gt('offer_price', 0)
-    }
-
     // Apply sorting
     switch (sort) {
       case 'price_asc':
@@ -127,9 +122,24 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform to PublicProduct type - hide sensitive data
+    const { data: automaticPromotionRows } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('organization_id', organization.id)
+      .eq('public_mode', 'automatic')
+      .eq('is_active', true)
+    const automaticPromotions = (automaticPromotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
+
     const publicProducts: PublicProduct[] = (products || []).map((p: Record<string, unknown>) => {
       const category = Array.isArray(p.category) ? p.category[0] : p.category
       const cat = category as { id: string; name: string } | null
+      const priced = applyAutomaticPromotionToProduct({
+        id: p.id as string,
+        category_id: cat?.id ?? null,
+        sale_price: Number(p.sale_price ?? 0),
+        has_offer: Boolean(p.has_offer),
+        offer_price: typeof p.offer_price === 'number' ? p.offer_price : null,
+      }, automaticPromotions)
       return {
         id: p.id as string,
         name: p.name as string,
@@ -144,20 +154,21 @@ export async function GET(request: NextRequest) {
         in_stock: (p.stock_quantity as number) > 0,
         is_active: p.is_active as boolean,
         featured: (p.featured as boolean) || false,
-        has_offer: Boolean(p.has_offer),
-        offer_price: typeof p.offer_price === 'number' ? (p.offer_price as number) : null,
+        has_offer: priced.has_offer,
+        offer_price: priced.offer_price,
+        promotion_name: priced.promotion_name,
         image: (p.image_url as string | null) || (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
         images: p.images as string[] | null,
         unit_measure: p.unit_measure as string,
         barcode: p.barcode as string | null,
       }
-    })
+    }).filter((product) => !hasOffer || Boolean(product.has_offer && product.offer_price))
 
     const response = NextResponse.json({
       success: true,
       data: {
         products: publicProducts,
-        total: count || 0,
+        total: hasOffer ? publicProducts.length : count || 0,
         page,
         per_page: perPage,
         total_pages: Math.ceil((count || 0) / perPage),

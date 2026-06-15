@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { OffersSectionSchema } from '@/lib/validation/website-settings'
 import type { WebsiteSettings } from '@/types/website-settings'
 
 describe('applyWebsiteSettingsDefaults', () => {
+  it('accepts the expanded offers accent palette', () => {
+    const base = applyWebsiteSettingsDefaults({} as Partial<WebsiteSettings>).offers_section
+    const colors = ['brand', 'rose', 'amber', 'orange', 'emerald', 'blue', 'sky', 'violet', 'fuchsia', 'red', 'teal']
+
+    colors.forEach((accentColor) => {
+      expect(OffersSectionSchema.safeParse({ ...base, accentColor }).success).toBe(true)
+    })
+  })
+
   it('deep merges nested company info fields', () => {
     const result = applyWebsiteSettingsDefaults({
       company_info: {

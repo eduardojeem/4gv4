@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles, MessageCircle, Building2, Upload } from 'lucide-react'
+import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles, MessageCircle, Building2, Upload, Info } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { CompanyInfo } from '@/types/website-settings'
@@ -367,6 +367,16 @@ export function CompanyInfoForm() {
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
           {/* Config */}
           <div className="space-y-6 lg:col-span-7">
+            <div className="flex items-start gap-2.5 rounded-xl border border-blue-100 bg-blue-50/20 p-4 text-xs text-muted-foreground dark:border-blue-900/30 dark:bg-blue-950/10">
+              <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-semibold text-foreground">Sugerencia de Diseño</span>
+                <p className="leading-relaxed">
+                  Si tu logo tiene fondo blanco o claro, los estilos de header <strong>Cristal</strong> o <strong>Sólido blanco</strong> lucirán mejor. Para logos transparentes o blancos, el estilo de header <strong>Color de marca</strong> o <strong>Negro elegante</strong> creará un contraste premium.
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-3">
               <Label className="text-sm font-semibold">Color de marca principal</Label>
               <p className="-mt-1 text-xs text-muted-foreground">Se aplica a botones, enlaces y estados destacados del portal.</p>
@@ -584,8 +594,10 @@ export function CompanyInfoForm() {
               <MessageCircle className="h-4 w-4 text-muted-foreground" />
               WhatsApp <span className="text-xs font-normal text-muted-foreground">— opcional</span>
             </Label>
-            <Input id="whatsapp" type="tel" value={formData.whatsapp || ''} onChange={(e) => handleChange('whatsapp', e.target.value)} placeholder="+595 981 000 000" maxLength={50} className="h-11" />
-            {formData.whatsapp && <p className="text-xs text-muted-foreground">wa.me/{formData.whatsapp.replace(/\D/g, '')}</p>}
+            <Input id="whatsapp" type="tel" value={formData.whatsapp || ''} onChange={(e) => handleChange('whatsapp', e.target.value)} placeholder="595981000000" maxLength={50} className="h-11" />
+            <p className="text-[11px] text-muted-foreground">
+              Ingresa el número con el código de país, sin símbolos ni espacios (ej: <strong>595981000000</strong>). {formData.whatsapp && <span>Enlace generado: <strong>wa.me/{formData.whatsapp.replace(/\D/g, '')}</strong></span>}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -680,7 +692,20 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Save bar */}
-      <div className="fixed bottom-6 right-6 z-50 md:sticky md:bottom-6 md:flex md:justify-end">
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 md:sticky md:bottom-6 md:justify-end">
+        {hasChanges && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setDraft(null)
+              setErrors({})
+            }}
+            className="h-14 rounded-full px-6 shadow-2xl bg-background/80 backdrop-blur border md:h-12 md:rounded-xl md:px-4"
+          >
+            Descartar
+          </Button>
+        )}
         <Button type="submit" disabled={isSaving || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl md:px-6">
           {isSaving ? (
             <>

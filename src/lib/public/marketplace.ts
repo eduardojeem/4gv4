@@ -1,5 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import type { PublicProduct } from '@/types/public'
+import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
 
 export type MarketplaceOrganization = {
   id: string
@@ -152,19 +153,40 @@ export async function getMarketplaceProducts(limit = 48): Promise<MarketplacePro
 
   if (error || !data) return []
 
-  return ((data ?? []) as unknown as ProductRow[])
-    .map((product) => {
+  const rows = (data ?? []) as unknown as ProductRow[]
+  const organizationIds = [...new Set(rows.map((product) => product.organization_id))]
+  const { data: automaticRows } = organizationIds.length > 0
+    ? await supabase.from('promotions').select('*').in('organization_id', organizationIds).eq('public_mode', 'automatic').eq('is_active', true)
+    : { data: [] }
+  const promotionsByOrganization = new Map<string, ReturnType<typeof mapPublicPromotion>[]>()
+  ;(automaticRows ?? []).forEach((row) => {
+    const organizationId = String(row.organization_id)
+    const promotions = promotionsByOrganization.get(organizationId) ?? []
+    promotions.push(mapPublicPromotion(row as Record<string, unknown>))
+    promotionsByOrganization.set(organizationId, promotions)
+  })
+
+  return rows
+    .map<MarketplaceProduct | null>((product) => {
       const organization = getProductOrganization(product)
       if (!organization) return null
+      const publicProduct = toPublicProduct(product)
+      const priced = applyAutomaticPromotionToProduct({
+        ...publicProduct,
+        category_id: publicProduct.category?.id ?? null,
+      }, promotionsByOrganization.get(product.organization_id) ?? [])
 
       return {
-        ...toPublicProduct(product),
+        ...publicProduct,
+        has_offer: priced.has_offer,
+        offer_price: priced.offer_price,
+        promotion_name: priced.promotion_name,
         organization_id: product.organization_id,
         organization_name: organization.name,
         organization_slug: organization.slug,
       }
     })
-    .filter((product): product is MarketplaceProduct => Boolean(product))
+    .filter((product): product is MarketplaceProduct => product !== null)
 }
 
 export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]> {
@@ -193,7 +215,8 @@ export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]>
     if (!tenantCategory) return
 
     // Preferir la categoría global si existe
-    const globalCat = (tenantCategory as any).global_categories
+    const globalCategoryRelation = (tenantCategory as { global_categories?: { id: string; name: string } | { id: string; name: string }[] | null }).global_categories
+    const globalCat = Array.isArray(globalCategoryRelation) ? globalCategoryRelation[0] : globalCategoryRelation
     const displayId   = globalCat?.id   ?? tenantCategory.id
     const displayName = globalCat?.name ?? tenantCategory.name
 

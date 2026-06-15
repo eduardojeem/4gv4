@@ -20,6 +20,7 @@ type PromotionRow = {
   is_active: boolean | null
   usage_count: number | null
   usage_limit: number | null
+  public_mode: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -46,6 +47,7 @@ function mapPromotionRow(row: PromotionRow) {
     is_active: row.is_active !== false,
     usage_count: toSafeNumber(row.usage_count, 0),
     usage_limit: row.usage_limit,
+    public_mode: row.public_mode === 'coupon' || row.public_mode === 'automatic' ? row.public_mode : 'disabled',
     created_at: row.created_at ?? undefined,
     updated_at: row.updated_at ?? undefined,
   }
@@ -222,6 +224,18 @@ export async function PUT(
       }
     }
 
+    const nextPublicMode = body.public_mode ?? existing.public_mode
+    const nextType = body.type ?? existing.type
+    const nextProducts = body.applicable_products ?? existing.applicable_products
+    if (nextPublicMode === 'automatic') {
+      if (nextType !== 'percentage') {
+        return NextResponse.json({ error: 'Las ofertas automáticas deben usar descuento porcentual.' }, { status: 400 })
+      }
+      if (!Array.isArray(nextProducts) || nextProducts.length === 0) {
+        return NextResponse.json({ error: 'Las ofertas automáticas requieren al menos un producto específico.' }, { status: 400 })
+      }
+    }
+
     const patch: Record<string, unknown> = {}
     const allowedKeys = [
       'name',
@@ -238,11 +252,14 @@ export async function PUT(
       'is_active',
       'usage_count',
       'usage_limit',
+      'public_mode',
     ]
 
     for (const key of allowedKeys) {
       if (body[key] !== undefined) {
-        patch[key] = body[key]
+        patch[key] = key === 'public_mode'
+          ? (body[key] === 'coupon' || body[key] === 'automatic' ? body[key] : 'disabled')
+          : body[key]
       }
     }
 

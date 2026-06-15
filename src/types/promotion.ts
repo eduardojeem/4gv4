@@ -1,6 +1,7 @@
 // Tipos centralizados para el sistema de promociones
 
 export type PromotionType = 'percentage' | 'fixed'
+export type PromotionPublicMode = 'disabled' | 'coupon' | 'automatic'
 
 export interface Promotion {
   id: string
@@ -18,6 +19,7 @@ export interface Promotion {
   usage_limit?: number | null
   applicable_products?: string[]
   applicable_categories?: string[]
+  public_mode?: PromotionPublicMode
   created_at?: string
   updated_at?: string
 }

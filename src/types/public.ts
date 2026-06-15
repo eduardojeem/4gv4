@@ -34,6 +34,7 @@ export interface PublicProduct {
   featured: boolean
   has_offer?: boolean
   offer_price?: number | null
+  promotion_name?: string | null
   image: string | null
   images: string[] | null
   unit_measure: string

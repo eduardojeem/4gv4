@@ -624,7 +624,17 @@ export function ServicesManager() {
         </DialogContent>
       </Dialog>
 
-      <div className="fixed bottom-6 right-6 md:sticky md:bottom-6 md:flex md:justify-end z-50">
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 md:sticky md:bottom-6 md:justify-end">
+        {hasChanges && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setServicesDraft(null)}
+            className="shadow-2xl h-14 rounded-full px-6 bg-background/80 backdrop-blur border md:h-16 md:rounded-2xl md:px-8 font-bold transition-all hover:scale-105 active:scale-95 text-muted-foreground"
+          >
+            Descartar
+          </Button>
+        )}
         <Button 
           onClick={handleSaveAll} 
           disabled={isSaving || !hasChanges}

@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import {
-  CheckCircle2, CreditCard, Loader2, Save, Store, Truck, Wallet,
+  CheckCircle2, CreditCard, Loader2, Save, Store, Truck, Wallet, Info,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -190,6 +190,16 @@ export function CheckoutSettingsEditor() {
 
   return (
     <div className="space-y-8 max-w-3xl">
+
+      <div className="flex items-start gap-2.5 rounded-xl border border-blue-100 bg-blue-50/20 p-4 text-xs text-muted-foreground dark:border-blue-900/30 dark:bg-blue-950/10">
+        <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <span className="font-semibold text-foreground">Configuración del Checkout</span>
+          <p className="leading-relaxed text-muted-foreground">
+            Para que tus clientes puedan concretar su compra o pedido online, es fundamental que habilites al menos un método de pago y por lo menos una opción de entrega (envío a domicilio o retiro).
+          </p>
+        </div>
+      </div>
 
       {/* ── Payment methods ── */}
       <Card>

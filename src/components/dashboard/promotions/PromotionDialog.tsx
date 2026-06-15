@@ -49,7 +49,7 @@ import {
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
-import type { Promotion, PromotionType } from '@/types/promotion'
+import type { Promotion, PromotionPublicMode, PromotionType } from '@/types/promotion'
 import { createClient } from '@/lib/supabase/client'
 
 interface PromotionDialogProps {
@@ -128,6 +128,7 @@ export function PromotionDialog({
         is_active: true,
         usage_limit: '' as string,
         applicable_products: [] as string[],
+        public_mode: 'disabled' as PromotionPublicMode,
     })
 
     const [errors, setErrors] = useState<Record<string, string>>({})
@@ -175,9 +176,10 @@ export function PromotionDialog({
                 is_active: promotion.is_active,
                 usage_limit: numStr(promotion.usage_limit),
                 applicable_products: promotion.applicable_products || [],
+                public_mode: promotion.public_mode || 'disabled',
             })
             setSelectedProductIds(promotion.applicable_products || [])
-            setApplyToRepairs(Array.isArray((promotion as any).applicable_categories) && (promotion as any).applicable_categories.includes('service'))
+            setApplyToRepairs(Array.isArray(promotion.applicable_categories) && promotion.applicable_categories.includes('service'))
         } else if (open && duplicateFrom) {
             setFormData({
                 name: `${duplicateFrom.name} (Copia)`,
@@ -192,6 +194,7 @@ export function PromotionDialog({
                 is_active: false,
                 usage_limit: numStr(duplicateFrom.usage_limit),
                 applicable_products: duplicateFrom.applicable_products || [],
+                public_mode: duplicateFrom.public_mode || 'disabled',
             })
             setSelectedProductIds(duplicateFrom.applicable_products || [])
             setApplyToRepairs(Array.isArray(duplicateFrom.applicable_categories) && duplicateFrom.applicable_categories.includes('service'))
@@ -209,6 +212,7 @@ export function PromotionDialog({
                 is_active: true,
                 usage_limit: '',
                 applicable_products: [],
+                public_mode: 'disabled',
             })
             setSelectedProductIds([])
             setApplyToRepairs(false)
@@ -254,7 +258,7 @@ export function PromotionDialog({
                 .select('id,name,sku')
                 .order('name', { ascending: true })
             if (!error && Array.isArray(data)) {
-                const productRows = (data as any[]).map(row => ({ ...row, type: 'product' as const }))
+                const productRows = (data as Array<{ id: string; name: string; sku: string }>).map(row => ({ ...row, type: 'product' as const }))
                 setProducts(productRows)
             }
         })()
@@ -304,6 +308,13 @@ export function PromotionDialog({
             newErrors.value = 'El porcentaje no puede ser mayor a 100'
         }
 
+        if (formData.public_mode === 'automatic' && formData.type !== 'percentage') {
+            newErrors.public_mode = 'Las ofertas automáticas deben usar descuento porcentual'
+        }
+        if (formData.public_mode === 'automatic' && selectedProductIds.length === 0) {
+            newErrors.public_mode = 'Seleccioná al menos un producto para publicar la oferta automática'
+        }
+
         if (formData.start_date && formData.end_date && formData.start_date >= formData.end_date) {
             newErrors.end_date = 'La fecha de fin debe ser posterior a la de inicio'
         }
@@ -344,6 +355,7 @@ export function PromotionDialog({
             ...(!isEditing && { usage_count: 0 }),
             applicable_products: selectedProductIds,
             applicable_categories: applyToRepairs ? ['service'] : [],
+            public_mode: formData.public_mode,
         }
 
         let success = false
@@ -556,6 +568,27 @@ export function PromotionDialog({
                                     rows={2}
                                     className="resize-none text-sm"
                                 />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label htmlFor="public-mode" className="text-xs font-medium">Disponibilidad pública</Label>
+                                <Select
+                                    value={formData.public_mode}
+                                    onValueChange={(value: PromotionPublicMode) => setFormData(prev => ({ ...prev, public_mode: value }))}
+                                >
+                                    <SelectTrigger id="public-mode" className={cn('h-9', errors.public_mode && 'border-red-500')}>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="disabled">Solo uso interno / POS</SelectItem>
+                                        <SelectItem value="coupon">Cupón para carrito público</SelectItem>
+                                        <SelectItem value="automatic">Oferta automática en tienda pública</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-[11px] text-muted-foreground">
+                                    Las ofertas automáticas muestran un precio rebajado sin pedir código. Los cupones se ingresan al finalizar la compra.
+                                </p>
+                                {errors.public_mode && <p className="text-xs text-red-500">{errors.public_mode}</p>}
                             </div>
                         </FormSection>
 

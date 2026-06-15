@@ -71,6 +71,30 @@ const OFFER_ACCENTS: Record<OffersSectionSettings['accentColor'], {
     button: 'bg-emerald-600 text-white hover:bg-emerald-700',
     activeDot: 'bg-emerald-600',
   },
+  blue: {
+    section: 'border-blue-200 bg-gradient-to-b from-blue-50/90 to-background dark:border-blue-900/40 dark:from-blue-950/25',
+    eyebrow: 'text-blue-700 dark:text-blue-300', price: 'text-blue-700 dark:text-blue-300', button: 'bg-blue-600 text-white hover:bg-blue-700', activeDot: 'bg-blue-600',
+  },
+  sky: {
+    section: 'border-sky-200 bg-gradient-to-b from-sky-50/90 to-background dark:border-sky-900/40 dark:from-sky-950/25',
+    eyebrow: 'text-sky-700 dark:text-sky-300', price: 'text-sky-700 dark:text-sky-300', button: 'bg-sky-600 text-white hover:bg-sky-700', activeDot: 'bg-sky-600',
+  },
+  violet: {
+    section: 'border-violet-200 bg-gradient-to-b from-violet-50/90 to-background dark:border-violet-900/40 dark:from-violet-950/25',
+    eyebrow: 'text-violet-700 dark:text-violet-300', price: 'text-violet-700 dark:text-violet-300', button: 'bg-violet-600 text-white hover:bg-violet-700', activeDot: 'bg-violet-600',
+  },
+  fuchsia: {
+    section: 'border-fuchsia-200 bg-gradient-to-b from-fuchsia-50/90 to-background dark:border-fuchsia-900/40 dark:from-fuchsia-950/25',
+    eyebrow: 'text-fuchsia-700 dark:text-fuchsia-300', price: 'text-fuchsia-700 dark:text-fuchsia-300', button: 'bg-fuchsia-600 text-white hover:bg-fuchsia-700', activeDot: 'bg-fuchsia-600',
+  },
+  red: {
+    section: 'border-red-200 bg-gradient-to-b from-red-50/90 to-background dark:border-red-900/40 dark:from-red-950/25',
+    eyebrow: 'text-red-700 dark:text-red-300', price: 'text-red-700 dark:text-red-300', button: 'bg-red-600 text-white hover:bg-red-700', activeDot: 'bg-red-600',
+  },
+  teal: {
+    section: 'border-teal-200 bg-gradient-to-b from-teal-50/90 to-background dark:border-teal-900/40 dark:from-teal-950/25',
+    eyebrow: 'text-teal-700 dark:text-teal-300', price: 'text-teal-700 dark:text-teal-300', button: 'bg-teal-600 text-white hover:bg-teal-700', activeDot: 'bg-teal-600',
+  },
 }
 
 const offersFetcher = async (url: string): Promise<OfferCard[]> => {

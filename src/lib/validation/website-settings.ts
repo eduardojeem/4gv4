@@ -83,7 +83,7 @@ export const OffersSectionSchema = z.object({
   eyebrow: z.string().min(2).max(60),
   title: z.string().min(3).max(120),
   subtitle: z.string().min(5).max(240),
-  accentColor: z.enum(['brand', 'rose', 'amber', 'orange', 'emerald']),
+  accentColor: z.enum(['brand', 'rose', 'amber', 'orange', 'emerald', 'blue', 'sky', 'violet', 'fuchsia', 'red', 'teal']),
 })
 
 // Esquema para un servicio individual

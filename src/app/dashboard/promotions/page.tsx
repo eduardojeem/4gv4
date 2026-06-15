@@ -153,7 +153,7 @@ export default function PromotionsPage() {
             </div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Promociones</h1>
             <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-              Gestioná descuentos, cupones y ofertas especiales aplicables en el POS y el marketplace.
+              Gestioná descuentos para POS, cupones del carrito y ofertas automáticas de la tienda pública.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

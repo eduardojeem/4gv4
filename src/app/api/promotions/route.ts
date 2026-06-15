@@ -21,6 +21,7 @@ type PromotionRow = {
   is_active: boolean | null
   usage_count: number | null
   usage_limit: number | null
+  public_mode: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -52,6 +53,7 @@ function mapPromotionRow(row: PromotionRow) {
     is_active: row.is_active !== false,
     usage_count: toSafeNumber(row.usage_count, 0),
     usage_limit: row.usage_limit,
+    public_mode: row.public_mode === 'coupon' || row.public_mode === 'automatic' ? row.public_mode : 'disabled',
     created_at: row.created_at ?? undefined,
     updated_at: row.updated_at ?? undefined,
   }
@@ -208,6 +210,15 @@ export const POST = withTenantAuth({ permission: 'promotions.create' }, async (r
       }
     }
 
+    if (body.public_mode === 'automatic') {
+      if (type !== 'percentage') {
+        return NextResponse.json({ error: 'Las ofertas automáticas deben usar descuento porcentual.' }, { status: 400 })
+      }
+      if (!Array.isArray(body.applicable_products) || body.applicable_products.length === 0) {
+        return NextResponse.json({ error: 'Las ofertas automáticas requieren al menos un producto específico.' }, { status: 400 })
+      }
+    }
+
     const supabase = createAdminSupabase()
 
     const { data: existingByCode, error: existingError } = await supabase
@@ -256,6 +267,7 @@ export const POST = withTenantAuth({ permission: 'promotions.create' }, async (r
       is_active: body.is_active !== false,
       usage_count: 0,
       usage_limit: body.usage_limit == null ? null : toSafeNumber(body.usage_limit, 0),
+      public_mode: body.public_mode === 'coupon' || body.public_mode === 'automatic' ? body.public_mode : 'disabled',
     }
 
     const { data: created, error } = await supabase
@@ -320,6 +332,7 @@ export const PUT = withTenantAuth({ permission: 'promotions.update' }, async (re
       if (promotion.is_active !== undefined) patch.is_active = Boolean(promotion.is_active)
       if (promotion.usage_count !== undefined) patch.usage_count = toSafeNumber(promotion.usage_count, 0)
       if (promotion.usage_limit !== undefined) patch.usage_limit = promotion.usage_limit == null ? null : toSafeNumber(promotion.usage_limit, 0)
+      if (promotion.public_mode !== undefined) patch.public_mode = promotion.public_mode === 'coupon' || promotion.public_mode === 'automatic' ? promotion.public_mode : 'disabled'
 
       const { data: updated, error } = await supabase
         .from('promotions')

@@ -6,6 +6,7 @@ import { PublicProduct } from '@/types/public'
 import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicStorefrontOrganization } from '@/lib/saas/public-tenant'
+import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
 
 type ProductRow = {
   id: string
@@ -119,6 +120,19 @@ export async function GET(
 
     // Transform to PublicProduct type
     const category = Array.isArray(finalProduct.category) ? finalProduct.category[0] : finalProduct.category
+    const { data: automaticRows } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('organization_id', organization.id)
+      .eq('public_mode', 'automatic')
+      .eq('is_active', true)
+    const priced = applyAutomaticPromotionToProduct({
+      id: finalProduct.id,
+      category_id: category?.id ?? null,
+      sale_price: finalProduct.sale_price,
+      has_offer: finalProduct.has_offer,
+      offer_price: finalProduct.offer_price,
+    }, (automaticRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>)))
     const publicProduct: PublicProduct = {
       id: finalProduct.id,
       name: finalProduct.name,
@@ -132,8 +146,9 @@ export async function GET(
       in_stock: finalProduct.stock_quantity > 0,
       is_active: finalProduct.is_active,
       featured: finalProduct.featured || false,
-      has_offer: Boolean(finalProduct.has_offer),
-      offer_price: typeof finalProduct.offer_price === 'number' ? finalProduct.offer_price : null,
+      has_offer: priced.has_offer,
+      offer_price: priced.offer_price,
+      promotion_name: priced.promotion_name,
       image: finalProduct.image_url || (Array.isArray(finalProduct.images) && finalProduct.images.length > 0 ? finalProduct.images[0] : null),
       images: finalProduct.images,
       unit_measure: finalProduct.unit_measure,

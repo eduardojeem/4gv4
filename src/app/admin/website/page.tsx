@@ -9,6 +9,7 @@ import { ServicesManager } from '@/components/admin/website/ServicesManager'
 import { ProcessStepsEditor } from '@/components/admin/website/ProcessStepsEditor'
 import { CheckoutSettingsEditor } from '@/components/admin/website/CheckoutSettingsEditor'
 import { OffersSectionEditor } from '@/components/admin/website/OffersSectionEditor'
+import { SetupGuide } from '@/components/admin/website/SetupGuide'
 import { Building2, Briefcase, Eye, Footprints, Globe, ShoppingCart, Sparkles, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -82,6 +83,9 @@ export default function WebsiteAdminPage() {
           </Link>
         </Button>
       </div>
+
+      {/* Setup Guide */}
+      <SetupGuide activeTab={tab} onTabChange={handleTabChange} />
 
       {/* Tabs */}
       <Tabs value={tab} onValueChange={handleTabChange} className="space-y-6">

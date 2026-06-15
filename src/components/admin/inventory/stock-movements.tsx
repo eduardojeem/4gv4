@@ -127,11 +127,7 @@ const StockMovements: React.FC = () => {
       // Aplicar filtros
       if (filterType !== 'all') {
         const rawValues = movementTypeFilters[filterType as StockMovement['type']] || [filterType]
-        query = query.or(
-          rawValues
-            .flatMap((value) => [`type.eq.${value}`, `movement_type.eq.${value}`])
-            .join(',')
-        )
+        query = query.in('movement_type', rawValues)
       }
 
       if (filterDateFrom) {
@@ -181,7 +177,7 @@ const StockMovements: React.FC = () => {
       let summaryQuery = withBranchFilter(
         supabase
           .from('product_movements')
-          .select('type, movement_type, created_at'),
+          .select('movement_type, created_at'),
         selectedBranchId
       )
 

@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft, Building2, CheckCircle2, CreditCard, Loader2,
   LogIn, Minus, Package, Phone, Plus, ShoppingCart, Store,
-  Trash2, Truck, User, Wallet,
+  Tag, Trash2, Truck, User, Wallet, X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -74,6 +74,9 @@ export function CartPageClient({
   const [paymentMethod,   setPaymentMethod]   = useState<PaymentMethod>('CASH')
   const [notes,           setNotes]           = useState('')
   const [shippingCost,    setShippingCost]    = useState(0)
+  const [promotionCode, setPromotionCode] = useState('')
+  const [validatingPromotion, setValidatingPromotion] = useState(false)
+  const [appliedPromotion, setAppliedPromotion] = useState<{ code: string; name: string; discountAmount: number } | null>(null)
 
   // ── UI state ─────────────────────────────────────────────────────────────
   const [loading,             setLoading]             = useState(false)
@@ -114,7 +117,37 @@ export function CartPageClient({
   }, [fulfillmentType, checkout.delivery.defaultCost, isFreeDelivery])
 
   // ── Derived totals ────────────────────────────────────────────────────────
-  const total = Math.max(0, subtotal + shippingCost)
+  const total = Math.max(0, subtotal + shippingCost - (appliedPromotion?.discountAmount ?? 0))
+
+  useEffect(() => {
+    setAppliedPromotion(null)
+  }, [items])
+
+  async function validatePromotion() {
+    if (!promotionCode.trim() || items.length === 0) return
+    setValidatingPromotion(true)
+    try {
+      const params = organizationSlug ? `?org=${encodeURIComponent(organizationSlug)}` : ''
+      const response = await fetch(`/api/public/promotions/validate${params}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: promotionCode,
+          items: items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload.success) throw new Error(payload.error || 'Código promocional inválido.')
+      setAppliedPromotion(payload.data)
+      setPromotionCode(payload.data.code)
+      toast({ title: 'Promoción aplicada', description: `${payload.data.name}: ahorro de ${formatMoney(payload.data.discountAmount)}.` })
+    } catch (error) {
+      setAppliedPromotion(null)
+      toast({ title: 'No se pudo aplicar', description: error instanceof Error ? error.message : 'Código promocional inválido.', variant: 'destructive' })
+    } finally {
+      setValidatingPromotion(false)
+    }
+  }
 
   // ── Validation ────────────────────────────────────────────────────────────
   const emailInvalid   = customerEmail.trim().length > 0 && !EMAIL_RE.test(customerEmail.trim())
@@ -174,6 +207,7 @@ export function CartPageClient({
           paymentMethod,
           shippingCost: fulfillmentType === 'DELIVERY' ? shippingCost : 0,
           notes: notesParts.join(' · ') || null,
+          promotionCode: appliedPromotion?.code ?? null,
         }),
       })
 
@@ -532,6 +566,38 @@ export function CartPageClient({
                 )}
               </div>
 
+              {/* ── Promotion code ── */}
+              <div className="space-y-3 rounded-2xl border p-4">
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  <Tag className="h-3.5 w-3.5" /> Código promocional
+                </p>
+                {appliedPromotion ? (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+                    <div>
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{appliedPromotion.code}</p>
+                      <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80">{appliedPromotion.name} · Ahorrás {formatMoney(appliedPromotion.discountAmount)}</p>
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => { setAppliedPromotion(null); setPromotionCode('') }} aria-label="Quitar código promocional">
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      value={promotionCode}
+                      onChange={(event) => setPromotionCode(event.target.value.toUpperCase())}
+                      onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void validatePromotion() } }}
+                      placeholder="Ingresá tu código"
+                      maxLength={80}
+                      className="h-10 rounded-xl font-mono uppercase"
+                    />
+                    <Button type="button" variant="outline" onClick={() => void validatePromotion()} disabled={validatingPromotion || !promotionCode.trim()} className="rounded-xl">
+                      {validatingPromotion ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aplicar'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               {/* ── Payment ── */}
               <div className="space-y-3 rounded-2xl border p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
@@ -670,6 +736,13 @@ export function CartPageClient({
                     }
                   </span>
                 </div>
+
+                {appliedPromotion && (
+                  <div className="flex justify-between font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span>Promoción {appliedPromotion.code}</span>
+                    <span className="tabular-nums">-{formatMoney(appliedPromotion.discountAmount)}</span>
+                  </div>
+                )}
 
                 <Separator />
 

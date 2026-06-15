@@ -40,7 +40,7 @@ export interface OffersSectionSettings {
   eyebrow: string
   title: string
   subtitle: string
-  accentColor: 'brand' | 'rose' | 'amber' | 'orange' | 'emerald'
+  accentColor: 'brand' | 'rose' | 'amber' | 'orange' | 'emerald' | 'blue' | 'sky' | 'violet' | 'fuchsia' | 'red' | 'teal'
 }
 
 export interface Service {

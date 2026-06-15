@@ -7,6 +7,7 @@ import { generateOrderNumber, normalizeOrder } from '@/lib/orders/helpers'
 import { releaseReservedStock, reserveOrderStock, type OrderStockItem } from '@/lib/orders/stock'
 import { resolvePublicOrganization } from '@/lib/saas/public-tenant'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
+import { applyAutomaticPromotionToProduct, evaluatePublicCoupon, mapPublicPromotion, type PublicPromotion } from '@/lib/public-promotions'
 
 const ORDER_RATE_LIMIT = 5
 const ORDER_RATE_WINDOW_MS = 10 * 60 * 1000
@@ -26,6 +27,7 @@ const publicOrderSchema = z.object({
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']).default('CASH'),
   shippingCost: z.number().min(0).max(9_999_999).default(0),
   notes: z.string().trim().max(1000).optional().nullable(),
+  promotionCode: z.string().trim().max(80).optional().nullable(),
 })
 
 export async function POST(request: NextRequest) {
@@ -44,6 +46,7 @@ export async function POST(request: NextRequest) {
   let reservedItems: OrderStockItem[] = []
   let reservedOrganizationId: string | null = null
   let createdOrderId: string | null = null
+  let claimedLimitedPromotion: PublicPromotion | null = null
 
   try {
     supabase = createAdminSupabase()
@@ -62,7 +65,7 @@ export async function POST(request: NextRequest) {
     const productIds = input.items.map((item) => item.productId)
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, name, sku, sale_price, has_offer, offer_price, stock_quantity, is_active')
+      .select('id, name, sku, category_id, sale_price, has_offer, offer_price, stock_quantity, is_active')
       .eq('organization_id', organization.id)
       .eq('is_active', true)
       .in('id', productIds)
@@ -75,6 +78,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Un producto del carrito ya no esta disponible.' }, { status: 400 })
     }
 
+    const { data: automaticRows } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('organization_id', organization.id)
+      .eq('public_mode', 'automatic')
+      .eq('is_active', true)
+    const automaticPromotions = (automaticRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
+
     const orderItems = input.items.map((item) => {
       const product = productMap.get(item.productId) as Record<string, unknown>
       const stock = Number(product.stock_quantity || 0)
@@ -83,12 +94,14 @@ export async function POST(request: NextRequest) {
       }
 
       const quantity = Math.min(item.quantity, stock)
-      const salePrice = Number(product.sale_price || 0)
-      const hasOffer =
-        Boolean(product.has_offer) &&
-        product.offer_price != null &&
-        Number(product.offer_price) < salePrice
-      const unitPrice = hasOffer ? Number(product.offer_price) : salePrice
+      const priced = applyAutomaticPromotionToProduct({
+        id: item.productId,
+        category_id: product.category_id ? String(product.category_id) : null,
+        sale_price: Number(product.sale_price || 0),
+        has_offer: Boolean(product.has_offer),
+        offer_price: product.offer_price == null ? null : Number(product.offer_price),
+      }, automaticPromotions)
+      const unitPrice = priced.has_offer && priced.offer_price ? priced.offer_price : priced.sale_price
 
       return {
         product_id: item.productId,
@@ -97,8 +110,32 @@ export async function POST(request: NextRequest) {
         quantity,
         unit_price: unitPrice,
         subtotal: unitPrice * quantity,
+        category_id: product.category_id ? String(product.category_id) : null,
       }
     })
+
+    let appliedPromotion: PublicPromotion | null = null
+    let discountAmount = 0
+    if (input.promotionCode) {
+      const { data: promotionRow } = await supabase
+        .from('promotions')
+        .select('*')
+        .eq('organization_id', organization.id)
+        .eq('code', input.promotionCode.toUpperCase())
+        .maybeSingle()
+      if (!promotionRow) {
+        return NextResponse.json({ success: false, error: 'Código promocional inválido.' }, { status: 422 })
+      }
+      appliedPromotion = mapPublicPromotion(promotionRow as Record<string, unknown>)
+      const result = evaluatePublicCoupon(appliedPromotion, orderItems.map((item) => ({
+        product_id: item.product_id,
+        category_id: item.category_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+      })))
+      if (!result.valid) return NextResponse.json({ success: false, error: result.reason }, { status: 422 })
+      discountAmount = result.discount_amount
+    }
 
     const stockReservation = await reserveOrderStock(supabase, organization.id, orderItems)
     if (!stockReservation.success) {
@@ -110,6 +147,24 @@ export async function POST(request: NextRequest) {
       product_name: item.productName,
       quantity: item.quantity,
     }))
+
+    if (appliedPromotion?.usage_limit != null) {
+      const { data: claimed } = await supabase
+        .from('promotions')
+        .update({ usage_count: appliedPromotion.usage_count + 1 })
+        .eq('id', appliedPromotion.id)
+        .eq('organization_id', organization.id)
+        .eq('usage_count', appliedPromotion.usage_count)
+        .lt('usage_count', appliedPromotion.usage_limit)
+        .select('id')
+        .maybeSingle()
+      if (!claimed) {
+        await releaseReservedStock(supabase, organization.id, reservedItems)
+        reservedItems = []
+        return NextResponse.json({ success: false, error: 'El código promocional alcanzó su límite de usos.' }, { status: 409 })
+      }
+      claimedLimitedPromotion = appliedPromotion
+    }
 
     const now = new Date().toISOString()
     const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0)
@@ -200,10 +255,10 @@ export async function POST(request: NextRequest) {
         customer_address: input.customer.address || null,
         subtotal,
         shipping_cost: shippingCost,
-        discount_amount: 0,
+        discount_amount: discountAmount,
         tax_amount: 0,
-        total: subtotal + shippingCost,
-        notes: input.notes || null,
+        total: Math.max(0, subtotal + shippingCost - discountAmount),
+        notes: [input.notes, appliedPromotion ? `Cupón: ${appliedPromotion.code}` : null].filter(Boolean).join(' · ') || null,
         stock_reserved: true,
         created_at: now,
         updated_at: now,
@@ -217,7 +272,12 @@ export async function POST(request: NextRequest) {
     const { error: itemsError } = await supabase
       .from('customer_order_items')
       .insert(orderItems.map((item) => ({
-        ...item,
+        product_id: item.product_id,
+        product_name: item.product_name,
+        product_sku: item.product_sku,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        subtotal: item.subtotal,
         organization_id: organization.id,
         order_id: order.id,
       })))
@@ -231,6 +291,15 @@ export async function POST(request: NextRequest) {
       note: 'Pedido creado desde la tienda publica.',
     })
     if (historyError) throw historyError
+
+    if (appliedPromotion && appliedPromotion.usage_limit == null) {
+      await supabase
+        .from('promotions')
+        .update({ usage_count: appliedPromotion.usage_count + 1, updated_at: now })
+        .eq('id', appliedPromotion.id)
+        .eq('organization_id', organization.id)
+        .eq('usage_count', appliedPromotion.usage_count)
+    }
 
     const { data: fullOrder } = await supabase
       .from('customer_orders')
@@ -252,6 +321,14 @@ export async function POST(request: NextRequest) {
             .eq('organization_id', reservedOrganizationId)
         }
         await releaseReservedStock(supabase, reservedOrganizationId, reservedItems)
+        if (claimedLimitedPromotion) {
+          await supabase
+            .from('promotions')
+            .update({ usage_count: claimedLimitedPromotion.usage_count })
+            .eq('id', claimedLimitedPromotion.id)
+            .eq('organization_id', reservedOrganizationId)
+            .eq('usage_count', claimedLimitedPromotion.usage_count + 1)
+        }
       } catch (releaseError) {
         logger.error('Public order stock rollback error', { error: releaseError })
       }

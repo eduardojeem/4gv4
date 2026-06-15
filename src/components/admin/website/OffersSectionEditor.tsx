@@ -28,6 +28,12 @@ const ACCENTS: Array<{
   { value: 'amber', label: 'Ámbar', swatch: 'bg-gradient-to-br from-amber-400 to-amber-600', preview: 'bg-gradient-to-br from-amber-500/15 via-background to-background border-amber-200/50 dark:border-amber-900/30' },
   { value: 'orange', label: 'Naranja', swatch: 'bg-gradient-to-br from-orange-400 to-orange-600', preview: 'bg-gradient-to-br from-orange-500/15 via-background to-background border-orange-200/50 dark:border-orange-900/30' },
   { value: 'emerald', label: 'Esmeralda', swatch: 'bg-gradient-to-br from-emerald-400 to-emerald-600', preview: 'bg-gradient-to-br from-emerald-500/15 via-background to-background border-emerald-200/50 dark:border-emerald-900/30' },
+  { value: 'blue', label: 'Azul', swatch: 'bg-gradient-to-br from-blue-400 to-blue-600', preview: 'bg-gradient-to-br from-blue-500/15 via-background to-background border-blue-200/50 dark:border-blue-900/30' },
+  { value: 'sky', label: 'Celeste', swatch: 'bg-gradient-to-br from-sky-400 to-sky-600', preview: 'bg-gradient-to-br from-sky-500/15 via-background to-background border-sky-200/50 dark:border-sky-900/30' },
+  { value: 'violet', label: 'Violeta', swatch: 'bg-gradient-to-br from-violet-400 to-violet-600', preview: 'bg-gradient-to-br from-violet-500/15 via-background to-background border-violet-200/50 dark:border-violet-900/30' },
+  { value: 'fuchsia', label: 'Fucsia', swatch: 'bg-gradient-to-br from-fuchsia-400 to-fuchsia-600', preview: 'bg-gradient-to-br from-fuchsia-500/15 via-background to-background border-fuchsia-200/50 dark:border-fuchsia-900/30' },
+  { value: 'red', label: 'Rojo', swatch: 'bg-gradient-to-br from-red-400 to-red-600', preview: 'bg-gradient-to-br from-red-500/15 via-background to-background border-red-200/50 dark:border-red-900/30' },
+  { value: 'teal', label: 'Turquesa', swatch: 'bg-gradient-to-br from-teal-400 to-teal-600', preview: 'bg-gradient-to-br from-teal-500/15 via-background to-background border-teal-200/50 dark:border-teal-900/30' },
 ]
 
 export function OffersSectionEditor() {
@@ -139,7 +145,7 @@ export function OffersSectionEditor() {
           <div className="space-y-3">
             <Label className="font-semibold">Color del Acento</Label>
             <p className="text-xs text-muted-foreground">Define el matiz de los bordes y brillos de esta sección especial.</p>
-            <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {ACCENTS.map((accent) => {
                 const isSelected = current.accentColor === accent.value
                 return (
@@ -185,7 +191,17 @@ export function OffersSectionEditor() {
         </Button>
       </div>
 
-      <div className="fixed bottom-6 right-6 z-50 md:sticky md:bottom-6 md:flex md:justify-end">
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 md:sticky md:bottom-6 md:justify-end">
+        {hasChanges && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setDraft(null)}
+            className="h-14 rounded-full px-6 shadow-2xl bg-background/80 backdrop-blur border md:h-12 md:rounded-xl md:px-4"
+          >
+            Descartar
+          </Button>
+        )}
         <Button onClick={handleSave} disabled={isSaving || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl">
           {isSaving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
           Guardar ofertas

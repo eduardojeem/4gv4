@@ -151,7 +151,17 @@ export function ProcessStepsEditor() {
         ))}
       </div>
 
-      <div className="fixed bottom-6 right-6 z-50 md:sticky md:bottom-6 md:flex md:justify-end">
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 md:sticky md:bottom-6 md:justify-end">
+        {hasChanges && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setStepsDraft(null)}
+            className="h-14 rounded-full px-6 shadow-2xl bg-background/80 backdrop-blur border md:h-12 md:rounded-xl md:px-4"
+          >
+            Descartar
+          </Button>
+        )}
         <Button onClick={handleSave} disabled={isSaving || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl md:px-6">
           {isSaving ? (
             <><Loader2 className="mr-2 h-5 w-5 animate-spin" /><span className="hidden md:inline">Guardando...</span></>

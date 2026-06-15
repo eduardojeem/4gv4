@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -43,6 +43,9 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
   )
 }
 
+// Suscripción no-op para useSyncExternalStore (el valor solo cambia entre SSR y cliente).
+const noopSubscribe = () => () => {}
+
 // ── Trust badges ──────────────────────────────────────────────────────────
 const TRUST_BADGES = [
   { icon: CheckCircle, label: 'Garantía escrita' },
@@ -54,6 +57,23 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
   const pathname = usePathname()
   const pathSegments = pathname.split('/').filter(Boolean)
   const tenantPrefix = pathSegments.length > 1 && pathSegments[1] === 'inicio' ? `/${pathSegments[0]}` : ''
+
+  // Estado de atención del día (según horarios de la empresa). Solo-cliente vía
+  // useSyncExternalStore: SSR asume "abierto" y el cliente corrige según el día real,
+  // sin mismatch de hidratación (el día depende de la zona horaria del visitante).
+  const closedToday = useSyncExternalStore(
+    noopSubscribe,
+    () => {
+      const dayIdx = new Date().getDay() // 0=Dom, 6=Sáb
+      const todayHours = dayIdx === 0
+        ? companyInfo.hours?.sunday
+        : dayIdx === 6
+          ? companyInfo.hours?.saturday
+          : companyInfo.hours?.weekdays
+      return !todayHours || /cerrad/i.test(todayHours)
+    },
+    () => false,
+  )
 
   return (
     <section className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} py-20 text-white md:py-28`}>
@@ -186,10 +206,13 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
                 </div>
               </div>
 
-              {/* Floating badge */}
-              <div className="absolute -bottom-4 -left-4 flex items-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2.5 shadow-xl shadow-emerald-900/30">
-                <span className="flex h-2 w-2 rounded-full bg-white" />
-                <span className="text-sm font-bold text-white">Atendemos hoy</span>
+              {/* Floating badge: estado de atención del día */}
+              <div className={cn(
+                'absolute -bottom-4 -left-4 flex items-center gap-2 rounded-2xl px-4 py-2.5 shadow-xl',
+                closedToday ? 'bg-slate-600 shadow-slate-900/30' : 'bg-emerald-500 shadow-emerald-900/30'
+              )}>
+                <span className={cn('flex h-2 w-2 rounded-full bg-white', !closedToday && 'animate-pulse')} />
+                <span className="text-sm font-bold text-white">{closedToday ? 'Hoy cerrado' : 'Atendemos hoy'}</span>
               </div>
             </div>
           </div>
