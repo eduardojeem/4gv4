@@ -177,6 +177,38 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
             { status: 403 }
           )
         }
+
+        // Verificar que el usuario sea owner/admin EN la org resuelta (no solo admin global).
+        // Evita que un admin global, miembro no-admin de otra org, opere como admin ahí.
+        try {
+          const adminClient = createAdminSupabase()
+          const { data: orgMembership } = await adminClient
+            .from('organization_members')
+            .select('role')
+            .eq('user_id', auth.user.id)
+            .eq('organization_id', organizationId)
+            .eq('status', 'active')
+            .maybeSingle()
+
+          if (!orgMembership || !['owner', 'admin'].includes(orgMembership.role)) {
+            logger.warn('Admin API denied: not admin of active organization', {
+              path: request.nextUrl.pathname,
+              userId: auth.user.id,
+              organizationId,
+              orgRole: orgMembership?.role ?? null,
+            })
+            return NextResponse.json(
+              { error: 'Forbidden', message: 'You are not an administrator of the active organization' },
+              { status: 403 }
+            )
+          }
+        } catch (err) {
+          logger.error('Failed to verify org-level admin role', { error: err, userId: auth.user.id, organizationId })
+          return NextResponse.json(
+            { error: 'Forbidden', message: 'Could not verify organization permissions' },
+            { status: 403 }
+          )
+        }
       }
 
       // super_admin keeps global access. Regular admins are always scoped above.

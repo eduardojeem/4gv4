@@ -1,4 +1,4 @@
-import { ProductFormData } from '@/types/products'
+import type { ProductFormData } from '@/types/products'
 
 export interface ValidationError {
   field: string
@@ -44,7 +44,7 @@ export async function validateProductForm(
       if (!isUnique) {
         errors.sku = 'Este SKU ya existe o hubo un error al verificarlo. Por favor intenta nuevamente.'
       }
-    } catch (error) {
+    } catch {
       errors.sku = 'Error al verificar disponibilidad del SKU. Verifica tu conexión.'
     }
   }
@@ -178,8 +178,11 @@ function validateBarcodeChecksum(barcode: string): boolean {
   
   let sum = 0
   digits.forEach((digit, index) => {
-    // Para EAN-13 y UPC-A, alternar multiplicadores 1 y 3
-    const multiplier = index % 2 === 0 ? 1 : 3
+    // EAN-8 starts with 3; UPC-A and EAN-13 start with 1.
+    const startsWithThree = barcode.length === 8 || barcode.length === 12
+    const multiplier = index % 2 === 0
+      ? (startsWithThree ? 3 : 1)
+      : (startsWithThree ? 1 : 3)
     sum += digit * multiplier
   })
   

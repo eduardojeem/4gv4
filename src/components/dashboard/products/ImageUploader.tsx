@@ -18,6 +18,8 @@ interface ImageUploaderProps {
   maxSize?: number
   disabled?: boolean
   onUploadFiles?: (files: File[]) => Promise<string[]>
+  onRemoveImage?: (url: string) => Promise<void> | void
+  onUploadingChange?: (uploading: boolean) => void
 }
 
 export function ImageUploader({ 
@@ -26,7 +28,9 @@ export function ImageUploader({
   maxImages = 5,
   maxSize = 5242880, // 5MB
   disabled = false,
-  onUploadFiles
+  onUploadFiles,
+  onRemoveImage,
+  onUploadingChange,
 }: ImageUploaderProps) {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
@@ -97,6 +101,7 @@ export function ImageUploader({
     }
 
     setUploading(true)
+    onUploadingChange?.(true)
     const uploadedUrls: string[] = []
 
     try {
@@ -117,9 +122,10 @@ export function ImageUploader({
       })
     } finally {
       setUploading(false)
+      onUploadingChange?.(false)
       setUploadProgress({})
     }
-  }, [images, onChange, maxImages, maxSize, disabled])
+  }, [images, onChange, maxImages, maxSize, disabled, onUploadingChange])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -131,8 +137,9 @@ export function ImageUploader({
     disabled: disabled || uploading
   })
 
-  const removeImage = (index: number) => {
+  const removeImage = async (index: number) => {
     if (disabled) return
+    await onRemoveImage?.(images[index])
     onChange(images.filter((_, i) => i !== index))
     toast.success('Imagen eliminada')
   }
@@ -242,9 +249,11 @@ export function ImageUploader({
                         type="button"
                         size="icon"
                         variant="secondary"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={() => removeImage(index)}
                         disabled={disabled}
+                        aria-label={`Eliminar imagen ${index + 1}`}
+                        title={`Eliminar imagen ${index + 1}`}
+                        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -364,6 +373,7 @@ export function ImageUploader({
                     <div className="flex gap-2">
                       <Input
                         type="url"
+                        aria-label="URL de la imagen"
                         placeholder="https://ejemplo.com/imagen.jpg"
                         value={imageUrl}
                         onChange={(e) => setImageUrl(e.target.value)}
@@ -403,6 +413,7 @@ export function ImageUploader({
                           setImageUrl('')
                         }}
                         disabled={loadingUrl}
+                        aria-label="Cancelar ingreso de URL"
                       >
                         <X className="h-4 w-4" />
                       </Button>

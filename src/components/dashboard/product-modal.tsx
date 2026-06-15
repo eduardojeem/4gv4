@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import {
@@ -33,6 +33,17 @@ import {
   FormMessage,
   FormDescription,
 } from '@/components/ui/form'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import type { Product, Category, Supplier, Brand, ProductFormData } from '@/types/products'
 import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
@@ -46,10 +57,12 @@ import { useCategories } from '@/hooks/useCategories'
 import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
 import type { UISupplier } from '@/lib/types/supplier-ui'
-import { uploadFile } from '@/lib/supabase-storage'
+import { removeFile, uploadFile } from '@/lib/supabase-storage'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { getProductSubmitState } from './product-modal-submit-state'
+import { getProductSaveFeedback, type ProductSaveFeedback } from '@/lib/products/product-save-feedback'
+import { getFirstProductErrorTab, shouldConfirmProductModalClose } from './product-modal-behavior'
 
 interface ProductModalProps {
   product: Product | null
@@ -91,6 +104,10 @@ export function ProductModal({
   onCatalogChange
 }: ProductModalProps) {
   const [activeTab, setActiveTab] = useState('basic')
+  const [saveFeedback, setSaveFeedback] = useState<ProductSaveFeedback | null>(null)
+  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
+  const [isUploadingImages, setIsUploadingImages] = useState(false)
+  const newlyUploadedImages = useRef(new Map<string, string>())
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false)
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false)
   const [isBrandModalOpen, setIsBrandModalOpen] = useState(false)
@@ -136,10 +153,10 @@ export function ProductModal({
     }
   })
 
-  const { formState: { isSubmitting, errors, isValid }, setValue, watch } = form
+  const { formState: { isSubmitting, errors, isValid, isDirty }, setValue, watch } = form
   const submitState = getProductSubmitState({
     isEditing: Boolean(product),
-    isSubmitting,
+    isSubmitting: isSubmitting || isUploadingImages,
     isValid,
   })
   
@@ -175,15 +192,6 @@ export function ProductModal({
     }
   }, [errors])
 
-  // Auto-navegar al primer tab con error al fallar el submit
-  useEffect(() => {
-    if (Object.keys(errors).length === 0) return
-    if (tabErrorMap.basic) { setActiveTab('basic'); return }
-    if (tabErrorMap.pricing) { setActiveTab('pricing'); return }
-    if (tabErrorMap.inventory) { setActiveTab('inventory'); return }
-    if (tabErrorMap.postSale) { setActiveTab('post-sale'); return }
-    if (tabErrorMap.images) setActiveTab('images')
-  }, [errors, tabErrorMap])
   const barcode = watch('barcode')
 
   useEffect(() => {
@@ -200,6 +208,10 @@ export function ProductModal({
 
   // Reset form when product changes
   useEffect(() => {
+    newlyUploadedImages.current.clear()
+    setSaveFeedback(null)
+    setActiveTab('basic')
+
     if (product) {
       form.reset({
         sku: product.sku || '',
@@ -269,7 +281,7 @@ export function ProductModal({
     if (result.success && result.data) {
        const newCategory = result.data as unknown as Category
        setLocalCategories(prev => [...prev, newCategory])
-       setValue('category_id', newCategory.id)
+       setValue('category_id', newCategory.id, { shouldDirty: true, shouldValidate: true })
        setIsCategoryModalOpen(false)
        onCatalogChange?.()
        toast.success('Categoría creada')
@@ -285,7 +297,7 @@ export function ProductModal({
        toast.success('Proveedor creado')
        const newSupplier = result.data as unknown as Supplier
        setLocalSuppliers(prev => [...prev, newSupplier])
-       setValue('supplier_id', newSupplier.id)
+       setValue('supplier_id', newSupplier.id, { shouldDirty: true, shouldValidate: true })
        setIsSupplierModalOpen(false)
        onCatalogChange?.()
     } else {
@@ -299,8 +311,8 @@ export function ProductModal({
        toast.success('Marca creada')
        const newBrand = result.data as unknown as Brand
        setLocalBrands(prev => [...prev, newBrand])
-       setValue('brand_id', newBrand.id)
-       setValue('brand', newBrand.name)
+       setValue('brand_id', newBrand.id, { shouldDirty: true, shouldValidate: true })
+       setValue('brand', newBrand.name, { shouldDirty: true })
        setIsBrandModalOpen(false)
        onCatalogChange?.()
        return { success: true }
@@ -365,6 +377,8 @@ export function ProductModal({
   }
 
   const onSubmit = async (values: ProductFormValues) => {
+    setSaveFeedback(null)
+
     try {
       const cleanedData = cleanProductData(values)
       
@@ -377,23 +391,65 @@ export function ProductModal({
       await onSave(cleanedData as unknown as ProductFormData)
       
       toast.success(
-        product ? 'Producto actualizado exitosamente' : 'Producto creado exitosamente',
+        product ? 'Producto actualizado correctamente' : 'Producto creado correctamente',
         {
-          description: `SKU: ${values.sku}`,
-          duration: 3000
+          description: product
+            ? `"${values.name}" · SKU ${values.sku}`
+            : `"${values.name}" · SKU ${values.sku} · Stock inicial ${values.stock_quantity}`,
+          duration: 4000
         }
       )
+      const savedImages = new Set(values.images || [])
+      await Promise.all(
+        [...newlyUploadedImages.current.keys()]
+          .filter(url => !savedImages.has(url))
+          .map(cleanupNewImage),
+      )
+      newlyUploadedImages.current.clear()
+      form.reset(values)
       onClose()
     } catch (error) {
       console.error('Error saving product:', error)
-      if (error instanceof Error) {
-        toast.error('Error al guardar', {
-          description: error.message
-        })
-      } else {
-        toast.error('Error desconocido')
-      }
+      const feedback = getProductSaveFeedback(error, product ? 'update' : 'create')
+      setSaveFeedback(feedback)
+      toast.error(feedback.title, { description: feedback.description })
     }
+  }
+
+  const onInvalidSubmit = (validationErrors: typeof errors) => {
+    const firstErrorTab = getFirstProductErrorTab(Object.keys(validationErrors))
+    if (firstErrorTab) setActiveTab(firstErrorTab)
+
+    const messages = Object.values(validationErrors)
+      .map(error => error?.message)
+      .filter((message): message is string => typeof message === 'string')
+    const remaining = Math.max(messages.length - 1, 0)
+    const feedback = {
+      title: 'Revisa los datos obligatorios',
+      description: messages[0]
+        ? `${messages[0]}${remaining > 0 ? ` Hay ${remaining} campo${remaining === 1 ? '' : 's'} más por corregir.` : ''}`
+        : 'Corrige los campos marcados antes de guardar el producto.',
+    }
+
+    setSaveFeedback(feedback)
+    toast.error(feedback.title, { description: feedback.description })
+  }
+
+  const requestClose = () => {
+    const closeBehavior = shouldConfirmProductModalClose({ isDirty, isSubmitting, isUploadingImages })
+    if (closeBehavior === 'blocked') return
+    if (closeBehavior === 'confirm') {
+      setShowDiscardConfirmation(true)
+      return
+    }
+    onClose()
+  }
+
+  const discardChangesAndClose = async () => {
+    setShowDiscardConfirmation(false)
+    await cleanupAllNewImages()
+    form.reset()
+    onClose()
   }
 
   const calculateMarginValue = () => {
@@ -418,6 +474,7 @@ export function ProductModal({
         
         if (result.success && result.url) {
           uploadedUrls.push(result.url)
+          newlyUploadedImages.current.set(result.url, filePath)
         } else {
           console.error('Upload error:', result.error)
           toast.error(`Error al subir imagen: ${result.error || 'Error desconocido'}`)
@@ -431,140 +488,167 @@ export function ProductModal({
     return uploadedUrls
   }
 
+  const cleanupNewImage = async (url: string) => {
+    const filePath = newlyUploadedImages.current.get(url)
+    if (!filePath) return
+
+    const result = await removeFile('product-images', filePath)
+    if (result.success) {
+      newlyUploadedImages.current.delete(url)
+    } else {
+      console.warn('Could not remove unused product image:', result.error)
+    }
+  }
+
+  const cleanupAllNewImages = async () => {
+    await Promise.all([...newlyUploadedImages.current.keys()].map(cleanupNewImage))
+  }
+
   return (
     <>
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] w-full lg:max-w-6xl h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-900 border-none">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-900 dark:via-indigo-900 dark:to-purple-900 px-8 py-6 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
-                <Package className="h-6 w-6" />
-              </div>
-              <div>
-                <DialogTitle className="text-2xl font-bold text-white">
-                  {product ? 'Editar Producto' : 'Nuevo Producto'}
-                </DialogTitle>
-                <DialogDescription className="text-blue-100 dark:text-blue-200 mt-1">
-                  {product ? `SKU: ${product.sku}` : 'Completa la información del nuevo producto'}
-                </DialogDescription>
-              </div>
-            </div>
-            {product && (
-              <Badge className="bg-white/20 text-white border-white/30">
-                {product.is_active ? 'Activo' : 'Inactivo'}
-              </Badge>
-            )}
-          </div>
-        </div>
-
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!open) requestClose()
+    }}>
+      <DialogContent
+        showCloseButton={!isSubmitting && !isUploadingImages}
+        className="max-w-[95vw] w-full lg:max-w-6xl h-[95vh] p-0 gap-0 overflow-hidden bg-white dark:bg-slate-900 border-none flex flex-col"
+      >
         <Form {...form}>
-          <form id="product-form" onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col md:flex-row flex-1 overflow-hidden">
-            {/* Sidebar */}
-            <div className="md:w-56 bg-gray-50 dark:bg-slate-900/50 border-r border-gray-200 dark:border-gray-800 p-4 overflow-y-auto">
-              <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="w-full">
-                <TabsList className="flex flex-col h-auto bg-transparent w-full gap-2 text-gray-500 dark:text-gray-400">
-                  <TabsTrigger
-                    value="basic"
-                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
-                  >
-                    <Tag className="h-4 w-4" />
-                    <span className="hidden md:inline">Información Básica</span>
-                    <span className="md:hidden">Básica</span>
-                    {tabErrorMap.basic && (
-                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="pricing"
-                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
-                  >
-                    <GSIcon className="h-4 w-4" />
-                    <span className="hidden md:inline">Precios y Ofertas</span>
-                    <span className="md:hidden">Precios</span>
-                    {tabErrorMap.pricing && (
-                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="inventory"
-                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
-                  >
-                    <Warehouse className="h-4 w-4" />
-                    <span className="hidden md:inline">Inventario</span>
-                    <span className="md:hidden">Stock</span>
-                    {tabErrorMap.inventory && (
-                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="post-sale"
-                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    <span className="hidden md:inline">Postventa</span>
-                    <span className="md:hidden">Postventa</span>
-                    {tabErrorMap.postSale && (
-                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="images"
-                    className="w-full justify-start gap-3 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm"
-                  >
-                    <Upload className="h-4 w-4" />
-                    <span className="hidden md:inline">Imágenes</span>
-                    <span className="md:hidden">Fotos</span>
-                    {tabErrorMap.images && (
-                      <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
-                    )}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-
-              {/* Quick Info Sidebar */}
-              {product && (
-                <div className="mt-6 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-sm space-y-3 border border-gray-100 dark:border-gray-700">
-                  <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Vista Rápida</h4>
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Stock</p>
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">{stockQuantity} unidades</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Precio Venta</p>
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(salePrice)}</p>
-                    </div>
-                    {hasOffer && (
-                      <div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Precio Oferta</p>
-                        <p className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(offerPrice || 0)}</p>
-                      </div>
-                    )}
+          <form onSubmit={form.handleSubmit(onSubmit, onInvalidSubmit)} className="flex flex-col flex-1 overflow-hidden h-full">
+            {/* Header */}
+            <div className="bg-primary px-4 py-4 md:px-8 md:py-6 text-primary-foreground shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-primary-foreground/15 rounded-lg">
+                    <Package className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-2xl font-bold text-primary-foreground">
+                      {product ? 'Editar Producto' : 'Nuevo Producto'}
+                    </DialogTitle>
+                    <DialogDescription className="text-primary-foreground/80 mt-1">
+                      {product ? `SKU: ${product.sku}` : 'Completa la información del nuevo producto'}
+                    </DialogDescription>
                   </div>
                 </div>
-              )}
+                {product && (
+                  <Badge className="bg-white/20 text-white border-white/30">
+                    {product.is_active ? 'Activo' : 'Inactivo'}
+                  </Badge>
+                )}
+              </div>
             </div>
 
+            {saveFeedback && (
+              <Alert variant="destructive" className="mx-4 md:mx-8 mt-4 w-auto shrink-0">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>{saveFeedback.title}</AlertTitle>
+                <AlertDescription>{saveFeedback.description}</AlertDescription>
+              </Alert>
+            )}
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="flex min-h-0 flex-col md:flex-row flex-1 overflow-hidden">
+              {/* Sidebar */}
+              <div className="w-full md:w-56 bg-gray-50 dark:bg-slate-900/50 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 p-3 md:p-4 overflow-hidden md:overflow-y-auto shrink-0">
+                  <TabsList className="grid grid-cols-3 md:flex md:flex-col h-auto bg-transparent w-full gap-2 text-gray-500 dark:text-gray-400">
+                    <TabsTrigger
+                      value="basic"
+                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                    >
+                      <Tag className="h-4 w-4" />
+                      <span className="hidden md:inline">Información Básica</span>
+                      <span className="md:hidden">Básica</span>
+                      {tabErrorMap.basic && (
+                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="pricing"
+                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                    >
+                      <GSIcon className="h-4 w-4" />
+                      <span className="hidden md:inline">Precios y Ofertas</span>
+                      <span className="md:hidden">Precios</span>
+                      {tabErrorMap.pricing && (
+                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="inventory"
+                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                    >
+                      <Warehouse className="h-4 w-4" />
+                      <span className="hidden md:inline">Inventario</span>
+                      <span className="md:hidden">Stock</span>
+                      {tabErrorMap.inventory && (
+                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="post-sale"
+                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      <span className="hidden md:inline">Postventa</span>
+                      <span className="md:hidden">Postventa</span>
+                      {tabErrorMap.postSale && (
+                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="images"
+                      className="w-full justify-center md:justify-start gap-2 md:gap-3 px-2 md:px-3 py-2 text-xs md:text-sm data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-blue-600 dark:data-[state=active]:text-blue-400 data-[state=active]:shadow-sm border md:border-0 rounded-lg whitespace-nowrap"
+                    >
+                      <Upload className="h-4 w-4" />
+                      <span className="hidden md:inline">Imágenes</span>
+                      <span className="md:hidden">Fotos</span>
+                      {tabErrorMap.images && (
+                        <AlertCircle className="h-3.5 w-3.5 ml-auto text-red-500 shrink-0" />
+                      )}
+                    </TabsTrigger>
+                  </TabsList>
+
+                {/* Quick Info Sidebar */}
+                {product && (
+                  <div className="hidden md:block mt-6 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-sm space-y-3 border border-gray-100 dark:border-gray-700">
+                    <h4 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Vista Rápida</h4>
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Stock</p>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">{stockQuantity} unidades</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Precio Venta</p>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(salePrice)}</p>
+                      </div>
+                      {hasOffer && (
+                        <div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Precio Oferta</p>
+                          <p className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(offerPrice || 0)}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
             {/* Main Content */}
-            <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">
               <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                 <span><strong className="font-medium text-red-600 dark:text-red-400">• Obligatorio</strong> para crear el producto</span>
                 <span><strong className="font-medium">• Opcional</strong> se puede completar después</span>
               </div>
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full" orientation="vertical">
-                
+
                 {/* Basic Info */}
                 <TabsContent value="basic" className="space-y-6 py-4">
-                  <Card className="border-blue-100 dark:border-blue-900/50 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-800 dark:to-slate-800/50">
-                    <CardHeader className="pb-3">
+                  <Card className="border-0 shadow-none bg-transparent md:border md:border-blue-100 md:dark:border-blue-900/50 md:bg-gradient-to-br md:from-white md:to-blue-50/30 md:dark:from-slate-800 md:dark:to-slate-800/50">
+                    <CardHeader className="pb-3 px-0 md:px-6">
                       <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-100">
                         <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                         Información del Producto
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -580,7 +664,8 @@ export function ProductModal({
                                   type="button"
                                   variant="outline"
                                   size="icon"
-                                  onClick={() => setValue('sku', generateSKU())}
+                                  onClick={() => setValue('sku', generateSKU(), { shouldDirty: true, shouldValidate: true })}
+                                  aria-label="Generar SKU automáticamente"
                                   title="Generar código automáticamente"
                                 >
                                   <Sparkles className="h-4 w-4" />
@@ -617,7 +702,7 @@ export function ProductModal({
                                     field.onChange(value)
                                     const selectedBrand = localBrands.find(b => b.id === value)
                                     if (selectedBrand) {
-                                      setValue('brand', selectedBrand.name)
+                                      setValue('brand', selectedBrand.name, { shouldDirty: true })
                                     }
                                   }} 
                                   value={field.value || ""}
@@ -640,6 +725,7 @@ export function ProductModal({
                                   variant="outline"
                                   size="icon"
                                   onClick={() => setIsBrandModalOpen(true)}
+                                  aria-label="Crear nueva marca"
                                 >
                                   <Plus className="h-4 w-4" />
                                 </Button>
@@ -697,7 +783,8 @@ export function ProductModal({
                                     type="button"
                                     variant="outline"
                                     size="icon"
-                                    onClick={() => setValue('barcode', generateEAN13())}
+                                    onClick={() => setValue('barcode', generateEAN13(), { shouldDirty: true, shouldValidate: true })}
+                                    aria-label="Generar código de barras automáticamente"
                                     title="Generar código automáticamente"
                                   >
                                     <Sparkles className="h-4 w-4" />
@@ -740,14 +827,14 @@ export function ProductModal({
                     </CardContent>
                   </Card>
 
-                  <Card className="border-purple-100 dark:border-purple-900/50 bg-gradient-to-br from-white to-purple-50/30 dark:from-slate-800 dark:to-slate-800/50">
-                    <CardHeader className="pb-3">
+                  <Card className="border-0 shadow-none bg-transparent md:border md:border-purple-100 md:dark:border-purple-900/50 md:bg-gradient-to-br md:from-white md:to-purple-50/30 md:dark:from-slate-800 md:dark:to-slate-800/50">
+                    <CardHeader className="pb-3 px-0 md:px-6">
                       <CardTitle className="text-base flex items-center gap-2 text-gray-900 dark:text-gray-100">
                         <Package className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                         Categorización
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -775,6 +862,7 @@ export function ProductModal({
                                   variant="outline"
                                   size="icon"
                                   onClick={() => setIsCategoryModalOpen(true)}
+                                  aria-label="Crear nueva categoría"
                                 >
                                   <Plus className="h-4 w-4" />
                                 </Button>
@@ -810,6 +898,7 @@ export function ProductModal({
                                   variant="outline"
                                   size="icon"
                                   onClick={() => setIsSupplierModalOpen(true)}
+                                  aria-label="Crear nuevo proveedor"
                                 >
                                   <Plus className="h-4 w-4" />
                                 </Button>
@@ -935,14 +1024,14 @@ export function ProductModal({
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Card className="border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50/50 to-white dark:from-blue-900/10 dark:to-slate-900">
-                        <CardHeader className="pb-3">
+                      <Card className="border-0 shadow-none bg-transparent md:border md:border-blue-200 md:dark:border-blue-800 md:bg-gradient-to-br md:from-blue-50/50 md:to-white md:dark:from-blue-900/10 md:dark:to-slate-900">
+                        <CardHeader className="pb-3 px-0 md:px-6">
                           <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-700 dark:text-blue-400">
                             <Users className="h-4 w-4" />
                             Precio Mayorista <FieldRequirement />
                           </CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-2">
+                        <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-2">
                           <FormField
                             control={form.control}
                             name="wholesale_price"
@@ -964,11 +1053,11 @@ export function ProductModal({
                         </CardContent>
                       </Card>
 
-                      <Card className={`border-2 transition-all ${hasOffer
-                        ? 'border-red-400 dark:border-red-800 bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/10 dark:to-pink-900/10 shadow-lg shadow-red-100 dark:shadow-none'
-                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-slate-900'
+                      <Card className={`transition-all ${hasOffer
+                        ? 'border-l-4 border-red-500 bg-red-50/20 dark:bg-red-955/10 md:border-2 md:border-red-400 md:dark:border-red-800 md:bg-gradient-to-br md:from-red-50 md:to-pink-50 md:dark:from-red-900/10 md:dark:to-pink-900/10 md:shadow-lg md:shadow-red-100 md:dark:shadow-none'
+                        : 'border-0 shadow-none bg-transparent md:border md:border-gray-200 md:dark:border-gray-700 md:bg-white md:dark:bg-slate-900'
                         }`}>
-                        <CardHeader className="pb-3">
+                        <CardHeader className="pb-3 px-0 md:px-6">
                           <div className="flex items-center justify-between">
                             <CardTitle className={`text-sm font-medium flex items-center gap-2 ${hasOffer ? 'text-red-700 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                               <Tag className="h-4 w-4" />
@@ -986,13 +1075,14 @@ export function ProductModal({
                                     checked={field.value}
                                     onCheckedChange={field.onChange}
                                     className="data-[state=checked]:bg-red-500"
+                                    aria-label="Activar precio en oferta"
                                   />
                                 </div>
                               )}
                             />
                           </div>
                         </CardHeader>
-                        <CardContent className="space-y-2">
+                        <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-2">
                           <FormField
                             control={form.control}
                             name="offer_price"
@@ -1021,14 +1111,14 @@ export function ProductModal({
                 {/* Inventory */}
                 <TabsContent value="inventory" className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card>
-                      <CardHeader className="pb-3">
+                    <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
+                      <CardHeader className="pb-3 px-0 md:px-6">
                         <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                           <Warehouse className="h-4 w-4" />
                           Stock Actual <FieldRequirement required />
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="p-0 md:p-6 pt-0 md:pt-0">
                         <FormField
                           control={form.control}
                           name="stock_quantity"
@@ -1048,14 +1138,14 @@ export function ProductModal({
                       </CardContent>
                     </Card>
 
-                    <Card>
-                      <CardHeader className="pb-3">
+                    <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
+                      <CardHeader className="pb-3 px-0 md:px-6">
                         <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                           <Package className="h-4 w-4" />
                           Stock Mínimo <FieldRequirement required />
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="p-0 md:p-6 pt-0 md:pt-0">
                         <FormField
                           control={form.control}
                           name="min_stock"
@@ -1078,14 +1168,14 @@ export function ProductModal({
                       </CardContent>
                     </Card>
 
-                    <Card>
-                      <CardHeader className="pb-3">
+                    <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
+                      <CardHeader className="pb-3 px-0 md:px-6">
                         <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                           <Warehouse className="h-4 w-4 text-amber-600" />
                           Stock Máximo <FieldRequirement />
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="p-0 md:p-6 pt-0 md:pt-0">
                         <FormField
                           control={form.control}
                           name="max_stock"
@@ -1112,14 +1202,14 @@ export function ProductModal({
 
                 {/* Post-Sale */}
                 <TabsContent value="post-sale" className="space-y-4 py-4">
-                  <Card>
-                    <CardHeader className="pb-3">
+                  <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
+                    <CardHeader className="pb-3 px-0 md:px-6">
                       <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                         <RefreshCw className="h-4 w-4" />
                         Garantia del Producto
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -1166,14 +1256,14 @@ export function ProductModal({
                     </CardContent>
                   </Card>
 
-                  <Card>
-                    <CardHeader className="pb-3">
+                  <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
+                    <CardHeader className="pb-3 px-0 md:px-6">
                       <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                         <RefreshCw className="h-4 w-4" />
                         Cambios y Devoluciones
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
@@ -1259,14 +1349,14 @@ export function ProductModal({
 
                 {/* Images */}
                 <TabsContent value="images" className="space-y-4 py-4">
-                  <Card>
-                    <CardHeader>
+                  <Card className="border-0 shadow-none bg-transparent md:border md:shadow-sm md:bg-card">
+                    <CardHeader className="px-0 md:px-6">
                       <CardTitle className="text-sm flex items-center gap-2 text-gray-900 dark:text-gray-100">
                         <Upload className="h-4 w-4" />
                         Imágenes del Producto <FieldRequirement />
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-0 md:p-6 pt-0 md:pt-0">
                       <FormField
                         control={form.control}
                         name="images"
@@ -1280,6 +1370,8 @@ export function ProductModal({
                                 maxSize={5242880}
                                 disabled={isSubmitting}
                                 onUploadFiles={handleUploadFiles}
+                                onRemoveImage={cleanupNewImage}
+                                onUploadingChange={setIsUploadingImages}
                               />
                             </FormControl>
                             <FormMessage />
@@ -1289,61 +1381,78 @@ export function ProductModal({
                     </CardContent>
                   </Card>
                 </TabsContent>
-              </Tabs>
+            </div>
+          </Tabs>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-gray-800 px-4 py-3 md:px-8 md:py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 shrink-0">
+              <div
+                id="product-form-status"
+                role="status"
+                className={`flex items-start sm:items-center gap-2 text-sm ${submitState.ready ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}
+              >
+                {submitState.ready ? (
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                )}
+                <span>{submitState.status}</span>
+              </div>
+              <div className="flex gap-3 w-full sm:w-auto sm:ml-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={requestClose}
+                  disabled={isSubmitting || isUploadingImages}
+                  className="min-w-[100px] flex-1 sm:flex-none border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting || isUploadingImages}
+                  aria-describedby="product-form-status"
+                  className={`min-w-[180px] flex-1 sm:flex-none text-white shadow-lg ${
+                    submitState.ready
+                      ? 'bg-primary hover:bg-primary/90 shadow-sm'
+                      : 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20 dark:bg-amber-700 dark:hover:bg-amber-600'
+                  }`}
+                >
+                  {isSubmitting || isUploadingImages ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      {isUploadingImages ? 'Subiendo imágenes...' : 'Guardando...'}
+                    </>
+                  ) : (
+                    <>
+                      <Package className="h-4 w-4 mr-2" />
+                      {submitState.label}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </form>
         </Form>
-
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-gray-800 px-4 md:px-8 py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-          <div
-            id="product-form-status"
-            role="status"
-            className={`flex items-start sm:items-center gap-2 text-sm ${submitState.ready ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}
-          >
-            {submitState.ready ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-            ) : (
-              <AlertCircle className="h-4 w-4 shrink-0" />
-            )}
-            <span>{submitState.status}</span>
-          </div>
-          <div className="flex gap-3 w-full sm:w-auto sm:ml-auto">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="min-w-[100px] flex-1 sm:flex-none border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              form="product-form"
-              disabled={isSubmitting}
-              aria-describedby="product-form-status"
-              className={`min-w-[180px] flex-1 sm:flex-none text-white shadow-lg ${
-                submitState.ready
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/30 dark:shadow-blue-900/30'
-                  : 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20 dark:bg-amber-700 dark:hover:bg-amber-600'
-              }`}
-            >
-              {isSubmitting ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Package className="h-4 w-4 mr-2" />
-                  {submitState.label}
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={showDiscardConfirmation} onOpenChange={setShowDiscardConfirmation}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>¿Descartar cambios del producto?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Los datos que completaste todavía no fueron guardados.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Continuar editando</AlertDialogCancel>
+          <AlertDialogAction onClick={discardChangesAndClose}>
+            Descartar cambios
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
 
     <CategoryModal
       isOpen={isCategoryModalOpen}

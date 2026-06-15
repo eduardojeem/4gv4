@@ -132,6 +132,30 @@ export async function uploadFile(
 }
 
 /**
+ * Remove a file using the current authenticated user's Storage policies.
+ */
+export async function removeFile(
+  bucketName: string,
+  filePath: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createClient()
+    const { error } = await supabase.storage.from(bucketName).remove([filePath])
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    }
+  }
+}
+
+/**
  * Setup instructions for missing buckets
  */
 export function getBucketSetupInstructions(): string {

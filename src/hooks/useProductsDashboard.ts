@@ -81,6 +81,13 @@ export function useProductsDashboard({
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false)
 
+  // Auto-detect mobile screen and switch to grid mode
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setViewMode('grid')
+    }
+  }, [])
+
   // Debounced search handler
   const debouncedSearch = useMemo(
     () => debounce((query: string) => {

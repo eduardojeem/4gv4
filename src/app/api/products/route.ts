@@ -126,6 +126,7 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
       return NextResponse.json({
         success: false,
         error: 'Validation failed',
+        code: 'VALIDATION_FAILED',
         details: errors
       }, { status: 400 })
     }
@@ -196,7 +197,7 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
       // Handle unique constraint violations
       if (error.code === '23505') {
         return NextResponse.json(
-          { success: false, error: 'Product with this SKU already exists' },
+          { success: false, error: 'Ya existe un producto con este SKU.', code: 'SKU_ALREADY_EXISTS' },
           { status: 409 }
         )
       }
@@ -240,7 +241,7 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
           .eq('organization_id', organization.id)
 
         return NextResponse.json(
-          { success: false, error: 'No se pudo sincronizar el stock inicial de la sucursal.' },
+          { success: false, error: 'No se pudo sincronizar el stock inicial de la sucursal.', code: 'BRANCH_STOCK_SYNC_FAILED' },
           { status: 500 }
         )
       }
@@ -263,7 +264,7 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
   } catch (error) {
     logger.error('Product creation error', { error })
     return NextResponse.json(
-      { success: false, error: 'Failed to create product' },
+      { success: false, error: 'No se pudo crear el producto.', code: 'PRODUCT_CREATE_FAILED' },
       { status: 500 }
     )
   }

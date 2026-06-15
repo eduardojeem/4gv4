@@ -114,6 +114,17 @@ export async function POST(request: Request) {
     const { firstName, lastName } = splitName(input.fullName)
     const now = new Date().toISOString()
 
+    // Si el email ya pertenecía a un usuario con rol de staff (Supabase puede devolver
+    // el id existente por anti-enumeración), NO degradamos su rol a 'cliente'.
+    const STAFF_ROLES = ['admin', 'super_admin', 'owner', 'vendedor', 'tecnico', 'inventory_manager']
+    const { data: existingProfile } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle()
+    const existingRole = typeof existingProfile?.role === 'string' ? existingProfile.role : null
+    const roleToSet = existingRole && STAFF_ROLES.includes(existingRole) ? existingRole : 'cliente'
+
     // Global identity (always): profile + role as a customer. This is what makes
     // a single account usable across the marketplace and every store.
     const globalSetup = await Promise.all([
@@ -121,13 +132,13 @@ export async function POST(request: Request) {
         id: userId,
         email: input.email,
         full_name: input.fullName,
-        role: 'cliente',
+        role: roleToSet,
         status: 'active',
       }),
       admin.from('user_roles').upsert(
         {
           user_id: userId,
-          role: 'cliente',
+          role: roleToSet,
           is_active: true,
         },
         { onConflict: 'user_id' }

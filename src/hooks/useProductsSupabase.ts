@@ -51,6 +51,8 @@ interface ProductApiPayload {
   success?: boolean
   data?: Product
   error?: string
+  code?: string
+  message?: string
   details?: Array<{
     field?: string
     message?: string
@@ -69,7 +71,7 @@ function getProductApiError(payload: ProductApiPayload | null, fallback: string)
     return `${payload.error || fallback}: ${detailMessage}`
   }
 
-  return payload.error || fallback
+  return payload.message || payload.error || fallback
 }
 
 export function useProductsSupabase(options?: { enabled?: boolean }) {

@@ -1,4 +1,5 @@
 import * as z from "zod"
+import { validateBarcode } from "./product-validation"
 
 export const productSchema = z
   .object({
@@ -107,7 +108,14 @@ export const productSchema = z
 
     // Other
     unit_measure: z.string().optional().nullable(),
-    barcode: z.string().optional().nullable(),
+    barcode: z
+      .string()
+      .optional()
+      .nullable()
+      .refine(
+        value => !value?.trim() || validateBarcode(value),
+        "Formato de codigo de barras invalido. Usa EAN-8, UPC-A o EAN-13 valido",
+      ),
     is_active: z.boolean().default(true),
     visibility: z.enum(['public', 'wholesale', 'hidden']).optional().default('public'),
     images: z.array(z.string()).default([]),
