@@ -75,6 +75,7 @@ import {
   SectionFrame,
 } from './analytics-widgets'
 import { ChartExporter } from '@/components/reports/ChartExporter'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 
 const PRESET_OPTIONS: Array<{ value: AnalyticsPreset; label: string }> = [
   { value: 'today', label: 'Hoy' },
@@ -305,6 +306,7 @@ export default function AnalyticsDashboard() {
     forceRefresh,
     refreshing,
   } = useAdminAnalytics(filters)
+  const { organizationName } = useSubscriptionStatus()
 
   const handlePresetChange = (nextPreset: AnalyticsPreset) => {
     setPreset(nextPreset)
@@ -451,7 +453,7 @@ export default function AnalyticsDashboard() {
       {/* Descargas con gráficos y detalle */}
       <div className="flex flex-wrap justify-end gap-2">
         <ChartExporter
-          title="Analytics — 4G Celulares"
+          title={`Analytics — ${organizationName || 'Mi Negocio'}`}
           data={snapshot.salesTrend}
           metrics={exportMetrics}
           chartRefs={exportChartRefs}

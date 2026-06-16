@@ -24,6 +24,10 @@ export type SubscriptionStatusData = {
   moduleTrials: ModuleTrial[]
   /** Módulos que la org ya probó alguna vez (activos o vencidos) → no se puede volver a probar. */
   trialedModules: string[]
+  /** Nombre de la organización activa (para branding del layout). */
+  organizationName: string | null
+  /** Logo de la organización activa (si tiene). */
+  organizationLogoUrl: string | null
 }
 
 const DEFAULTS: SubscriptionStatusData = {
@@ -38,6 +42,8 @@ const DEFAULTS: SubscriptionStatusData = {
   downgradedFromExpiry: false,
   moduleTrials: [],
   trialedModules: [],
+  organizationName: null,
+  organizationLogoUrl: null,
 }
 
 const SubscriptionStatusContext = createContext<SubscriptionStatusData>(DEFAULTS)

@@ -23,10 +23,12 @@ type PromoCode = {
   discount_amount: number | null
   target_plan: string | null
   duration_days: number | null
+  duration_unit: string | null
   max_redemptions: number | null
   starts_at: string | null
   expires_at: string | null
   is_active: boolean
+  created_at: string
   redemption_count: number
 }
 
@@ -41,15 +43,35 @@ const benefitLabels: Record<string, string> = {
   extend_period: 'Extensión de suscripción',
 }
 
+type Redemption = {
+  id: string
+  promo_code_id: string
+  organization_id: string
+  organization_name: string
+  redeemed_at: string
+}
+
+function codeStatus(code: PromoCode): { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' } {
+  const now = Date.now()
+  if (!code.is_active) return { label: 'Inactivo', variant: 'secondary' }
+  if (code.expires_at && new Date(code.expires_at).getTime() < now) return { label: 'Vencido', variant: 'destructive' }
+  if (code.max_redemptions && code.redemption_count >= code.max_redemptions) return { label: 'Agotado', variant: 'destructive' }
+  if (code.starts_at && new Date(code.starts_at).getTime() > now) return { label: 'Programado', variant: 'outline' }
+  return { label: 'Vigente', variant: 'default' }
+}
+
 function benefitSummary(code: PromoCode) {
   if (code.benefit_type === 'discount_percent') return `${code.discount_percent}% de descuento`
   if (code.benefit_type === 'discount_fixed') return `${Number(code.discount_amount).toLocaleString('es-PY')} de descuento`
-  if (code.benefit_type === 'activate_plan') return `${code.target_plan} por ${code.duration_days} días`
-  return `${code.duration_days} días adicionales`
+  const unit = code.duration_unit === 'months' ? 'mes(es)' : 'días'
+  if (code.benefit_type === 'activate_plan') return `${code.target_plan} por ${code.duration_days} ${unit}`
+  return `${code.duration_days} ${unit} adicionales`
 }
 
 export function PromoCodesDashboard() {
   const [codes, setCodes] = useState<PromoCode[]>([])
+  const [redemptions, setRedemptions] = useState<Redemption[]>([])
+  const [detailCode, setDetailCode] = useState<PromoCode | null>(null)
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,6 +88,7 @@ export function PromoCodesDashboard() {
     discountAmount: '',
     targetPlan: '',
     durationDays: '',
+    durationUnit: 'days',
     maxRedemptions: '',
     expiresAt: '',
   })
@@ -77,6 +100,7 @@ export function PromoCodesDashboard() {
       const data = await response.json()
       if (!response.ok) throw new Error(data.error)
       setCodes(data.codes)
+      setRedemptions(data.redemptions ?? [])
       setOrganizations(data.organizations)
       setPlans(data.plans)
     } catch (error) {
@@ -114,7 +138,7 @@ export function PromoCodesDashboard() {
       if (!response.ok) throw new Error(data.error)
       toast.success('Código promocional creado.')
       setCreateOpen(false)
-      setForm({ code: '', name: '', description: '', benefitType: 'discount_percent', discountPercent: '', discountAmount: '', targetPlan: '', durationDays: '', maxRedemptions: '', expiresAt: '' })
+      setForm({ code: '', name: '', description: '', benefitType: 'discount_percent', discountPercent: '', discountAmount: '', targetPlan: '', durationDays: '', durationUnit: 'days', maxRedemptions: '', expiresAt: '' })
       await loadData()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo crear el código.')
@@ -188,14 +212,22 @@ export function PromoCodesDashboard() {
             <Card key={code.id} className="rounded-2xl">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-4">
-                  <div><div className="flex flex-wrap items-center gap-2"><CardTitle className="text-lg">{code.name}</CardTitle><Badge variant={code.is_active ? 'default' : 'secondary'}>{code.is_active ? 'Activo' : 'Inactivo'}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{code.description || benefitLabels[code.benefit_type]}</p></div>
+                  <div><div className="flex flex-wrap items-center gap-2"><CardTitle className="text-lg">{code.name}</CardTitle><Badge variant={codeStatus(code).variant}>{codeStatus(code).label}</Badge></div><p className="mt-1 text-sm text-muted-foreground">{code.description || benefitLabels[code.benefit_type]}</p></div>
                   <Switch checked={code.is_active} onCheckedChange={() => void toggleCode(code)} aria-label={`Cambiar estado de ${code.code}`} />
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <button onClick={() => void navigator.clipboard.writeText(code.code).then(() => toast.success('Código copiado.'))} className="flex w-full items-center justify-between rounded-xl border bg-muted/40 px-4 py-3 text-left"><span className="font-mono text-lg font-bold tracking-wider">{code.code}</span><Copy className="h-4 w-4 text-muted-foreground" /></button>
-                <div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs text-muted-foreground">Beneficio</p><p className="mt-1 font-semibold">{benefitSummary(code)}</p></div><div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs text-muted-foreground">Usos</p><p className="mt-1 font-semibold">{code.redemption_count} / {code.max_redemptions ?? 'Sin límite'}</p></div></div>
-                <Button disabled={!code.is_active} onClick={() => setApplyCode(code)} className="w-full"><BadgePercent className="mr-2 h-4 w-4" />Aplicar a organización</Button>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs text-muted-foreground">Beneficio</p><p className="mt-1 font-semibold">{benefitSummary(code)}</p></div>
+                  <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs text-muted-foreground">Usos</p><p className="mt-1 font-semibold">{code.redemption_count} / {code.max_redemptions ?? 'Sin límite'}</p></div>
+                  <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs text-muted-foreground">Vence</p><p className="mt-1 font-semibold">{code.expires_at ? new Date(code.expires_at).toLocaleDateString('es-PY') : 'Sin vencimiento'}</p></div>
+                  <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900"><p className="text-xs text-muted-foreground">Creado</p><p className="mt-1 font-semibold">{new Date(code.created_at).toLocaleDateString('es-PY')}</p></div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setDetailCode(code)} className="flex-1"><Building2 className="mr-2 h-4 w-4" />Ver usos ({code.redemption_count})</Button>
+                  <Button disabled={codeStatus(code).label !== 'Vigente'} onClick={() => setApplyCode(code)} className="flex-1"><BadgePercent className="mr-2 h-4 w-4" />Aplicar</Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -213,7 +245,52 @@ export function PromoCodesDashboard() {
             {form.benefitType === 'discount_percent' && <div className="space-y-2"><Label>Porcentaje</Label><Input type="number" min="1" max="100" value={form.discountPercent} onChange={event => setForm({ ...form, discountPercent: event.target.value })} /></div>}
             {form.benefitType === 'discount_fixed' && <div className="space-y-2"><Label>Monto</Label><Input type="number" min="1" value={form.discountAmount} onChange={event => setForm({ ...form, discountAmount: event.target.value })} /></div>}
             {form.benefitType === 'activate_plan' && <div className="space-y-2"><Label>Plan de destino</Label><Select value={form.targetPlan} onValueChange={value => setForm({ ...form, targetPlan: value })}><SelectTrigger><SelectValue placeholder="Seleccionar plan" /></SelectTrigger><SelectContent>{plans.map(plan => <SelectItem key={plan.tier} value={plan.tier}>{plan.name}</SelectItem>)}</SelectContent></Select></div>}
-            {['activate_plan', 'extend_trial', 'extend_period'].includes(form.benefitType) && <div className="space-y-2"><Label>Duración en días</Label><Input type="number" min="1" value={form.durationDays} onChange={event => setForm({ ...form, durationDays: event.target.value })} /></div>}
+            {['activate_plan', 'extend_trial', 'extend_period'].includes(form.benefitType) && (
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Duración</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    className="flex-1"
+                    placeholder={form.durationUnit === 'months' ? 'cant. de meses' : 'cant. de días'}
+                    value={form.durationDays}
+                    onChange={event => setForm({ ...form, durationDays: event.target.value })}
+                  />
+                  <Select value={form.durationUnit} onValueChange={value => setForm({ ...form, durationUnit: value })}>
+                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="days">Días</SelectItem>
+                      <SelectItem value="months">Meses</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[
+                    { l: '1 mes', v: '1', u: 'months' },
+                    { l: '3 meses', v: '3', u: 'months' },
+                    { l: '6 meses', v: '6', u: 'months' },
+                    { l: '1 año', v: '12', u: 'months' },
+                    { l: '15 días', v: '15', u: 'days' },
+                    { l: '30 días', v: '30', u: 'days' },
+                  ].map(p => (
+                    <Button
+                      key={p.l}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => setForm({ ...form, durationDays: p.v, durationUnit: p.u })}
+                    >
+                      {p.l}
+                    </Button>
+                  ))}
+                </div>
+                {form.durationUnit === 'months' && (
+                  <p className="text-xs text-muted-foreground">El período vence el mismo día del mes (sin desfase por meses de 28/30/31).</p>
+                )}
+              </div>
+            )}
             <div className="space-y-2"><Label>Máximo de usos</Label><Input type="number" min="1" value={form.maxRedemptions} onChange={event => setForm({ ...form, maxRedemptions: event.target.value })} placeholder="Sin límite" /></div>
             <div className="space-y-2"><Label>Fecha de expiración</Label><Input type="datetime-local" value={form.expiresAt} onChange={event => setForm({ ...form, expiresAt: event.target.value })} /></div>
           </div>
@@ -226,6 +303,31 @@ export function PromoCodesDashboard() {
           <DialogHeader><DialogTitle>Aplicar {applyCode?.code}</DialogTitle><DialogDescription>{applyCode && benefitSummary(applyCode)}. Esta acción quedará registrada en auditoría.</DialogDescription></DialogHeader>
           <div className="space-y-2 py-3"><Label>Organización</Label><Select value={organizationId} onValueChange={setOrganizationId}><SelectTrigger><SelectValue placeholder="Seleccionar organización" /></SelectTrigger><SelectContent>{organizations.map(org => <SelectItem key={org.id} value={org.id}>{org.name} · {org.plan}</SelectItem>)}</SelectContent></Select></div>
           <DialogFooter><Button variant="outline" onClick={() => setApplyCode(null)}>Cancelar</Button><Button onClick={() => void applyPromotion()} disabled={saving || !organizationId}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Power className="mr-2 h-4 w-4" />}Confirmar aplicación</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detalle de usos: qué organizaciones activaron el código y cuándo */}
+      <Dialog open={Boolean(detailCode)} onOpenChange={open => !open && setDetailCode(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Usos de {detailCode?.code}</DialogTitle>
+            <DialogDescription>Organizaciones que activaron este código y la fecha de canje.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 space-y-2 overflow-y-auto py-2">
+            {(() => {
+              const rows = redemptions.filter(r => r.promo_code_id === detailCode?.id)
+              if (rows.length === 0) {
+                return <p className="py-6 text-center text-sm text-muted-foreground">Todavía nadie usó este código.</p>
+              }
+              return rows.map(r => (
+                <div key={r.id} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
+                  <span className="flex items-center gap-2 font-medium"><Building2 className="h-4 w-4 text-muted-foreground" />{r.organization_name}</span>
+                  <span className="text-muted-foreground">{new Date(r.redeemed_at).toLocaleString('es-PY')}</span>
+                </div>
+              ))
+            })()}
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setDetailCode(null)}>Cerrar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

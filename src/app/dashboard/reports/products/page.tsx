@@ -46,8 +46,9 @@ import { isCompletedSaleStatus } from '@/lib/sales-status'
 // Datos mock eliminados
 
 export default function ProductReportsPage() {
-  const { planCode } = useSubscriptionStatus()
+  const { planCode, organizationName } = useSubscriptionStatus()
   const canExport = canExportReports(planCode) // exportar: Basic en adelante
+  const reportBrand = organizationName || 'Mi Negocio'
   const supabase = useMemo(() => createClient(), [])
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
@@ -281,7 +282,7 @@ export default function ProductReportsPage() {
         
         // Hoja principal con datos de productos
         const wsData = [
-          ['REPORTE DE PRODUCTOS - 4G CELULARES'],
+          [`REPORTE DE PRODUCTOS - ${reportBrand.toUpperCase()}`],
           [`Generado el: ${new Date().toLocaleDateString('es-ES')} a las ${new Date().toLocaleTimeString('es-ES')}`],
           [`Filtros aplicados: Categoría: ${selectedCategory}, Estado: ${selectedStatus}`],
           [`Total de productos: ${filteredData.length}`],
@@ -344,7 +345,7 @@ export default function ProductReportsPage() {
         wb.Props = {
           Title: "Reporte de Productos",
           Subject: "Análisis de Inventario y Ventas",
-          Author: "4G Celulares - Sistema de Gestión",
+          Author: `${reportBrand} - Sistema de Gestión`,
           CreatedDate: new Date()
         }
         
@@ -357,7 +358,7 @@ export default function ProductReportsPage() {
 
         doc.setFontSize(18)
         doc.setTextColor(31, 78, 121)
-        doc.text('Reporte de productos - 4G Celulares', 40, 40)
+        doc.text(`Reporte de productos - ${reportBrand}`, 40, 40)
 
         doc.setFontSize(10)
         doc.setTextColor(100, 100, 100)
@@ -398,7 +399,7 @@ export default function ProductReportsPage() {
     } finally {
       setIsExporting(false)
     }
-  }, [filteredData, metrics, selectedCategory, selectedStatus, canExport])
+  }, [filteredData, metrics, selectedCategory, selectedStatus, canExport, reportBrand])
 
   return (
     <div className="min-h-screen">

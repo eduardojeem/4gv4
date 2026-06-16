@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
-
-type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
+import {
+  buildCreditInstallmentPlan,
+  normalizeCreditFrequency,
+  normalizeInstallmentCount,
+} from '@/lib/credits/installments'
 
 type CreateCreditSaleBody = {
   customerId?: unknown
@@ -42,36 +45,6 @@ function normalizePositiveAmount(value: unknown) {
   return Number.isFinite(amount) && amount > 0 ? amount : null
 }
 
-function normalizeInstallmentCount(value: unknown) {
-  const count = Number(value)
-  if (!Number.isFinite(count) || count <= 0) return 1
-  return Math.max(1, Math.floor(count))
-}
-
-function normalizeFrequency(value: unknown): CreditFrequency {
-  return value === 'weekly' || value === 'biweekly' || value === 'monthly'
-    ? value
-    : 'monthly'
-}
-
-function buildDueDate(baseDate: Date, index: number, frequency: CreditFrequency, useProvidedBase: boolean) {
-  const dueDate = new Date(baseDate)
-  const step = useProvidedBase ? index : index + 1
-
-  if (frequency === 'weekly') {
-    dueDate.setDate(dueDate.getDate() + (7 * step))
-    return dueDate
-  }
-
-  if (frequency === 'biweekly') {
-    dueDate.setDate(dueDate.getDate() + (14 * step))
-    return dueDate
-  }
-
-  dueDate.setMonth(dueDate.getMonth() + step)
-  return dueDate
-}
-
 export async function POST(request: Request) {
   try {
     const auth = await requireStaff()
@@ -95,7 +68,7 @@ export async function POST(request: Request) {
     const amount = normalizePositiveAmount(body.amount)
     const interestRate = Number.isFinite(Number(body.interestRate)) ? Number(body.interestRate) : 0
     const installmentCount = normalizeInstallmentCount(body.installments?.count)
-    const frequency = normalizeFrequency(body.installments?.frequency)
+    const frequency = normalizeCreditFrequency(body.installments?.frequency)
 
     if (!customerId) {
       return NextResponse.json({ error: 'Cliente inválido.' }, { status: 400 })
@@ -166,6 +139,15 @@ export async function POST(request: Request) {
     }
 
     const installmentRows = (existingInstallments as InstallmentRow[] | null) ?? []
+    const nextInstallmentNumber = (installmentRows[0]?.installment_number ?? 0) + 1
+    const creditPlan = buildCreditInstallmentPlan({
+      principalAmount: amount,
+      interestRate,
+      installmentCount,
+      frequency,
+      firstDueDate: providedDueDate,
+      startInstallmentNumber: nextInstallmentNumber,
+    })
     const currentBalance = installmentRows.reduce((sum, installment) => {
       if (installment.status !== 'pending' && installment.status !== 'late') return sum
 
@@ -175,7 +157,7 @@ export async function POST(request: Request) {
     }, 0)
 
     const availableCredit = creditLimit - currentBalance
-    if (availableCredit < amount) {
+    if (availableCredit < creditPlan.financedTotal) {
       return NextResponse.json(
         {
           error: `El cliente no tiene crédito disponible suficiente. Disponible: ${availableCredit.toFixed(2)}.`,
@@ -184,22 +166,17 @@ export async function POST(request: Request) {
       )
     }
 
-    const nextInstallmentNumber = (installmentRows[0]?.installment_number ?? 0) + 1
     const nextTermMonths = nextInstallmentNumber + installmentCount - 1
 
     if (existingCredit) {
       previousCreditSnapshot = existingCredit as ExistingCreditRow
 
-      const updatedPrincipal = Number(existingCredit.principal || 0) + amount
-      const updatedInterestRate = Number.isFinite(Number(existingCredit.interest_rate))
-        ? Number(existingCredit.interest_rate)
-        : interestRate
-
+      const updatedPrincipal = Number(existingCredit.principal || 0) + creditPlan.financedTotal
       const { error: updateCreditError } = await supabase
         .from('customer_credits')
         .update({
           principal: updatedPrincipal,
-          interest_rate: updatedInterestRate,
+          interest_rate: interestRate,
           term_months: nextTermMonths,
           status: 'active',
         })
@@ -218,7 +195,7 @@ export async function POST(request: Request) {
         .insert({
           customer_id: customerId,
           organization_id: organization.id,
-          principal: amount,
+          principal: creditPlan.financedTotal,
           interest_rate: interestRate,
           term_months: installmentCount,
           start_date: new Date().toISOString(),
@@ -235,16 +212,13 @@ export async function POST(request: Request) {
       creditId = creditRow.id as string
     }
 
-    const baseAmount = Math.floor((amount / installmentCount) * 100) / 100
-    const remainder = Math.round((amount - (baseAmount * installmentCount)) * 100) / 100
-    const dueDateBase = providedDueDate ?? new Date()
-    const useProvidedBase = providedDueDate !== null
-
-    const installmentsToInsert = Array.from({ length: installmentCount }, (_, index) => ({
+    const installmentsToInsert = creditPlan.installments.map(installment => ({
       credit_id: creditId,
-      installment_number: nextInstallmentNumber + index,
-      due_date: buildDueDate(dueDateBase, index, frequency, useProvidedBase).toISOString(),
-      amount: Number((index === installmentCount - 1 ? baseAmount + remainder : baseAmount).toFixed(2)),
+      installment_number: installment.installmentNumber,
+      due_date: installment.dueDate.toISOString(),
+      amount: installment.amount,
+      principal_component: installment.principalComponent,
+      interest_component: installment.interestComponent,
       status: 'pending',
     }))
 
@@ -277,6 +251,8 @@ export async function POST(request: Request) {
       success: true,
       creditId,
       installmentCount,
+      financedTotal: creditPlan.financedTotal,
+      interestAmount: creditPlan.interestAmount,
     })
   } catch (error) {
     console.error('[credits/sale] Unhandled error:', error)

@@ -39,6 +39,18 @@ import { withBranchFilter } from '@/lib/branches/client'
 import { formatCurrency } from '@/lib/currency'
 import { COMPLETED_SALE_STATUSES, PENDING_SALE_STATUSES, isCompletedSaleStatus } from '@/lib/sales-status'
 import { cn } from '@/lib/utils'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useAuth } from '@/contexts/auth-context'
+import { useCashRegister } from '@/hooks/useCashRegister'
 
 // Dynamic imports
 const RecentActivity = dynamic(
@@ -172,6 +184,62 @@ export default function DashboardPage() {
     { title: 'Stock bajo', value: '—', icon: AlertTriangle, tone: 'amber', href: '/dashboard/products?filter=low_stock' },
     { title: 'Reparaciones', value: '—', icon: Wrench, tone: 'red', href: '/dashboard/repairs' },
   ])
+
+  // Caja / Cash Register integration
+  const { user } = useAuth()
+  const {
+    currentSession,
+    checkOpenSession,
+    openRegister: hookOpenRegister,
+    closeRegister: hookCloseRegister,
+    loading: registerLoading,
+  } = useCashRegister()
+
+  const [activeRegisterId, setActiveRegisterId] = useState<string>('principal')
+  const [isOpenRegisterDialogOpen, setIsOpenRegisterDialogOpen] = useState(false)
+  const [openingAmount, setOpeningAmount] = useState('')
+  const [openingNote, setOpeningNote] = useState('')
+  const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false)
+  const [closingCountedAmount, setClosingCountedAmount] = useState('')
+
+  // Sync active register with localstorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pos_active_register_id') ?? 'principal'
+      setActiveRegisterId(saved)
+    }
+  }, [])
+
+  // Check open session
+  useEffect(() => {
+    if (activeRegisterId) {
+      checkOpenSession(activeRegisterId)
+    }
+  }, [activeRegisterId, checkOpenSession])
+
+  const parsedOpeningAmount = useMemo(() => {
+    const n = Number(openingAmount)
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  }, [openingAmount])
+
+  const isOpeningAmountValid = parsedOpeningAmount > 0
+
+  const parsedClosingAmount = useMemo(() => {
+    const n = Number(closingCountedAmount)
+    return Number.isFinite(n) && n >= 0 ? n : null
+  }, [closingCountedAmount])
+
+  const expectedBalance = useMemo(() => {
+    if (!currentSession) return 0
+    return currentSession.movements.reduce((sum, mov) => {
+      if (mov.type === 'opening' || mov.type === 'sale' || mov.type === 'cash_in') {
+        return sum + mov.amount
+      } else if (mov.type === 'cash_out') {
+        return sum - mov.amount
+      }
+      return sum
+    }, 0)
+  }, [currentSession])
 
   const fetchDashboardStats = useCallback(async () => {
     if (!config.supabase.isConfigured) return
@@ -375,13 +443,42 @@ export default function DashboardPage() {
           </div>
           <p className="text-sm capitalize text-slate-500 dark:text-slate-400">{today}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm" className="gap-2">
-            <Link href="/dashboard/reports">
-              <BarChart3 className="h-3.5 w-3.5" />
-              Reportes
-            </Link>
-          </Button>
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Botón dinámico de Caja (Llamativo y cambia de color) */}
+          {currentSession ? (
+            <Button
+              onClick={() => {
+                setClosingCountedAmount('')
+                setIsCloseDialogOpen(true)
+              }}
+              disabled={registerLoading}
+              type="button"
+              className="gap-2 h-10 px-5 text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-lg shadow-emerald-500/20 border-0 transition-all duration-300 transform hover:scale-[1.02]"
+            >
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-300"></span>
+              </span>
+              Caja Abierta (Cerrar)
+            </Button>
+          ) : (
+            <Button
+              onClick={() => {
+                setOpeningAmount('')
+                setOpeningNote('')
+                setIsOpenRegisterDialogOpen(true)
+              }}
+              disabled={registerLoading}
+              type="button"
+              className="gap-2 h-10 px-5 text-sm font-bold bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white shadow-lg shadow-red-500/20 border-0 transition-all duration-300 transform hover:scale-[1.02] animate-pulse"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-200"></span>
+              </span>
+              Abrir Caja
+            </Button>
+          )}
+
           <Button asChild size="sm" className="gap-2">
             <Link href="/dashboard/pos">
               <Plus className="h-3.5 w-3.5" />
@@ -404,7 +501,12 @@ export default function DashboardPage() {
             className="gap-2"
             onClick={() => {
               if (!canRefresh) return
-              startTransition(() => fetchDashboardStats())
+              startTransition(() => {
+                fetchDashboardStats()
+                if (activeRegisterId) {
+                  checkOpenSession(activeRegisterId).catch(() => {})
+                }
+              })
             }}
             disabled={loadingStats || isPending || !canRefresh}
             title={!canRefresh ? 'Esperá 30s entre actualizaciones' : undefined}
@@ -520,6 +622,165 @@ export default function DashboardPage() {
           </Link>
         ))}
       </section>
+
+      {/* Dialogs for Cash Register Control */}
+      <Dialog open={isOpenRegisterDialogOpen} onOpenChange={setIsOpenRegisterDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Abrir Caja</DialogTitle>
+            <DialogDescription>
+              Ingrese el monto inicial en caja para comenzar el turno.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="amount">Monto Inicial (Gs)</Label>
+              <Input
+                id="amount"
+                type="number"
+                inputMode="decimal"
+                value={openingAmount}
+                onChange={(e) => setOpeningAmount(e.target.value)}
+                placeholder="0"
+                autoFocus
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="note">Nota (Opcional)</Label>
+              <Input
+                id="note"
+                value={openingNote}
+                onChange={(e) => setOpeningNote(e.target.value)}
+                placeholder="Ej. Turno mañana"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setIsOpenRegisterDialogOpen(false)}>Cancelar</Button>
+            <Button
+              disabled={!isOpeningAmountValid || registerLoading}
+              type="button"
+              onClick={async () => {
+                const ok = await hookOpenRegister(activeRegisterId, parsedOpeningAmount, user?.id)
+                if (ok) {
+                  setIsOpenRegisterDialogOpen(false)
+                  setOpeningAmount('')
+                  setOpeningNote('')
+                }
+              }}
+            >
+              {registerLoading ? 'Abriendo...' : 'Abrir Caja'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCloseDialogOpen} onOpenChange={(open) => {
+        setIsCloseDialogOpen(open)
+        if (!open) setClosingCountedAmount('')
+      }}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Cerrar Caja</DialogTitle>
+            <DialogDescription>
+              Registre el monto físico contado en caja para calcular diferencias.
+            </DialogDescription>
+          </DialogHeader>
+
+          {currentSession && (
+            <div className="rounded-lg border bg-muted/40 p-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Apertura:</span>
+                <span className="font-semibold">
+                  {new Intl.NumberFormat('es-PY').format(currentSession.opening_balance)} Gs.
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ventas registradas:</span>
+                <span className="font-semibold text-emerald-600">
+                  +{new Intl.NumberFormat('es-PY').format(
+                    currentSession.movements.filter(m => m.type === 'sale').reduce((s, m) => s + m.amount, 0)
+                  )} Gs.
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ingresos (Varios):</span>
+                <span className="font-semibold text-emerald-600">
+                  +{new Intl.NumberFormat('es-PY').format(
+                    currentSession.movements.filter(m => m.type === 'cash_in').reduce((s, m) => s + m.amount, 0)
+                  )} Gs.
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Egresos:</span>
+                <span className="font-semibold text-rose-600">
+                  -{new Intl.NumberFormat('es-PY').format(
+                    currentSession.movements.filter(m => m.type === 'cash_out').reduce((s, m) => s + m.amount, 0)
+                  )} Gs.
+                </span>
+              </div>
+              <div className="h-px bg-border my-2" />
+              <div className="flex justify-between font-bold">
+                <span>Esperado en caja:</span>
+                <span className="text-blue-700 dark:text-blue-400">
+                  {new Intl.NumberFormat('es-PY').format(expectedBalance)} Gs.
+                </span>
+              </div>
+              {parsedClosingAmount !== null && (
+                <div className={`flex justify-between font-bold ${
+                  parsedClosingAmount === expectedBalance
+                    ? 'text-emerald-600'
+                    : 'text-amber-600'
+                }`}>
+                  <span>Diferencia:</span>
+                  <span>
+                    {parsedClosingAmount > expectedBalance ? '+' : ''}
+                    {new Intl.NumberFormat('es-PY').format(parsedClosingAmount - expectedBalance)} Gs.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid gap-2">
+            <Label htmlFor="closing-counted">Monto real contado en caja (Gs)</Label>
+            <Input
+              id="closing-counted"
+              type="number"
+              inputMode="decimal"
+              value={closingCountedAmount}
+              onChange={(e) => setClosingCountedAmount(e.target.value)}
+              placeholder={`Ej: ${new Intl.NumberFormat('es-PY').format(expectedBalance)}`}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              Cuente el efectivo físico de la caja y anote el monto final aquí.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => {
+              setIsCloseDialogOpen(false)
+              setClosingCountedAmount('')
+            }}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={parsedClosingAmount === null || registerLoading}
+              type="button"
+              onClick={async () => {
+                if (parsedClosingAmount === null) return
+                const ok = await hookCloseRegister(parsedClosingAmount, user?.id)
+                if (ok) {
+                  setIsCloseDialogOpen(false)
+                  setClosingCountedAmount('')
+                }
+              }}
+            >
+              {registerLoading ? 'Cerrando...' : 'Confirmar Cierre'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

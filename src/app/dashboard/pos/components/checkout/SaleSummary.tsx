@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Wrench } from 'lucide-react'
 import { config, getTaxConfig } from '@/lib/config'
 import { useCheckout } from '../../contexts/CheckoutContext'
+import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 
 interface CartItem {
   id: string
@@ -47,7 +48,15 @@ export function SaleSummary({
   WHOLESALE_DISCOUNT_RATE,
   formatCurrency
 }: SaleSummaryProps) {
-  const { discount } = useCheckout()
+  const { discount, paymentMethod, creditTerms } = useCheckout()
+  const creditSummary = React.useMemo(() => buildPosCreditSummary(cartCalculations.total, creditTerms), [
+    cartCalculations.total,
+    creditTerms.count,
+    creditTerms.frequency,
+    creditTerms.interestRate,
+  ])
+  const isCreditSale = paymentMethod === 'credit'
+  const displayedTotal = isCreditSale ? creditSummary.financedTotal : cartCalculations.total
 
   return (
     <div className="space-y-4">
@@ -119,14 +128,26 @@ export function SaleSummary({
           <span>{getTaxConfig().label} ({getTaxConfig().percentage}%):</span>
           <span>{formatCurrency(cartCalculations.tax)}</span>
         </div>
+        {isCreditSale && (
+          <>
+            <div className="flex justify-between text-blue-700 dark:text-blue-300">
+              <span>Interes credito ({creditTerms.interestRate}%):</span>
+              <span>+{formatCurrency(creditSummary.interestAmount)}</span>
+            </div>
+            <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
+              {creditSummary.installmentCount} cuotas {creditTerms.frequency === 'monthly' ? 'mensuales' : creditTerms.frequency === 'biweekly' ? 'quincenales' : 'semanales'} de{' '}
+              <strong>{formatCurrency(creditSummary.installmentAmount)}</strong>
+            </div>
+          </>
+        )}
       </div>
 
       <Separator />
 
       {/* Total */}
       <div className="flex justify-between font-bold text-lg">
-        <span>Total:</span>
-        <span className="text-primary">{formatCurrency(cartCalculations.total)}</span>
+        <span>{isCreditSale ? 'Total financiado:' : 'Total:'}</span>
+        <span className="text-primary">{formatCurrency(displayedTotal)}</span>
       </div>
 
       {/* Información adicional */}

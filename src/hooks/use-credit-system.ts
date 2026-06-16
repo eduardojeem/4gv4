@@ -308,6 +308,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
       items: Array<{ name: string; quantity: number; price: number }>
       repairIds?: string[]
       dueDate?: string
+      interestRate?: number
       installments?: {
         count: number
         frequency: 'weekly' | 'biweekly' | 'monthly'
@@ -326,7 +327,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
         body: JSON.stringify({
           customerId: customer.id,
           amount: saleData.amount,
-          interestRate: 0,
+          interestRate: saleData.interestRate ?? 0,
           dueDate: saleData.dueDate,
           installments: saleData.installments ?? { count: 1, frequency: 'monthly' },
         })

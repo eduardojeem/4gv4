@@ -10,12 +10,15 @@ export const promoBenefitTypes = [
 
 export type PromoBenefitType = typeof promoBenefitTypes[number]
 
+export type DurationUnit = 'days' | 'months'
+
 export type PromoBenefit = {
   benefit_type: PromoBenefitType
   discount_percent?: number | null
   discount_amount?: number | null
   target_plan?: string | null
   duration_days?: number | null
+  duration_unit?: DurationUnit | null
 }
 
 export type SubscriptionSnapshot = {
@@ -43,6 +46,7 @@ export const promoCodeCreateSchema = z.object({
   discountAmount: optionalPositiveNumber,
   targetPlan: z.string().trim().min(1).max(30).nullable().optional(),
   durationDays: optionalPositiveInteger,
+  durationUnit: z.enum(['days', 'months']).optional().default('days'),
   maxRedemptions: optionalPositiveInteger,
   startsAt: z.iso.datetime().nullable().optional(),
   expiresAt: z.iso.datetime().nullable().optional(),
@@ -65,14 +69,35 @@ export const promoCodeCreateSchema = z.object({
   }
 })
 
-function addDaysFromLatest(now: Date, existing: string | null | undefined, days: number) {
+// Suma meses calendario manteniendo el día (con clamp para meses más cortos:
+// 31 ene + 1 mes → 28/29 feb, no se desborda a marzo).
+function addMonths(base: Date, months: number): Date {
+  const result = new Date(base)
+  const day = result.getDate()
+  result.setMonth(result.getMonth() + months)
+  if (result.getDate() < day) result.setDate(0)
+  return result
+}
+
+// Calcula la nueva fecha sumando la duración al período vigente si está en el futuro
+// (renovación que acumula) o a "ahora" si ya venció. Soporta días o meses.
+function addDurationFromLatest(
+  now: Date,
+  existing: string | null | undefined,
+  value: number,
+  unit: DurationUnit
+) {
   const existingDate = existing ? new Date(existing) : null
   const base = existingDate && !Number.isNaN(existingDate.getTime()) && existingDate > now ? existingDate : now
-  return new Date(base.getTime() + days * 86_400_000).toISOString()
+  const result = unit === 'months'
+    ? addMonths(base, value)
+    : new Date(base.getTime() + value * 86_400_000)
+  return result.toISOString()
 }
 
 export function buildPromoApplication(promo: PromoBenefit, subscription: SubscriptionSnapshot, now = new Date()) {
-  const durationDays = promo.duration_days ?? 0
+  const durationValue = promo.duration_days ?? 0
+  const durationUnit: DurationUnit = promo.duration_unit === 'months' ? 'months' : 'days'
 
   if (promo.benefit_type === 'discount_percent' || promo.benefit_type === 'discount_fixed') {
     return { subscriptionPatch: {}, requiresBillingAction: true }
@@ -84,7 +109,7 @@ export function buildPromoApplication(promo: PromoBenefit, subscription: Subscri
         plan: promo.target_plan?.toUpperCase(),
         status: 'active',
         current_period_starts_at: now.toISOString(),
-        current_period_ends_at: addDaysFromLatest(now, subscription.current_period_ends_at, durationDays),
+        current_period_ends_at: addDurationFromLatest(now, subscription.current_period_ends_at, durationValue, durationUnit),
         cancel_at_period_end: false,
       },
       requiresBillingAction: false,
@@ -95,7 +120,7 @@ export function buildPromoApplication(promo: PromoBenefit, subscription: Subscri
     return {
       subscriptionPatch: {
         status: 'trialing',
-        trial_ends_at: addDaysFromLatest(now, subscription.trial_ends_at, durationDays),
+        trial_ends_at: addDurationFromLatest(now, subscription.trial_ends_at, durationValue, durationUnit),
         cancel_at_period_end: false,
       },
       requiresBillingAction: false,
@@ -105,7 +130,7 @@ export function buildPromoApplication(promo: PromoBenefit, subscription: Subscri
   return {
     subscriptionPatch: {
       status: 'active',
-      current_period_ends_at: addDaysFromLatest(now, subscription.current_period_ends_at, durationDays),
+      current_period_ends_at: addDurationFromLatest(now, subscription.current_period_ends_at, durationValue, durationUnit),
       cancel_at_period_end: false,
     },
     requiresBillingAction: false,

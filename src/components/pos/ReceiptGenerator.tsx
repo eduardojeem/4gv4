@@ -47,6 +47,15 @@ interface ReceiptData {
   payments: PaymentSplit[]
   change?: number
   loyaltyPoints?: number
+  creditInfo?: {
+    baseTotal: number
+    interestAmount: number
+    financedTotal: number
+    installmentCount: number
+    installmentAmount: number
+    frequency: string
+    interestRate: number
+  }
 }
 
 interface ReceiptGeneratorProps {
@@ -238,6 +247,25 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
             <span>-{formatCurrency(receiptData.totalDiscount)}</span>
           </div>
         )}
+        {receiptData.creditInfo && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2 text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
+            <div className="flex justify-between">
+              <span>Subtotal contado:</span>
+              <span>{formatCurrency(receiptData.creditInfo.baseTotal)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Interes credito ({receiptData.creditInfo.interestRate}%):</span>
+              <span>+{formatCurrency(receiptData.creditInfo.interestAmount)}</span>
+            </div>
+            <div className="flex justify-between font-semibold">
+              <span>Total financiado:</span>
+              <span>{formatCurrency(receiptData.creditInfo.financedTotal)}</span>
+            </div>
+            <div className="mt-1 text-xs">
+              {receiptData.creditInfo.installmentCount} cuotas {receiptData.creditInfo.frequency} de {formatCurrency(receiptData.creditInfo.installmentAmount)}
+            </div>
+          </div>
+        )}
 
         {/* Desglose IVA */}
         <div className="border-t border-dashed border-border/50 pt-2 mt-2 space-y-1">
@@ -298,7 +326,7 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
           )}
           <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400 font-bold mt-3 bg-green-50 dark:bg-green-900/20 py-2 rounded">
             <CheckCircle2 className="h-5 w-5" />
-            <span>PAGADO</span>
+            <span>{receiptData.creditInfo ? 'CREDITO REGISTRADO' : 'PAGADO'}</span>
           </div>
         </div>
       </div>

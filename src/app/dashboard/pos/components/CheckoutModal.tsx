@@ -26,17 +26,16 @@ import {
   PackageCheck,
   PackageX,
 } from 'lucide-react'
-import { toast } from 'sonner'
 import { CustomerCreditHistory } from '@/components/pos/CustomerCreditHistory'
 import { useCreditSystem } from '@/hooks/use-credit-system'
-import { CartItem, PaymentSplit } from '../types'
+import { CartItem } from '../types'
 import { Badge } from '@/components/ui/badge'
 import { PaymentMethods } from './checkout/PaymentMethods'
 import { CustomerSelection } from './checkout/CustomerSelection'
 import { SaleSummary } from './checkout/SaleSummary'
 import { PromotionsSection } from './checkout/PromotionsSection'
-import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import type { Promotion } from '@/types/promotion'
+import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 
 import { useCheckout } from '../contexts/CheckoutContext'
 import { usePOSCustomer } from '../contexts/POSCustomerContext'
@@ -139,6 +138,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     setNotes,
     discount,
     setDiscount,
+    creditTerms,
     paymentSplit,
     addPaymentSplit,
     removePaymentSplit
@@ -159,7 +159,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   }
 
   // Sistema de creditos
-  const { canSellOnCredit, createCreditSale, getCreditSummary, loadCreditData } = useCreditSystem()
+  const { canSellOnCredit, getCreditSummary, loadCreditData } = useCreditSystem()
   const [showCreditHistory, setShowCreditHistory] = React.useState(false)
   
   // Cargar datos de credito cuando cambia el cliente
@@ -170,48 +170,15 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   }, [activeCustomer?.id, loadCreditData])
   
   // Verificar si el cliente puede comprar a credito
-  const canUseCredit = activeCustomer && canSellOnCredit(activeCustomer, cartCalculations.total)
+  const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
+    principalAmount: cartCalculations.total,
+    interestRate: creditTerms.interestRate,
+    installmentCount: creditTerms.count,
+    frequency: creditTerms.frequency,
+  }), [cartCalculations.total, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
+  const canUseCredit = activeCustomer && canSellOnCredit(activeCustomer, creditPlan.financedTotal)
+  const displayTotal = paymentMethod === 'credit' ? creditPlan.financedTotal : cartCalculations.total
   const creditSummary = activeCustomer ? getCreditSummary(activeCustomer) : null
-  const processCreditSale = React.useCallback(async () => {
-    if (!activeCustomer) return
-    
-    const saleData = {
-      amount: cartCalculations.total,
-      items: cart.map(item => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price
-      })),
-      repairIds: selectedRepairIds.length > 0 ? selectedRepairIds : undefined
-    }
-    
-    const success = await createCreditSale(activeCustomer, saleData)
-    if (success) {
-      try {
-        if (selectedRepairIds.length > 0) {
-          const supabase = createSupabaseClient()
-          const { error } = await supabase
-            .from('repairs')
-            .update({
-              status: 'entregado',
-              picked_up_at: new Date().toISOString(),
-              delivery_outcome: deliveryOutcome,
-              completed_at: new Date().toISOString(),
-            })
-            .in('id', selectedRepairIds)
-            .select()
-            
-          if (error) throw error
-        }
-      } catch (error) {
-        console.error('Error updating repair status:', error)
-        toast.error('La venta se proceso pero hubo un error al actualizar el estado de las reparaciones. Por favor actualice manualmente.')
-      }
-      // Limpiar carrito y cerrar modal
-      onCancel()
-    }
-  }, [activeCustomer, cartCalculations.total, cart, selectedRepairIds, deliveryOutcome, createCreditSale, onCancel])
-
   return (
     <Dialog open={isCheckoutOpen} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="flex max-h-[90vh] w-[95vw] flex-col p-0 overflow-hidden sm:max-w-3xl md:max-w-5xl lg:max-w-6xl">
@@ -241,7 +208,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             </div>
             <div className="rounded-lg border bg-muted/20 px-3 py-2 text-right">
               <p className="text-[11px] text-muted-foreground">Total</p>
-              <p className="font-semibold text-primary">{formatCurrency(cartCalculations.total)}</p>
+              <p className="font-semibold text-primary">{formatCurrency(displayTotal)}</p>
             </div>
           </div>
         </div>
@@ -532,7 +499,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                   {paymentMethod === 'credit' ? (
                     <Button
                       className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
-                      onClick={processCreditSale}
+                      onClick={processSale}
                       disabled={
                         !isRegisterOpen ||
                         paymentStatus === 'processing' ||
@@ -552,7 +519,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                             Vender a Credito
                           </span>
                           <span className="text-xs font-normal opacity-90 mt-0.5">
-                            Registrar deuda en cuenta corriente
+                            Total financiado {formatCurrency(displayTotal)}
                           </span>
                         </div>
                       )}
@@ -576,7 +543,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                           Procesando...
                         </span>
                       ) : (
-                        <>Confirmar Venta - {formatCurrency(cartCalculations.total)}</>
+                        <>Confirmar Venta - {formatCurrency(displayTotal)}</>
                       )}
                     </Button>
                   )}

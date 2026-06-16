@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 
 type AuthEventAction =
   | 'login'
@@ -31,6 +32,12 @@ const ALLOWED_ACTIONS = new Set<AuthEventAction>([
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit por IP para evitar spam/flooding del log de seguridad.
+    const clientIp = getClientIp(request)
+    if (!rateLimiter.check(clientIp, 30, 60_000)) {
+      return NextResponse.json({ ok: false, error: 'Too many requests' }, { status: 429 })
+    }
+
     const body = (await request.json()) as AuthEventPayload
 
     if (!body.action || !ALLOWED_ACTIONS.has(body.action)) {
@@ -48,8 +55,8 @@ export async function POST(request: NextRequest) {
       p_user_id: body.userId ?? null,
       p_action: body.action,
       p_success: body.success ?? true,
-      p_ip_address: body.ipAddress ?? null,
-      p_user_agent: body.userAgent ?? request.headers.get('user-agent'),
+      p_ip_address: clientIp,
+      p_user_agent: request.headers.get('user-agent'),
       p_details: body.details ?? {},
     })
 

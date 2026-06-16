@@ -44,7 +44,7 @@ interface StockMovement {
 interface SaleData {
   items: CartItem[]
   total: number
-  payment_method: 'cash' | 'card' | 'transfer'
+  payment_method: 'cash' | 'card' | 'transfer' | 'credit'
   customer_id?: string
   notes?: string
 }

@@ -1,11 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth/require-auth'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import {
   WHOLESALE_PRICE_PERMISSION,
   isLegacyWholesaleRole,
   resolveWholesaleAccessForUser,
 } from '@/lib/auth/wholesale-access'
+
+/**
+ * Verifica que el usuario objetivo pertenezca a la organización del admin.
+ * super_admin tiene acceso global. Devuelve una respuesta 403 si no corresponde, o null si OK.
+ */
+async function assertTargetInActorOrg(
+  admin: ReturnType<typeof createAdminSupabase>,
+  actorRole: string,
+  actorId: string,
+  targetUserId: string
+): Promise<NextResponse | null> {
+  if (actorRole === 'super_admin') return null
+
+  const org = await getCurrentOrganizationContext(actorId)
+  if (!org) {
+    return NextResponse.json({ error: 'Sin organización activa.' }, { status: 403 })
+  }
+
+  const [{ data: member }, { data: customer }] = await Promise.all([
+    admin.from('organization_members').select('user_id').eq('organization_id', org.id).eq('user_id', targetUserId).maybeSingle(),
+    admin.from('customers').select('id').eq('organization_id', org.id).eq('profile_id', targetUserId).maybeSingle(),
+  ])
+
+  if (!member && !customer) {
+    return NextResponse.json({ error: 'El cliente no pertenece a tu organización.' }, { status: 403 })
+  }
+  return null
+}
 
 // POST /api/customers/[id]/set-wholesale — habilita o deshabilita acceso mayorista
 export async function POST(
@@ -31,6 +60,10 @@ export async function POST(
     }
 
     const admin = createAdminSupabase()
+
+    // Autorización a nivel de objeto: el cliente debe pertenecer a la org del admin.
+    const orgGuard = await assertTargetInActorOrg(admin, authResult.role, authResult.user.id, customerId)
+    if (orgGuard) return orgGuard
 
     // Verificar que el perfil exista
     const { data: profile, error: fetchError } = await admin
@@ -157,6 +190,9 @@ export async function GET(
 
     const { id: customerId } = await params
     const admin = createAdminSupabase()
+
+    const orgGuard = await assertTargetInActorOrg(admin, authResult.role, authResult.user.id, customerId)
+    if (orgGuard) return orgGuard
 
     const { data: profile, error } = await admin.from('profiles').select('role').eq('id', customerId).maybeSingle()
 

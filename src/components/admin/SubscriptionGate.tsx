@@ -7,6 +7,7 @@ const EMPTY: SubscriptionStatusData = {
   status: null, isBlocked: false, isTrialing: false, trialDaysLeft: null, periodDaysLeft: null,
   planCode: 'FREE', planName: 'Free', modules: [], downgradedFromExpiry: false,
   moduleTrials: [], trialedModules: [],
+  organizationName: null, organizationLogoUrl: null,
 }
 
 export async function SubscriptionGate({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,8 @@ export async function SubscriptionGate({ children }: { children: React.ReactNode
           downgradedFromExpiry: planInfo.downgradedFromExpiry,
           moduleTrials: planInfo.moduleTrials,
           trialedModules: planInfo.trialedModules,
+          organizationName: organization.name,
+          organizationLogoUrl: organization.logoUrl,
         }
       }
     }

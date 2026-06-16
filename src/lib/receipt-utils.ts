@@ -37,6 +37,15 @@ interface ReceiptData {
   payments: PaymentSplit[]
   change?: number
   loyaltyPoints?: number
+  creditInfo?: {
+    baseTotal: number
+    interestAmount: number
+    financedTotal: number
+    installmentCount: number
+    installmentAmount: number
+    frequency: string
+    interestRate: number
+  }
 }
 
 // Generar número de ticket único
@@ -75,6 +84,7 @@ interface Calculations {
   total: number
   change?: number
   loyaltyPoints?: number
+  creditInfo?: ReceiptData['creditInfo']
 }
 
 interface Customer {
@@ -115,7 +125,8 @@ export const createReceiptData = (
     total: calculations.total,
     payments,
     change: (calculations.change || 0) > 0 ? calculations.change : undefined,
-    loyaltyPoints: calculations.loyaltyPoints || 0
+    loyaltyPoints: calculations.loyaltyPoints || 0,
+    creditInfo: calculations.creditInfo
   }
 }
 

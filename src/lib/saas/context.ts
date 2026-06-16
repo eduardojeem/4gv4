@@ -19,45 +19,55 @@ export async function getCurrentOrganizationContext(userId: string): Promise<Org
   const activeOrganizationId = headerStore.get('x-organization-id')
   const supabase = await createClient()
 
-  // Build the query — if no org hint from headers, fetch the first active membership
-  const buildQuery = (client: ReturnType<typeof createClient> | ReturnType<typeof createAdminSupabase>) => {
-    let q = (client as ReturnType<typeof createAdminSupabase>)
+  // Trae TODAS las membresías staff (no-cliente) activas del usuario.
+  const fetchMemberships = (client: ReturnType<typeof createClient> | ReturnType<typeof createAdminSupabase>) =>
+    (client as ReturnType<typeof createAdminSupabase>)
       .from('organization_members')
       .select('role, organizations!inner(id, name, slug, plan, logo_url)')
       .eq('user_id', userId)
       .eq('status', 'active')
       .neq('role', 'customer')
-      .order('created_at', { ascending: true })
-      .limit(1)
 
-    if (requestedSlug) {
-      q = q.eq('organizations.slug', requestedSlug)
-    } else if (activeOrganizationId) {
-      q = q.eq('organization_id', activeOrganizationId)
-    }
-    // No filter = first active org (correct for single-tenant users)
-    return q
-  }
+  let { data, error } = await fetchMemberships(supabase)
 
-  let { data, error } = await buildQuery(supabase).maybeSingle()
-
-  // If auth client fails (e.g. no cookie session on API routes), retry with admin client
-  if (error || !data) {
+  // Retry con admin client si la sesión no está disponible (rutas API).
+  if (error || !data || data.length === 0) {
     const admin = createAdminSupabase()
-    const fallback = await buildQuery(admin).maybeSingle()
+    const fallback = await fetchMemberships(admin)
     data = fallback.data
     error = fallback.error
   }
 
-  if (error || !data) {
+  if (error || !data || data.length === 0) {
     return null
   }
 
-  const organization = Array.isArray(data.organizations) ? data.organizations[0] : data.organizations
+  type MembershipRow = { role: string; organizations: { id: string; name: string; slug: string; plan: string; logo_url: string | null } | { id: string; name: string; slug: string; plan: string; logo_url: string | null }[] }
+  const rows = data as unknown as MembershipRow[]
+  const orgOf = (row: MembershipRow) => (Array.isArray(row.organizations) ? row.organizations[0] : row.organizations)
 
-  if (!organization) {
-    return null
+  // Prioridad de rol para elegir la org "principal": owner > admin > resto.
+  const rolePriority = (role: string) => (role === 'owner' ? 0 : role === 'admin' ? 1 : 2)
+  const byBestRole = [...rows].sort((a, b) => rolePriority(a.role) - rolePriority(b.role))
+
+  let chosen: MembershipRow | null = null
+  if (requestedSlug) {
+    // Ruta con slug (público/tenant): solo si el usuario es miembro de esa tienda.
+    chosen = rows.find((row) => orgOf(row)?.slug === requestedSlug) ?? null
+  } else {
+    // Dashboard/admin: respetar el cookie de org activa si es una membresía válida;
+    // si el cookie es inválido/obsoleto, caer a la mejor org (owner-preferida) en vez de null.
+    if (activeOrganizationId) {
+      chosen = rows.find((row) => orgOf(row)?.id === activeOrganizationId) ?? null
+    }
+    if (!chosen) {
+      chosen = byBestRole[0] ?? null
+    }
   }
+
+  if (!chosen) return null
+  const organization = orgOf(chosen)
+  if (!organization) return null
 
   return {
     id: organization.id,
@@ -65,6 +75,6 @@ export async function getCurrentOrganizationContext(userId: string): Promise<Org
     slug: organization.slug,
     plan: organization.plan as SaaSPlan,
     logoUrl: organization.logo_url,
-    role: mapLegacyRoleToOrganizationRole(data.role),
+    role: mapLegacyRoleToOrganizationRole(chosen.role),
   }
 }

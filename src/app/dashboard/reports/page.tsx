@@ -83,8 +83,9 @@ interface KpiDelta {
 }
 
 export default function ReportsPage() {
-  const { planCode } = useSubscriptionStatus()
+  const { planCode, organizationName } = useSubscriptionStatus()
   const canExport = canExportReports(planCode) // exportar/descargar: Basic en adelante
+  const reportBrand = organizationName || 'Mi Negocio'
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
     to: new Date()
@@ -634,7 +635,7 @@ export default function ReportsPage() {
           
           {canExport ? (
             <ChartExporter
-              title="Reporte de Gestión - 4G Celulares"
+              title={`Reporte de Gestión - ${reportBrand}`}
               data={salesData}
               metrics={{
                 'Ventas Totales': formatFullPrice(totalSales),

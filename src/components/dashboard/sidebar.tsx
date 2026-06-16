@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
+import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import type { UserRole } from '@/lib/auth/roles-permissions'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
@@ -78,6 +79,7 @@ export const Sidebar = memo(function Sidebar() {
   const router = useRouter()
   const { sidebarCollapsed: collapsed, toggleSidebar } = useDashboardLayout()
   const { user, signOut } = useAuth()
+  const { organizationName, organizationLogoUrl } = useSubscriptionStatus()
   const [sidebarBadges, setSidebarBadges] = useState({ repairs: 0, lowStock: 0 })
   const [onboardingDone, setOnboardingDone] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
@@ -169,12 +171,23 @@ export const Sidebar = memo(function Sidebar() {
         {/* Logo */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-linear-to-r from-primary/5 to-primary/10 shrink-0">
           {!collapsed && (
-            <div className="flex items-center space-x-3">
-              <div className="bg-linear-to-br from-blue-600 to-blue-700 p-2.5 rounded-xl shadow-lg">
-                <Smartphone className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-foreground">4G celulares</h1>
+            <div className="flex items-center space-x-3 min-w-0">
+              {organizationLogoUrl ? (
+                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-border bg-white shadow-lg">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={organizationLogoUrl}
+                    alt={organizationName || 'Logo'}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="bg-linear-to-br from-blue-600 to-blue-700 p-2.5 rounded-xl shadow-lg shrink-0">
+                  <Smartphone className="h-6 w-6 text-white" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <h1 className="truncate text-lg font-bold text-foreground">{organizationName || 'Mi Negocio'}</h1>
                 <p className="text-xs text-muted-foreground">Sistema POS</p>
               </div>
             </div>

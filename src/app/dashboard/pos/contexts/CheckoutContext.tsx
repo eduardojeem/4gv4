@@ -2,6 +2,9 @@
 
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 import { PaymentSplit } from '../types'
+import type { CreditTerms } from '../components/checkout/CreditStatusPanel'
+
+const DEFAULT_CREDIT_TERMS: CreditTerms = { count: 1, frequency: 'monthly', interestRate: 0 }
 
 interface CheckoutContextType {
   // Modal State
@@ -34,6 +37,10 @@ interface CheckoutContextType {
   discount: number
   setDiscount: (discount: number) => void
 
+  // Términos de la venta a crédito (cuotas / frecuencia / interés)
+  creditTerms: CreditTerms
+  setCreditTerms: (terms: CreditTerms) => void
+
   // Split Payments
   paymentSplit: PaymentSplit[]
   setPaymentSplit: (splits: PaymentSplit[]) => void
@@ -60,7 +67,8 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   const [splitAmount, setSplitAmount] = useState<number>(0)
   const [notes, setNotes] = useState('')
   const [discount, setDiscount] = useState<number>(0)
-  
+  const [creditTerms, setCreditTerms] = useState<CreditTerms>(DEFAULT_CREDIT_TERMS)
+
   const [paymentSplit, setPaymentSplit] = useState<PaymentSplit[]>([])
 
   const addPaymentSplit = useCallback((method: string, amount: number, reference?: string) => {
@@ -91,6 +99,7 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     setSplitAmount(0)
     setNotes('')
     setDiscount(0)
+    setCreditTerms(DEFAULT_CREDIT_TERMS)
     setPaymentSplit([])
   }, [])
 
@@ -118,6 +127,8 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
       setNotes,
       discount,
       setDiscount,
+      creditTerms,
+      setCreditTerms,
       paymentSplit,
       setPaymentSplit,
       addPaymentSplit,

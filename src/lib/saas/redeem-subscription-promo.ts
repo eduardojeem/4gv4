@@ -110,6 +110,34 @@ export async function redeemSubscriptionPromo(input: RedeemPromoInput): Promise<
     }
   }
 
+  // Activación de plan = venta: registrar un pago como ingreso real (best-effort,
+  // no se revierte la activación si falla el registro contable).
+  if (promo.benefit_type === 'activate_plan') {
+    try {
+      const planCode = (resultingSubscription as { plan?: string | null }).plan ?? application.subscriptionPatch.plan ?? null
+      const { data: planRow } = await admin
+        .from('subscription_plans')
+        .select('price')
+        .eq('tier', String(promo.target_plan ?? '').toLowerCase())
+        .maybeSingle()
+
+      await admin.from('subscription_payments').insert({
+        organization_id: organization.id,
+        subscription_id: subscription.id,
+        plan_id: planCode,
+        amount: Number(planRow?.price ?? 0),
+        currency: 'PYG',
+        status: 'paid',
+        payment_method: 'activation_code',
+        provider: 'activation',
+        external_reference: promo.code,
+        paid_at: now.toISOString(),
+      })
+    } catch (err) {
+      console.error('No se pudo registrar el pago de activación', err)
+    }
+  }
+
   const { error: traceError } = await admin.from('subscription_promo_redemptions').update({ resulting_subscription: resultingSubscription }).eq('id', redemption.id)
   if (traceError) return { success: false, error: 'La promoción fue aplicada, pero no se pudo completar su trazabilidad.', status: 500 }
 

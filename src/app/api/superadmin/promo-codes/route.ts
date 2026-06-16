@@ -23,8 +23,19 @@ export async function GET() {
     redemptionCounts.set(redemption.promo_code_id, (redemptionCounts.get(redemption.promo_code_id) ?? 0) + 1)
   }
 
+  // Detalle de canjes enriquecido con el nombre de la organización (quién activó y cuándo).
+  const orgNameById = new Map((organizations ?? []).map((o: { id: string; name: string }) => [o.id, o.name]))
+  const enrichedRedemptions = (redemptions ?? []).map((r) => ({
+    id: r.id,
+    promo_code_id: r.promo_code_id,
+    organization_id: r.organization_id,
+    organization_name: orgNameById.get(r.organization_id) ?? '—',
+    redeemed_at: r.redeemed_at,
+  }))
+
   return NextResponse.json({
     codes: (codes ?? []).map(code => ({ ...code, redemption_count: redemptionCounts.get(code.id) ?? 0 })),
+    redemptions: enrichedRedemptions,
     organizations: organizations ?? [],
     plans: plans ?? [],
   })
@@ -65,6 +76,7 @@ export async function POST(request: NextRequest) {
       discount_amount: value.discountAmount ?? null,
       target_plan: value.targetPlan?.toUpperCase() ?? null,
       duration_days: value.durationDays ?? null,
+      duration_unit: value.durationUnit ?? 'days',
       max_redemptions: value.maxRedemptions ?? null,
       starts_at: value.startsAt ?? null,
       expires_at: value.expiresAt ?? null,

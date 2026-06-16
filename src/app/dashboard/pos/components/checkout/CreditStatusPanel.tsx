@@ -2,6 +2,15 @@
 import React from 'react'
 import { Clock, AlertCircle, Calendar } from 'lucide-react'
 import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
+import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+
+export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
+
+export interface CreditTerms {
+  count: number
+  frequency: CreditFrequency
+  interestRate: number
+}
 
 interface CreditStatusPanelProps {
   cartTotal: number
@@ -9,17 +18,30 @@ interface CreditStatusPanelProps {
     availableCredit: number
     usedCredit: number
   }
+  terms: CreditTerms
+  onTermsChange: (terms: CreditTerms) => void
   formatCurrency?: (amount: number) => string
 }
 
 export function CreditStatusPanel({
   cartTotal,
   creditSummary,
+  terms,
+  onTermsChange,
   formatCurrency = defaultFormatCurrency
 }: CreditStatusPanelProps) {
+  const installmentCount = Math.max(1, terms.count || 1)
+  const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
+    principalAmount: cartTotal,
+    interestRate: terms.interestRate,
+    installmentCount,
+    frequency: terms.frequency,
+  }), [cartTotal, installmentCount, terms.frequency, terms.interestRate])
+  const estimatedInstallment = creditPlan.installments[0]?.amount ?? 0
+  const frequencyLabel: Record<CreditFrequency, string> = { weekly: 'semanal', biweekly: 'quincenal', monthly: 'mensual' }
   const totalCredit = creditSummary.availableCredit + creditSummary.usedCredit
-  const newBalance = creditSummary.usedCredit + cartTotal
-  const remainingCredit = Math.max(0, creditSummary.availableCredit - cartTotal)
+  const newBalance = creditSummary.usedCredit + creditPlan.financedTotal
+  const remainingCredit = Math.max(0, creditSummary.availableCredit - creditPlan.financedTotal)
   const utilizationPercentage = totalCredit > 0 ? (newBalance / totalCredit) * 100 : 0
   const isNearLimit = utilizationPercentage > 80
 
@@ -120,20 +142,75 @@ export function CreditStatusPanel({
           </div>
         )}
         
-        {/* Información de cuotas */}
+        {/* Condiciones de pago configurables */}
         <div className="mt-3 p-2.5 bg-white/50 dark:bg-gray-900/30 rounded-md border border-blue-200/50 dark:border-blue-800/50">
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-2">
             <Calendar className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-            <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Condiciones:</span>
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Condiciones de pago</span>
           </div>
-          <div className="text-xs text-blue-600 dark:text-blue-400 space-y-0.5">
-            <div className="flex justify-between">
-              <span>• Registro en cuenta corriente</span>
-              <span className="font-semibold">{formatCurrency(cartTotal)}</span>
+          <div className="grid grid-cols-3 gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-blue-600 dark:text-blue-400">Cuotas</span>
+              <input
+                type="number" min={1} max={60} value={terms.count}
+                onChange={e => onTermsChange({ ...terms, count: Math.min(60, Math.max(1, Number(e.target.value) || 1)) })}
+                className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-blue-600 dark:text-blue-400">Frecuencia</span>
+              <select
+                value={terms.frequency}
+                onChange={e => onTermsChange({ ...terms, frequency: e.target.value as CreditFrequency })}
+                className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
+              >
+                <option value="weekly">Semanal</option>
+                <option value="biweekly">Quincenal</option>
+                <option value="monthly">Mensual</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[10px] text-blue-600 dark:text-blue-400">Interés %</span>
+              <input
+                type="number" min={0} step="0.1" value={terms.interestRate}
+                onChange={e => onTermsChange({ ...terms, interestRate: Math.max(0, Number(e.target.value) || 0) })}
+                className="h-8 rounded-md border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 px-2 text-sm"
+              />
+            </label>
+          </div>
+          <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/80 p-3 text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-100">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-blue-600 dark:text-blue-400">Interes</p>
+                <p className="text-sm font-semibold">{formatCurrency(creditPlan.interestAmount)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-blue-600 dark:text-blue-400">Total financiado</p>
+                <p className="text-sm font-semibold">{formatCurrency(creditPlan.financedTotal)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wide text-blue-600 dark:text-blue-400">Monto por cuota</p>
+                <p className="text-sm font-semibold">{formatCurrency(estimatedInstallment)}</p>
+              </div>
             </div>
-            <div className="text-[10px] text-blue-500 dark:text-blue-500 mt-1">
-              Sin intereses • Vencimiento a 30 días
+            <div className="mt-3 max-h-28 overflow-y-auto rounded-md border border-blue-200/80 bg-white/70 text-[11px] dark:border-blue-800/80 dark:bg-slate-950/30">
+              {creditPlan.installments.slice(0, 6).map((installment) => (
+                <div key={installment.installmentNumber} className="grid grid-cols-[1fr_auto_auto] gap-2 border-b border-blue-100 px-2 py-1.5 last:border-b-0 dark:border-blue-900">
+                  <span>Cuota {installment.installmentNumber}</span>
+                  <span>{installment.dueDate.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>
+                  <span className="font-semibold">{formatCurrency(installment.amount)}</span>
+                </div>
+              ))}
+              {creditPlan.installments.length > 6 && (
+                <div className="px-2 py-1.5 text-center text-blue-700 dark:text-blue-300">
+                  +{creditPlan.installments.length - 6} cuotas mas
+                </div>
+              )}
             </div>
+          </div>
+          <div className="mt-2 flex justify-between text-[11px] text-blue-700 dark:text-blue-300">
+            <span>{installmentCount} cuota{installmentCount === 1 ? '' : 's'} {frequencyLabel[terms.frequency]}</span>
+            <span className="font-semibold">≈ {formatCurrency(estimatedInstallment)} c/u</span>
           </div>
         </div>
       </div>

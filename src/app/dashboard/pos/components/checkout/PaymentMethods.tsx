@@ -12,6 +12,7 @@ import { GSIcon } from '@/components/ui/standardized-components'
 import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
 import { useCheckout } from '../../contexts/CheckoutContext'
 import { CreditStatusPanel } from './CreditStatusPanel'
+import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 
 /**
  * Genera sugerencias inteligentes de billetes basadas en el monto total
@@ -80,7 +81,9 @@ export function PaymentMethods({
     setSplitAmount,
     paymentSplit,
     addPaymentSplit,
-    removePaymentSplit
+    removePaymentSplit,
+    creditTerms,
+    setCreditTerms
   } = useCheckout()
 
   // Estado local para el input de efectivo para permitir borrarlo fácilmente (evita que el 0 se quede "pegado")
@@ -132,6 +135,12 @@ export function PaymentMethods({
     { id: 'transfer', label: 'Transferencia', icon: Users, color: 'text-muted-foreground' },
     { id: 'credit', label: 'Crédito', icon: Clock, color: 'text-muted-foreground' }
   ]
+  const creditPlan = React.useMemo(() => buildCreditInstallmentPlan({
+    principalAmount: cartTotal,
+    interestRate: creditTerms.interestRate,
+    installmentCount: creditTerms.count,
+    frequency: creditTerms.frequency,
+  }), [cartTotal, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
 
   return (
     <div className="space-y-4">
@@ -203,6 +212,8 @@ export function PaymentMethods({
             <CreditStatusPanel
               cartTotal={cartTotal}
               creditSummary={creditSummary}
+              terms={creditTerms}
+              onTermsChange={setCreditTerms}
               formatCurrency={formatCurrency}
             />
           )}
@@ -234,8 +245,8 @@ export function PaymentMethods({
                       </p>
                       <div className="space-y-1 text-xs">
                         <div className="flex justify-between">
-                          <span className="text-red-600 dark:text-red-400">Total de la venta:</span>
-                          <span className="font-semibold text-red-800 dark:text-red-200">{formatCurrency(cartTotal)}</span>
+                          <span className="text-red-600 dark:text-red-400">Total financiado:</span>
+                          <span className="font-semibold text-red-800 dark:text-red-200">{formatCurrency(creditPlan.financedTotal)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-red-600 dark:text-red-400">Crédito disponible:</span>
@@ -243,7 +254,7 @@ export function PaymentMethods({
                         </div>
                         <div className="flex justify-between border-t border-red-300 dark:border-red-700 pt-1 mt-1">
                           <span className="text-red-700 dark:text-red-300 font-medium">Faltante:</span>
-                          <span className="font-bold text-red-900 dark:text-red-100">{formatCurrency(cartTotal - creditSummary.availableCredit)}</span>
+                          <span className="font-bold text-red-900 dark:text-red-100">{formatCurrency(creditPlan.financedTotal - creditSummary.availableCredit)}</span>
                         </div>
                       </div>
                     </>

@@ -80,10 +80,12 @@ export async function GET(request: NextRequest) {
     .filter((organization): organization is NonNullable<ReturnType<typeof normalizeMembership>> => Boolean(organization))
 
   const requestedActiveId = request.cookies.get(ACTIVE_ORGANIZATION_COOKIE)?.value
+  // Org por defecto: priorizar donde el usuario es owner > admin > resto (no la más antigua).
+  const rolePriority = (role: string) => (role === 'owner' ? 0 : role === 'admin' ? 1 : 2)
+  const bestByRole = [...organizations].sort((a, b) => rolePriority(a.role) - rolePriority(b.role))[0] ?? null
   const activeOrganization =
     organizations.find((organization) => organization.id === requestedActiveId) ??
-    organizations[0] ??
-    null
+    bestByRole
 
   const response = NextResponse.json({
     organizations,

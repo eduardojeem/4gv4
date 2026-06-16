@@ -1,9 +1,35 @@
 ﻿import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireAdmin, getAuthResponse } from '@/lib/auth/require-auth'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { UserRole } from '@/lib/auth/roles-permissions'
 
 const VALID_ROLES: UserRole[] = ['admin', 'vendedor', 'tecnico', 'cliente']
+
+/** El usuario objetivo debe pertenecer a la org del admin (super_admin = global). */
+async function assertTargetInActorOrg(
+  admin: ReturnType<typeof createAdminSupabase>,
+  actorRole: string,
+  actorId: string,
+  targetUserId: string
+): Promise<NextResponse | null> {
+  if (actorRole === 'super_admin') return null
+
+  const org = await getCurrentOrganizationContext(actorId)
+  if (!org) {
+    return NextResponse.json({ error: 'Sin organización activa.' }, { status: 403 })
+  }
+
+  const [{ data: member }, { data: customer }] = await Promise.all([
+    admin.from('organization_members').select('user_id').eq('organization_id', org.id).eq('user_id', targetUserId).maybeSingle(),
+    admin.from('customers').select('id').eq('organization_id', org.id).eq('profile_id', targetUserId).maybeSingle(),
+  ])
+
+  if (!member && !customer) {
+    return NextResponse.json({ error: 'El usuario no pertenece a tu organización.' }, { status: 403 })
+  }
+  return null
+}
 
 export async function POST(request: Request) {
   try {
@@ -32,6 +58,10 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminSupabase()
+
+    // Autorización a nivel de objeto: el usuario objetivo debe pertenecer a la org del admin.
+    const orgGuard = await assertTargetInActorOrg(admin, auth.role, auth.user.id, user_id)
+    if (orgGuard) return orgGuard
 
     // Actualizar en la tabla user_roles
     const { error: roleError } = await admin

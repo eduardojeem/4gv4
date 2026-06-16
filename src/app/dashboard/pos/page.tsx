@@ -87,6 +87,7 @@ import type { Product } from '@/types/product-unified'
 import { SALE_STATUS } from '@/lib/sales-status'
 import { branchHeaders } from '@/lib/branches/client'
 import { buildQuickItemPayload, getQuickItemApiError } from './lib/quick-item'
+import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
@@ -203,6 +204,7 @@ function POSPageContent() {
     setNotes,
     discount,
     setDiscount,
+    creditTerms,
     paymentSplit,
     setPaymentSplit,
     addPaymentSplit,
@@ -719,11 +721,11 @@ function POSPageContent() {
         const { data: auth } = await supabase.auth.getUser()
         const userId = auth?.user?.id || 'pos-user'
 
-        const methodMap: Record<string, 'efectivo' | 'tarjeta' | 'transferencia'> = {
+        const methodMap: Record<string, string> = {
           cash: 'efectivo',
           card: 'tarjeta',
           transfer: 'transferencia',
-          credit: 'tarjeta',
+          credit: 'credit',
           // Pago mixto: usar efectivo como fallback en esquema actual
           mixed: 'efectivo',
         }
@@ -738,6 +740,41 @@ function POSPageContent() {
           return sum + unitApplied * i.quantity
         }, 0)
         const code = `POS-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0,14)}-${Math.floor(Math.random()*1000)}`
+
+        // Venta a crédito: exige cliente y registra la deuda ANTES de confirmar la venta.
+        // Si no se puede registrar el crédito (ej. cupo insuficiente), se aborta toda la
+        // venta — nunca se entrega mercadería sin dejar registrada la deuda.
+        if (method === 'credit') {
+          if (!selectedCustomer) {
+            throw new Error('Seleccioná un cliente para registrar la venta a crédito.')
+          }
+          try {
+            const creditResponse = await fetch('/api/credits/sale', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customerId: selectedCustomer,
+                amount: totalValue,
+                interestRate: creditTerms.interestRate,
+                installments: { count: creditTerms.count, frequency: creditTerms.frequency },
+              }),
+            })
+            const creditResult = await creditResponse.json().catch(() => null) as { error?: string } | null
+            if (!creditResponse.ok) {
+              throw new Error(creditResult?.error || 'No se pudo registrar la venta a crédito.')
+            }
+          } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error || '')
+            const missingCreditsTables = msg.includes('relation "customer_credits" does not exist')
+              || msg.includes('relation "credit_installments" does not exist')
+            if (missingCreditsTables) {
+              console.warn('Supabase: tablas de créditos no encontradas. Omitiendo creación de crédito.')
+            } else {
+              // Bloquea la venta: el error sube y processSale falla sin persistir la venta.
+              throw error instanceof Error ? error : new Error(msg)
+            }
+          }
+        }
 
         if (!saleId) {
           const { data: saleRow, error: saleError } = await supabase
@@ -784,46 +821,18 @@ function POSPageContent() {
             }
           }
 
-          if (method === 'credit' && selectedCustomer) {
-            try {
-              const creditResponse = await fetch('/api/credits/sale', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  customerId: selectedCustomer,
-                  amount: totalValue,
-                  interestRate: 0,
-                  installments: { count: 12, frequency: 'monthly' },
-                })
-              })
-
-              const creditResult = await creditResponse.json().catch(() => null) as { error?: string } | null
-              if (!creditResponse.ok) {
-                throw new Error(creditResult?.error || 'No se pudo crear la venta a crédito')
-              }
-            } catch (error) {
-              const msg = error instanceof Error ? error.message : String(error || '')
-              const missingCreditsTables = msg.includes('relation "customer_credits" does not exist')
-                || msg.includes('relation "credit_installments" does not exist')
-              if (missingCreditsTables) {
-                console.warn('Supabase: tablas de créditos no encontradas. Omitiendo creación de crédito.')
-              } else {
-                console.error('Error creando crédito desde POS:', msg)
-              }
-            }
-          }
-
           if (!existingSaleId) {
             const productItems = items.filter(i => !i.isService)
             for (const i of productItems) {
-              const newStock = Math.max(0, (i.stock ?? 0) - i.quantity)
-              const { error: updError } = await supabase
-                .from('products')
-                .update({ stock_quantity: newStock, updated_at: new Date().toISOString() })
-                .eq('id', i.id)
-                .select()
-                .maybeSingle()
+              // Descuento atómico (bloqueo de fila + chequeo de stock) para evitar sobreventa.
+              const { data: ok, error: updError } = await supabase.rpc('pos_decrement_stock', {
+                p_product_id: i.id,
+                p_quantity: i.quantity,
+              })
               if (updError) throw new Error(updError.message)
+              if (ok !== true) {
+                throw new Error(`Stock insuficiente para "${i.name}". Actualizá el carrito.`)
+              }
             }
           }
 
@@ -891,7 +900,7 @@ function POSPageContent() {
         throw err
       }
     },
-    [selectedCustomer, selectedRepairIds, finalCostFromSale, markRepairDelivered, deliveryOutcome]
+    [selectedCustomer, selectedRepairIds, finalCostFromSale, markRepairDelivered, deliveryOutcome, creditTerms]
   )
 
   // Estados para búsqueda avanzada
@@ -1584,17 +1593,30 @@ function POSPageContent() {
 
       // Crear datos del ticket
       const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
+      const creditSummaryForReceipt = paymentMethod === 'credit'
+        ? buildPosCreditSummary(cartCalculations.total, creditTerms)
+        : null
+      const receiptCalculations = creditSummaryForReceipt
+        ? {
+            ...cartCalculations,
+            total: creditSummaryForReceipt.financedTotal,
+            creditInfo: {
+              ...creditSummaryForReceipt,
+              interestRate: creditTerms.interestRate,
+            },
+          }
+        : cartCalculations
       const payments = [{
         id: '1',
         method: paymentMethod as any,
-        amount: cartCalculations.total,
+        amount: creditSummaryForReceipt?.financedTotal ?? cartCalculations.total,
         reference: paymentMethod === 'transfer' ? transferReference : undefined,
         cardLast4: paymentMethod === 'card' && cardNumber ? cardNumber.slice(-4) : undefined
       }]
 
       const receiptData = createReceiptData(
         combinedCartItems,
-        cartCalculations,
+        receiptCalculations,
         payments,
         customer,
         'Cajero Principal'
@@ -1625,7 +1647,7 @@ function POSPageContent() {
               subtotal: item.price * item.quantity
             })),
             total: (cartCalculations as any).total,
-            payment_method: paymentMethod as 'cash' | 'card' | 'transfer',
+            payment_method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
             customer_id: selectedCustomer || undefined,
             notes: notes || undefined
           })
@@ -1690,7 +1712,7 @@ function POSPageContent() {
         setPaymentStatus('idle')
       }, 600)
     })
-  }, [combinedCartItems, paymentMethod, cashReceived, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing, getCurrentRegister.isOpen, syncSaleWithCashRegister, notes, markRepairDelivered, selectedRepairIds, normalizePaymentError, resetCheckoutState])
+  }, [combinedCartItems, paymentMethod, cashReceived, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing, getCurrentRegister.isOpen, syncSaleWithCashRegister, notes, markRepairDelivered, selectedRepairIds, normalizePaymentError, resetCheckoutState, creditTerms])
 
 
 
