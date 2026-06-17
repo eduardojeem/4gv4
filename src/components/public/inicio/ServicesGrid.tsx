@@ -1,11 +1,13 @@
 'use client'
 
-import { Wrench, CheckCircle, Tag, Clock, ExternalLink } from 'lucide-react'
+import { Wrench, CheckCircle, Tag, Clock, ExternalLink, MessageCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { iconMap } from '@/lib/constants/brand-theme'
 import type { Service } from '@/types/website-settings'
 import { cn } from '@/lib/utils'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { formatWhatsAppPhone, getWhatsAppLink, getBusinessWhatsApp } from '@/lib/whatsapp'
 
 interface ServicesGridProps {
   services: Service[]
@@ -30,7 +32,11 @@ const CARD_BG: Record<string, string> = {
 }
 
 export function ServicesGrid({ services }: ServicesGridProps) {
+  const { settings } = useWebsiteSettings()
+  
   if (services.length === 0) return null
+
+  const orgPhone = settings?.company_info?.whatsapp || settings?.company_info?.phone || ''
 
   return (
     <section className="border-t bg-background py-16 md:py-24">
@@ -55,11 +61,31 @@ export function ServicesGrid({ services }: ServicesGridProps) {
             const IconComponent = iconMap[service.icon] || Wrench
             const cardGradient = CARD_BG[service.color] || CARD_BG.blue
             const rawCtaHref   = service.ctaUrl?.trim()
-            const ctaHref      = rawCtaHref && (rawCtaHref.startsWith('/') || /^https?:\/\//i.test(rawCtaHref))
-              ? rawCtaHref
-              : '/inicio#contacto'
-            const isExternalCta = /^https?:\/\//i.test(ctaHref)
-            const isFeatured   = service.featured
+            
+            // Si ctaUrl es personalizado y no el default anterior, lo respetamos
+            const hasCustomCta = rawCtaHref && 
+              rawCtaHref !== '/inicio#contacto' && 
+              rawCtaHref !== '#contacto' && 
+              (rawCtaHref.startsWith('/') || /^https?:\/\//i.test(rawCtaHref))
+
+            let ctaHref = ''
+            let isExternalCta = true
+
+            if (hasCustomCta) {
+              ctaHref = rawCtaHref
+              isExternalCta = /^https?:\/\//i.test(ctaHref)
+            } else {
+              // Si está vacío o tiene el enlace por defecto roto, abre WhatsApp directamente
+              const phoneToUse = orgPhone || getBusinessWhatsApp()
+              const message = `¡Hola! Me gustaría hacer una consulta sobre el servicio de *${service.title}*`
+              ctaHref = getWhatsAppLink({
+                phone: formatWhatsAppPhone(phoneToUse),
+                message
+              })
+              isExternalCta = true
+            }
+
+            const isFeatured = service.featured
 
             return (
               <div
@@ -130,7 +156,7 @@ export function ServicesGrid({ services }: ServicesGridProps) {
                     variant="outline"
                     size="sm"
                     className={cn(
-                      'mt-auto w-full gap-2 rounded-xl transition-colors',
+                      'mt-auto w-full gap-2 rounded-xl transition-all duration-300',
                       `group-hover:border-transparent group-hover:bg-gradient-to-br ${cardGradient} group-hover:text-white`
                     )}
                   >
@@ -140,7 +166,11 @@ export function ServicesGrid({ services }: ServicesGridProps) {
                       rel={isExternalCta ? 'noopener noreferrer' : undefined}
                     >
                       Consultar
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      {hasCustomCta ? (
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      ) : (
+                        <MessageCircle className="h-3.5 w-3.5 text-green-500 group-hover:text-white transition-colors duration-300" />
+                      )}
                     </a>
                   </Button>
                 </div>
