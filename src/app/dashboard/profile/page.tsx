@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/contexts/auth-context'
 import { config } from '@/lib/config'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -99,6 +100,7 @@ const DEFAULT_PREFS: ProfilePreferences = {
 export default function UserProfilePage() {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
+  const { refreshUser } = useAuth()
 
   const [loading, setLoading] = useState(false)
   const [loadingUser, setLoadingUser] = useState(true)
@@ -334,6 +336,7 @@ export default function UserProfilePage() {
       }
 
       setInitialProfile(normalizedProfile)
+      refreshUser().catch(err => console.warn('Error refreshing auth user:', err))
       return true
     } catch (error: unknown) {
       const userMessage = logAndTranslateError(error, 'Profile Update')
@@ -506,6 +509,10 @@ export default function UserProfilePage() {
                 errors={errors}
                 userId={userId}
                 roleLabel={roleLabel}
+                onAvatarChange={(url) => {
+                  setInitialProfile((p) => ({ ...p, avatarUrl: url }))
+                  refreshUser().catch(err => console.warn('Error refreshing auth user:', err))
+                }}
               />
             )}
 

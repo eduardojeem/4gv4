@@ -280,26 +280,32 @@ export const Header = memo(function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-64 p-2" align="end" forceMount sideOffset={8}>
-              <DropdownMenuLabel className="font-normal p-2">
-                <div className="flex flex-col space-y-1.5">
-                  <p className="text-sm font-semibold leading-none">{user?.profile?.name || 'Usuario'}</p>
-                  <p className="text-xs leading-none text-muted-foreground break-all">
-                    {user?.email || 'usuario@email.com'}
-                  </p>
-                  {user?.role && (
-                    <div className="pt-1">
-                      <span className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded-full font-medium border capitalize",
-                        user.role === 'admin'
-                          ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700/50"
-                          : user.role === 'vendedor'
-                          ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700/50"
-                          : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50"
-                      )}>
-                        {user.role}
-                      </span>
-                    </div>
-                  )}
+              <DropdownMenuLabel className="font-normal p-1">
+                <div className="flex items-center gap-2.5 px-1 py-1.5">
+                  <Avatar className="h-9 w-9 border border-border shadow-sm">
+                    <AvatarImage src={user?.profile?.avatar_url || "/avatars/01.svg"} alt={user?.profile?.name || "Usuario"} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">{userInitials}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col space-y-0.5 min-w-0">
+                    <p className="text-sm font-semibold leading-none truncate">{user?.profile?.name || 'Usuario'}</p>
+                    <p className="text-xs leading-none text-muted-foreground break-all truncate">
+                      {user?.email || 'usuario@email.com'}
+                    </p>
+                    {user?.role && (
+                      <div className="pt-0.5">
+                        <span className={cn(
+                          "text-[9px] px-1.5 py-0.5 rounded-full font-medium border capitalize",
+                          user.role === 'admin'
+                            ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700/50"
+                            : user.role === 'vendedor'
+                            ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700/50"
+                            : "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-300 dark:border-gray-600/50"
+                        )}>
+                          {user.role}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator className="my-2" />

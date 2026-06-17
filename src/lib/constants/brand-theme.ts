@@ -1,4 +1,4 @@
-import { Wrench, Package, Shield, Smartphone, Monitor, Battery, Cpu, Zap, Headset, Laptop, Clock, Sparkles, Droplet, Camera } from 'lucide-react'
+import { Wrench, Package, Shield, Smartphone, Monitor, Battery, Cpu, Zap, Headset, Laptop, Clock, Sparkles, Droplet, Camera, Receipt, Wallet, Landmark, Banknote, CreditCard } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 export type BrandColor = 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo' | 'teal' | 'rose' | 'amber' | 'emerald' | 'cyan' | 'sky' | 'custom'
@@ -38,6 +38,8 @@ export const colorMap: Record<string, { bg: string; text: string; hover: string 
   red:     { bg: 'bg-red-100',     text: 'text-red-600',     hover: 'group-hover:bg-red-600' },
   indigo:  { bg: 'bg-indigo-100',  text: 'text-indigo-600',  hover: 'group-hover:bg-indigo-600' },
   teal:    { bg: 'bg-teal-100',    text: 'text-teal-600',    hover: 'group-hover:bg-teal-600' },
+  yellow:  { bg: 'bg-yellow-100',  text: 'text-yellow-700',  hover: 'group-hover:bg-yellow-500' },
+  pink:    { bg: 'bg-pink-100',    text: 'text-pink-600',    hover: 'group-hover:bg-pink-600' },
   rose:    { bg: 'bg-rose-100',    text: 'text-rose-600',    hover: 'group-hover:bg-rose-600' },
   amber:   { bg: 'bg-amber-100',   text: 'text-amber-600',   hover: 'group-hover:bg-amber-600' },
   emerald: { bg: 'bg-emerald-100', text: 'text-emerald-600', hover: 'group-hover:bg-emerald-600' },
@@ -61,6 +63,11 @@ export const iconMap: Record<string, LucideIcon> = {
   droplet: Droplet,
   camera: Camera,
   microchip: Cpu,
+  receipt: Receipt,
+  wallet: Wallet,
+  landmark: Landmark,
+  banknote: Banknote,
+  'credit-card': CreditCard,
 }
 
 export function getBrandTheme(color?: string): BrandTheme {

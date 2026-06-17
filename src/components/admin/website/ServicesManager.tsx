@@ -14,7 +14,7 @@ import {
   Loader2, Save, Briefcase, Wrench, Shield, Package, Check, Plus, Trash2, 
   Smartphone, Monitor, Battery, Cpu, Zap, Headset, ArrowUp, ArrowDown, 
   Clock, Sparkles, Laptop, Edit3, Droplet, Camera,
-  Eye, EyeOff
+  Eye, EyeOff, Receipt, Wallet, Landmark, Banknote, CreditCard
 } from 'lucide-react'
 import { Service } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
@@ -43,6 +43,54 @@ const ICON_OPTIONS = [
   { value: 'droplet', label: 'Agua', icon: Droplet },
   { value: 'camera', label: 'Cámara', icon: Camera },
   { value: 'microchip', label: 'Chip', icon: Cpu },
+  { value: 'receipt', label: 'Facturas', icon: Receipt },
+  { value: 'wallet', label: 'Billetera', icon: Wallet },
+  { value: 'landmark', label: 'Banco', icon: Landmark },
+  { value: 'banknote', label: 'Efectivo', icon: Banknote },
+  { value: 'credit-card', label: 'Tarjeta', icon: CreditCard },
+]
+
+const FINANCIAL_SERVICE_PRESETS: Array<Omit<Service, 'id'>> = [
+  {
+    title: 'Pago de facturas',
+    description: 'Cobro de facturas y servicios con comprobante para tus clientes.',
+    icon: 'receipt',
+    color: 'emerald',
+    benefits: ['Tigo', 'Personal', 'ANDE', 'ESSAP'],
+    active: true,
+    price: 'Consultar comision',
+    priceNote: 'segun operacion',
+    duration: 'En el momento',
+    category: 'Pagos y servicios',
+    featured: true,
+    ctaUrl: '/inicio#contacto',
+  },
+  {
+    title: 'Tigo Money y billeteras',
+    description: 'Atencion para operaciones de billetera digital segun disponibilidad del local.',
+    icon: 'wallet',
+    color: 'sky',
+    benefits: ['Envios', 'Retiros', 'Cargas', 'Pagos'],
+    active: true,
+    price: 'Segun operacion',
+    priceNote: 'consultar condiciones',
+    duration: 'En el momento',
+    category: 'Billeteras digitales',
+    ctaUrl: '/inicio#contacto',
+  },
+  {
+    title: 'Depositos bancarios',
+    description: 'Recepcion de depositos o pagos a cuentas bancarias con confirmacion por comprobante.',
+    icon: 'landmark',
+    color: 'blue',
+    benefits: ['Depositos a cuentas', 'Comprobante', 'Atencion en local'],
+    active: true,
+    price: 'Consultar comision',
+    priceNote: 'segun banco',
+    duration: 'En el momento',
+    category: 'Operaciones bancarias',
+    ctaUrl: '/inicio#contacto',
+  },
 ]
 
 const COLOR_OPTIONS = [
@@ -152,6 +200,26 @@ export function ServicesManager() {
     setEditingService(newService)
     setEditingIndex(null) // null indica que es uno nuevo
     setIsDialogOpen(true)
+  }
+
+  const handleAddPreset = (preset: Omit<Service, 'id'>) => {
+    if (services.length >= 10) {
+      toast.error('Limite de servicios alcanzado', {
+        description: 'Puedes publicar hasta 10 servicios en la pagina.',
+      })
+      return
+    }
+
+    const newService: Service = {
+      ...preset,
+      id: `service-${Date.now()}-${preset.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      benefits: [...preset.benefits],
+    }
+
+    setServicesDraft([...services, newService])
+    toast.success('Plantilla agregada', {
+      description: 'Revisa el detalle y guarda los cambios para publicarla.',
+    })
   }
 
   const handleApplyChanges = () => {
@@ -281,6 +349,40 @@ export function ServicesManager() {
             }}
             disabled={isSaving || services.length === 0}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="border-emerald-100 dark:border-emerald-900/40">
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Plantillas para pagos y operaciones</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Agrega servicios frecuentes como facturas, billeteras digitales o depositos bancarios y ajustalos antes de publicar.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[520px]">
+              {FINANCIAL_SERVICE_PRESETS.map((preset) => {
+                const IconComp = ICON_OPTIONS.find((option) => option.value === preset.icon)?.icon || Receipt
+                return (
+                  <Button
+                    key={preset.title}
+                    type="button"
+                    variant="outline"
+                    className="h-auto justify-start gap-2 rounded-xl px-3 py-2 text-left"
+                    onClick={() => handleAddPreset(preset)}
+                    disabled={services.length >= 10}
+                  >
+                    <IconComp className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold">{preset.title}</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">{preset.category}</span>
+                    </span>
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

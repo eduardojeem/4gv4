@@ -7,13 +7,22 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { config } from '../src/lib/config'
+import dotenv from 'dotenv'
+import path from 'path'
+
+// Cargar variables de entorno
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+dotenv.config({ path: path.resolve(process.cwd(), '.env') })
 
 const REQUIRED_BUCKETS = ['avatars', 'repair-images', 'product-images']
 
 async function checkStorageStatus() {
   console.log('🔍 Verificando estado de Supabase Storage...\n')
 
-  if (!config.supabase.isConfigured) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
     console.error('❌ Supabase no está configurado')
     console.log('   Verifica las variables de entorno:')
     console.log('   - NEXT_PUBLIC_SUPABASE_URL')
@@ -21,17 +30,17 @@ async function checkStorageStatus() {
     process.exit(1)
   }
 
-  const supabase = createClient(
-    config.supabase.url,
-    config.supabase.anonKey
-  )
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey
+  const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
     // Verificar conexión
     console.log('🔗 Verificando conexión a Supabase...')
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
-    if (authError && !authError.message.includes('session_not_found')) {
+    if (authError && 
+        !authError.message.includes('session_not_found') && 
+        !authError.message.includes('Auth session missing')) {
       console.error('❌ Error de conexión:', authError.message)
       process.exit(1)
     }
@@ -110,8 +119,10 @@ async function checkStorageStatus() {
   }
 }
 
+import { fileURLToPath } from 'url'
+
 // Ejecutar si es llamado directamente
-if (require.main === module) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   checkStorageStatus()
 }
 

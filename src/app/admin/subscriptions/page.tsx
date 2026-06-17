@@ -85,15 +85,66 @@ function limitText(limit: number | null) {
   return limit === null ? 'Ilimitado' : String(limit)
 }
 
+function getRedemptionDetailText(benefit: any) {
+  if (!benefit) return ''
+  const type = benefit.benefit_type
+  const unit = benefit.duration_unit === 'months' ? 'meses' : 'días'
+  const durationText = benefit.duration_days ? `${benefit.duration_days} ${unit}` : ''
+
+  if (type === 'activate_plan') {
+    return `Activación de plan ${benefit.target_plan || ''} por ${durationText}`
+  }
+  if (type === 'extend_trial') {
+    return `Extensión de prueba por ${durationText}`
+  }
+  if (type === 'extend_period') {
+    return `Extensión de período por ${durationText}`
+  }
+  if (type === 'discount_percent') {
+    return `Descuento de ${benefit.discount_percent}%`
+  }
+  if (type === 'discount_fixed') {
+    return `Descuento de ${money(benefit.discount_amount, 'PYG')}`
+  }
+  return 'Beneficio promocional aplicado'
+}
+
 function usagePercent(current: number, limit: number | null) {
   if (limit === null || limit <= 0) return 0
   return Math.min(100, Math.round((current / limit) * 100))
 }
 
 function feature(plan: PlanRecord, key: string) {
-  const value = plan.features?.[key]
-  if (typeof value === 'boolean') return value ? 'Incluido' : 'No incluido'
-  if (typeof value === 'string') return value
+  // 1. Check if features is a key-value object map
+  if (plan.features && !Array.isArray(plan.features)) {
+    const value = plan.features[key]
+    if (typeof value === 'boolean') return value ? 'Incluido' : 'No incluido'
+    if (typeof value === 'string') return value
+  }
+
+  // 2. Check if features is a JSON array of objects
+  if (Array.isArray(plan.features)) {
+    const found = plan.features.find((f: any) => {
+      const label = String(f?.label || '').toLowerCase()
+      if (key === 'marketplace') {
+        return label.includes('marketplace') || label.includes('ecommerce')
+      }
+      if (key === 'analytics') {
+        return label.includes('analytics') || label.includes('analítica') || label.includes('analysis')
+      }
+      if (key === 'credits') {
+        return label.includes('crédito') || label.includes('cuota')
+      }
+      return label.includes(key.toLowerCase())
+    })
+
+    if (found) {
+      if (typeof found.value === 'boolean') return found.value ? 'Incluido' : 'No incluido'
+      if (typeof found.value === 'string') return found.value
+    }
+  }
+
+  // 3. Fallback to modules
   return plan.modules.includes(key) ? 'Incluido' : 'No incluido'
 }
 
@@ -333,6 +384,7 @@ export default async function AdminSubscriptionsPage() {
           marketplace: feature(plan, 'marketplace'),
           analytics: feature(plan, 'analytics'),
           credits: feature(plan, 'credits'),
+          isPopular: plan.is_popular,
         }))}
       />
 
@@ -364,27 +416,56 @@ export default async function AdminSubscriptionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {state.payments.map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell>{date(payment.paid_at || payment.created_at)}</TableCell>
-                    <TableCell>{state.plans.find((p) => p.code === payment.plan_id)?.name || payment.plan_id || state.currentPlan.name}</TableCell>
-                    <TableCell>{money(payment.amount, payment.currency)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={cn('rounded-full border', statusTone(payment.status))}>
-                        {statusLabels[payment.status] || payment.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{payment.payment_method || payment.provider || 'manual'}</TableCell>
-                    <TableCell>{payment.external_reference || payment.provider_payment_id || '-'}</TableCell>
-                    <TableCell>
-                      {payment.receipt_url ? (
-                        <Button asChild size="sm" variant="outline">
-                          <a href={payment.receipt_url} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Ver</a>
-                        </Button>
-                      ) : '-'}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {state.payments.map((payment) => {
+                  const isActivationCode = payment.payment_method === 'activation_code' || payment.provider === 'activation'
+                  const matchingRedemption = isActivationCode
+                    ? state.promoRedemptions?.find((r) => r.benefit_snapshot?.code === payment.external_reference)
+                    : null
+                  return (
+                    <TableRow key={payment.id}>
+                      <TableCell>{date(payment.paid_at || payment.created_at)}</TableCell>
+                      <TableCell>{state.plans.find((p) => p.code === payment.plan_id)?.name || payment.plan_id || state.currentPlan.name}</TableCell>
+                      <TableCell>{money(payment.amount, payment.currency)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn('rounded-full border', statusTone(payment.status))}>
+                          {statusLabels[payment.status] || payment.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {isActivationCode ? (
+                          <Badge variant="secondary" className="bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-800 font-medium">
+                            Código de Activación
+                          </Badge>
+                        ) : (
+                          payment.payment_method || payment.provider || 'manual'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isActivationCode ? (
+                          <div className="space-y-1">
+                            <span className="font-mono font-semibold text-violet-700 dark:text-violet-400">
+                              {payment.external_reference}
+                            </span>
+                            {matchingRedemption && (
+                              <p className="text-[10px] text-muted-foreground leading-tight">
+                                {getRedemptionDetailText(matchingRedemption.benefit_snapshot)}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          payment.external_reference || payment.provider_payment_id || '-'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {payment.receipt_url ? (
+                          <Button asChild size="sm" variant="outline">
+                            <a href={payment.receipt_url} target="_blank" rel="noreferrer"><ExternalLink className="mr-2 h-4 w-4" />Ver</a>
+                          </Button>
+                        ) : '-'}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           )}

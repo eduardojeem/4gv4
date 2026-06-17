@@ -86,6 +86,15 @@ export const OffersSectionSchema = z.object({
   accentColor: z.enum(['brand', 'rose', 'amber', 'orange', 'emerald', 'blue', 'sky', 'violet', 'fuchsia', 'red', 'teal']),
 })
 
+const ServiceCtaUrlSchema = z.string()
+  .max(200, 'Enlace CTA no puede exceder 200 caracteres')
+  .optional()
+  .or(z.literal(''))
+  .refine(
+    (value) => !value || value.startsWith('/') || /^https?:\/\//i.test(value),
+    'Enlace CTA debe ser relativo o una URL http(s)'
+  )
+
 // Esquema para un servicio individual
 export const ServiceSchema = z.object({
   id: z.string(),
@@ -110,7 +119,12 @@ export const ServiceSchema = z.object({
     'sparkles',
     'droplet',
     'camera',
-    'microchip'
+    'microchip',
+    'receipt',
+    'wallet',
+    'landmark',
+    'banknote',
+    'credit-card'
   ] as const, { error: 'Icono inválido' }),
   color: z.enum([
     'blue',
@@ -138,7 +152,13 @@ export const ServiceSchema = z.object({
       (benefits) => benefits.every(b => b.trim().length > 0),
       'Los beneficios no pueden estar vacíos'
     ),
-  active: z.boolean().optional().default(true)
+  active: z.boolean().optional().default(true),
+  price: z.union([z.string().max(60), z.number().min(0).max(999_999_999)]).nullable().optional(),
+  priceNote: z.string().max(60).optional().or(z.literal('')),
+  duration: z.string().max(60).optional().or(z.literal('')),
+  ctaUrl: ServiceCtaUrlSchema,
+  featured: z.boolean().optional(),
+  category: z.string().max(80).optional().or(z.literal('')),
 })
 
 // Esquema para array de servicios

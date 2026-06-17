@@ -15,6 +15,7 @@ export interface PlanRecord {
   features: Record<string, unknown>
   modules: string[]
   is_active: boolean
+  is_popular?: boolean
 }
 
 export interface SubscriptionRecord {
@@ -79,6 +80,7 @@ export interface OrganizationSubscriptionState {
   usage: OrganizationUsage
   billingProfile: BillingProfile | null
   payments: SubscriptionPayment[]
+  promoRedemptions?: any[]
 }
 
 // Fallback de seguridad. La fuente de verdad es la tabla `plans` (sincronizada desde
@@ -128,6 +130,7 @@ function normalizePlan(row: Record<string, unknown> | null | undefined): PlanRec
     features: typeof row.features === 'object' && row.features ? row.features as Record<string, unknown> : {},
     modules: Array.isArray(row.modules) ? row.modules.map(String) : [],
     is_active: row.is_active !== false,
+    is_popular: row.is_popular === true,
   }
 }
 
@@ -194,6 +197,7 @@ function mergeCommercialPlans(
       limits: typeof row.limits === 'object' && row.limits ? row.limits : commercial.limits,
       features: typeof commercial.features === 'object' && commercial.features ? commercial.features : row.features,
       is_active: commercial.is_active !== false && row.is_active !== false,
+      is_popular: commercial.is_popular === true,
     }
   })
 
@@ -211,6 +215,7 @@ function mergeCommercialPlans(
         features: row.features,
         modules: [],
         is_active: row.is_active,
+        is_popular: row.is_popular === true,
       })
     }
   }
@@ -271,7 +276,16 @@ export async function getCommercialPlanPrices(): Promise<Record<string, number>>
 export async function getCurrentOrganizationSubscription(organizationId: string): Promise<OrganizationSubscriptionState> {
   const supabase = createAdminSupabase()
 
-  const [{ data: subscriptionData }, { data: organizationData }, { data: plansData }, { data: commercialPlansData }, usage, { data: billingData }, { data: paymentsData }] = await Promise.all([
+  const [
+    { data: subscriptionData },
+    { data: organizationData },
+    { data: plansData },
+    { data: commercialPlansData },
+    usage,
+    { data: billingData },
+    { data: paymentsData },
+    { data: redemptionsData }
+  ] = await Promise.all([
     supabase
       .from('subscriptions')
       .select('id, organization_id, plan, status, provider, provider_customer_id, provider_subscription_id, external_reference, payment_status, last_payment_method, started_at, trial_ends_at, current_period_starts_at, current_period_ends_at, cancel_at_period_end, created_at, updated_at')
@@ -289,7 +303,7 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
       .order('code', { ascending: true }),
     supabase
       .from('subscription_plans')
-      .select('tier, name, price, price_note, limits, features, is_active')
+      .select('tier, name, price, price_note, is_popular, limits, features, is_active')
       .eq('is_active', true)
       .order('price', { ascending: true }),
     getOrganizationUsage(organizationId),
@@ -304,6 +318,11 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .limit(25),
+    supabase
+      .from('subscription_promo_redemptions')
+      .select('id, promo_code_id, redeemed_at, benefit_snapshot, redeemed_by')
+      .eq('organization_id', organizationId)
+      .order('redeemed_at', { ascending: false })
   ])
 
   const planRows = plansData ?? []
@@ -326,6 +345,7 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
     usage,
     billingProfile: billingData as BillingProfile | null,
     payments: (paymentsData ?? []) as SubscriptionPayment[],
+    promoRedemptions: redemptionsData ?? [],
   }
 }
 

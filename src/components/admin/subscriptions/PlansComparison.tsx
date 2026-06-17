@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   List,
   Package,
+  Star,
   Users,
   X,
 } from 'lucide-react'
@@ -30,6 +31,7 @@ export type PlanRow = {
   marketplace: string
   analytics: string
   credits: string
+  isPopular?: boolean
 }
 
 type Props = {
@@ -61,6 +63,15 @@ function PlanCard({ plan, isCurrent }: { plan: PlanRow; isCurrent: boolean }) {
           <Badge className="rounded-full bg-primary text-primary-foreground shadow gap-1 text-xs">
             <CheckCircle2 className="h-3 w-3" />
             Plan actual
+          </Badge>
+        </div>
+      )}
+
+      {plan.isPopular && !isCurrent && (
+        <div className="absolute -top-3 left-4">
+          <Badge className="rounded-full bg-violet-600 text-white shadow gap-1 text-xs">
+            <Star className="h-3 w-3" />
+            Más popular
           </Badge>
         </div>
       )}
@@ -122,7 +133,7 @@ function PlanCard({ plan, isCurrent }: { plan: PlanRow; isCurrent: boolean }) {
 }
 
 export function PlansComparison({ plans, currentPlanCode }: Props) {
-  const [view, setView] = useState<'table' | 'cards'>('table')
+  const [view, setView] = useState<'table' | 'cards'>('cards')
 
   return (
     <Card>

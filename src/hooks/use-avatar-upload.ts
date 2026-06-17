@@ -52,7 +52,7 @@ export function useAvatarUpload(userId: string | null) {
   }, [])
 
   // Validar archivo
-  const validateFile = useCallback((file: File): string | null => {
+  const validateFile = useCallback(async (file: File): Promise<string | null> => {
     // Verificar tipo
     if (!file.type.startsWith('image/')) {
       return 'El archivo debe ser una imagen'
@@ -88,7 +88,7 @@ export function useAvatarUpload(userId: string | null) {
         URL.revokeObjectURL(img.src)
       }
       img.src = URL.createObjectURL(file)
-    }) as any
+    })
   }, [])
 
   // Procesar imagen con Web Worker
@@ -148,6 +148,8 @@ export function useAvatarUpload(userId: string | null) {
       error: null
     }))
 
+    let progressInterval: NodeJS.Timeout | null = null
+
     try {
       // Validar archivo
       const validationError = await validateFile(file)
@@ -185,18 +187,23 @@ export function useAvatarUpload(userId: string | null) {
       const filePath = `${userId}/avatar-${Date.now()}.webp`
       
       // Simular progreso de subida
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
         setState(prev => ({ 
           ...prev, 
           progress: Math.min(prev.progress + 10, 90) 
         }))
       }, 200)
 
-      const result = await uploadFile('avatars', filePath, processedFile, { 
-        upsert: true 
-      })
-
-      clearInterval(progressInterval)
+      let result;
+      try {
+        result = await uploadFile('avatars', filePath, processedFile, { 
+          upsert: true 
+        })
+      } finally {
+        if (progressInterval) {
+          clearInterval(progressInterval)
+        }
+      }
 
       if (!result.success) {
         throw new Error(result.error || 'Error subiendo imagen')
@@ -204,14 +211,29 @@ export function useAvatarUpload(userId: string | null) {
 
       setState(prev => ({ ...prev, progress: 95 }))
 
-      // Actualizar perfil en base de datos
-      const { error: upsertError } = await supabase
+      // Intentar actualizar el perfil existente primero (evita problemas de NOT NULL en columnas omitidas)
+      const { data: updateData, error: updateError } = await supabase
         .from('profiles')
-        .upsert({ 
-          id: userId, 
+        .update({ 
           avatar_url: result.url,
           updated_at: new Date().toISOString()
         })
+        .eq('id', userId)
+        .select('id')
+
+      let upsertError = updateError
+
+      // Si no se actualizó ningún registro (el perfil no existe), hacer upsert como fallback
+      if (!updateError && (!updateData || updateData.length === 0)) {
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .upsert({ 
+            id: userId, 
+            avatar_url: result.url,
+            updated_at: new Date().toISOString()
+          })
+        upsertError = insertError
+      }
 
       if (upsertError) {
         console.warn('Error actualizando perfil:', upsertError)
@@ -248,6 +270,9 @@ export function useAvatarUpload(userId: string | null) {
       }
 
     } catch (error) {
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
       
       setState(prev => ({ 
@@ -269,6 +294,72 @@ export function useAvatarUpload(userId: string | null) {
       return { success: false, error: errorMessage }
     }
   }, [userId, supabase, validateFile, processImage, state.previewUrl])
+
+  // Eliminar avatar
+  const removeAvatar = useCallback(async (): Promise<AvatarUploadResult> => {
+    if (!userId) {
+      return { success: false, error: 'Usuario no autenticado' }
+    }
+
+    setState(prev => ({
+      ...prev,
+      isUploading: true,
+      progress: 50,
+      error: null
+    }))
+
+    try {
+      // Intentar actualizar el perfil en la base de datos a null
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ 
+          avatar_url: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', userId)
+
+      if (updateError) throw updateError
+
+      // Actualizar auth metadata
+      try {
+        if ('updateUser' in supabase.auth) {
+          await (supabase.auth as any).updateUser({ 
+            data: { avatar_url: null } 
+          })
+        }
+      } catch (authError) {
+        console.warn('Error actualizando auth metadata:', authError)
+      }
+
+      setState(prev => ({ 
+        ...prev, 
+        progress: 100, 
+        isUploading: false,
+        previewUrl: null
+      }))
+
+      toast.success('Foto de perfil eliminada')
+
+      return { 
+        success: true, 
+        url: ''
+      }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      
+      setState(prev => ({ 
+        ...prev, 
+        error: errorMessage,
+        isUploading: false,
+        progress: 0
+      }))
+
+      toast.error(errorMessage)
+
+      return { success: false, error: errorMessage }
+    }
+  }, [userId, supabase])
 
   // Cancelar subida
   const cancelUpload = useCallback(() => {
@@ -308,6 +399,7 @@ export function useAvatarUpload(userId: string | null) {
   return {
     ...state,
     uploadAvatar,
+    removeAvatar,
     cancelUpload,
     cleanup,
     isLoading: state.isProcessing || state.isUploading

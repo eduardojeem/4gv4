@@ -3,9 +3,8 @@
 import { Wrench, CheckCircle, Tag, Clock, ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { iconMap, colorMap } from '@/lib/constants/brand-theme'
+import { iconMap } from '@/lib/constants/brand-theme'
 import type { Service } from '@/types/website-settings'
-import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
 interface ServicesGridProps {
@@ -21,6 +20,8 @@ const CARD_BG: Record<string, string> = {
   red:     'from-red-500 to-rose-600',
   indigo:  'from-indigo-500 to-blue-700',
   teal:    'from-teal-500 to-emerald-600',
+  yellow:  'from-yellow-400 to-amber-500',
+  pink:    'from-pink-500 to-rose-600',
   rose:    'from-rose-500 to-pink-600',
   amber:   'from-amber-400 to-orange-500',
   emerald: 'from-emerald-500 to-teal-600',
@@ -44,7 +45,7 @@ export function ServicesGrid({ services }: ServicesGridProps) {
             Nuestros servicios
           </h2>
           <p className="mt-3 text-muted-foreground">
-            Soluciones completas para tu dispositivo con garantía y repuestos de calidad.
+            Servicios publicados por la empresa para consultas y atención directa.
           </p>
         </div>
 
@@ -52,9 +53,12 @@ export function ServicesGrid({ services }: ServicesGridProps) {
         <div className="mx-auto mt-12 grid max-w-5xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {services.map((service, index) => {
             const IconComponent = iconMap[service.icon] || Wrench
-            const colors       = colorMap[service.color] || colorMap.blue
             const cardGradient = CARD_BG[service.color] || CARD_BG.blue
-            const ctaHref      = service.ctaUrl || '/inicio#contacto'
+            const rawCtaHref   = service.ctaUrl?.trim()
+            const ctaHref      = rawCtaHref && (rawCtaHref.startsWith('/') || /^https?:\/\//i.test(rawCtaHref))
+              ? rawCtaHref
+              : '/inicio#contacto'
+            const isExternalCta = /^https?:\/\//i.test(ctaHref)
             const isFeatured   = service.featured
 
             return (
@@ -121,19 +125,24 @@ export function ServicesGrid({ services }: ServicesGridProps) {
                   )}
 
                   {/* CTA */}
-                  <Link href={ctaHref} className="mt-auto block">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        'w-full gap-2 rounded-xl transition-colors',
-                        `group-hover:border-transparent group-hover:bg-gradient-to-br ${cardGradient} group-hover:text-white`
-                      )}
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'mt-auto w-full gap-2 rounded-xl transition-colors',
+                      `group-hover:border-transparent group-hover:bg-gradient-to-br ${cardGradient} group-hover:text-white`
+                    )}
+                  >
+                    <a
+                      href={ctaHref}
+                      target={isExternalCta ? '_blank' : undefined}
+                      rel={isExternalCta ? 'noopener noreferrer' : undefined}
                     >
                       Consultar
                       <ExternalLink className="h-3.5 w-3.5" />
-                    </Button>
-                  </Link>
+                    </a>
+                  </Button>
                 </div>
               </div>
             )

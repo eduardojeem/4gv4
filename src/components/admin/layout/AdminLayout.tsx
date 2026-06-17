@@ -360,28 +360,34 @@ function AdminLayoutContent({ children }: AdminLayoutProps) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-64 p-2" align="end" forceMount sideOffset={8}>
-                  <DropdownMenuLabel className="p-2 font-normal">
-                    <div className="flex flex-col space-y-1.5">
-                      <p className="text-sm font-semibold leading-none">{user?.profile?.name || 'Usuario'}</p>
-                      <p className="break-all text-xs leading-none text-muted-foreground">
-                        {user?.email || 'usuario@email.com'}
-                      </p>
-                      {user?.role && (
-                        <div className="pt-1">
-                          <span
-                            className={cn(
-                              'rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
-                              user.role === 'admin'
-                                ? 'border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-700/50 dark:bg-purple-900/30 dark:text-purple-300'
-                                : user.role === 'vendedor'
-                                  ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-700/50 dark:bg-blue-900/30 dark:text-blue-300'
-                                  : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-600/50 dark:bg-gray-800/50 dark:text-gray-300'
-                            )}
-                          >
-                            {user.role}
-                          </span>
-                        </div>
-                      )}
+                  <DropdownMenuLabel className="p-1 font-normal">
+                    <div className="flex items-center gap-2.5 px-1 py-1.5">
+                      <Avatar className="h-9 w-9 border border-border shadow-sm">
+                        <AvatarImage src={user?.profile?.avatar_url || '/avatars/01.svg'} alt={user?.profile?.name || 'Usuario'} />
+                        <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">{userInitials}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col space-y-0.5 min-w-0">
+                        <p className="text-sm font-semibold leading-none truncate">{user?.profile?.name || 'Usuario'}</p>
+                        <p className="break-all text-xs leading-none text-muted-foreground truncate">
+                          {user?.email || 'usuario@email.com'}
+                        </p>
+                        {user?.role && (
+                          <div className="pt-0.5">
+                            <span
+                              className={cn(
+                                'rounded-full border px-1.5 py-0.5 text-[9px] font-medium capitalize',
+                                user.role === 'admin'
+                                  ? 'border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-700/50 dark:bg-purple-900/30 dark:text-purple-300'
+                                  : user.role === 'vendedor'
+                                    ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-700/50 dark:bg-blue-900/30 dark:text-blue-300'
+                                    : 'border-gray-200 bg-gray-50 text-gray-700 dark:border-gray-600/50 dark:bg-gray-800/50 dark:text-gray-300'
+                              )}
+                            >
+                              {user.role}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator className="my-2" />

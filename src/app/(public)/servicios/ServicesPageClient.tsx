@@ -35,6 +35,8 @@ const CARD_BG: Record<string, string> = {
   red:     'from-red-500 to-rose-600',
   indigo:  'from-indigo-500 to-blue-700',
   teal:    'from-teal-500 to-emerald-600',
+  yellow:  'from-yellow-400 to-amber-500',
+  pink:    'from-pink-500 to-rose-600',
   rose:    'from-rose-500 to-pink-600',
   amber:   'from-amber-400 to-orange-500',
   emerald: 'from-emerald-500 to-teal-600',
@@ -85,10 +87,10 @@ export function ServicesPageClient({ services, companyName, whatsapp }: Services
           <div>
             <Badge className="border-primary/20 bg-primary/10 text-primary hover:bg-primary/10">
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              Servicio técnico profesional
+              Servicios disponibles
             </Badge>
             <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight text-foreground sm:text-5xl">
-              Soluciones confiables para tus dispositivos
+              Soluciones y servicios para el dia a dia
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
               Conocé los servicios de {companyName}, compará opciones y consultá directamente con nuestro equipo.
@@ -109,9 +111,9 @@ export function ServicesPageClient({ services, companyName, whatsapp }: Services
 
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
             {[
-              { icon: ShieldCheck, title: 'Trabajo garantizado', text: 'Atención profesional y respaldo.' },
-              { icon: Clock3, title: 'Tiempos claros', text: 'Duración informada en cada servicio.' },
-              { icon: MessageCircle, title: 'Consulta directa', text: 'Coordiná rápidamente por WhatsApp.' },
+              { icon: ShieldCheck, title: 'Atencion confiable', text: 'Informacion clara y respaldo.' },
+              { icon: Clock3, title: 'Condiciones claras', text: 'Tiempo, precio o comision visible.' },
+              { icon: MessageCircle, title: 'Consulta directa', text: 'Coordina rapidamente por WhatsApp.' },
             ].map(({ icon: Icon, title, text }) => (
               <div key={title} className="flex gap-3 rounded-2xl border border-primary/10 bg-background/85 p-4 shadow-sm backdrop-blur">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -151,6 +153,12 @@ export function ServicesPageClient({ services, companyName, whatsapp }: Services
                     const Icon = iconMap[service.icon] || Wrench
                     const cardGradient = CARD_BG[service.color] || CARD_BG.blue
                     const benefits = Array.isArray(service.benefits) ? service.benefits.filter(Boolean) : []
+                    const ctaHref = service.ctaUrl?.trim()
+                    const isExternalCta = /^https?:\/\//i.test(ctaHref || '')
+                    const ctaButtonClass = cn(
+                      'w-full gap-2 rounded-xl font-bold transition-colors shadow-sm',
+                      `group-hover:border-transparent group-hover:bg-gradient-to-br ${cardGradient} group-hover:text-white`
+                    )
 
                     return (
                       <article
@@ -215,20 +223,30 @@ export function ServicesPageClient({ services, companyName, whatsapp }: Services
                           )}
 
                           <div className="mt-auto pt-2">
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                'w-full gap-2 rounded-xl font-bold transition-colors shadow-sm',
-                                `group-hover:border-transparent group-hover:bg-gradient-to-br ${cardGradient} group-hover:text-white`
-                              )}
-                              onClick={() => handleContactService(service.title)}
-                              disabled={!canContact}
-                            >
-                              <MessageCircle className="h-4 w-4" />
-                              {canContact ? 'Consultar servicio' : 'Consulta no disponible'}
-                            </Button>
+                            {ctaHref ? (
+                              <Button asChild variant="outline" className={ctaButtonClass}>
+                                <a
+                                  href={ctaHref}
+                                  target={isExternalCta ? '_blank' : undefined}
+                                  rel={isExternalCta ? 'noopener noreferrer' : undefined}
+                                >
+                                  <MessageCircle className="h-4 w-4" />
+                                  Consultar servicio
+                                </a>
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                className={ctaButtonClass}
+                                onClick={() => handleContactService(service.title)}
+                                disabled={!canContact}
+                              >
+                                <MessageCircle className="h-4 w-4" />
+                                {canContact ? 'Consultar servicio' : 'Consulta no disponible'}
+                              </Button>
+                            )}
                             <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                              Respuesta directa de {companyName}
+                              {ctaHref ? `Mas informacion de ${companyName}` : `Respuesta directa de ${companyName}`}
                             </p>
                           </div>
                         </div>

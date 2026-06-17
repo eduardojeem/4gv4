@@ -315,22 +315,28 @@ export function PublicHeader() {
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-60" align="end" sideOffset={8}>
-                <DropdownMenuLabel className="font-normal pb-0">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold leading-none">
-                        {user?.profile?.name || 'Usuario'}
+              <DropdownMenuContent className="w-64 p-2" align="end" sideOffset={8}>
+                <DropdownMenuLabel className="font-normal p-1">
+                  <div className="flex items-center gap-2.5 px-1 py-1.5">
+                    <Avatar className="h-9 w-9 border border-border shadow-sm">
+                      <AvatarImage src={user?.profile?.avatar_url || ''} alt={user?.profile?.name || 'Usuario'} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">{userInitials}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-semibold leading-none truncate">
+                          {user?.profile?.name || 'Usuario'}
+                        </p>
+                        {isWholesaleUser && (
+                          <Badge className="h-4 px-1 text-[9px] bg-primary/10 text-primary border-primary/20 font-semibold shrink-0">
+                            Mayorista
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs leading-none text-muted-foreground break-all truncate">
+                        {user?.email || 'usuario@email.com'}
                       </p>
-                      {isWholesaleUser && (
-                        <Badge className="h-4 px-1.5 text-[10px] bg-primary/10 text-primary border-primary/20 font-semibold">
-                          Mayorista
-                        </Badge>
-                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground break-all">
-                      {user?.email || 'usuario@email.com'}
-                    </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />

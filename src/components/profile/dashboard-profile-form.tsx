@@ -15,9 +15,10 @@ export interface DashboardProfileFormProps {
   errors: Record<string, string>
   userId: string | null
   roleLabel: string
+  onAvatarChange?: (url: string) => void
 }
 
-export function DashboardProfileForm({ profile, setProfile, errors, userId, roleLabel }: DashboardProfileFormProps) {
+export function DashboardProfileForm({ profile, setProfile, errors, userId, roleLabel, onAvatarChange }: DashboardProfileFormProps) {
   return (
     <div className="space-y-6">
       <Card>
@@ -33,7 +34,10 @@ export function DashboardProfileForm({ profile, setProfile, errors, userId, role
                 userName={profile.name}
                 userId={userId}
                 userEmail={profile.email}
-                onAvatarChange={(url) => setProfile((p) => ({ ...p, avatarUrl: url }))}
+                onAvatarChange={(url) => {
+                  setProfile((p) => ({ ...p, avatarUrl: url }))
+                  onAvatarChange?.(url)
+                }}
                 size="lg"
               />
             </div>
