@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { logger } from '@/lib/logger'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
-import { isModuleEnabled, type SaaSModule } from '@/lib/saas/plans'
+import { type SaaSModule } from '@/lib/saas/plans'
+import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { roleHasPermission, type Permission } from '@/lib/saas/permissions'
 
 export interface TenantAuthContext {
@@ -53,11 +54,14 @@ export function withTenantAuth(options: TenantGuardOptions, handler: TenantAuthe
         )
       }
 
-      if (options.module && !isModuleEnabled(organization.plan, options.module)) {
-        return NextResponse.json(
-          { error: 'Module unavailable', message: 'This module is not enabled for the current plan.' },
-          { status: 402 }
-        )
+      if (options.module) {
+        const planInfo = await getOrganizationPlanInfo(organization.id)
+        if (!planInfo.modules.includes(options.module)) {
+          return NextResponse.json(
+            { error: 'Module unavailable', message: 'This module is not enabled for the current plan.' },
+            { status: 402 }
+          )
+        }
       }
 
       const permissions = options.permission

@@ -13,19 +13,17 @@ type CreateCreditSaleBody = {
   amount?: unknown
   interestRate?: unknown
   dueDate?: unknown
+  saleId?: unknown
   installments?: {
     count?: unknown
     frequency?: unknown
   }
 }
 
-type ExistingCreditRow = {
+type SaleRow = {
   id: string
-  principal: number | string | null
-  interest_rate: number | string | null
-  term_months: number | null
-  start_date: string
-  status: string
+  code: string | null
+  customer_id: string | null
 }
 
 type CustomerRow = {
@@ -43,6 +41,10 @@ type InstallmentRow = {
 function normalizePositiveAmount(value: unknown) {
   const amount = Number(value)
   return Number.isFinite(amount) && amount > 0 ? amount : null
+}
+
+function buildCreditCode() {
+  return `CR-${crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()}`
 }
 
 export async function POST(request: Request) {
@@ -69,6 +71,7 @@ export async function POST(request: Request) {
     const interestRate = Number.isFinite(Number(body.interestRate)) ? Number(body.interestRate) : 0
     const installmentCount = normalizeInstallmentCount(body.installments?.count)
     const frequency = normalizeCreditFrequency(body.installments?.frequency)
+    const saleId = typeof body.saleId === 'string' && body.saleId.trim() ? body.saleId.trim() : null
 
     if (!customerId) {
       return NextResponse.json({ error: 'Cliente inválido.' }, { status: 400 })
@@ -109,29 +112,65 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'El cliente no tiene límite de crédito habilitado.' }, { status: 400 })
     }
 
-    const { data: existingCredit, error: existingCreditError } = await supabase
-      .from('customer_credits')
-      .select('id, principal, interest_rate, term_months, start_date, status')
-      .eq('organization_id', organization.id)
-      .eq('customer_id', customerId)
-      .maybeSingle()
+    let saleRow: SaleRow | null = null
+    if (saleId) {
+      const { data: saleData, error: saleError } = await supabase
+        .from('sales')
+        .select('id, code, customer_id')
+        .eq('id', saleId)
+        .eq('organization_id', organization.id)
+        .maybeSingle()
 
-    if (existingCreditError) {
-      console.error('[credits/sale] Error fetching existing credit:', existingCreditError)
-      return NextResponse.json({ error: 'No se pudo validar la cuenta de crédito del cliente.' }, { status: 500 })
+      if (saleError) {
+        console.error('[credits/sale] Error fetching sale:', saleError)
+        return NextResponse.json({ error: 'No se pudo validar la venta asociada al crédito.' }, { status: 500 })
+      }
+
+      if (!saleData) {
+        return NextResponse.json({ error: 'La venta asociada no existe.' }, { status: 404 })
+      }
+
+      saleRow = saleData as SaleRow
+
+      if (saleRow.customer_id && saleRow.customer_id !== customerId) {
+        return NextResponse.json({ error: 'La venta seleccionada pertenece a otro cliente.' }, { status: 400 })
+      }
+
+      const { data: duplicatedCredit, error: duplicatedCreditError } = await supabase
+        .from('customer_credits')
+        .select('id')
+        .eq('organization_id', organization.id)
+        .eq('sale_id', saleId)
+        .maybeSingle()
+
+      if (duplicatedCreditError) {
+        console.error('[credits/sale] Error checking duplicated sale credit:', duplicatedCreditError)
+        return NextResponse.json({ error: 'No se pudo validar si la venta ya tiene un crédito asociado.' }, { status: 500 })
+      }
+
+      if (duplicatedCredit?.id) {
+        return NextResponse.json({ error: 'La venta seleccionada ya tiene un crédito asociado.' }, { status: 409 })
+      }
     }
 
-    let creditId: string
-    let previousCreditSnapshot: ExistingCreditRow | null = null
+    const { data: existingCredits, error: existingCreditsError } = await supabase
+      .from('customer_credits')
+      .select('id')
+      .eq('organization_id', organization.id)
+      .eq('customer_id', customerId)
 
-    const { data: existingInstallments, error: existingInstallmentsError } = existingCredit
+    if (existingCreditsError) {
+      console.error('[credits/sale] Error fetching customer credits:', existingCreditsError)
+      return NextResponse.json({ error: 'No se pudo validar el historial de créditos del cliente.' }, { status: 500 })
+    }
+
+    const existingCreditIds = (existingCredits ?? []).map(row => row.id as string).filter(Boolean)
+    const { data: existingInstallments, error: existingInstallmentsError } = existingCreditIds.length > 0
       ? await supabase
           .from('credit_installments')
           .select('installment_number, amount, status, amount_paid')
-          .eq('credit_id', existingCredit.id)
-          .order('installment_number', { ascending: false })
-          
-      : { data: null, error: null }
+          .in('credit_id', existingCreditIds)
+      : { data: [], error: null }
 
     if (existingInstallmentsError) {
       console.error('[credits/sale] Error fetching credit installments:', existingInstallmentsError)
@@ -139,14 +178,13 @@ export async function POST(request: Request) {
     }
 
     const installmentRows = (existingInstallments as InstallmentRow[] | null) ?? []
-    const nextInstallmentNumber = (installmentRows[0]?.installment_number ?? 0) + 1
     const creditPlan = buildCreditInstallmentPlan({
       principalAmount: amount,
       interestRate,
       installmentCount,
       frequency,
       firstDueDate: providedDueDate,
-      startInstallmentNumber: nextInstallmentNumber,
+      startInstallmentNumber: 1,
     })
     const currentBalance = installmentRows.reduce((sum, installment) => {
       if (installment.status !== 'pending' && installment.status !== 'late') return sum
@@ -166,54 +204,35 @@ export async function POST(request: Request) {
       )
     }
 
-    const nextTermMonths = nextInstallmentNumber + installmentCount - 1
+    const { data: creditRow, error: createCreditError } = await supabase
+      .from('customer_credits')
+      .insert({
+        customer_id: customerId,
+        organization_id: organization.id,
+        sale_id: saleId,
+        principal: creditPlan.financedTotal,
+        interest_rate: interestRate,
+        term_months: installmentCount,
+        start_date: new Date().toISOString(),
+        status: 'active',
+        credit_code: buildCreditCode(),
+        credit_type: saleId ? 'product_financing' : 'manual',
+        origin_type: saleId ? 'sale' : 'manual',
+        label: saleRow?.code ? `Venta ${saleRow.code}` : 'Credito manual',
+      })
+      .select('id')
+      .single()
 
-    if (existingCredit) {
-      previousCreditSnapshot = existingCredit as ExistingCreditRow
-
-      const updatedPrincipal = Number(existingCredit.principal || 0) + creditPlan.financedTotal
-      const { error: updateCreditError } = await supabase
-        .from('customer_credits')
-        .update({
-          principal: updatedPrincipal,
-          interest_rate: interestRate,
-          term_months: nextTermMonths,
-          status: 'active',
-        })
-        .eq('id', existingCredit.id)
-        .eq('organization_id', organization.id)
-
-      if (updateCreditError) {
-        console.error('[credits/sale] Error updating credit header:', updateCreditError)
-        return NextResponse.json({ error: 'No se pudo actualizar la cuenta de crédito del cliente.' }, { status: 500 })
-      }
-
-      creditId = existingCredit.id
-    } else {
-      const { data: creditRow, error: createCreditError } = await supabase
-        .from('customer_credits')
-        .insert({
-          customer_id: customerId,
-          organization_id: organization.id,
-          principal: creditPlan.financedTotal,
-          interest_rate: interestRate,
-          term_months: installmentCount,
-          start_date: new Date().toISOString(),
-          status: 'active',
-        })
-        .select('id')
-        .single()
-
-      if (createCreditError || !creditRow?.id) {
-        console.error('[credits/sale] Error creating credit header:', createCreditError)
-        return NextResponse.json({ error: 'No se pudo crear la cuenta de crédito del cliente.' }, { status: 500 })
-      }
-
-      creditId = creditRow.id as string
+    if (createCreditError || !creditRow?.id) {
+      console.error('[credits/sale] Error creating credit header:', createCreditError)
+      return NextResponse.json({ error: 'No se pudo crear la cuenta de crédito del cliente.' }, { status: 500 })
     }
+
+    const creditId = creditRow.id as string
 
     const installmentsToInsert = creditPlan.installments.map(installment => ({
       credit_id: creditId,
+      sale_id: saleId,
       installment_number: installment.installmentNumber,
       due_date: installment.dueDate.toISOString(),
       amount: installment.amount,
@@ -228,21 +247,7 @@ export async function POST(request: Request) {
 
     if (installmentsError) {
       console.error('[credits/sale] Error creating installments:', installmentsError)
-
-      if (existingCredit && previousCreditSnapshot) {
-        await supabase
-          .from('customer_credits')
-          .update({
-            principal: previousCreditSnapshot.principal,
-            interest_rate: previousCreditSnapshot.interest_rate,
-            term_months: previousCreditSnapshot.term_months,
-            status: previousCreditSnapshot.status,
-          })
-          .eq('id', existingCredit.id)
-          .eq('organization_id', organization.id)
-      } else {
-        await supabase.from('customer_credits').delete().eq('id', creditId).eq('organization_id', organization.id)
-      }
+      await supabase.from('customer_credits').delete().eq('id', creditId).eq('organization_id', organization.id)
 
       return NextResponse.json({ error: 'No se pudieron generar las cuotas de la venta a crédito.' }, { status: 500 })
     }

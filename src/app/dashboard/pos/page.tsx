@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import React, { useState, useMemo, useCallback, useEffect, memo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -741,45 +741,14 @@ function POSPageContent() {
         }, 0)
         const code = `POS-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0,14)}-${Math.floor(Math.random()*1000)}`
 
-        // Venta a crédito: exige cliente y registra la deuda ANTES de confirmar la venta.
-        // Si no se puede registrar el crédito (ej. cupo insuficiente), se aborta toda la
-        // venta — nunca se entrega mercadería sin dejar registrada la deuda.
-        if (method === 'credit') {
-          if (!selectedCustomer) {
-            throw new Error('Seleccioná un cliente para registrar la venta a crédito.')
-          }
-          try {
-            const creditResponse = await fetch('/api/credits/sale', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                customerId: selectedCustomer,
-                amount: totalValue,
-                interestRate: creditTerms.interestRate,
-                installments: { count: creditTerms.count, frequency: creditTerms.frequency },
-              }),
-            })
-            const creditResult = await creditResponse.json().catch(() => null) as { error?: string } | null
-            if (!creditResponse.ok) {
-              throw new Error(creditResult?.error || 'No se pudo registrar la venta a crédito.')
-            }
-          } catch (error) {
-            const msg = error instanceof Error ? error.message : String(error || '')
-            const missingCreditsTables = msg.includes('relation "customer_credits" does not exist')
-              || msg.includes('relation "credit_installments" does not exist')
-            if (missingCreditsTables) {
-              console.warn('Supabase: tablas de créditos no encontradas. Omitiendo creación de crédito.')
-            } else {
-              // Bloquea la venta: el error sube y processSale falla sin persistir la venta.
-              throw error instanceof Error ? error : new Error(msg)
-            }
-          }
-        }
+        const preGeneratedSaleId = crypto.randomUUID()
+        let saleInserted = false
 
         if (!saleId) {
           const { data: saleRow, error: saleError } = await supabase
             .from('sales')
             .insert({
+              id: preGeneratedSaleId, // USE PRE-GENERATED ID
               customer_id: selectedCustomer || null,
               created_by: userId,
               code,
@@ -795,6 +764,49 @@ function POSPageContent() {
 
           if (saleError) throw new Error(saleError.message)
           saleId = saleRow?.id
+          saleInserted = true
+        }
+
+        // Venta a crédito: exige cliente y registra la deuda.
+        // Si no se puede registrar el crédito (ej. cupo insuficiente), se aborta toda la
+        // venta — nunca se entrega mercadería sin dejar registrada la deuda.
+        if (method === 'credit') {
+          if (!selectedCustomer) {
+            if (saleInserted && saleId) {
+              await supabase.from('sales').delete().eq('id', saleId)
+            }
+            throw new Error('Seleccioná un cliente para registrar la venta a crédito.')
+          }
+          try {
+            const creditResponse = await fetch('/api/credits/sale', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customerId: selectedCustomer,
+                amount: totalValue,
+                interestRate: creditTerms.interestRate,
+                installments: { count: creditTerms.count, frequency: creditTerms.frequency },
+                saleId: saleId, // PASS THE ACTUAL SALE ID
+              }),
+            })
+            const creditResult = await creditResponse.json().catch(() => null) as { error?: string } | null
+            if (!creditResponse.ok) {
+              throw new Error(creditResult?.error || 'No se pudo registrar la venta a crédito.')
+            }
+          } catch (error) {
+            // Rollback sale if it was just inserted
+            if (saleInserted && saleId) {
+              await supabase.from('sales').delete().eq('id', saleId)
+            }
+            const msg = error instanceof Error ? error.message : String(error || '')
+            const missingCreditsTables = msg.includes('relation "customer_credits" does not exist')
+              || msg.includes('relation "credit_installments" does not exist')
+            if (missingCreditsTables) {
+              console.warn('Supabase: tablas de créditos no encontradas. Omitiendo creación de crédito.')
+            } else {
+              throw error instanceof Error ? error : new Error(msg)
+            }
+          }
         }
 
         if (saleId) {
@@ -1596,16 +1608,20 @@ function POSPageContent() {
       const creditSummaryForReceipt = paymentMethod === 'credit'
         ? buildPosCreditSummary(cartCalculations.total, creditTerms)
         : null
-      const receiptCalculations = creditSummaryForReceipt
-        ? {
-            ...cartCalculations,
-            total: creditSummaryForReceipt.financedTotal,
-            creditInfo: {
+      const receiptCalculations = {
+        subtotal: cartCalculations.subtotal,
+        totalDiscount: cartCalculations.totalDiscount,
+        tax: cartCalculations.tax,
+        repairCost: cartCalculations.repairCost,
+        total: creditSummaryForReceipt?.financedTotal ?? cartCalculations.total,
+        change: cartCalculations.change,
+        creditInfo: creditSummaryForReceipt
+          ? {
               ...creditSummaryForReceipt,
               interestRate: creditTerms.interestRate,
-            },
-          }
-        : cartCalculations
+            }
+          : undefined,
+      }
       const payments = [{
         id: '1',
         method: paymentMethod as any,

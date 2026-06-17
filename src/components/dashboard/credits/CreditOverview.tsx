@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/currency'
 import { formatCreditId } from '@/lib/utils'
@@ -27,6 +28,7 @@ interface CreditOverviewProps {
   installments: InstallmentRow[]
   creditById: Record<string, CreditRow>
   remainingByCredit: Record<string, number>
+  onRegisterPayment?: (creditId: string) => void
 }
 
 type AgingBucket = {
@@ -107,6 +109,7 @@ export function CreditOverview({
   installments,
   creditById,
   remainingByCredit,
+  onRegisterPayment,
 }: CreditOverviewProps) {
   const metrics = useMemo(() => {
     const now = new Date()
@@ -495,7 +498,7 @@ export function CreditOverview({
               {metrics.topDebtors.map((debtor) => (
                 <div
                   key={debtor.creditId}
-                  className="grid gap-3 px-4 py-3 md:grid-cols-[1.3fr_auto_auto_auto] md:items-center"
+                  className="grid gap-3 px-4 py-3 md:grid-cols-[1.3fr_auto_auto_auto_auto] md:items-center"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">
@@ -536,6 +539,19 @@ export function CreditOverview({
                           : 'Sin fecha'}
                     </p>
                   </div>
+                  {onRegisterPayment && (
+                    <div className="md:text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 w-full gap-1.5 md:w-auto"
+                        onClick={() => onRegisterPayment(debtor.creditId)}
+                      >
+                        <Wallet className="h-3.5 w-3.5" />
+                        Cobrar
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -12,11 +12,15 @@ import {
 } from '@/components/ui/table'
 import { Users, DollarSign, Calendar, Percent, TrendingUp, Eye, LayoutGrid, List, Table2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
-import { formatCustomerId, formatCreditId } from '@/lib/utils'
-import { CreditRow } from '@/hooks/use-credits'
+import { formatCustomerId } from '@/lib/utils'
+import { CreditRow, InstallmentRow } from '@/hooks/use-credits'
+import { getCreditDisplayInfo } from '@/lib/credits/display'
 
 interface CreditListProps {
     credits: CreditRow[]
+    installments?: InstallmentRow[]
+    sales?: any[]
+    saleItems?: any[]
     remainingByCredit: Record<string, number>
     paidByCredit: Record<string, number>
     onRegisterPayment: (creditId: string) => void
@@ -49,6 +53,9 @@ const statusStyle: Record<string, string> = {
 
 export function CreditList({
     credits,
+    installments = [],
+    sales = [],
+    saleItems = [],
     remainingByCredit,
     paidByCredit,
     onRegisterPayment,
@@ -77,6 +84,7 @@ export function CreditList({
                 const name = c.customer_name || `Cliente ${c.customer_code || formatCustomerId(c.customer_id)}`
                 const initials = name.split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
                 const gradient = getAvatarGradient(name)
+                const display = getCreditDisplayInfo(c, installments, sales, saleItems)
 
                 return (
                     <div
@@ -97,7 +105,19 @@ export function CreditList({
                                                 {statusLabel[c.status] ?? c.status}
                                             </span>
                                         </div>
-                                        <p className="text-xs text-muted-foreground font-mono">{formatCreditId(c.id)}</p>
+                                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                            <span className="font-mono">{display.creditCode}</span>
+                                            <span className="text-muted-foreground/50">•</span>
+                                            <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+                                                {display.originLabel}
+                                            </span>
+                                            {display.saleCode && (
+                                                <span className="font-mono text-muted-foreground">Ticket {display.saleCode}</span>
+                                            )}
+                                        </div>
+                                        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                                            {display.productSummary}
+                                        </p>
 
                                         {/* Metrics */}
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
@@ -106,8 +126,9 @@ export function CreditList({
                                                 <p className="text-sm font-semibold tabular-nums">{formatCurrency(c.principal)}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1"><Calendar className="h-3 w-3" />Plazo</p>
-                                                <p className="text-sm font-semibold">{c.term_months} meses</p>
+                                                <p className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1"><Calendar className="h-3 w-3" />Cuotas</p>
+                                                <p className="text-sm font-semibold">{display.paidInstallmentCount}/{display.installmentCount || c.term_months}</p>
+                                                <p className="text-[10px] text-muted-foreground">{display.nextInstallmentLabel}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-1"><Percent className="h-3 w-3" />Interés</p>
@@ -174,6 +195,7 @@ export function CreditList({
                 const initials = name.split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()
                 const gradient = getAvatarGradient(name)
                 const rowBg = idx % 2 === 0 ? 'bg-white dark:bg-white/[0.02]' : 'bg-slate-50/50 dark:bg-white/[0.01]'
+                const display = getCreditDisplayInfo(c, installments, sales, saleItems)
 
                 return (
                     <div key={c.id} className={`flex items-center gap-3 px-4 py-3 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-colors ${rowBg}`}>
@@ -182,7 +204,11 @@ export function CreditList({
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate">{name}</p>
-                            <p className="text-[11px] font-mono text-muted-foreground">{formatCreditId(c.id)}</p>
+                            <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                                <span className="font-mono">{display.creditCode}</span>
+                                <span className="rounded-full border border-border px-1.5 py-0.5">{display.originLabel}</span>
+                                {display.saleCode && <span className="font-mono">Ticket {display.saleCode}</span>}
+                            </div>
                         </div>
                         {/* Mini progress */}
                         <div className="hidden sm:flex flex-col items-end gap-1 w-28 shrink-0">
@@ -232,10 +258,21 @@ export function CreditList({
                         const total = paid + remaining
                         const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0
                         const name = c.customer_name || `Cliente ${c.customer_code || formatCustomerId(c.customer_id)}`
+                        const display = getCreditDisplayInfo(c, installments, sales, saleItems)
                         return (
                             <TableRow key={c.id} className="hover:bg-blue-50/20 dark:hover:bg-blue-900/10">
                                 <TableCell className="font-medium text-sm">{name}</TableCell>
-                                <TableCell className="font-mono text-xs text-muted-foreground">{formatCreditId(c.id)}</TableCell>
+                                <TableCell>
+                                    <div className="space-y-1">
+                                        <p className="font-mono text-xs text-muted-foreground">{display.creditCode}</p>
+                                        <p className="text-xs font-medium">{display.creditTypeLabel}</p>
+                                        <div className="flex flex-wrap gap-1">
+                                            <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">{display.originLabel}</span>
+                                            {display.saleCode && <span className="font-mono text-[10px] text-muted-foreground">Ticket {display.saleCode}</span>}
+                                        </div>
+                                        <p className="max-w-[220px] truncate text-[11px] text-muted-foreground">{display.creditLabel}</p>
+                                    </div>
+                                </TableCell>
                                 <TableCell className="text-right tabular-nums text-sm">{formatCurrency(c.principal)}</TableCell>
                                 <TableCell className="text-right tabular-nums text-sm text-green-600 dark:text-green-400">{formatCurrency(paid)}</TableCell>
                                 <TableCell className="text-right tabular-nums text-sm font-semibold">{formatCurrency(remaining)}</TableCell>

@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
@@ -87,6 +88,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<Error | null>(null)
     const { selectedBranchId } = useBranch()
+    const pathname = usePathname()
+    const shouldLoadRepairs = pathname.startsWith('/dashboard/repairs') || pathname.startsWith('/dashboard/technician')
 
     const supabase = useMemo(() => createClient(), [])
 
@@ -666,11 +669,13 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
 
     // Initial fetch
     useEffect(() => {
+        if (!shouldLoadRepairs) return
         fetchRepairs()
-    }, [fetchRepairs])
+    }, [fetchRepairs, shouldLoadRepairs])
 
     // Supabase realtime subscription
     useEffect(() => {
+        if (!shouldLoadRepairs) return
         const channel = supabase
             .channel(`repairs_changes_${selectedBranchId || 'all'}`)
             .on(
@@ -718,7 +723,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [selectedBranchId, supabase])
+    }, [selectedBranchId, shouldLoadRepairs, supabase])
 
     // Create context value object
     const contextValue = useMemo<RepairsContextValue>(() => ({

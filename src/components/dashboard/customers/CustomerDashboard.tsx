@@ -59,6 +59,7 @@ import { SearchStats, SearchInsights } from './SearchStats'
 import searchService from '@/services/search-service'
 import { formatCurrency } from '@/lib/currency'
 import { useCustomers } from '@/contexts/CustomerContext'
+import { usePlanModule } from '@/contexts/SubscriptionStatusContext'
 
 
 // Tipos para la navegación
@@ -71,6 +72,7 @@ const dashboardTabs = [
 ]
 
 export function CustomerDashboard() {
+  const hasCreditsModule = usePlanModule('credits')
   const { 
     customers, 
     filteredCustomers, 
@@ -213,7 +215,7 @@ export function CustomerDashboard() {
     installments,
     payments,
     markInstallmentPaid,
-  } = useCredits()
+  } = useCredits(hasCreditsModule)
 
   const customersWithActiveCredits = useMemo(() => {
     const term = creditSearchTerm.trim().toLowerCase()

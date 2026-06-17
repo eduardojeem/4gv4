@@ -28,6 +28,7 @@ export function usePredictivePrefetch() {
   const metricsRef = useRef<PrefetchMetric[]>([]);
 
   useEffect(() => {
+    if (process.env.NODE_ENV === "development") return;
     // Cargar historial simple desde localStorage
     const raw = localStorage.getItem("navigation_patterns");
     let patterns: Record<string, number> = {};

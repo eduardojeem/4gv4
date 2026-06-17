@@ -586,7 +586,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
       {/* Modal de historial de credito */}
       <Dialog open={showCreditHistory} onOpenChange={setShowCreditHistory}>
         <DialogContent className="max-w-6xl max-h-[92vh] p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 border-b bg-muted/30">
+          <DialogHeader className="px-6 py-4 border-b bg-muted/30 flex flex-row items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-primary" />
               Historial de Credito

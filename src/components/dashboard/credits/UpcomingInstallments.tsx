@@ -14,11 +14,14 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { useState, useMemo } from 'react'
+import { getInstallmentDisplayInfo } from '@/lib/credits/display'
 
 interface UpcomingInstallmentsProps {
     installments: InstallmentRow[]
     creditById: Record<string, CreditRow>
-    onMarkPaid: (id: string, method: string, amount: number) => void
+    sales?: any[]
+    saleItems?: any[]
+    onMarkPaid: (id: string, method: string, amount: number) => Promise<{ success: boolean; error?: string } | void>
 }
 
 type GroupKey = 'overdue' | 'today' | 'thisWeek' | 'later'
@@ -70,6 +73,8 @@ const groupConfig: Record<GroupKey, {
 export function UpcomingInstallments({
     installments,
     creditById,
+    sales = [],
+    saleItems = [],
     onMarkPaid,
 }: UpcomingInstallmentsProps) {
     const [methodByInstallment, setMethodByInstallment] = useState<Record<string, string>>({})
@@ -93,17 +98,25 @@ export function UpcomingInstallments({
         return groups
     }, [installments])
 
-    const handlePay = (i: InstallmentRow) => {
+    const handlePay = async (i: InstallmentRow) => {
         const rawAmount = amountByInstallment[i.id]
-        const amount = rawAmount !== undefined && rawAmount !== '' ? Number(rawAmount) : i.amount
+        const outstanding = Math.max(0, Number(i.amount || 0) - Math.min(Number(i.amount_paid || 0), Number(i.amount || 0)))
+        const amount = rawAmount !== undefined && rawAmount !== '' ? Number(rawAmount) : outstanding
         const method = methodByInstallment[i.id] || 'cash'
 
         if (!Number.isFinite(amount) || amount <= 0) {
             setErrorById(prev => ({ ...prev, [i.id]: 'El monto debe ser mayor a 0' }))
             return
         }
+        if (amount > outstanding) {
+            setErrorById(prev => ({ ...prev, [i.id]: `El monto excede el saldo de la cuota (${formatCurrency(outstanding)})` }))
+            return
+        }
         setErrorById(prev => ({ ...prev, [i.id]: '' }))
-        onMarkPaid(i.id, method, amount)
+        const result = await onMarkPaid(i.id, method, amount)
+        if (result && result.success === false) {
+            setErrorById(prev => ({ ...prev, [i.id]: result.error || 'No se pudo registrar el pago' }))
+        }
     }
 
     const renderGroup = (key: GroupKey) => {
@@ -130,10 +143,12 @@ export function UpcomingInstallments({
                     {items.map(i => {
                         const paid = Number(i.amount_paid || 0)
                         const amt = Number(i.amount || 0)
+                        const outstanding = Math.max(0, amt - Math.min(paid, amt))
                         const pct = amt > 0 ? Math.min(100, Math.round((paid / amt) * 100)) : 0
                         const customerName = creditById[i.credit_id]?.customer_name || 'Cliente'
                         const isPaid = i.status === 'paid'
                         const errorMsg = errorById[i.id]
+                        const display = getInstallmentDisplayInfo(i, creditById[i.credit_id], installments, sales, saleItems)
 
                         return (
                             <div
@@ -147,6 +162,14 @@ export function UpcomingInstallments({
                                             <div className="flex items-start justify-between gap-2 mb-1">
                                                 <div>
                                                     <p className="text-sm font-semibold truncate leading-tight">{customerName}</p>
+                                                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                                                        <span className="font-mono">{display.creditCode}</span>
+                                                        <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px]">{display.originLabel}</span>
+                                                        {display.saleCode && <span className="font-mono">Ticket {display.saleCode}</span>}
+                                                    </div>
+                                                    <p className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">
+                                                        {display.productSummary}
+                                                    </p>
                                                     <p className="text-xs text-muted-foreground mt-0.5">
                                                         Cuota <span className="font-mono font-bold">#{i.installment_number}</span>
                                                         {' · '}
@@ -202,7 +225,7 @@ export function UpcomingInstallments({
                                                             step={0.01}
                                                             className={`w-[110px] h-8 text-xs ${errorMsg ? 'border-red-400' : ''}`}
                                                             value={amountByInstallment[i.id] ?? ''}
-                                                            placeholder={String(i.amount)}
+                                                            placeholder={String(outstanding)}
                                                             onChange={e => {
                                                                 setAmountByInstallment(prev => ({ ...prev, [i.id]: e.target.value }))
                                                                 if (errorMsg) setErrorById(prev => ({ ...prev, [i.id]: '' }))

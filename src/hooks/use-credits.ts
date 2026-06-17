@@ -2,10 +2,13 @@ import { useState, useEffect, useRef, useMemo, useTransition, useCallback } from
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { config } from '@/lib/config'
+import { endOfLocalDay, startOfLocalDay } from '@/lib/date-only'
 
 export type CreditRow = {
     id: string
     customer_id: string
+    sale_id?: string | null
+    organization_id?: string | null
     principal: number
     interest_rate: number
     term_months: number
@@ -13,11 +16,17 @@ export type CreditRow = {
     status: 'active' | 'completed' | 'defaulted' | 'cancelled'
     customer_name?: string
     customer_code?: string
+    credit_code?: string | null
+    credit_type?: string | null
+    origin_type?: string | null
+    label?: string | null
+    sale_code?: string | null
 }
 
 export type InstallmentRow = {
     id: string
     credit_id: string
+    sale_id?: string | null
     installment_number: number
     due_date: string
     amount: number
@@ -34,6 +43,7 @@ export type PaymentRow = {
     amount: number
     payment_method?: 'cash' | 'card' | 'transfer' | null
     created_at?: string
+    notes?: string | null
 }
 
 export type CreditSummaryRow = {
@@ -66,7 +76,7 @@ type InstallmentFilters = {
 
 /** Retorna true si la cuota está vencida aunque su status sea 'pending' */
 export const isInstallmentLate = (i: InstallmentRow): boolean =>
-  i.status === 'late' || (i.status === 'pending' && new Date(i.due_date) < new Date())
+  i.status === 'late' || (i.status === 'pending' && startOfLocalDay(i.due_date) < startOfLocalDay(new Date()))
 
 const fetchData = async (supabase: SupabaseClient) => {
   const [
@@ -116,9 +126,24 @@ const fetchData = async (supabase: SupabaseClient) => {
 
 void fetchData
 
+const emptyTenantCreditsData = {
+    dbCredits: [],
+    dbInstallments: [],
+    dbPayments: [],
+    dbSummary: [],
+    dbInstallmentsProgress: [],
+    dbCustomers: [],
+    dbSales: [],
+    dbSaleItems: []
+}
+
 const fetchTenantCreditsData = async () => {
   const response = await fetch('/api/credits', { cache: 'no-store' })
   const result = await response.json()
+
+  if (response.status === 402 && (result?.error === 'Module unavailable' || result?.message === 'This module is not enabled for the current plan.')) {
+    return emptyTenantCreditsData
+  }
 
   if (!response.ok || !result.success) {
     throw new Error(result.error || 'No se pudieron cargar los creditos.')
@@ -131,21 +156,26 @@ const fetchTenantCreditsData = async () => {
     dbPayments: data.payments,
     dbSummary: data.summary,
     dbInstallmentsProgress: data.installmentsProgress,
-    dbCustomers: data.customers
+    dbCustomers: data.customers,
+    dbSales: data.sales,
+    dbSaleItems: data.saleItems
   }
 }
 
-export function useCredits() {
+export function useCredits(enabled = true) {
     const supabase = useMemo(() => createClient(), [])
     const [isPending, startTransition] = useTransition()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const channelRef = useRef<ReturnType<SupabaseClient['channel']> | null>(null)
+    const realtimeRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const [credits, setCredits] = useState<CreditRow[]>([])
     const [installments, setInstallments] = useState<InstallmentRow[]>([])
     const [payments, setPayments] = useState<PaymentRow[]>([])
     const [summary, setSummary] = useState<Record<string, CreditSummaryRow>>({})
     const [installmentsProgress, setInstallmentsProgress] = useState<Record<string, InstallmentProgressRow>>({})
+    const [sales, setSales] = useState<any[]>([])
+    const [saleItems, setSaleItems] = useState<any[]>([])
 
     // Keep these exposed if components need them, or wrap them in actions
     const [filterValues, setFilterValues] = useState<InstallmentFilters>({
@@ -158,10 +188,22 @@ export function useCredits() {
     })
 
     const loadData = useCallback(async () => {
+        if (!enabled) {
+            setCredits([])
+            setInstallments([])
+            setPayments([])
+            setSummary({})
+            setInstallmentsProgress({})
+            setSales([])
+            setSaleItems([])
+            setError(null)
+            setLoading(false)
+            return
+        }
         setLoading(true)
         setError(null)
         try {
-            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers } = await fetchTenantCreditsData()
+            const { dbCredits, dbInstallments, dbPayments, dbSummary, dbInstallmentsProgress, dbCustomers, dbSales, dbSaleItems } = await fetchTenantCreditsData()
 
             const customersMap = ((dbCustomers || []) as Array<{ id: string; customer_code?: string }>).reduce((acc, c) => {
                 acc[c.id] = c.customer_code ?? ''
@@ -181,19 +223,30 @@ export function useCredits() {
                 return {
                     id: String(o['id'] || ''),
                     customer_id: String(o['customer_id'] || ''),
+                    sale_id: o['sale_id'] ? String(o['sale_id']) : null,
+                    organization_id: o['organization_id'] ? String(o['organization_id']) : null,
                     principal: Number(o['principal'] || 0),
                     interest_rate: Number(o['interest_rate'] || 0),
                     term_months: Number(o['term_months'] || 0),
                     start_date: String(o['start_date'] || new Date().toISOString()),
                     status,
                     customer_name: typeof nameVal === 'string' ? nameVal : undefined,
-                    customer_code: customersMap[String(o['customer_id'] || '')]
+                    customer_code: typeof o['customer_code'] === 'string' && o['customer_code']
+                        ? String(o['customer_code'])
+                        : customersMap[String(o['customer_id'] || '')],
+                    credit_code: typeof o['credit_code'] === 'string' ? String(o['credit_code']) : null,
+                    credit_type: typeof o['credit_type'] === 'string' ? String(o['credit_type']) : null,
+                    origin_type: typeof o['origin_type'] === 'string' ? String(o['origin_type']) : null,
+                    label: typeof o['label'] === 'string' ? String(o['label']) : null,
+                    sale_code: typeof o['sale_code'] === 'string' ? String(o['sale_code']) : null,
                 } as CreditRow
             })
             setCredits(normalizedCredits)
 
             setInstallments((dbInstallments || []) as InstallmentRow[])
             setPayments((dbPayments || []) as PaymentRow[])
+            setSales(dbSales || [])
+            setSaleItems(dbSaleItems || [])
 
             const s = ((dbSummary || []) as CreditSummaryRow[]).reduce((acc, row) => {
                 acc[row.credit_id] = {
@@ -225,7 +278,7 @@ export function useCredits() {
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [enabled])
 
     const refreshData = useCallback(() => {
         startTransition(() => {
@@ -233,13 +286,26 @@ export function useCredits() {
         })
     }, [loadData])
 
+    const scheduleRefresh = useCallback(() => {
+        if (realtimeRefreshTimeoutRef.current) {
+            clearTimeout(realtimeRefreshTimeoutRef.current)
+        }
+
+        realtimeRefreshTimeoutRef.current = setTimeout(() => {
+            realtimeRefreshTimeoutRef.current = null
+            refreshData()
+        }, 500)
+    }, [refreshData])
+
     // Initial data load
     useEffect(() => {
+        if (!enabled) return
         startTransition(() => { loadData() })
-    }, [loadData])
+    }, [enabled, loadData])
 
     // Realtime subscription — separate effect with ref guard to avoid duplicate channels
     useEffect(() => {
+        if (!enabled) return
         if (!config.supabase.isConfigured) return
 
         // Unsubscribe any existing channel before creating a new one
@@ -249,18 +315,24 @@ export function useCredits() {
 
         const channel = supabase
             .channel('credits_realtime_hook')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'customer_credits' }, () => refreshData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_installments' }, () => refreshData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_payments' }, () => refreshData())
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'customer_credits' }, () => scheduleRefresh())
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'customer_credits' }, () => scheduleRefresh())
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'credit_installments' }, () => scheduleRefresh())
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'credit_installments' }, () => scheduleRefresh())
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'credit_payments' }, () => scheduleRefresh())
 
         channel.subscribe()
         channelRef.current = channel
 
         return () => {
+            if (realtimeRefreshTimeoutRef.current) {
+                clearTimeout(realtimeRefreshTimeoutRef.current)
+                realtimeRefreshTimeoutRef.current = null
+            }
             channel.unsubscribe()
             channelRef.current = null
         }
-    }, [supabase, refreshData])
+    }, [enabled, supabase, scheduleRefresh])
     const markInstallmentPaid = useCallback(async (
         installmentId: string,
         method: string,
@@ -312,63 +384,28 @@ export function useCredits() {
             return { success: true, appliedAmount: selectedAmount, installmentId }
         }
 
-        const { error } = await (supabase.from('credit_payments')
-            .insert({
-                credit_id: current.credit_id,
-                installment_id: installmentId,
+        const response = await fetch('/api/credits', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                installmentId,
+                method,
                 amount: selectedAmount,
-                payment_method: method,
                 notes
-            }) as unknown as Promise<{ error: unknown }>)
+            })
+        })
 
-        if (error) {
-            const message = error instanceof Error ? error.message : 'No se pudo registrar el pago.'
-            console.error('Error al registrar el pago:', error)
+        const payload = await response.json().catch(() => null)
+
+        if (!response.ok || payload?.success === false) {
+            const message = payload?.error || 'No se pudo registrar el pago.'
+            console.error('Error al registrar el pago:', payload)
             return { success: false, error: message }
-        }
-
-        // Register cash movement in the active register session (if any)
-        // This ensures credit payments show up in the cash register report
-        try {
-            // Find the open session matching the default register ('principal')
-            // The POS caja uses 'principal' as the default activeRegisterId
-            const { data: openSessions } = await supabase
-                .from('cash_closures')
-                .select('id, register_id')
-                .is('date', null)
-                .order('created_at', { ascending: false })
-
-            // Prefer 'principal' (lowercase) which is the default in the UI
-            const targetSession = (openSessions || []).find(
-                s => s.register_id?.toLowerCase() === 'principal'
-            ) || (openSessions || [])[0]
-
-            if (targetSession) {
-                const credit = credits.find(c => c.id === current.credit_id)
-                const customerName = credit?.customer_name || ''
-                const reason = `Cobro cuota crédito${customerName ? ` - ${customerName}` : ''}${notes ? ` (${notes})` : ''}`
-
-                // Get current user ID for audit trail
-                const { data: { user: currentUser } } = await supabase.auth.getUser()
-
-                await supabase.from('cash_movements').insert({
-                    session_id: targetSession.id,
-                    type: 'cash_in',
-                    amount: selectedAmount,
-                    reason,
-                    payment_method: method,
-                    created_by: currentUser?.id || null,
-                    created_at: new Date().toISOString()
-                })
-            }
-        } catch (cashErr) {
-            // Non-blocking: credit payment was already registered successfully
-            console.warn('No se pudo registrar movimiento en caja:', cashErr)
         }
 
         await loadData()
         return { success: true, appliedAmount: selectedAmount, installmentId }
-    }, [installments, supabase, loadData, credits])
+    }, [installments, supabase, loadData])
 
 
     // Derived Data Helpers
@@ -425,11 +462,9 @@ export function useCredits() {
             }
             if (filterValues.creditId && !String(i.credit_id).toLowerCase().includes(String(filterValues.creditId).toLowerCase())) return false
             if (filterValues.minAmount && Number(i.amount) < Number(filterValues.minAmount)) return false
-            if (filterValues.fromDate && new Date(i.due_date) < new Date(filterValues.fromDate)) return false
+            if (filterValues.fromDate && startOfLocalDay(i.due_date) < startOfLocalDay(filterValues.fromDate)) return false
             if (filterValues.toDate) {
-                const toDate = new Date(filterValues.toDate)
-                toDate.setHours(23, 59, 59, 999)
-                if (new Date(i.due_date) > toDate) return false
+                if (startOfLocalDay(i.due_date) > endOfLocalDay(filterValues.toDate)) return false
             }
             if (filterValues.customerName) {
                 const name = creditById[i.credit_id]?.customer_name || ''
@@ -456,6 +491,8 @@ export function useCredits() {
         remainingByCredit,
         paidByCredit,
         getNextPendingInstallment,
-        filteredInstallments
+        filteredInstallments,
+        sales,
+        saleItems
     }
 }

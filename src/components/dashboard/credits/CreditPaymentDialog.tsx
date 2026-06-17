@@ -1,4 +1,4 @@
-﻿import {
+import {
     Dialog,
     DialogContent,
     DialogHeader,
@@ -22,6 +22,7 @@ import { useState, useEffect } from 'react'
 import { CreditCard, User, DollarSign, FileText, Calendar, AlertCircle, CheckCircle2, Printer } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { formatCustomerId, formatCreditId } from '@/lib/utils'
+import { createCreditPaymentReceiptPdf } from '@/lib/credits/payment-receipt'
 
 export type PaymentMethod = 'cash' | 'card' | 'transfer'
 export type PaymentConfirmResult =
@@ -33,6 +34,9 @@ interface CreditPaymentDialogProps {
     onOpenChange: (open: boolean) => void
     onConfirm: (method: PaymentMethod, amount: number, reference?: string, notes?: string) => Promise<PaymentConfirmResult>
     initialAmount?: number
+    maxPaymentAmount?: number
+    allowFullDebtPayment?: boolean
+    totalDebtAmount?: number
     creditInfo?: {
         id: string
         customerName: string
@@ -44,6 +48,12 @@ interface CreditPaymentDialogProps {
         remainingBalance: number
         nextInstallmentNumber?: number
         nextDueDate?: string
+        creditCode?: string
+        creditTypeLabel?: string
+        originLabel?: string
+        creditLabel?: string
+        saleCode?: string
+        productSummary?: string
     }
 }
 
@@ -52,6 +62,9 @@ export function CreditPaymentDialog({
     onOpenChange,
     onConfirm,
     initialAmount,
+    maxPaymentAmount,
+    allowFullDebtPayment = false,
+    totalDebtAmount,
     creditInfo,
 }: CreditPaymentDialogProps) {
     const [method, setMethod] = useState<PaymentMethod>('cash')
@@ -76,23 +89,27 @@ export function CreditPaymentDialog({
     const handleAmountChange = (value: string) => {
         setAmount(value)
         const numericAmount = parseFloat(value)
+        const maxAllowed = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
+        const balanceLabel = allowFullDebtPayment ? 'la deuda total' : 'esta cuota'
 
         if (isNaN(numericAmount) || numericAmount <= 0) {
             setError('El monto debe ser mayor a 0')
-        } else if (creditInfo && numericAmount > creditInfo.remainingBalance) {
-            setError(`El monto excede el saldo pendiente (${formatCurrency(creditInfo.remainingBalance)})`)
+        } else if (typeof maxAllowed === 'number' && numericAmount > maxAllowed) {
+            setError(`El monto excede el saldo disponible para ${balanceLabel} (${formatCurrency(maxAllowed)})`)
         } else {
             setError('')
         }
     }
     const handleConfirm = async () => {
         const numericAmount = parseFloat(amount)
+        const maxAllowed = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
+        const balanceLabel = allowFullDebtPayment ? 'la deuda total' : 'esta cuota'
         if (isNaN(numericAmount) || numericAmount <= 0) {
             setError('Ingrese un monto válido')
             return
         }
-        if (creditInfo && numericAmount > creditInfo.remainingBalance) {
-            setError('El monto excede el saldo pendiente')
+        if (typeof maxAllowed === 'number' && numericAmount > maxAllowed) {
+            setError(`El monto excede el saldo disponible para ${balanceLabel}`)
             return
         }
 
@@ -130,88 +147,35 @@ export function CreditPaymentDialog({
     }
 
     const isValid = amount && !error && parseFloat(amount) > 0
+    const effectiveMaxAmount = typeof maxPaymentAmount === 'number' ? maxPaymentAmount : creditInfo?.remainingBalance
+    const canPayFullDebt = allowFullDebtPayment && typeof totalDebtAmount === 'number' && totalDebtAmount > 0
 
     const generateReceiptDoc = async () => {
         if (!paymentDone) return null
-        const { default: jsPDF } = await import('jspdf')
-        const { default: autoTable } = await import('jspdf-autotable')
-
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' })
-        const pageW = doc.internal.pageSize.getWidth()
-        const receiptNum = `REC-${Date.now().toString(36).toUpperCase()}`
-
-        // --- Encabezado ---
-        doc.setFillColor(37, 99, 235)
-        doc.rect(0, 0, pageW, 28, 'F')
-        doc.setTextColor(255)
-        doc.setFontSize(16)
-        doc.setFont('helvetica', 'bold')
-        doc.text('COMPROBANTE DE PAGO', pageW / 2, 12, { align: 'center' })
-        doc.setFontSize(9)
-        doc.setFont('helvetica', 'normal')
-        doc.text(`N° ${receiptNum}`, pageW / 2, 20, { align: 'center' })
-        doc.setTextColor(0)
-
-        // --- Fecha ---
-        doc.setFontSize(9)
-        doc.setTextColor(100)
-        doc.text(`Emitido: ${paymentDone.date.toLocaleString('es-AR')}`, pageW / 2, 35, { align: 'center' })
-        doc.setTextColor(0)
-
-        // --- Datos del crédito ---
-        if (creditInfo) {
-            autoTable(doc, {
-                startY: 40,
-                head: [['Datos del Crédito', '']],
-                body: [
-                    ['Cliente', creditInfo.customerName],
-                    ['ID Cliente', creditInfo.customerCode || formatCustomerId(creditInfo.customerId)],
-                    ['ID Crédito', formatCreditId(creditInfo.id)],
-                    ...( creditInfo.nextInstallmentNumber ? [['N° de Cuota', `#${creditInfo.nextInstallmentNumber}`]] : []),
-                    ...( creditInfo.nextDueDate ? [['Vencimiento', new Date(creditInfo.nextDueDate).toLocaleDateString('es-AR')]] : []),
-                ],
-                theme: 'grid',
-                headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 10 },
-                columnStyles: { 0: { fontStyle: 'bold', cellWidth: 55 } },
-                margin: { left: 10, right: 10 },
-            })
-        }
-
-        // --- Detalle del pago ---
-        const afterCredit = (doc as any).lastAutoTable?.finalY ?? 40
-        autoTable(doc, {
-            startY: afterCredit + 6,
-            head: [['Detalle del Pago', '']],
-            body: [
-                ['Monto Pagado', formatCurrency(paymentDone.amount)],
-                ['Método', getMethodLabel(paymentDone.method)],
-                ...( paymentDone.reference ? [['Referencia', paymentDone.reference]] : []),
-                ...( paymentDone.notes ? [['Notas', paymentDone.notes]] : []),
-            ],
-            theme: 'grid',
-            headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 10 },
-            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 55 } },
-            bodyStyles: { fontSize: 10 },
-            margin: { left: 10, right: 10 },
+        const sharedReceipt = await createCreditPaymentReceiptPdf({
+            paymentId: `dialog-${paymentDone.date.getTime()}`,
+            paymentDate: paymentDone.date,
+            paymentAmount: paymentDone.amount,
+            paymentMethod: paymentDone.method,
+            reference: paymentDone.reference,
+            notes: paymentDone.notes,
+            customerName: creditInfo?.customerName || 'Cliente',
+            customerId: creditInfo?.customerId,
+            customerCode: creditInfo?.customerCode,
+            creditId: creditInfo?.id || '',
+            creditCode: creditInfo?.creditCode,
+            creditTypeLabel: creditInfo?.creditTypeLabel,
+            originLabel: creditInfo?.originLabel,
+            creditLabel: creditInfo?.creditLabel,
+            saleCode: creditInfo?.saleCode,
+            productSummary: creditInfo?.productSummary,
+            installmentNumber: allowFullDebtPayment ? null : creditInfo?.nextInstallmentNumber,
+            installmentDueDate: allowFullDebtPayment ? null : creditInfo?.nextDueDate,
+            currentCreditBalance: creditInfo ? Math.max(0, creditInfo.remainingBalance - paymentDone.amount) : null,
         })
 
-        // --- Nuevo saldo ---
-        if (creditInfo) {
-            const afterPayment = (doc as any).lastAutoTable.finalY + 4
-            const newBalance = creditInfo.remainingBalance - paymentDone.amount
-            doc.setFontSize(10)
-            doc.setFont('helvetica', 'bold')
-            doc.text(`Nuevo saldo pendiente: ${formatCurrency(Math.max(0, newBalance))}`, pageW / 2, afterPayment + 6, { align: 'center' })
-        }
+        return { doc: sharedReceipt.doc, receiptNum: sharedReceipt.receiptNumber }
 
-        // --- Footer ---
-        const pageH = doc.internal.pageSize.getHeight()
-        doc.setFontSize(8)
-        doc.setFont('helvetica', 'italic')
-        doc.setTextColor(150)
-        doc.text('Este comprobante es válido como constancia de pago.', pageW / 2, pageH - 8, { align: 'center' })
-
-        return { doc, receiptNum }
     }
 
     const downloadReceipt = async () => {
@@ -276,7 +240,12 @@ export function CreditPaymentDialog({
                                             <span className="text-muted-foreground">Cliente</span>
                                             <span className="font-medium">{creditInfo.customerName}</span>
                                         </div>
-                                        {creditInfo.nextInstallmentNumber && (
+                                        {allowFullDebtPayment ? (
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-muted-foreground">Aplicacion</span>
+                                                <span className="font-medium">Deuda total</span>
+                                            </div>
+                                        ) : creditInfo.nextInstallmentNumber && (
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-muted-foreground">Cuota</span>
                                                 <span className="font-medium">#{creditInfo.nextInstallmentNumber}</span>
@@ -342,14 +311,42 @@ export function CreditPaymentDialog({
                                                     <p className="text-xs text-muted-foreground">{creditInfo.customerCode || formatCustomerId(creditInfo.customerId)}</p>
                                                 </div>
                                             </div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {creditInfo.creditTypeLabel && (
+                                                    <Badge variant="secondary" className="text-[11px]">
+                                                        {creditInfo.creditTypeLabel}
+                                                    </Badge>
+                                                )}
+                                                {creditInfo.originLabel && (
+                                                    <Badge variant="outline" className="text-[11px]">
+                                                        {creditInfo.originLabel}
+                                                    </Badge>
+                                                )}
+                                                {creditInfo.saleCode && (
+                                                    <Badge variant="outline" className="text-[11px] font-mono">
+                                                        Ticket {creditInfo.saleCode}
+                                                    </Badge>
+                                                )}
+                                            </div>
                                         </div>
                                         <Badge variant="outline" className="text-xs">
                                             <CreditCard className="h-3 w-3 mr-1" />
-                                            {formatCreditId(creditInfo.id)}
+                                            {creditInfo.creditCode || formatCreditId(creditInfo.id)}
                                         </Badge>
                                     </div>
 
                                     <Separator />
+
+                                    {(creditInfo.creditLabel || creditInfo.productSummary) && (
+                                        <div className="rounded-lg border border-border/50 bg-background/70 p-3">
+                                            {creditInfo.creditLabel && (
+                                                <p className="text-sm font-semibold">{creditInfo.creditLabel}</p>
+                                            )}
+                                            {creditInfo.productSummary && (
+                                                <p className="mt-1 text-xs text-muted-foreground">{creditInfo.productSummary}</p>
+                                            )}
+                                        </div>
+                                    )}
 
                                     <div className="grid grid-cols-2 gap-3 text-sm">
                                         <div>
@@ -357,8 +354,17 @@ export function CreditPaymentDialog({
                                             <p className="font-semibold">{formatCurrency(creditInfo.principal)}</p>
                                         </div>
                                         <div>
-                                            <p className="text-muted-foreground text-xs">Saldo Pendiente</p>
-                                            <p className="font-semibold text-orange-600">{formatCurrency(creditInfo.remainingBalance)}</p>
+                                            <p className="text-muted-foreground text-xs">
+                                                {allowFullDebtPayment ? 'Deuda total' : 'Saldo Pendiente'}
+                                            </p>
+                                            <p className="font-semibold text-orange-600">
+                                                {formatCurrency(effectiveMaxAmount ?? creditInfo.remainingBalance)}
+                                            </p>
+                                            {typeof maxPaymentAmount === 'number' && (
+                                                <p className="text-[11px] text-muted-foreground">
+                                                    {allowFullDebtPayment ? 'Disponible para cancelar deuda' : 'Saldo de esta cuota'}
+                                                </p>
+                                            )}
                                         </div>
                                         {creditInfo.nextInstallmentNumber && (
                                             <>
@@ -373,6 +379,12 @@ export function CreditPaymentDialog({
                                                     </p>
                                                 </div>
                                             </>
+                                        )}
+                                        {creditInfo.saleCode && (
+                                            <div>
+                                                <p className="text-muted-foreground text-xs">Ticket asociado</p>
+                                                <p className="font-semibold font-mono">{creditInfo.saleCode}</p>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -419,6 +431,18 @@ export function CreditPaymentDialog({
                                                 {error}
                                             </p>
                                         )}
+                                        {canPayFullDebt && (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 w-full justify-between"
+                                                onClick={() => handleAmountChange(String(totalDebtAmount))}
+                                            >
+                                                <span>Pagar total deuda</span>
+                                                <span className="font-semibold tabular-nums">{formatCurrency(totalDebtAmount)}</span>
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -454,7 +478,7 @@ export function CreditPaymentDialog({
                                             <p className="text-2xl font-bold text-green-700 dark:text-green-300">{formatCurrency(parseFloat(amount))}</p>
                                             {creditInfo && (
                                                 <p className="text-xs text-green-600 dark:text-green-400">
-                                                    Nuevo saldo: {formatCurrency(creditInfo.remainingBalance - parseFloat(amount))}
+                                                    Nuevo saldo: {formatCurrency(Math.max(0, (allowFullDebtPayment ? creditInfo.remainingBalance : (effectiveMaxAmount ?? creditInfo.remainingBalance)) - parseFloat(amount)))}
                                                 </p>
                                             )}
                                         </div>

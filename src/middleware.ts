@@ -267,13 +267,15 @@ export async function middleware(request: NextRequest) {
           auth: { autoRefreshToken: false, persistSession: false },
         })
         const { data: orgRows } = await withTimeout(
-          adminSupabase
-            .from('organization_members')
-            .select('role')
-            .eq('user_id', user.id)
-            .eq('status', 'active')
-            .in('role', ['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'])
-            .limit(1),
+          Promise.resolve(
+            adminSupabase
+              .from('organization_members')
+              .select('role')
+              .eq('user_id', user.id)
+              .eq('status', 'active')
+              .in('role', ['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'])
+              .limit(1)
+          ) as unknown as Promise<{ data: { role: any }[] | null }>,
           PROXY_PROFILE_TIMEOUT_MS,
           { data: null }
         )

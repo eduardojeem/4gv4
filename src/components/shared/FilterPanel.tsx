@@ -21,6 +21,7 @@ import {
     SheetTrigger,
 } from '@/components/ui/sheet'
 import { Card, CardContent } from '@/components/ui/card'
+import { formatDateOnlyDisplay } from '@/lib/date-only'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ function getActiveLabels(filters: FilterConfig[], values: Record<string, string 
             display = opt?.label ?? display
         }
         if (f.type === 'date') {
-            try { display = new Date(v).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) } catch { /* noop */ }
+            try { display = formatDateOnlyDisplay(v) } catch { /* noop */ }
         }
         return [{ key: f.key, label: f.label, display }]
     })

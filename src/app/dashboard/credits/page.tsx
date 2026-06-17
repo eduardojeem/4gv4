@@ -5,23 +5,25 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FilterPanel } from '@/components/shared'
-import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, Search } from 'lucide-react'
+import { CreditCard, CalendarClock, CheckCircle, LayoutDashboard, Receipt, RefreshCw, Download, Users } from 'lucide-react'
 import { formatCurrency } from '@/lib/currency'
 import { useCredits, InstallmentRow, isInstallmentLate } from '@/hooks/use-credits'
 import { CreditOverview } from '@/components/dashboard/credits/CreditOverview'
 import { CreditList } from '@/components/dashboard/credits/CreditList'
 import { UpcomingInstallments } from '@/components/dashboard/credits/UpcomingInstallments'
 import { CreditPaymentDialog, PaymentMethod, PaymentConfirmResult } from '@/components/dashboard/credits/CreditPaymentDialog'
-import { CreditQuickActions } from '@/components/dashboard/credits/CreditQuickActions'
 import { CreditDetailDialog } from '@/components/dashboard/credits/CreditDetailDialog'
+import { PaymentsTimeline } from '@/components/dashboard/credits/PaymentsTimeline'
 import { RouteGuard } from '@/components/auth/permission-guard'
 import { PlanGate } from '@/components/admin/PlanGate'
+import { formatDateInputLocal, formatDateOnlyDisplay, isSameLocalDate, startOfLocalDay } from '@/lib/date-only'
+import { getCreditDisplayInfo, getInstallmentDisplayInfo } from '@/lib/credits/display'
 
 export default function CreditsDashboardPage() {
   return (
     <PlanGate
       module="credits"
-      requiredPlan="el plan que incluya Créditos"
+      requiredPlan="Pro"
       title="Módulo de créditos no incluido"
       description="Tu organización necesita habilitar Créditos y cuotas en su plan para gestionar financiación y cobranza."
     >
@@ -47,7 +49,9 @@ function CreditsDashboardContent() {
     remainingByCredit,
     paidByCredit,
     getNextPendingInstallment,
-    filteredInstallments
+    filteredInstallments,
+    sales,
+    saleItems
   } = useCredits()
 
   // Local UI State
@@ -81,6 +85,7 @@ function CreditsDashboardContent() {
   const [dialogCreditId, setDialogCreditId] = useState<string | null>(null)
   const [dialogInstallmentId, setDialogInstallmentId] = useState<string | null>(null)
   const [dialogInitialAmount, setDialogInitialAmount] = useState<number>(0)
+  const [dialogPaymentScope, setDialogPaymentScope] = useState<'installment' | 'credit'>('installment')
 
   // Detail Dialog State
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
@@ -89,16 +94,14 @@ function CreditsDashboardContent() {
   // Quick filter counts
   const { overdueCount, dueTodayCount } = useMemo(() => {
     const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const today = startOfLocalDay(now)
 
     const overdue = installments.filter(i =>
       isInstallmentLate(i)
     ).length
 
     const dueToday = installments.filter(i => {
-      const dueDate = new Date(i.due_date)
-      dueDate.setHours(0, 0, 0, 0)
-      return (i.status === 'pending' || i.status === 'late') && dueDate.getTime() === today.getTime()
+      return (i.status === 'pending' || i.status === 'late') && isSameLocalDate(i.due_date, today)
     }).length
 
     return { overdueCount: overdue, dueTodayCount: dueToday }
@@ -117,6 +120,10 @@ function CreditsDashboardContent() {
 
   const selectedDialogCreditId = selectedDialogInstallment?.credit_id || dialogCreditId
   const recentPayments = useMemo(() => payments.slice(0, 50), [payments])
+  const selectedDialogDisplay = useMemo(() => {
+    if (!selectedDialogCreditId) return null
+    return getCreditDisplayInfo(creditById[selectedDialogCreditId], installments, sales, saleItems)
+  }, [selectedDialogCreditId, creditById, installments, sales, saleItems])
 
   const getInstallmentOutstanding = (installment: InstallmentRow): number => {
     const installmentAmount = Number(installment.amount || 0)
@@ -124,9 +131,30 @@ function CreditsDashboardContent() {
     return Math.max(0, installmentAmount - paidAmount)
   }
 
+  const getCreditOutstanding = (creditId: string): number => {
+    return installments
+      .filter((installment) => installment.credit_id === creditId)
+      .reduce((sum, installment) => sum + getInstallmentOutstanding(installment), 0)
+  }
+
+  // Totales globales (no dependen del filtro) para el encabezado siempre visible.
+  const portfolioTotals = useMemo(() => {
+    let outstanding = 0
+    let overdue = 0
+    for (const installment of installments) {
+      const amount = Number(installment.amount || 0)
+      const paid = Math.max(0, Number(installment.amount_paid || 0))
+      const open = Math.max(0, amount - paid)
+      if (open <= 0) continue
+      outstanding += open
+      if (isInstallmentLate(installment)) overdue += open
+    }
+    return { outstanding, overdue }
+  }, [installments])
+
   const collectionSummary = useMemo(() => {
     const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const today = startOfLocalDay(now)
 
     let visibleOutstanding = 0
     let visibleOverdue = 0
@@ -150,12 +178,9 @@ function CreditsDashboardContent() {
         visibleOverdue += outstanding
       }
 
-      const dueDate = new Date(installment.due_date)
-      dueDate.setHours(0, 0, 0, 0)
-
       if (
         outstanding > 0 &&
-        dueDate.getTime() === today.getTime() &&
+        isSameLocalDate(installment.due_date, today) &&
         (installment.status === 'pending' || installment.status === 'late')
       ) {
         visibleDueToday += outstanding
@@ -171,10 +196,11 @@ function CreditsDashboardContent() {
     }
   }, [filteredInstallments, creditById])
 
-  const openPaymentDialogForInstallment = (installment: InstallmentRow) => {
+  const openPaymentDialogForInstallment = (installment: InstallmentRow, scope: 'installment' | 'credit' = 'installment') => {
     const outstanding = getInstallmentOutstanding(installment)
     setDialogCreditId(installment.credit_id)
     setDialogInstallmentId(installment.id)
+    setDialogPaymentScope(scope)
     setDialogInitialAmount(outstanding > 0 ? outstanding : Number(installment.amount))
     setIsDialogOpen(true)
   }
@@ -183,7 +209,7 @@ function CreditsDashboardContent() {
   const handleOpenPaymentDialog = (creditId: string) => {
     const next = getNextPendingInstallment(creditId)
     if (!next) return
-    openPaymentDialogForInstallment(next)
+    openPaymentDialogForInstallment(next, 'credit')
   }
 
   const handleConfirmPayment = async (
@@ -192,7 +218,7 @@ function CreditsDashboardContent() {
     reference?: string,
     notes?: string
   ): Promise<PaymentConfirmResult> => {
-    if (!dialogInstallmentId) {
+    if (!dialogInstallmentId || !selectedDialogCreditId) {
       return { success: false, error: 'No hay cuota seleccionada para cobrar.' }
     }
 
@@ -200,6 +226,39 @@ function CreditsDashboardContent() {
       reference ? `Ref: ${reference}` : null,
       notes
     ].filter(Boolean).join(' - ')
+
+    if (dialogPaymentScope === 'credit') {
+      const openInstallments = installments
+        .filter((installment) => installment.credit_id === selectedDialogCreditId && getInstallmentOutstanding(installment) > 0)
+        .sort((a, b) => (
+          startOfLocalDay(a.due_date).getTime() - startOfLocalDay(b.due_date).getTime() ||
+          a.installment_number - b.installment_number
+        ))
+
+      let remainingAmount = amount
+      let appliedAmount = 0
+
+      for (const installment of openInstallments) {
+        if (remainingAmount <= 0) break
+
+        const installmentOutstanding = getInstallmentOutstanding(installment)
+        const amountForInstallment = Math.min(installmentOutstanding, remainingAmount)
+        const result = await markInstallmentPaid(installment.id, method, amountForInstallment, fullNotes)
+
+        if (result.success === false) {
+          return { success: false, error: result.error }
+        }
+
+        appliedAmount += result.appliedAmount ?? amountForInstallment
+        remainingAmount -= result.appliedAmount ?? amountForInstallment
+      }
+
+      if (appliedAmount <= 0) {
+        return { success: false, error: 'No hay saldo abierto para cobrar en este credito.' }
+      }
+
+      return { success: true, appliedAmount }
+    }
 
     const result = await markInstallmentPaid(dialogInstallmentId, method, amount, fullNotes)
     if (result.success === false) {
@@ -215,6 +274,7 @@ function CreditsDashboardContent() {
       setDialogCreditId(null)
       setDialogInstallmentId(null)
       setDialogInitialAmount(0)
+      setDialogPaymentScope('installment')
     }
   }
 
@@ -230,7 +290,9 @@ function CreditsDashboardContent() {
     const result = await markInstallmentPaid(installmentId, method, amount)
     if (result.success === false) {
       console.error('No se pudo registrar el pago:', result.error)
+      return { success: false, error: result.error }
     }
+    return { success: true }
   }
 
   const handleViewDetail = (creditId: string) => {
@@ -248,7 +310,7 @@ function CreditsDashboardContent() {
     type CsvRow = { Cuota: number; Vence: string; Monto: number; Estado: string; Credito: string; Cliente: string }
     const rows: CsvRow[] = filteredInstallments.map(i => ({
       Cuota: i.installment_number,
-      Vence: new Date(i.due_date).toLocaleDateString(),
+      Vence: formatDateOnlyDisplay(i.due_date),
       Monto: i.amount,
       // Use the shared helper — consistent with all other places in the module
       Estado: isInstallmentLate(i) ? 'late' : i.status,
@@ -296,13 +358,12 @@ function CreditsDashboardContent() {
   }
 
   const handleFilterDueToday = () => {
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const today = formatDateInputLocal()
     setFilterValues({
       ...filterValues,
       status: '',
-      fromDate: today.toISOString().split('T')[0],
-      toDate: today.toISOString().split('T')[0]
+      fromDate: today,
+      toDate: today
     })
     setPage(1)
     setActiveTab('cuotas')
@@ -327,18 +388,42 @@ function CreditsDashboardContent() {
     <RouteGuard route="/dashboard/credits" redirectTo="/dashboard">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Header */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <CreditCard className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Créditos y Cuotas</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Gestión completa de créditos y pagos de clientes
-              </p>
-            </div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+            <CreditCard className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Créditos y Cuotas</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Gestión completa de créditos y pagos de clientes
+            </p>
+          </div>
+        </div>
+
+        {/* Headline KPIs + acciones (siempre visibles) */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="rounded-xl border border-border bg-card px-4 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Total por cobrar</p>
+            <p className="text-xl font-bold tabular-nums text-foreground">{formatCurrency(portfolioTotals.outstanding)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleFilterOverdue}
+            className="rounded-xl border border-red-200 bg-red-50/70 px-4 py-2 text-left transition-colors hover:bg-red-100/70 dark:border-red-900/50 dark:bg-red-950/20 dark:hover:bg-red-950/40"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-red-700 dark:text-red-300">Vencido</p>
+            <p className="text-xl font-bold tabular-nums text-red-700 dark:text-red-300">{formatCurrency(portfolioTotals.overdue)}</p>
+          </button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-9" onClick={refreshData} disabled={loading || isPending}>
+              <RefreshCw className={`h-4 w-4 mr-1.5 ${loading || isPending ? 'animate-spin' : ''}`} />
+              Actualizar
+            </Button>
+            <Button variant="outline" size="sm" className="h-9" onClick={exportInstallmentsCsv}>
+              <Download className="h-4 w-4 mr-1.5" />
+              Exportar
+            </Button>
           </div>
         </div>
       </div>
@@ -356,22 +441,15 @@ function CreditsDashboardContent() {
         </div>
       )}
 
-      {/* Quick Actions */}
-      <CreditQuickActions
-        onRefresh={refreshData}
-        onExportCSV={exportInstallmentsCsv}
-        onFilterOverdue={handleFilterOverdue}
-        onFilterDueToday={handleFilterDueToday}
-        loading={loading || isPending}
-        overdueCount={overdueCount}
-        dueTodayCount={dueTodayCount}
-      />
-
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:w-auto lg:inline-grid gap-1.5 h-auto">
           <TabsTrigger value="overview" className="gap-2">
             <LayoutDashboard className="h-4 w-4" />
             Resumen
+          </TabsTrigger>
+          <TabsTrigger value="credits" className="gap-2">
+            <Users className="h-4 w-4" />
+            Clientes
           </TabsTrigger>
           <TabsTrigger value="cuotas" className="gap-2">
             <CalendarClock className="h-4 w-4" />
@@ -390,16 +468,31 @@ function CreditsDashboardContent() {
 
         {/* Tab Content: Resumen */}
         <TabsContent value="overview" className="space-y-6">
-          {/* Active Credits List — view toggle embedded in component header */}
           <CreditOverview
             credits={credits}
             installments={installments}
             creditById={creditById}
             remainingByCredit={remainingByCredit}
+            onRegisterPayment={handleOpenPaymentDialog}
           />
 
+          {/* Upcoming Installments */}
+          <UpcomingInstallments
+            installments={installments.filter(i => isInstallmentLate(i) || i.status === 'pending').slice(0, 15)}
+            creditById={creditById}
+            sales={sales}
+            saleItems={saleItems}
+            onMarkPaid={handleQuickPayInstallment}
+          />
+        </TabsContent>
+
+        {/* Tab Content: Créditos Activos */}
+        <TabsContent value="credits" className="space-y-6">
           <CreditList
             credits={credits.filter(c => c.status === 'active')}
+            installments={installments}
+            sales={sales}
+            saleItems={saleItems}
             remainingByCredit={remainingByCredit}
             paidByCredit={paidByCredit}
             onRegisterPayment={handleOpenPaymentDialog}
@@ -407,15 +500,7 @@ function CreditsDashboardContent() {
             viewMode={creditViewMode}
             onChangeViewMode={setCreditViewMode}
           />
-
-          {/* Upcoming Installments */}
-          <UpcomingInstallments
-            installments={installments.filter(i => isInstallmentLate(i) || i.status === 'pending').slice(0, 15)}
-            creditById={creditById}
-            onMarkPaid={handleQuickPayInstallment}
-          />
         </TabsContent>
-
 
         {/* Tab Content: Cuotas */}
         <TabsContent value="cuotas" className="space-y-4">
@@ -581,8 +666,9 @@ function CreditsDashboardContent() {
           ) : (
             <div className="rounded-xl border border-border/50 overflow-hidden">
               {/* Table header */}
-              <div className="hidden md:grid grid-cols-[1fr_auto_auto_auto_120px_auto] items-center gap-4 px-5 py-2.5 bg-muted/40 border-b border-border/50 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              <div className="hidden md:grid grid-cols-[1.15fr_1.05fr_auto_auto_auto_120px_auto] items-center gap-4 px-5 py-2.5 bg-muted/40 border-b border-border/50 text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 <span>Cliente</span>
+                <span>Crédito / Origen</span>
                 <span className="text-center w-16">Cuota</span>
                 <span className="w-28">Vence</span>
                 <span className="text-right w-24">Monto</span>
@@ -596,13 +682,14 @@ function CreditsDashboardContent() {
                 const paid = Number(row.amount_paid || 0)
                 const amt = Number(row.amount || 0)
                 const prog = installmentsProgress[row.id]?.progreso ?? (amt > 0 ? Math.min(100, Math.round((paid / amt) * 100)) : 0)
-                const customerName = creditById[row.credit_id]?.customer_name || 'Cliente'
+                const credit = creditById[row.credit_id]
+                const customerName = credit?.customer_name || 'Cliente'
                 const initials = customerName.split(' ').filter(Boolean).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+                const display = getInstallmentDisplayInfo(row, credit, installments, sales, saleItems)
 
                 // Due date helpers
-                const dueDate = new Date(row.due_date)
-                const today = new Date(); today.setHours(0,0,0,0)
-                dueDate.setHours(0,0,0,0)
+                const dueDate = startOfLocalDay(row.due_date)
+                const today = startOfLocalDay(new Date())
                 const isToday = dueDate.getTime() === today.getTime()
                 const daysOverdue = effStatus === 'late' ? Math.floor((today.getTime() - dueDate.getTime()) / 86400000) : 0
 
@@ -628,10 +715,10 @@ function CreditsDashboardContent() {
                 const barColor = effStatus === 'late' ? 'bg-red-500' : effStatus === 'paid' ? 'bg-green-500' : 'bg-blue-500'
 
                 return (
-                  <div
-                    key={row.id}
-                    className={`group flex flex-col md:grid md:grid-cols-[1fr_auto_auto_auto_120px_auto] items-start md:items-center gap-3 md:gap-4 px-4 md:px-5 py-4 border-b border-border/30 last:border-0 transition-colors duration-100 ${rowBg}`}
-                  >
+                    <div
+                      key={row.id}
+                      className={`group flex flex-col md:grid md:grid-cols-[1.15fr_1.05fr_auto_auto_auto_120px_auto] items-start md:items-center gap-3 md:gap-4 px-4 md:px-5 py-4 border-b border-border/30 last:border-0 transition-colors duration-100 ${rowBg}`}
+                    >
                     {/* Customer */}
                     <div className="flex items-center gap-2.5 min-w-0 w-full md:w-auto">
                       <div className="flex-shrink-0 h-8 w-8 rounded-full bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center text-white text-[10px] font-bold select-none">
@@ -648,6 +735,19 @@ function CreditsDashboardContent() {
                       </div>
                     </div>
 
+                    {/* Credit context */}
+                    <div className="min-w-0 w-full md:w-auto">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-mono text-xs text-muted-foreground">{display.creditCode}</span>
+                        <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+                          {display.originLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                        {display.saleCode ? `Ticket ${display.saleCode} · ` : ''}{display.productSummary}
+                      </p>
+                    </div>
+
                     {/* Cuota # */}
                     <div className="flex md:flex-col items-center gap-2 md:gap-0 w-16">
                       <span className="text-[10px] text-muted-foreground md:hidden">Cuota</span>
@@ -657,7 +757,7 @@ function CreditsDashboardContent() {
                     {/* Due date */}
                     <div className="hidden md:block w-28">
                       <p className="text-sm tabular-nums text-foreground">
-                        {new Date(row.due_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {formatDateOnlyDisplay(row.due_date)}
                       </p>
                     </div>
 
@@ -685,14 +785,14 @@ function CreditsDashboardContent() {
 
                     {/* Mobile: date + amount + status in one row */}
                     <div className="flex md:hidden items-center justify-between w-full gap-2 text-xs text-muted-foreground">
-                      <span>{new Date(row.due_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}</span>
+                      <span>{formatDateOnlyDisplay(row.due_date, 'es-AR', { day: '2-digit', month: 'short' })}</span>
                       <span className="font-semibold text-foreground tabular-nums">{formatCurrency(row.amount)}</span>
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${statusStyle}`}>{statusLabel}</span>
                     </div>
 
                     {/* Action */}
                     <div className="flex md:justify-center w-full md:w-24">
-                      {row.status !== 'paid' ? (
+                      {effStatus !== 'paid' ? (
                         <Button
                           variant="outline"
                           size="sm"
@@ -770,171 +870,18 @@ function CreditsDashboardContent() {
             </div>
           </div>
 
-          {/* Timeline with search, skeleton and date grouping */}
-          {(() => {
-            const methodConfig: Record<string, { label: string; color: string; dot: string }> = {
-              cash:     { label: 'Efectivo',       color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',     dot: 'bg-green-500' },
-              card:     { label: 'Tarjeta',         color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',         dot: 'bg-blue-500' },
-              transfer: { label: 'Transferencia',   color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', dot: 'bg-purple-500' },
-            }
-            const avatarGradients = [
-              'from-blue-500 to-blue-700', 'from-violet-500 to-violet-700',
-              'from-emerald-500 to-emerald-700', 'from-rose-500 to-rose-700',
-              'from-amber-500 to-amber-700', 'from-cyan-500 to-cyan-700',
-              'from-indigo-500 to-indigo-700', 'from-fuchsia-500 to-fuchsia-700',
-            ]
-            const getGradient = (name: string) => {
-              let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff
-              return avatarGradients[Math.abs(h) % avatarGradients.length]
-            }
-            const getDateLabel = (iso?: string) => {
-              if (!iso) return 'Sin fecha'
-              const d = new Date(iso); d.setHours(0,0,0,0)
-              const today = new Date(); today.setHours(0,0,0,0)
-              const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1)
-              if (d.getTime() === today.getTime()) return 'Hoy'
-              if (d.getTime() === yesterday.getTime()) return 'Ayer'
-              return new Date(iso).toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-            }
-
-            // Inner component to allow local useState for search
-            function Timeline() {
-              const [search, setSearch] = useState('')
-              const filtered = search.trim()
-                ? recentPayments.filter(p => {
-                    const n = (creditById[p.credit_id]?.customer_name || '').toLowerCase()
-                    const m = (p.payment_method || '').toLowerCase()
-                    const q = search.toLowerCase()
-                    return n.includes(q) || m.includes(q)
-                  })
-                : recentPayments
-
-              const groups = filtered.reduce<Record<string, typeof recentPayments>>((acc, p) => {
-                const k = getDateLabel(p.created_at)
-                if (!acc[k]) acc[k] = []
-                acc[k].push(p)
-                return acc
-              }, {})
-
-              return (
-                <>
-                  {/* Toolbar */}
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-1 max-w-xs">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                      <input
-                        type="text"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Buscar cliente o método..."
-                        className="w-full h-8 pl-8 pr-7 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-ring/40 transition-all"
-                      />
-                      {search && (
-                        <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground">✕</button>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground ml-auto shrink-0">
-                      {filtered.length !== recentPayments.length
-                        ? `${filtered.length} de ${recentPayments.length}`
-                        : payments.length > 300 ? `Últimos 300 de ${payments.length}` : `${recentPayments.length} pagos`}
-                    </p>
-                    <Button variant="outline" size="sm" onClick={exportPaymentsCsv} className="h-8 gap-1.5 shrink-0">
-                      <CheckCircle className="h-3.5 w-3.5" />
-                      Exportar CSV
-                    </Button>
-                  </div>
-
-                  {/* Skeleton */}
-                  {(loading || isPending) && (
-                    <div className="space-y-2 animate-pulse">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className="flex items-center gap-3 rounded-xl px-4 py-3 border border-border/60 bg-muted/20">
-                          <div className="h-9 w-9 rounded-full bg-muted" />
-                          <div className="flex-1 space-y-2">
-                            <div className="h-3 w-28 bg-muted rounded" />
-                            <div className="h-2.5 w-16 bg-muted rounded" />
-                          </div>
-                          <div className="h-4 w-14 bg-muted rounded" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Timeline */}
-                  {!loading && !isPending && (
-                    filtered.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl border border-dashed border-border">
-                        <div className="p-4 rounded-full bg-muted/50 mb-3">
-                          <Receipt className="h-8 w-8 text-muted-foreground/50" />
-                        </div>
-                        <p className="text-sm font-medium text-muted-foreground">
-                          {search ? 'Sin resultados' : 'Sin pagos registrados'}
-                        </p>
-                        <p className="text-xs text-muted-foreground/70 mt-1">
-                          {search ? 'Intentá con otro término' : 'Los pagos aparecerán aquí cuando se registren'}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-6">
-                        {Object.entries(groups).map(([label, rows]) => {
-                          const dayTotal = rows.reduce((s, p) => s + Number(p.amount || 0), 0)
-                          return (
-                            <div key={label}>
-                              {/* Date separator + subtotal */}
-                              <div className="flex items-center gap-3 mb-3">
-                                <div className="h-px flex-1 bg-border" />
-                                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-muted/60 border border-border/40">
-                                  <span className="text-xs font-semibold text-foreground capitalize">{label}</span>
-                                  <span className="text-[10px] text-muted-foreground">·</span>
-                                  <span className="text-xs font-bold text-green-600 dark:text-green-400 tabular-nums">{formatCurrency(dayTotal)}</span>
-                                </div>
-                                <div className="h-px flex-1 bg-border" />
-                              </div>
-                              {/* Rows */}
-                              <div className="space-y-1.5">
-                                {rows.map(p => {
-                                  const name = creditById[p.credit_id]?.customer_name || 'Cliente'
-                                  const initials = name.split(' ').filter(Boolean).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
-                                  const inst = installments.find(i => i.id === p.installment_id)
-                                  const method = methodConfig[p.payment_method || ''] ?? { label: p.payment_method || 'Otro', color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400', dot: 'bg-slate-400' }
-                                  return (
-                                    <div key={p.id} className="group flex items-center gap-3 rounded-xl px-4 py-3 bg-white dark:bg-white/[0.03] border border-border/50 dark:border-white/[0.05] hover:border-green-300 dark:hover:border-green-800 hover:shadow-sm hover:bg-green-50/20 dark:hover:bg-green-900/10 transition-all duration-150 cursor-default">
-                                      <div className={`flex-shrink-0 h-9 w-9 rounded-full bg-gradient-to-br ${getGradient(name)} flex items-center justify-center text-white text-xs font-bold shadow-sm select-none`}>
-                                        {initials}
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-foreground truncate leading-tight">{name}</p>
-                                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                          {inst && <span className="text-[11px] text-muted-foreground font-mono bg-muted/50 rounded px-1.5 py-0.5 leading-none">Cuota #{inst.installment_number}</span>}
-                                          <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full leading-none ${method.color}`}>
-                                            <span className={`h-1.5 w-1.5 rounded-full ${method.dot} opacity-80`} />
-                                            {method.label}
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <div className="hidden sm:block text-right shrink-0">
-                                        <p className="text-xs text-muted-foreground tabular-nums">
-                                          {p.created_at ? new Date(p.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
-                                        </p>
-                                      </div>
-                                      <div className="text-right shrink-0 min-w-[80px]">
-                                        <p className="text-sm font-bold text-green-600 dark:text-green-400 tabular-nums">+{formatCurrency(p.amount)}</p>
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  )}
-                </>
-              )
-            }
-            return <Timeline />
-          })()}
+          {/* Timeline con búsqueda, skeleton y agrupado por fecha */}
+          <PaymentsTimeline
+            recentPayments={recentPayments}
+            payments={payments}
+            creditById={creditById}
+            installments={installments}
+          sales={sales}
+          saleItems={saleItems}
+            loading={loading}
+            isPending={isPending}
+            onExportCSV={exportPaymentsCsv}
+          />
         </TabsContent>
 
 
@@ -946,6 +893,15 @@ function CreditsDashboardContent() {
         onOpenChange={handlePaymentDialogOpenChange}
         onConfirm={handleConfirmPayment}
         initialAmount={dialogInitialAmount}
+        maxPaymentAmount={
+          dialogPaymentScope === 'credit' && selectedDialogCreditId
+            ? getCreditOutstanding(selectedDialogCreditId)
+            : selectedDialogInstallment
+              ? getInstallmentOutstanding(selectedDialogInstallment)
+              : undefined
+        }
+        allowFullDebtPayment={dialogPaymentScope === 'credit'}
+        totalDebtAmount={selectedDialogCreditId ? getCreditOutstanding(selectedDialogCreditId) : undefined}
         creditInfo={selectedDialogCreditId ? {
           id: selectedDialogCreditId,
           customerName: creditById[selectedDialogCreditId]?.customer_name || 'Cliente',
@@ -956,7 +912,13 @@ function CreditsDashboardContent() {
           termMonths: creditById[selectedDialogCreditId]?.term_months || 0,
           remainingBalance: remainingByCredit[selectedDialogCreditId] || 0,
           nextInstallmentNumber: selectedDialogInstallment?.installment_number,
-          nextDueDate: selectedDialogInstallment?.due_date
+          nextDueDate: selectedDialogInstallment?.due_date,
+          creditCode: selectedDialogDisplay?.creditCode,
+          creditTypeLabel: selectedDialogDisplay?.creditTypeLabel,
+          originLabel: selectedDialogDisplay?.originLabel,
+          creditLabel: selectedDialogDisplay?.creditLabel,
+          saleCode: selectedDialogDisplay?.saleCode,
+          productSummary: selectedDialogDisplay?.productSummary,
         } : undefined}
       />
 
@@ -975,11 +937,15 @@ function CreditsDashboardContent() {
         })) : []}
         remainingBalance={detailCreditId ? remainingByCredit[detailCreditId] || 0 : 0}
         paidAmount={detailCreditId ? paidByCredit[detailCreditId] || 0 : 0}
+        sales={sales}
+        saleItems={saleItems}
+        onPayInstallment={(installmentId) => {
+          setIsDetailDialogOpen(false)
+          handleMarkInstallmentPaidDirectly(installmentId)
+        }}
       />
 
       </div>
     </RouteGuard>
   )
 }
-
-
