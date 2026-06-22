@@ -68,6 +68,7 @@ const TIERS = [
 const FEATURE_LIST = [
   { label: 'Punto de Venta (POS)',    icon: ShoppingCart },
   { label: 'Inventario',              icon: Boxes        },
+  { label: 'Inventario avanzado',      icon: Boxes        },
   { label: 'Gestión de usuarios',     icon: Users        },
   { label: 'Sucursales múltiples',    icon: Building2    },
   { label: 'Módulo de Reparaciones',  icon: Wrench       },

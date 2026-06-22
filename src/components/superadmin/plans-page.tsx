@@ -221,6 +221,7 @@ function PlanCard({
   const accent = tierAccent[plan.tier] || 'from-slate-400 to-slate-500'
   const accentText = plan.color_config?.accent || 'text-slate-700'
   const badge = tierBadge[plan.tier] || 'bg-slate-100 text-slate-700'
+  const inventoryAdminEnabled = Boolean(getCommercialFeatureValue(plan.features, 'inventoryAdmin'))
   const creditsEnabled = Boolean(getCommercialFeatureValue(plan.features, 'credits'))
   const promotionsEnabled = Boolean(getCommercialFeatureValue(plan.features, 'promotions'))
   const securityEnabled = Boolean(getCommercialFeatureValue(plan.features, 'security'))
@@ -289,6 +290,17 @@ function PlanCard({
             Organizaciones activas
           </div>
           <span className={cn('text-xl font-extrabold tabular-nums', accentText)}>{orgCount}</span>
+        </div>
+
+        <div className={cn(
+          'flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold',
+          inventoryAdminEnabled
+            ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-900/50 dark:bg-indigo-950/20 dark:text-indigo-300'
+            : 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-800 dark:bg-slate-900/50'
+        )}>
+          <Boxes className="h-3.5 w-3.5" />
+          Inventario avanzado
+          <span className="ml-auto">{inventoryAdminEnabled ? 'Incluido' : 'No incluido'}</span>
         </div>
 
         <div className={cn(
@@ -415,6 +427,7 @@ function PlanCard({
 const availableFeatures = [
   { key: 'pos',       label: 'Punto de Venta (POS)',       icon: ShoppingCart },
   { key: 'inventory', label: 'Inventario',                  icon: Boxes        },
+  { key: 'inventoryAdmin', label: 'Inventario avanzado',     icon: Boxes        },
   { key: 'users',     label: 'Gestión de usuarios',         icon: Users        },
   { key: 'branches',  label: 'Sucursales múltiples',        icon: Building2    },
   { key: 'repairs',   label: 'Módulo de Reparaciones',      icon: Wrench       },

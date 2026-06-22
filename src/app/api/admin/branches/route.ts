@@ -295,10 +295,16 @@ async function postHandler(request: NextRequest, ctx: AdminAuthContext) {
     const planGate = await canCreateResource(organizationId, 'branches')
 
     if (!planGate.allowed) {
+      const planName = planGate.plan?.name || planGate.plan?.code || 'actual'
+      const limitText = planGate.limit === null ? 'ilimitadas' : String(planGate.limit)
       return NextResponse.json(
         {
-          error: `Tu plan ${planGate.plan.name} permite hasta ${planGate.limit} sucursales. Actualiza el plan para crear mas.`,
-          code: 'PLAN_LIMIT_REACHED',
+          error: planGate.blocked
+            ? 'No se puede crear la sucursal porque la suscripcion esta suspendida o cancelada. Reactiva la suscripcion para habilitar mas sucursales.'
+            : planGate.expired
+              ? `No hay cupo para crear esta sucursal. Como el plan vencio, la organizacion quedo con el limite Free de ${limitText} sucursal(es). Elimina una sucursal que no uses o actualiza el plan.`
+              : `No hay cupo para crear esta sucursal. El plan ${planName} permite ${limitText} sucursal(es). Elimina una sucursal que no uses o actualiza el plan.`,
+          code: planGate.blocked ? 'SUBSCRIPTION_BLOCKED' : 'PLAN_LIMIT_REACHED',
           resource: 'branches',
           current: planGate.current,
           limit: planGate.limit,

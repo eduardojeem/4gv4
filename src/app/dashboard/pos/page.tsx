@@ -3294,20 +3294,21 @@ function POSPageContent() {
                         return
                       }
                       try {
-                        const supabase = createSupabaseClient()
-                        const { data, error } = await supabase
-                          .from('cash_registers')
-                          .insert({ name, is_open: false, balance: 0, branch_id: selectedBranchId })
-                          .select('id')
-                          .single()
-                        if (error) {
-                          toast.error('Error al crear caja en Supabase')
+                        const response = await fetch('/api/pos/cash-registers', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ name, branch_id: selectedBranchId }),
+                        })
+                        const payload = await response.json().catch(() => ({}))
+
+                        if (!response.ok || !payload?.success) {
+                          toast.warning(payload?.error || 'No se pudo crear la caja')
                           return
-                        } else {
-                          const insertedId = (data as { id?: string } | null)?.id
-                          if (insertedId) {
-                            newId = insertedId as string
-                          }
+                        }
+
+                        const insertedId = payload?.data?.id
+                        if (insertedId) {
+                          newId = String(insertedId)
                         }
                       } catch (e) {
                         console.error('Error creating register in Supabase:', e)

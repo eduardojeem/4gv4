@@ -3,12 +3,16 @@ import { createClient as createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase, mapUiRoleToDbRole } from '@/lib/supabase/admin'
 import { withAdminAuth } from '@/lib/api/withAdminAuth'
 import { logger } from '@/lib/logger'
+import { sendEmail, renderBrandedEmail } from '@/lib/email/resend'
+import { canCreateResource } from '@/lib/saas/subscription-service'
 
 type ImportUser = {
   name: string
   email: string
   role?: string
   status?: string
+  phone?: string
+  department?: string
 }
 
 type CanonicalRole = 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
@@ -18,7 +22,7 @@ const MAX_IMPORT_SIZE = 100
 const DEFAULT_ROLE: CanonicalRole = 'cliente'
 const DEFAULT_STATUS: ProfileStatus = 'active'
 
-function genPassword(len = 12) {
+function genPassword(len = 16) {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+'
   let pass = ''
   for (let i = 0; i < len; i++) pass += chars[Math.floor(Math.random() * chars.length)]
@@ -71,6 +75,58 @@ function mapRoleToOrgRole(role: CanonicalRole): string {
   }
 }
 
+function mapStatusToOrgMemberStatus(status: ProfileStatus): 'active' | 'suspended' {
+  return status === 'active' ? 'active' : 'suspended'
+}
+
+function countsTowardUserLimit(role: CanonicalRole) {
+  return role !== 'cliente' && role !== 'super_admin'
+}
+
+async function countStaffMembershipAdditions(
+  supabaseAdmin: ReturnType<typeof createAdminSupabase>,
+  organizationId: string,
+  users: Array<{ email: string | undefined; role: CanonicalRole; status: ProfileStatus }>,
+  existingMap: Map<string, string>
+) {
+  const staffEmails = Array.from(
+    new Set(
+      users
+        .filter((user) => user.email && user.status === 'active' && countsTowardUserLimit(user.role))
+        .map((user) => user.email as string)
+    )
+  )
+
+  if (staffEmails.length === 0) return 0
+
+  const existingStaffUserIds = staffEmails
+    .map((email) => existingMap.get(email))
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+
+  const existingStaffMemberIds = new Set<string>()
+
+  if (existingStaffUserIds.length > 0) {
+    const { data, error } = await supabaseAdmin
+      .from('organization_members')
+      .select('user_id, role, status')
+      .eq('organization_id', organizationId)
+      .in('user_id', existingStaffUserIds)
+      .neq('role', 'customer')
+      .eq('status', 'active')
+
+    if (error) throw error
+
+    for (const row of data ?? []) {
+      existingStaffMemberIds.add(String(row.user_id))
+    }
+  }
+
+  return staffEmails.filter((email) => {
+    const existingId = existingMap.get(email)
+    return !existingId || !existingStaffMemberIds.has(existingId)
+  }).length
+}
+
 async function handler(req: NextRequest, context: { user: { id: string; email?: string; role: string }; organizationId: string | null }) {
   try {
     const body = await req.json()
@@ -108,6 +164,8 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
       name: u.name?.trim(),
       role: normalizeRole(u.role),
       status: normalizeStatus(u.status),
+      phone: u.phone?.trim() || null,
+      department: u.department?.trim() || null,
     }))
 
     const invalid = normalizedUsers.find((u) => !u.email || !u.name)
@@ -123,7 +181,7 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
       userCount: users.length,
     })
 
-    const results: { email: string; ok: boolean; error?: string }[] = []
+    const results: { email: string; ok: boolean; error?: string; invite_link?: string | null }[] = []
 
     let supabaseAdmin: ReturnType<typeof createAdminSupabase> | null = null
     try {
@@ -138,16 +196,56 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
     if (supabaseAdmin) {
       const existingMap = await loadExistingUsersByEmail(supabaseAdmin)
 
+      if (context.organizationId) {
+        const staffAdditions = await countStaffMembershipAdditions(
+          supabaseAdmin,
+          context.organizationId,
+          normalizedUsers,
+          existingMap
+        )
+
+        if (staffAdditions > 0) {
+          const quota = await canCreateResource(context.organizationId, 'users', staffAdditions)
+
+          if (!quota.allowed) {
+            const planName = quota.plan?.name || quota.plan?.code || 'actual'
+            const limitText = quota.limit === null ? 'ilimitado' : String(quota.limit)
+
+            return NextResponse.json(
+              {
+                ok: false,
+                error: quota.blocked
+                  ? 'No se pueden agregar usuarios porque la suscripcion de la organizacion esta suspendida o cancelada. Reactiva la suscripcion para habilitar mas accesos.'
+                  : quota.expired
+                    ? `No hay cupo para agregar estos usuarios. Como el plan vencio, la organizacion quedo con el limite Free de ${limitText} usuarios activos. Actualmente hay ${quota.current} activos e intentas agregar ${staffAdditions}.`
+                  : `No hay cupo para agregar estos usuarios. El plan ${planName} permite ${limitText} usuarios activos. Actualmente hay ${quota.current} activos e intentas agregar ${staffAdditions}.`,
+                plan: {
+                  code: quota.plan?.code,
+                  name: quota.plan?.name,
+                  limit: quota.limit,
+                  current: quota.current,
+                  requested: staffAdditions,
+                },
+              },
+              { status: quota.blocked ? 402 : 409 }
+            )
+          }
+        }
+      }
+
       for (const u of normalizedUsers) {
         const email = u.email as string
         const fullName = u.name as string
         const role = u.role
         const status = u.status
+        const phone = u.phone
+        const department = u.department
 
         try {
           const existingId = existingMap.get(email)
 
           if (existingId) {
+            // ── Update existing user ──────────────────────────────────────
             const { error: updateUserError } = await supabaseAdmin.auth.admin.updateUserById(existingId, {
               user_metadata: {
                 full_name: fullName,
@@ -158,15 +256,19 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
             if (updateUserError) throw updateUserError
 
             const nowIso = new Date().toISOString()
+            const profilePayload: Record<string, unknown> = {
+              id: existingId,
+              full_name: fullName,
+              email,
+              role,
+              status,
+              updated_at: nowIso,
+            }
+            if (phone !== null) profilePayload.phone = phone
+            if (department !== null) profilePayload.department = department
+
             const { error: profileError } = await supabaseAdmin.from('profiles').upsert(
-              {
-                id: existingId,
-                full_name: fullName,
-                email,
-                role,
-                status,
-                updated_at: nowIso,
-              },
+              profilePayload,
               { onConflict: 'id' }
             )
             if (profileError) throw profileError
@@ -182,49 +284,57 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
             )
             if (roleError) throw roleError
 
-            // Ensure the user is a member of the importing admin's org
             if (context.organizationId && role !== 'super_admin') {
               await supabaseAdmin.from('organization_members').upsert(
                 {
                   organization_id: context.organizationId,
                   user_id: existingId,
                   role: mapRoleToOrgRole(role),
-                  status: 'active',
+                  status: mapStatusToOrgMemberStatus(status),
                 },
                 { onConflict: 'organization_id,user_id' }
               )
             }
 
-            results.push({ email, ok: true })
+            results.push({ email, ok: true, invite_link: null })
             continue
           }
 
+          // ── Create new user ───────────────────────────────────────────
           const password = genPassword()
           const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
             email,
             password,
-            email_confirm: false,
+            // Confirm email immediately so the recovery link works
+            email_confirm: true,
             app_metadata: { role },
             user_metadata: {
               full_name: fullName,
               status,
-              imported_via: 'admin_csv',
+              imported_via: 'admin_panel',
             },
           })
           if (createErr) throw createErr
 
           const userId = created?.user?.id
+          let inviteLink: string | null = null
+
           if (userId) {
             const nowIso = new Date().toISOString()
+
+            const profilePayload: Record<string, unknown> = {
+              id: userId,
+              full_name: fullName,
+              email,
+              role,
+              status,
+              updated_at: nowIso,
+            }
+            if (phone !== null) profilePayload.phone = phone
+            if (department !== null) profilePayload.department = department
+
             const { error: profileError } = await supabaseAdmin.from('profiles').upsert(
-              {
-                id: userId,
-                full_name: fullName,
-                email,
-                role,
-                status,
-                updated_at: nowIso,
-              },
+              profilePayload,
               { onConflict: 'id' }
             )
             if (profileError) throw profileError
@@ -240,28 +350,70 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
             )
             if (roleError) throw roleError
 
-            // Add new user to the importing admin's organization
             if (context.organizationId && role !== 'super_admin') {
               await supabaseAdmin.from('organization_members').upsert(
                 {
                   organization_id: context.organizationId,
                   user_id: userId,
                   role: mapRoleToOrgRole(role),
-                  status: 'active',
+                  status: mapStatusToOrgMemberStatus(status),
                 },
                 { onConflict: 'organization_id,user_id' }
               )
             }
 
+            // Generate a password-recovery link so the admin can share it
+            // with the new user to let them set their own password.
+            try {
+              const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://servix360.org'
+              const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+                type: 'recovery',
+                email,
+                options: {
+                  redirectTo: `${siteUrl}/auth/callback?next=/auth/reset-password`,
+                },
+              })
+              inviteLink = (linkData as any)?.properties?.action_link ?? null
+
+              // Send email automatically if we have a link
+              if (inviteLink) {
+                const html = renderBrandedEmail({
+                  title: 'Bienvenido al sistema',
+                  intro: `Hola${fullName ? ` ${fullName}` : ''}, tu cuenta ha sido creada con éxito. Por favor, configurá tu contraseña para poder acceder al sistema.`,
+                  cta: { label: 'Configurar mi contraseña', url: inviteLink },
+                  footerNote: 'Este enlace expira en 24 horas. Si expira, puedes solicitar uno nuevo en la página de inicio de sesión.',
+                })
+
+                await sendEmail({
+                  to: email,
+                  subject: 'Bienvenido al sistema — Configura tu acceso',
+                  html,
+                })
+              }
+            } catch (linkErr) {
+              logger.warn('Could not generate invite link for new user', {
+                email,
+                error: linkErr instanceof Error ? linkErr.message : String(linkErr),
+              })
+            }
+
             existingMap.set(email, userId)
           }
 
-          results.push({ email, ok: true })
+          results.push({ email, ok: true, invite_link: inviteLink })
         } catch (e: any) {
           results.push({ email, ok: false, error: e?.message || 'Unknown error' })
         }
       }
     } else {
+      if (context.organizationId) {
+        return NextResponse.json(
+          { ok: false, error: 'No se puede crear usuarios de organizacion sin cliente administrativo de Supabase' },
+          { status: 500 }
+        )
+      }
+
+      // ── Fallback: server client (no admin SDK) ────────────────────────
       const supabase = await createServerSupabase()
 
       for (const u of normalizedUsers) {
@@ -269,6 +421,8 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
         const fullName = u.name as string
         const role = u.role
         const status = u.status
+        const phone = u.phone
+        const department = u.department
         const password = genPassword()
 
         try {
@@ -279,7 +433,7 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
               data: {
                 full_name: fullName,
                 status,
-                imported_via: 'admin_csv',
+                imported_via: 'admin_panel',
               },
             },
           })
@@ -288,15 +442,20 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
           const userId = data?.user?.id
           if (userId) {
             const nowIso = new Date().toISOString()
+
+            const profilePayload: Record<string, unknown> = {
+              id: userId,
+              full_name: fullName,
+              email,
+              role,
+              status,
+              updated_at: nowIso,
+            }
+            if (phone !== null) profilePayload.phone = phone
+            if (department !== null) profilePayload.department = department
+
             await supabase.from('profiles').upsert(
-              {
-                id: userId,
-                full_name: fullName,
-                email,
-                role,
-                status,
-                updated_at: nowIso,
-              },
+              profilePayload,
               { onConflict: 'id' }
             )
 
@@ -316,14 +475,15 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
                   organization_id: context.organizationId,
                   user_id: userId,
                   role: mapRoleToOrgRole(role),
-                  status: 'active',
+                  status: mapStatusToOrgMemberStatus(status),
                 },
                 { onConflict: 'organization_id,user_id' }
               )
             }
           }
 
-          results.push({ email, ok: true })
+          // In fallback mode, signUp sends a confirmation email automatically
+          results.push({ email, ok: true, invite_link: null })
         } catch (e: any) {
           results.push({ email, ok: false, error: e?.message || 'Unknown error' })
         }

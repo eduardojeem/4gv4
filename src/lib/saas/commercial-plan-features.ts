@@ -6,6 +6,7 @@ export type CommercialPlanFeature = {
 const aliasesByKey: Record<string, string[]> = {
   pos: ['Punto de Venta (POS)'],
   inventory: ['Inventario'],
+  inventoryAdmin: ['Inventario avanzado', 'Inventario avanzado (/admin/inventory)'],
   users: ['Gestión de usuarios', 'Usuarios'],
   branches: ['Sucursales múltiples', 'Sucursales'],
   repairs: ['Módulo de Reparaciones', 'Reparaciones'],

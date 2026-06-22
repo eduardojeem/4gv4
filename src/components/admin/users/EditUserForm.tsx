@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Search } from 'lucide-react'
+import { Search, Mail, Lock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
@@ -156,6 +156,20 @@ export function EditUserForm({
                 </FormItem>
               )}
             />
+          </div>
+        </div>
+
+        {/* Email — read-only notice */}
+        <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+          <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground leading-snug truncate">
+              Email: <span className="font-medium text-foreground">{user.email}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground flex-shrink-0">
+            <Lock className="h-3 w-3" />
+            No editable
           </div>
         </div>
 
@@ -338,8 +352,16 @@ export function EditUserForm({
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting || !form.formState.isValid || !form.formState.isDirty}>
-            {isSubmitting ? 'Guardando...' : 'Guardar cambios'}
+          <Button
+            type="submit"
+            disabled={isSubmitting || !form.formState.isValid || !form.formState.isDirty}
+            title={!form.formState.isDirty ? 'No hay cambios para guardar' : undefined}
+          >
+            {isSubmitting
+              ? 'Guardando...'
+              : !form.formState.isDirty
+              ? 'Sin cambios'
+              : 'Guardar cambios'}
           </Button>
         </div>
       </form>

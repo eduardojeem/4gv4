@@ -170,9 +170,20 @@ async function setPrimaryBranch(
     return NextResponse.json({ success: false, error: 'Usuario o sucursal fuera de tu organizacion' }, { status: 403 })
   }
 
+  const nowIso = new Date().toISOString()
+
+  const { error: clearPrimaryError } = await supabaseAdmin
+    .from('user_branch_assignments')
+    .update({ is_primary: false, updated_at: nowIso })
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .neq('branch_id', branchId)
+
+  if (clearPrimaryError) throw clearPrimaryError
+
   const { error } = await supabaseAdmin
     .from('user_branch_assignments')
-    .update({ is_primary: true, is_active: true, updated_at: new Date().toISOString() })
+    .update({ is_primary: true, is_active: true, updated_at: nowIso })
     .eq('user_id', userId)
     .eq('branch_id', branchId)
 

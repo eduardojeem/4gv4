@@ -2,6 +2,7 @@ export type SaaSPlan = 'FREE' | 'BASIC' | 'PRO' | 'ENTERPRISE'
 
 export type SaaSModule =
   | 'inventory'
+  | 'inventory_admin'
   | 'pos'
   | 'repairs'
   | 'crm'
@@ -33,21 +34,21 @@ export const PLAN_LIMITS: Record<SaaSPlan, PlanLimits> = {
     products: 1000,
     branches: 1,
     storageMb: 5120,
-    modules: ['inventory', 'pos', 'repairs', 'crm'],
+    modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm'],
   },
   PRO: {
     users: 20,
     products: 10000,
     branches: 5,
     storageMb: 51200,
-    modules: ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'analytics', 'promotions', 'security'],
+    modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'analytics', 'promotions', 'security'],
   },
   ENTERPRISE: {
     users: null,
     products: null,
     branches: null,
     storageMb: null,
-    modules: ['inventory', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'analytics', 'promotions', 'security'],
+    modules: ['inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'analytics', 'promotions', 'security'],
   },
 }
 

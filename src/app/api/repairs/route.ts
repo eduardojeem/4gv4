@@ -68,11 +68,15 @@ export async function POST(request: NextRequest) {
     // Límite mensual de reparaciones según el plan (free 10/mes, basic 100/mes, pro+ ilimitado).
     const planGate = await canCreateRepair(organization.id)
     if (!planGate.allowed) {
+      const planName = planGate.plan?.name || planGate.plan?.code || 'actual'
+      const limitText = planGate.limit === null ? 'ilimitadas' : String(planGate.limit)
       return NextResponse.json(
         {
           error: planGate.blocked
-            ? 'Tu suscripción está suspendida. Regularizá el pago para seguir creando reparaciones.'
-            : `Tu plan ${planGate.plan.name} permite hasta ${planGate.limit} reparaciones por mes. Actualizá el plan para crear más.`,
+            ? 'No se puede crear la reparacion porque la suscripcion esta suspendida o cancelada. Reactiva la suscripcion para habilitar mas reparaciones.'
+            : planGate.expired
+              ? `No hay cupo para crear esta reparacion. Como el plan vencio, la organizacion quedo con el limite Free de ${limitText} reparaciones por mes. Actualiza el plan para crear mas.`
+              : `No hay cupo para crear esta reparacion. El plan ${planName} permite ${limitText} reparaciones por mes. Actualiza el plan para crear mas.`,
           code: planGate.blocked ? 'SUBSCRIPTION_BLOCKED' : 'PLAN_LIMIT_REACHED',
           resource: 'repairs',
           current: planGate.current,

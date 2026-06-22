@@ -3,7 +3,8 @@
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Search, RotateCw } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Search, X } from 'lucide-react'
 
 interface UsersFiltersProps {
   searchTerm: string
@@ -12,6 +13,29 @@ interface UsersFiltersProps {
   onRoleFilterChange: (value: string) => void
   statusFilter: string
   onStatusFilterChange: (value: string) => void
+  showGlobalRoles?: boolean
+}
+
+const ROLE_OPTIONS = [
+  { value: 'all', label: 'Todos los roles' },
+  { value: 'admin', label: 'Administrador' },
+  { value: 'super_admin', label: 'Super Admin' },
+  { value: 'vendedor', label: 'Vendedor' },
+  { value: 'tecnico', label: 'Técnico' },
+  { value: 'cliente', label: 'Cliente' },
+]
+
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'Todos los estados' },
+  { value: 'active', label: 'Activos' },
+  { value: 'inactive', label: 'Inactivos' },
+  { value: 'suspended', label: 'Suspendidos' },
+]
+
+const STATUS_BADGE: Record<string, string> = {
+  active: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800',
+  inactive: 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800',
+  suspended: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800',
 }
 
 export function UsersFilters({
@@ -20,9 +44,18 @@ export function UsersFilters({
   roleFilter,
   onRoleFilterChange,
   statusFilter,
-  onStatusFilterChange
+  onStatusFilterChange,
+  showGlobalRoles = false,
 }: UsersFiltersProps) {
-  const hasFilters = searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
+  const normalizedSearchTerm = searchTerm.trim()
+  const roleOptions = showGlobalRoles
+    ? ROLE_OPTIONS
+    : ROLE_OPTIONS.filter((option) => option.value !== 'super_admin' && option.value !== 'cliente')
+  const activeFilterCount = [
+    normalizedSearchTerm !== '',
+    roleFilter !== 'all',
+    statusFilter !== 'all',
+  ].filter(Boolean).length
 
   const clearFilters = () => {
     onSearchChange('')
@@ -30,49 +63,108 @@ export function UsersFilters({
     onStatusFilterChange('all')
   }
 
+  const roleLabel = roleOptions.find((o) => o.value === roleFilter)?.label
+  const statusLabel = STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label
+
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="relative flex-1 min-w-[220px] max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Buscar por nombre o email..."
-          value={searchTerm}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-9 h-9 text-sm"
-        />
+    <div className="space-y-3">
+      {/* Filter controls row */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Buscar por nombre o email..."
+            value={searchTerm}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="pl-9 h-9 text-sm pr-8"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => onSearchChange('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Role filter */}
+        <Select value={roleFilter} onValueChange={onRoleFilterChange}>
+          <SelectTrigger className="w-[160px] h-9 text-sm">
+            <SelectValue placeholder="Rol" />
+          </SelectTrigger>
+          <SelectContent>
+            {roleOptions.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Status filter */}
+        <Select value={statusFilter} onValueChange={onStatusFilterChange}>
+          <SelectTrigger className="w-[160px] h-9 text-sm">
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Clear all */}
+        {activeFilterCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+            onClick={clearFilters}
+          >
+            <X className="h-3.5 w-3.5" />
+            Limpiar
+            <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+              {activeFilterCount}
+            </Badge>
+          </Button>
+        )}
       </div>
 
-      <Select value={roleFilter} onValueChange={onRoleFilterChange}>
-        <SelectTrigger className="w-[150px] h-9 text-sm">
-          <SelectValue placeholder="Rol" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todos los roles</SelectItem>
-          <SelectItem value="admin">Administrador</SelectItem>
-          <SelectItem value="super_admin">Super Admin</SelectItem>
-          <SelectItem value="vendedor">Vendedor</SelectItem>
-          <SelectItem value="tecnico">Técnico</SelectItem>
-          <SelectItem value="cliente">Cliente</SelectItem>
-        </SelectContent>
-      </Select>
+      {/* Active filter chips */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Filtros:</span>
 
-      <Select value={statusFilter} onValueChange={onStatusFilterChange}>
-        <SelectTrigger className="w-[140px] h-9 text-sm">
-          <SelectValue placeholder="Estado" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todos</SelectItem>
-          <SelectItem value="active">Activos</SelectItem>
-          <SelectItem value="inactive">Inactivos</SelectItem>
-          <SelectItem value="suspended">Suspendidos</SelectItem>
-        </SelectContent>
-      </Select>
+          {normalizedSearchTerm && (
+            <button
+              onClick={() => onSearchChange('')}
+              className="inline-flex items-center gap-1 rounded-full border bg-muted/60 px-2.5 py-0.5 text-xs font-medium hover:bg-muted transition-colors"
+            >
+              "{normalizedSearchTerm}"
+              <X className="h-3 w-3 text-muted-foreground" />
+            </button>
+          )}
 
-      {hasFilters && (
-        <Button variant="ghost" size="sm" className="h-9 text-xs text-muted-foreground" onClick={clearFilters}>
-          <RotateCw className="h-3.5 w-3.5 mr-1" />
-          Limpiar
-        </Button>
+          {roleFilter !== 'all' && (
+            <button
+              onClick={() => onRoleFilterChange('all')}
+              className="inline-flex items-center gap-1 rounded-full border bg-muted/60 px-2.5 py-0.5 text-xs font-medium hover:bg-muted transition-colors"
+            >
+              {roleLabel}
+              <X className="h-3 w-3 text-muted-foreground" />
+            </button>
+          )}
+
+          {statusFilter !== 'all' && (
+            <button
+              onClick={() => onStatusFilterChange('all')}
+              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium hover:opacity-80 transition-opacity ${STATUS_BADGE[statusFilter] ?? 'bg-muted/60'}`}
+            >
+              {statusLabel}
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

@@ -58,6 +58,51 @@ interface UseInventoryProps {
   initialPageSize?: number
 }
 
+const productApiFields = [
+  'name',
+  'sku',
+  'description',
+  'category_id',
+  'supplier_id',
+  'brand',
+  'brand_id',
+  'stock_quantity',
+  'min_stock',
+  'max_stock',
+  'purchase_price',
+  'sale_price',
+  'wholesale_price',
+  'offer_price',
+  'has_offer',
+  'is_active',
+  'visibility',
+  'warranty_months',
+  'warranty_info',
+  'return_window_days',
+  'exchange_window_days',
+  'return_policy',
+  'exchange_policy',
+  'images',
+  'image_url',
+  'barcode',
+  'unit_measure',
+] as const
+
+function toProductApiPayload(productData: Partial<Product>) {
+  const source = productData as Record<string, unknown>
+  const payload: Record<string, unknown> = {}
+
+  for (const field of productApiFields) {
+    if (source[field] !== undefined) payload[field] = source[field]
+  }
+
+  if (payload.is_active === undefined && typeof source.status === 'string') {
+    payload.is_active = source.status === 'active'
+  }
+
+  return payload
+}
+
 export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInventoryProps = {}) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -205,34 +250,57 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   // Operaciones CRUD
   const createProduct = async (productData: Partial<Product>) => {
     try {
-      const { error } = await supabase.from('products').insert([productData])
-      if (error) throw error
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toProductApiPayload(productData)),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.success) {
+        return { success: false, error: payload?.error || 'No se pudo crear el producto' }
+      }
+
       await fetchProducts()
       return { success: true }
     } catch (err: any) {
-      return { success: false, error: err.message }
+      return { success: false, error: err?.message || 'No se pudo crear el producto' }
     }
   }
 
   const updateProduct = async (id: string, productData: Partial<Product>) => {
     try {
-      const { error } = await supabase.from('products').update(productData).eq('id', id)
-      if (error) throw error
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toProductApiPayload(productData)),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.success) {
+        return { success: false, error: payload?.error || 'No se pudo actualizar el producto' }
+      }
+
       await fetchProducts()
       return { success: true }
     } catch (err: any) {
-      return { success: false, error: err.message }
+      return { success: false, error: err?.message || 'No se pudo actualizar el producto' }
     }
   }
 
   const deleteProduct = async (id: string) => {
     try {
-      const { error } = await supabase.from('products').delete().eq('id', id)
-      if (error) throw error
+      const response = await fetch(`/api/products/${id}`, { method: 'DELETE' })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.success) {
+        return { success: false, error: payload?.error || 'No se pudo eliminar el producto' }
+      }
+
       await fetchProducts()
       return { success: true }
     } catch (err: any) {
-      return { success: false, error: err.message }
+      return { success: false, error: err?.message || 'No se pudo eliminar el producto' }
     }
   }
 
@@ -293,4 +361,3 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
     refreshSuppliers: fetchSuppliers
   }
 }
-

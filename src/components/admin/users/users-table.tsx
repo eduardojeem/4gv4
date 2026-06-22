@@ -1,3 +1,6 @@
+'use client'
+
+import { useState, useMemo } from 'react'
 import {
   Table,
   TableBody,
@@ -16,10 +19,14 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  ArrowUpDown
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react'
 import { SupabaseUser } from '@/hooks/use-users-supabase'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+
+type SortDirection = 'asc' | 'desc' | null
 
 interface UsersTableProps {
   users: SupabaseUser[]
@@ -34,6 +41,72 @@ interface UsersTableProps {
   onView: (user: SupabaseUser) => void
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const ROLE_CONFIG: Record<string, { label: string; className: string }> = {
+  super_admin: {
+    label: 'Super Admin',
+    className: 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800',
+  },
+  admin: {
+    label: 'Administrador',
+    className: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800',
+  },
+  tecnico: {
+    label: 'Técnico',
+    className: 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
+  },
+  vendedor: {
+    label: 'Vendedor',
+    className: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800',
+  },
+  cliente: {
+    label: 'Cliente',
+    className: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700',
+  },
+}
+
+const STATUS_CONFIG: Record<string, { label: string; className: string; dot: string }> = {
+  active: {
+    label: 'Activo',
+    className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800',
+    dot: 'bg-emerald-500',
+  },
+  inactive: {
+    label: 'Inactivo',
+    className: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800',
+    dot: 'bg-red-500',
+  },
+  suspended: {
+    label: 'Suspendido',
+    className: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800',
+    dot: 'bg-orange-500',
+  },
+}
+
+function getRoleConfig(role: string) {
+  return ROLE_CONFIG[role] ?? { label: role, className: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700' }
+}
+
+function getStatusConfig(status: string) {
+  return STATUS_CONFIG[status] ?? { label: status, className: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700', dot: 'bg-gray-400' }
+}
+
+function formatLastLogin(value: string | null | undefined): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return '—'
+  return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function getLastLoginTimestamp(value: string | null | undefined): number {
+  if (!value) return 0
+  const t = new Date(value).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function UsersTable({
   users,
   isLoading,
@@ -46,199 +119,242 @@ export function UsersTable({
   onDelete,
   onView
 }: UsersTableProps) {
+  const [sortDir, setSortDir] = useState<SortDirection>(null)
+
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
   const tableColSpan = showOrganization ? 7 : 6
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'super_admin': return 'bg-rose-100 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800'
-      case 'admin': return 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800'
-      case 'tecnico': return 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800'
-      case 'vendedor': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
-    }
+  const sortedUsers = useMemo(() => {
+    if (!sortDir) return users
+    return [...users].sort((a, b) => {
+      const ta = getLastLoginTimestamp(a.lastLogin)
+      const tb = getLastLoginTimestamp(b.lastLogin)
+      return sortDir === 'asc' ? ta - tb : tb - ta
+    })
+  }, [users, sortDir])
+
+  const cycleSortDir = () => {
+    setSortDir((prev) => {
+      if (prev === null) return 'desc'
+      if (prev === 'desc') return 'asc'
+      return null
+    })
   }
 
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
-      case 'inactive': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
-      case 'suspended': return 'bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800'
-      default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
-    }
-  }
-
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'super_admin':
-        return 'Super Admin'
-      case 'admin':
-        return 'Administrador'
-      case 'vendedor':
-        return 'Vendedor'
-      case 'tecnico':
-        return 'Tecnico'
-      case 'cliente':
-        return 'Cliente'
-      default:
-        return role
-    }
-  }
+  const SortIcon = sortDir === 'asc' ? ArrowUp : sortDir === 'desc' ? ArrowDown : ArrowUpDown
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-md border dark:border-gray-700 overflow-hidden">
+    <div className="space-y-0">
+      <div className="rounded-t-md border-b overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-gray-50/50 dark:bg-gray-900/50 hover:bg-gray-50/50 dark:hover:bg-gray-900/50">
-              <TableHead className="w-[300px]">Usuario</TableHead>
-              <TableHead>Rol</TableHead>
-              {showOrganization ? <TableHead>Organizacion</TableHead> : null}
-              <TableHead>Estado</TableHead>
-              <TableHead className="hidden md:table-cell">Departamento</TableHead>
-              <TableHead className="hidden lg:table-cell">
-                <div className="flex items-center gap-2 cursor-pointer hover:text-gray-900 dark:hover:text-gray-100">
-                   Último Acceso
-                   <ArrowUpDown className="h-3 w-3" />
-                </div>
+            <TableRow className="bg-muted/30 hover:bg-muted/30">
+              <TableHead className="w-[280px] pl-4 font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+                Usuario
               </TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Rol</TableHead>
+              {showOrganization ? (
+                <TableHead className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+                  Organización
+                </TableHead>
+              ) : null}
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Estado</TableHead>
+              <TableHead className="hidden md:table-cell font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+                Departamento
+              </TableHead>
+              <TableHead className="hidden lg:table-cell font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+                <button
+                  onClick={cycleSortDir}
+                  className="flex items-center gap-1.5 hover:text-foreground transition-colors group"
+                  title={sortDir === null ? 'Ordenar por último acceso' : sortDir === 'desc' ? 'Más reciente primero' : 'Más antiguo primero'}
+                >
+                  Último acceso
+                  <SortIcon
+                    className={`h-3.5 w-3.5 transition-colors ${sortDir ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}
+                  />
+                </button>
+              </TableHead>
+              <TableHead className="text-right pr-4 font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+                Acciones
+              </TableHead>
             </TableRow>
           </TableHeader>
+
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={tableColSpan} className="h-32 text-center">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <TableCell colSpan={tableColSpan} className="h-40 text-center">
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <Loader2 className="h-7 w-7 animate-spin text-primary" />
                     <p className="text-muted-foreground text-sm">Cargando usuarios...</p>
                   </div>
                 </TableCell>
               </TableRow>
-            ) : users.length === 0 ? (
+            ) : sortedUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={tableColSpan} className="h-32 text-center text-muted-foreground">
-                  No se encontraron usuarios que coincidan con los filtros
+                <TableCell colSpan={tableColSpan} className="h-40 text-center">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <p className="text-sm font-medium">Sin resultados</p>
+                    <p className="text-xs">No hay usuarios que coincidan con los filtros aplicados.</p>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
-                <TableRow key={user.id} className="hover:bg-muted/50 transition-colors group">
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9 border">
-                        <AvatarImage src={user.avatar_url} alt={user.name} />
-                        <AvatarFallback className="bg-primary/10 text-primary font-bold">
-                            {user.name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm text-foreground">{user.name}</span>
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Mail className="h-3 w-3" /> {user.email}
-                        </span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={`capitalize font-normal ${getRoleBadgeColor(user.role)}`}>
-                      {getRoleLabel(user.role)}
-                    </Badge>
-                  </TableCell>
-                  {showOrganization ? (
-                    <TableCell>
-                      {user.organizations && user.organizations.length > 0 ? (
-                        <div className="flex max-w-[240px] flex-wrap gap-1">
-                          {user.organizations.slice(0, 2).map((organization) => (
-                            <Badge key={organization.id} variant="secondary" className="max-w-[180px] truncate font-normal">
-                              {organization.name}
-                            </Badge>
-                          ))}
-                          {user.organizations.length > 2 ? (
-                            <Badge variant="outline" className="font-normal">
-                              +{user.organizations.length - 2}
-                            </Badge>
-                          ) : null}
+              sortedUsers.map((user) => {
+                const roleConf = getRoleConfig(user.role)
+                const statusConf = getStatusConfig(user.status)
+                const initials = user.name ? user.name.charAt(0).toUpperCase() : '?'
+                const isInactive = user.status !== 'active'
+
+                return (
+                  <TableRow
+                    key={user.id}
+                    className={`group hover:bg-muted/40 transition-colors cursor-default ${isInactive ? 'opacity-70' : ''}`}
+                  >
+                    {/* User cell */}
+                    <TableCell className="pl-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9 border-2 border-muted flex-shrink-0">
+                          <AvatarImage src={user.avatar_url} alt={user.name} />
+                          <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5 text-primary font-bold text-sm">
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm text-foreground truncate leading-tight">
+                            {user.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                            <Mail className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">{user.email}</span>
+                          </p>
                         </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">Sin organizacion</span>
-                      )}
+                      </div>
                     </TableCell>
-                  ) : null}
-                  <TableCell>
-                    <Badge variant="outline" className={`capitalize font-normal ${getStatusBadgeColor(user.status)}`}>
-                      {user.status === 'active' ? 'Activo' : user.status === 'inactive' ? 'Inactivo' : 'Suspendido'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                    {user.department || '-'}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Nunca'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => onView(user)}
-                        title="Ver detalles"
+
+                    {/* Role */}
+                    <TableCell className="py-3">
+                      <Badge
+                        variant="outline"
+                        className={`font-medium text-xs px-2 py-0.5 ${roleConf.className}`}
                       >
-                        <Eye className="h-4 w-4 text-muted-foreground" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => onEdit(user)}
-                        title="Editar usuario"
+                        {roleConf.label}
+                      </Badge>
+                    </TableCell>
+
+                    {/* Organisation (superadmin only) */}
+                    {showOrganization ? (
+                      <TableCell className="py-3">
+                        {user.organizations && user.organizations.length > 0 ? (
+                          <div className="flex max-w-[200px] flex-wrap gap-1">
+                            {user.organizations.slice(0, 2).map((org) => (
+                              <Badge key={org.id} variant="secondary" className="max-w-[160px] truncate font-normal text-xs">
+                                {org.name}
+                              </Badge>
+                            ))}
+                            {user.organizations.length > 2 ? (
+                              <Badge variant="outline" className="font-normal text-xs">
+                                +{user.organizations.length - 2}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Sin organización</span>
+                        )}
+                      </TableCell>
+                    ) : null}
+
+                    {/* Status */}
+                    <TableCell className="py-3">
+                      <Badge
+                        variant="outline"
+                        className={`font-medium text-xs px-2 py-0.5 flex items-center gap-1.5 w-fit ${statusConf.className}`}
                       >
-                        <Edit className="h-4 w-4 text-blue-500" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => onDelete(user)}
-                        title="Desactivar usuario"
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                        <span className={`h-1.5 w-1.5 rounded-full ${statusConf.dot} flex-shrink-0`} />
+                        {statusConf.label}
+                      </Badge>
+                    </TableCell>
+
+                    {/* Department */}
+                    <TableCell className="hidden md:table-cell py-3 text-sm text-muted-foreground">
+                      {user.department || <span className="text-muted-foreground/50">—</span>}
+                    </TableCell>
+
+                    {/* Last login */}
+                    <TableCell className="hidden lg:table-cell py-3 text-sm text-muted-foreground">
+                      {formatLastLogin(user.lastLogin)}
+                    </TableCell>
+
+                    {/* Actions */}
+                    <TableCell className="text-right pr-4 py-3">
+                      <div className="flex justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded-md"
+                          onClick={() => onView(user)}
+                          title="Ver detalles"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded-md"
+                          onClick={() => onEdit(user)}
+                          title="Editar usuario"
+                        >
+                          <Edit className="h-3.5 w-3.5 text-blue-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded-md"
+                          onClick={() => onDelete(user)}
+                          title="Desactivar usuario"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between px-2">
-        <div className="text-sm text-muted-foreground">
+      <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/10">
+        <p className="text-xs text-muted-foreground">
           {totalCount === 0
-            ? 'Mostrando 0 de 0 usuarios'
-            : `Mostrando ${((page - 1) * pageSize) + 1} a ${Math.min(page * pageSize, totalCount)} de ${totalCount} usuarios`}
-        </div>
-        <div className="flex gap-2">
+            ? 'Sin usuarios'
+            : `${((page - 1) * pageSize) + 1}–${Math.min(page * pageSize, totalCount)} de ${totalCount} usuario${totalCount !== 1 ? 's' : ''}`}
+        </p>
+        <div className="flex items-center gap-1.5">
           <Button
             variant="outline"
             size="sm"
+            className="h-7 px-2.5 text-xs"
             onClick={() => onPageChange(Math.max(1, page - 1))}
             disabled={page === 1 || isLoading}
           >
-            <ChevronLeft className="h-4 w-4 mr-1" />
+            <ChevronLeft className="h-3.5 w-3.5 mr-0.5" />
             Anterior
           </Button>
+          <span className="text-xs text-muted-foreground px-1">
+            {page} / {totalPages}
+          </span>
           <Button
             variant="outline"
             size="sm"
+            className="h-7 px-2.5 text-xs"
             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
             disabled={page >= totalPages || isLoading}
           >
             Siguiente
-            <ChevronRight className="h-4 w-4 ml-1" />
+            <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
           </Button>
         </div>
       </div>

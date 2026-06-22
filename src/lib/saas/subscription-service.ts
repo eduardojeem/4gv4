@@ -234,8 +234,33 @@ async function countRows(table: string, organizationId: string) {
   return count || 0
 }
 
-// Las "butacas" del plan cuentan solo staff. Los clientes (role 'customer') se registran
-// desde la pública y no deben consumir el límite de usuarios del plan.
+async function countCashRegisters(organizationId: string) {
+  const supabase = createAdminSupabase()
+  const { data: branches, error: branchesError } = await supabase
+    .from('branches')
+    .select('id')
+    .eq('organization_id', organizationId)
+
+  if (branchesError) return 0
+
+  const branchIds = (branches ?? [])
+    .map((branch) => String(branch.id))
+    .filter(Boolean)
+
+  if (branchIds.length === 0) return 0
+
+  const { count, error } = await supabase
+    .from('cash_registers')
+    .select('id', { count: 'exact', head: true })
+    .in('branch_id', branchIds)
+
+  if (error) return 0
+  return count || 0
+}
+
+// Las "butacas" del plan cuentan solo staff activo. Los clientes (role 'customer')
+// se registran desde la pública y no consumen límite; staff suspendido se conserva
+// como histórico y puede reactivarse cuando haya cupo.
 async function countStaffMembers(organizationId: string) {
   const supabase = createAdminSupabase()
   const { count, error } = await supabase
@@ -243,6 +268,7 @@ async function countStaffMembers(organizationId: string) {
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
     .neq('role', 'customer')
+    .eq('status', 'active')
 
   if (error) return 0
   return count || 0
@@ -252,7 +278,7 @@ export async function getOrganizationUsage(organizationId: string): Promise<Orga
   const [users, branches, cashRegisters, products, categories] = await Promise.all([
     countStaffMembers(organizationId),
     countRows('branches', organizationId),
-    countRows('cash_registers', organizationId),
+    countCashRegisters(organizationId),
     countRows('products', organizationId),
     countRows('categories', organizationId),
   ])
@@ -406,11 +432,13 @@ export async function getOrganizationPlanInfo(
   }
 }
 
-const BLOCKED_STATUSES = new Set(['past_due', 'suspended', 'cancelled', 'canceled', 'expired', 'unpaid'])
+const HARD_BLOCKED_STATUSES = new Set(['suspended', 'cancelled', 'canceled'])
+const EXPIRED_STATUSES = new Set(['past_due', 'expired', 'unpaid'])
 
 export async function getSubscriptionStatus(organizationId: string): Promise<{
   status: string | null
   isBlocked: boolean
+  isExpired: boolean
   isTrialing: boolean
   trialDaysLeft: number | null
   periodDaysLeft: number | null
@@ -418,13 +446,20 @@ export async function getSubscriptionStatus(organizationId: string): Promise<{
   const supabase = createAdminSupabase()
   const { data } = await supabase
     .from('subscriptions')
-    .select('status, trial_ends_at, current_period_ends_at')
+    .select('status, payment_status, trial_ends_at, current_period_ends_at')
     .eq('organization_id', organizationId)
     .maybeSingle()
 
   const status = data?.status ?? null
-  const isBlocked = status ? BLOCKED_STATUSES.has(status) : false
+  const paymentStatus = typeof data?.payment_status === 'string' ? data.payment_status : null
+  const isBlocked = status ? HARD_BLOCKED_STATUSES.has(status) : false
   const isTrialing = status === 'trialing'
+  const periodEndsAt = data?.current_period_ends_at ? new Date(data.current_period_ends_at).getTime() : null
+  const isExpired = Boolean(
+    (status && EXPIRED_STATUSES.has(status)) ||
+    paymentStatus === 'unpaid' ||
+    (status === 'active' && periodEndsAt !== null && periodEndsAt <= Date.now())
+  )
   let trialDaysLeft: number | null = null
   let periodDaysLeft: number | null = null
 
@@ -433,19 +468,19 @@ export async function getSubscriptionStatus(organizationId: string): Promise<{
     trialDaysLeft = Math.max(0, Math.ceil(msLeft / 86400000))
   }
 
-  if (status === 'active' && data?.current_period_ends_at) {
-    const msLeft = new Date(data.current_period_ends_at).getTime() - Date.now()
+  if (status === 'active' && periodEndsAt !== null) {
+    const msLeft = periodEndsAt - Date.now()
     periodDaysLeft = Math.max(0, Math.ceil(msLeft / 86400000))
   }
 
-  return { status, isBlocked, isTrialing, trialDaysLeft, periodDaysLeft }
+  return { status, isBlocked, isExpired, isTrialing, trialDaysLeft, periodDaysLeft }
 }
 
 export async function canCreateResource(
   organizationId: string,
   resourceType: ResourceType,
   increment = 1
-): Promise<{ allowed: boolean; current: number; limit: number | null; plan: PlanRecord; blocked?: boolean }> {
+): Promise<{ allowed: boolean; current: number; limit: number | null; plan: PlanRecord; blocked?: boolean; expired?: boolean }> {
   const [state, subscriptionStatus] = await Promise.all([
     getCurrentOrganizationSubscription(organizationId),
     getSubscriptionStatus(organizationId),
@@ -462,14 +497,16 @@ export async function canCreateResource(
   }
 
   const current = state.usage[resourceType]
-  const limit = getPlanLimit(state.currentPlan, resourceType)
+  const effectivePlan = subscriptionStatus.isExpired ? await getPlanLimits('FREE') : state.currentPlan
+  const limit = getPlanLimit(effectivePlan, resourceType)
 
   return {
     allowed: limit === null || current + increment <= limit,
     current,
     limit,
-    plan: state.currentPlan,
+    plan: effectivePlan,
     blocked: false,
+    expired: subscriptionStatus.isExpired,
   }
 }
 
@@ -479,7 +516,7 @@ export async function canCreateResource(
  */
 export async function canCreateRepair(
   organizationId: string
-): Promise<{ allowed: boolean; current: number; limit: number | null; plan: PlanRecord; blocked?: boolean }> {
+): Promise<{ allowed: boolean; current: number; limit: number | null; plan: PlanRecord; blocked?: boolean; expired?: boolean }> {
   const [state, subscriptionStatus] = await Promise.all([
     getCurrentOrganizationSubscription(organizationId),
     getSubscriptionStatus(organizationId),
@@ -489,14 +526,15 @@ export async function canCreateRepair(
     return { allowed: false, current: 0, limit: null, plan: state.currentPlan, blocked: true }
   }
 
-  const raw = state.currentPlan.limits?.repairs
+  const effectivePlan = subscriptionStatus.isExpired ? await getPlanLimits('FREE') : state.currentPlan
+  const raw = effectivePlan.limits?.repairs
   const limit = raw === null || typeof raw === 'undefined'
     ? null
     : (Number.isFinite(toNumber(raw, Number.NaN)) ? toNumber(raw, Number.NaN) : null)
 
   // Plan ilimitado (limit null) -> siempre permitido, sin contar.
   if (limit === null) {
-    return { allowed: true, current: 0, limit: null, plan: state.currentPlan }
+    return { allowed: true, current: 0, limit: null, plan: effectivePlan, expired: subscriptionStatus.isExpired }
   }
 
   const supabase = createAdminSupabase()
@@ -509,7 +547,7 @@ export async function canCreateRepair(
     .gte('created_at', monthStart)
 
   const current = count || 0
-  return { allowed: current < limit, current, limit, plan: state.currentPlan }
+  return { allowed: current < limit, current, limit, plan: effectivePlan, expired: subscriptionStatus.isExpired }
 }
 
 export type PlanFeatureItem = {

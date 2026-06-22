@@ -29,7 +29,7 @@ import {
   Mail,
   History
 } from 'lucide-react'
-import { SupabaseUser } from '@/hooks/use-users-optimized'
+import { SupabaseUser } from '@/hooks/use-users-supabase'
 import { useAuth } from '@/contexts/auth-context'
 
 interface UserActionsMenuProps {

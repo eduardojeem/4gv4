@@ -64,6 +64,7 @@ interface UserDetailDialogProps {
   onEdit?: (user: SupabaseUser) => void
   onDeactivate?: (user: SupabaseUser) => Promise<void> | void
   onReactivate?: (user: SupabaseUser) => Promise<void> | void
+  onResendInvite?: (user: SupabaseUser) => Promise<{ success: boolean; invite_link?: string | null }> | void
   isUpdatingStatus?: boolean
   currentUserId?: string | null
 }
@@ -274,10 +275,13 @@ export function UserDetailDialog({
   onEdit,
   onDeactivate,
   onReactivate,
+  onResendInvite,
   isUpdatingStatus = false,
   currentUserId,
 }: UserDetailDialogProps) {
   const supabase = useMemo(() => createClient(), [])
+
+  const [isResending, setIsResending] = useState(false)
 
   const [permissions, setPermissions] = useState<PermissionsMatrix | null>(null)
   const [directPermissions, setDirectPermissions] = useState<string[]>([])
@@ -550,6 +554,28 @@ export function UserDetailDialog({
                     <UserCheck className="h-3.5 w-3.5 mr-2" />
                   )}
                   {statusActionLabel}
+                </Button>
+              ) : null}
+              {onResendInvite ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isResending}
+                  onClick={async () => {
+                    setIsResending(true)
+                    try {
+                      await onResendInvite(user)
+                    } finally {
+                      setIsResending(false)
+                    }
+                  }}
+                >
+                  {isResending ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                  ) : (
+                    <Mail className="h-3.5 w-3.5 mr-2 text-blue-500" />
+                  )}
+                  Reenviar invitación
                 </Button>
               ) : null}
               <Button variant="outline" size="sm" onClick={() => handleCopy(user.email, 'Email')}>

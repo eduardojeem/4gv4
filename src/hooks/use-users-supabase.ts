@@ -50,6 +50,8 @@ type ApiUserProfile = {
   organizations?: SupabaseUser['organizations']
   updated_at?: string | null
   created_at?: string | null
+  /** Real last sign-in time from auth.users (may be present in some API responses) */
+  last_sign_in_at?: string | null
 }
 
 const DEFAULT_ROLE: CanonicalRole = 'cliente'
@@ -132,10 +134,12 @@ export function useUsersSupabase({
     status: normalizeStatus(profile.status),
     department: profile.department || '',
     phone: profile.phone || '',
-    avatar_url: profile.avatar_url,
+    avatar_url: profile.avatar_url ?? undefined,
     permissions: profile.permissions || [],
     organizations: profile.organizations || [],
-    lastLogin: profile.updated_at || new Date().toISOString(),
+    // Prefer the real last sign-in timestamp; fall back to null so the UI can
+    // distinguish "never logged in" from "profile was recently edited".
+    lastLogin: profile.last_sign_in_at ?? null,
     createdAt: profile.created_at || new Date().toISOString(),
     loginAttempts: 0,
     lastActivity: profile.updated_at || new Date().toISOString(),
@@ -146,6 +150,7 @@ export function useUsersSupabase({
     try {
       setIsLoading(true)
       setError(null)
+      const normalizedSearch = search.trim()
 
       const params = new URLSearchParams({
         page: String(page),
@@ -154,8 +159,8 @@ export function useUsersSupabase({
         status: statusFilter || 'all',
       })
 
-      if (search.trim()) {
-        params.set('search', search.trim())
+      if (normalizedSearch) {
+        params.set('search', normalizedSearch)
       }
 
       const response = await fetch(`/api/admin/users?${params.toString()}`)
@@ -182,6 +187,7 @@ export function useUsersSupabase({
     } finally {
       setIsLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, search, roleFilter, statusFilter])
 
   useEffect(() => {
@@ -190,13 +196,29 @@ export function useUsersSupabase({
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
     const channel = supabase
-      .channel('profiles-changes')
+      .channel('admin-users-changes')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'profiles',
+        },
+        () => {
+          if (debounceTimer) {
+            clearTimeout(debounceTimer)
+          }
+          debounceTimer = setTimeout(() => {
+            void fetchUsers()
+          }, 250)
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'organization_members',
         },
         () => {
           if (debounceTimer) {
@@ -223,6 +245,12 @@ export function useUsersSupabase({
         throw new Error('Nombre y email son obligatorios')
       }
 
+      // Basic email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(userData.email)) {
+        throw new Error('El formato del email no es válido')
+      }
+
       const requestedRole = normalizeRole(userData.role)
       if (requestedRole === 'super_admin' && !isSuperAdmin) {
         throw new Error('Solo un super admin puede asignar el rol super_admin')
@@ -238,6 +266,8 @@ export function useUsersSupabase({
               email: userData.email,
               role: requestedRole,
               status: normalizeStatus(userData.status),
+              phone: userData.phone || null,
+              department: userData.department || null,
             },
           ],
         }),
@@ -250,9 +280,11 @@ export function useUsersSupabase({
         throw new Error(apiError)
       }
 
+      const inviteLink: string | null = payload?.results?.[0]?.invite_link ?? null
+
       toast.success('Usuario creado correctamente')
       await fetchUsers()
-      return { success: true }
+      return { success: true, invite_link: inviteLink }
     } catch (err: unknown) {
       console.error('Error creating user:', serializeError(err))
       const msg = errorMessage(err)
@@ -275,7 +307,12 @@ export function useUsersSupabase({
       const payload = await response.json().catch(() => ({}))
 
       if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error || 'No se pudo actualizar el usuario')
+        return {
+          success: false,
+          error: payload?.error || 'No se pudo actualizar el usuario',
+          status: response.status,
+          plan: payload?.plan,
+        }
       }
 
       toast.success('Usuario actualizado correctamente')
@@ -291,6 +328,27 @@ export function useUsersSupabase({
     } catch (err: unknown) {
       console.error('Error updating user:', serializeError(err))
       const msg = errorMessage(err)
+      return { success: false, error: msg }
+    }
+  }
+
+  const resendInvitation = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/resend-invite`, {
+        method: 'POST',
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo reenviar la invitación')
+      }
+
+      toast.success('Invitación reenviada por correo')
+      return { success: true, invite_link: payload.invite_link }
+    } catch (err: unknown) {
+      console.error('Error resending invitation:', serializeError(err))
+      const msg = errorMessage(err)
+      toast.error(msg)
       return { success: false, error: msg }
     }
   }
@@ -375,6 +433,7 @@ export function useUsersSupabase({
     createUser,
     updateUser,
     deleteUser,
+    resendInvitation,
     uploadAvatar,
     syncUsers,
   }

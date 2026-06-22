@@ -45,6 +45,7 @@ import { getCommercialFeatureValue } from '@/lib/saas/commercial-plan-features'
 const FEATURE_LIST = [
   { key: 'pos',       label: 'Punto de Venta (POS)',      icon: ShoppingCart },
   { key: 'inventory', label: 'Inventario',                 icon: Boxes        },
+  { key: 'inventoryAdmin', label: 'Inventario avanzado',   icon: Boxes        },
   { key: 'users',     label: 'Gestión de usuarios',        icon: Users        },
   { key: 'branches',  label: 'Sucursales múltiples',       icon: Building2    },
   { key: 'repairs',   label: 'Módulo de Reparaciones',     icon: Wrench       },

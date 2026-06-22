@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -18,7 +18,11 @@ import {
   ShieldAlert,
   Activity,
   Users,
-  AlertTriangle
+  AlertTriangle,
+  UserX,
+  Copy,
+  CheckCircle2,
+  Link2,
 } from 'lucide-react'
 import { UserStatsCards } from './user-stats-cards'
 import { UserAvatarUpload } from './user-avatar-upload'
@@ -29,6 +33,31 @@ import { UserDetailDialog } from './user-detail-dialog'
 import { useDebounce } from '@/hooks/use-debounce'
 import { toast } from 'sonner'
 import { EditUserForm } from './EditUserForm'
+
+// ── Simple email validation ───────────────────────────────────────────────────
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function validateCreateForm(data: { name: string; email: string }): string | null {
+  if (!data.name.trim()) return 'El nombre es requerido'
+  if (!data.email.trim()) return 'El email es requerido'
+  if (!EMAIL_RE.test(data.email.trim())) return 'El formato del email no es válido'
+  return null
+}
+
+type UserQuota = {
+  allowed: boolean
+  blocked: boolean
+  overLimit: boolean
+  expired: boolean
+  enforcedSuspensions: number
+  current: number
+  limit: number | null
+  plan?: {
+    code?: string
+    name?: string
+  }
+  message: string
+}
 
 export function UserManagement() {
   const router = useRouter()
@@ -57,6 +86,7 @@ export function UserManagement() {
     updateUser,
     deleteUser,
     uploadAvatar,
+    resendInvitation,
     syncUsers
   } = useUsersSupabase({
     page,
@@ -71,12 +101,9 @@ export function UserManagement() {
     if (!authLoading) {
       if (!user) {
         router.push('/auth/login')
-      } else if (!isAdmin) {
-        // Optional: Show toast or redirect to a specific 403 page
-        // For now we render a message below
       }
     }
-  }, [user, isAdmin, authLoading, router])
+  }, [user, authLoading, router])
 
   // Estados de diálogos y selección
   const [selectedUser, setSelectedUser] = useState<SupabaseUser | null>(null)
@@ -87,8 +114,16 @@ export function UserManagement() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoadingEditPermissions, setIsLoadingEditPermissions] = useState(false)
   const [isUpdatingStatusFromDetail, setIsUpdatingStatusFromDetail] = useState(false)
+  const [userQuota, setUserQuota] = useState<UserQuota | null>(null)
+  const [isLoadingUserQuota, setIsLoadingUserQuota] = useState(false)
+  // Invite link shown after user creation
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
+  // Delete error feedback
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  // Form Data
+  // Form Data (create dialog)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -99,6 +134,7 @@ export function UserManagement() {
     notes: '',
     permissions: [] as string[]
   })
+  const [formErrors, setFormErrors] = useState<{ name?: string; email?: string }>({})
 
   const mapApiUserToDialogUser = useCallback((profile: Partial<SupabaseUser> & {
     id: string
@@ -115,19 +151,77 @@ export function UserManagement() {
     phone: profile.phone || '',
     avatar_url: profile.avatar_url,
     permissions: profile.permissions || [],
-    lastLogin: profile.updated_at || new Date().toISOString(),
+    lastLogin: profile.lastLogin ?? null,
     createdAt: profile.created_at || new Date().toISOString(),
     loginAttempts: 0,
     lastActivity: profile.updated_at || new Date().toISOString(),
-    notes: '',
+    notes: profile.notes || '',
   }), [])
+
+  const refreshUserQuota = useCallback(async () => {
+    if (!isAdmin) return
+
+    setIsLoadingUserQuota(true)
+    try {
+      let response = await fetch('/api/admin/users/quota', { cache: 'no-store' })
+      let payload = await response.json().catch(() => ({}))
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo verificar el plan actual')
+      }
+
+      if (payload.overLimit && !payload.blocked) {
+        response = await fetch('/api/admin/users/quota', { method: 'POST', cache: 'no-store' })
+        payload = await response.json().catch(() => ({}))
+
+        if (!response.ok || !payload?.success) {
+          throw new Error(payload?.error || 'No se pudo regularizar el cupo del plan actual')
+        }
+      }
+
+      setUserQuota({
+        allowed: Boolean(payload.allowed),
+        blocked: Boolean(payload.blocked),
+        overLimit: Boolean(payload.overLimit),
+        expired: Boolean(payload.expired),
+        enforcedSuspensions: Number(payload.enforcedSuspensions ?? 0),
+        current: Number(payload.current ?? 0),
+        limit: payload.limit === null || typeof payload.limit === 'undefined' ? null : Number(payload.limit),
+        plan: payload.plan,
+        message: payload.message || 'Estado del plan verificado.',
+      })
+
+      const enforcedSuspensions = Number(payload.enforcedSuspensions ?? 0)
+      if (enforcedSuspensions > 0) {
+        toast.info(`Se suspendieron ${enforcedSuspensions} usuario(s) excedentes del cupo del plan.`)
+        refreshUsers()
+      }
+    } catch (err: unknown) {
+      console.error('Error fetching user quota:', err)
+      setUserQuota(null)
+    } finally {
+      setIsLoadingUserQuota(false)
+    }
+  }, [isAdmin, refreshUsers])
+
+  useEffect(() => {
+    if (!authLoading && user && isAdmin) {
+      void refreshUserQuota()
+    }
+  }, [authLoading, isAdmin, refreshUserQuota, user])
 
   // Reset page when filters change
   useEffect(() => {
     setPage(1)
   }, [debouncedSearch, roleFilter, statusFilter])
 
-  // Stats for cards (now coming from backend)
+  useEffect(() => {
+    if (!isSuperAdmin && (roleFilter === 'super_admin' || roleFilter === 'cliente')) {
+      setRoleFilter('all')
+    }
+  }, [isSuperAdmin, roleFilter])
+
+  // Stats for cards (coming from backend — over full unfiltered set)
   const dashboardStats = {
     totalUsers: stats.total,
     activeUsers: stats.active,
@@ -143,36 +237,58 @@ export function UserManagement() {
   ) : null
 
   const accessDenied = !isAdmin ? (
-      <div className="flex flex-col items-center justify-center h-[500px] text-center p-6">
-        <ShieldAlert className="h-16 w-16 text-red-500 mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900">Acceso Denegado</h2>
-        <p className="text-gray-500 mt-2 max-w-md">
-          No tienes permisos de administrador para ver esta sección. Por favor contacta al soporte si crees que esto es un error.
-        </p>
-        <Button className="mt-6" onClick={() => router.push('/dashboard')}>
-          Volver al Dashboard
-        </Button>
-      </div>
-    ) : null
+    <div className="flex flex-col items-center justify-center h-[500px] text-center p-6">
+      <ShieldAlert className="h-16 w-16 text-red-500 mb-4" />
+      <h2 className="text-2xl font-bold text-gray-900">Acceso Denegado</h2>
+      <p className="text-gray-500 mt-2 max-w-md">
+        No tienes permisos de administrador para ver esta sección. Por favor contacta al soporte si crees que esto es un error.
+      </p>
+      <Button className="mt-6" onClick={() => router.push('/dashboard')}>
+        Volver al Dashboard
+      </Button>
+    </div>
+  ) : null
 
-  // Handlers
+  // ── Handlers ───────────────────────────────────────────────────────────────
+
+  const resetCreateForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      role: 'cliente',
+      department: '',
+      status: 'active',
+      notes: '',
+      permissions: []
+    })
+    setFormErrors({})
+  }
+
   const handleCreateSubmit = async () => {
+    const validationError = validateCreateForm(formData)
+    if (validationError) {
+      if (validationError.includes('nombre')) setFormErrors({ name: validationError })
+      else if (validationError.includes('email') || validationError.includes('Email')) setFormErrors({ email: validationError })
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const result = await createUser(formData)
       if (result.success) {
         setIsCreateDialogOpen(false)
-        setFormData({
-          name: '',
-          email: '',
-          phone: '',
-          role: 'cliente',
-          department: '',
-          status: 'active',
-          notes: '',
-          permissions: []
-        })
+        resetCreateForm()
         refreshUsers()
+        refreshUserQuota()
+        // Show invite link dialog if we have one
+        if (result.invite_link) {
+          setInviteLink(result.invite_link)
+          setCopiedLink(false)
+          setIsInviteDialogOpen(true)
+        }
+      } else {
+        toast.error(result.error || 'No se pudo crear el usuario')
       }
     } finally {
       setIsSubmitting(false)
@@ -182,12 +298,17 @@ export function UserManagement() {
   const handleDeleteSubmit = async () => {
     if (!selectedUser) return
     setIsSubmitting(true)
+    setDeleteError(null)
     try {
       const result = await deleteUser(selectedUser.id)
       if (result.success) {
         setIsDeleteDialogOpen(false)
         setSelectedUser(null)
         refreshUsers()
+        refreshUserQuota()
+      } else {
+        // Show the error inside the dialog so the admin can read it
+        setDeleteError(result.error || 'No se pudo desactivar el usuario')
       }
     } finally {
       setIsSubmitting(false)
@@ -279,7 +400,7 @@ export function UserManagement() {
     try {
       const result = await updateUser(targetUser.id, { status: nextStatus })
       if (!result.success) {
-        toast.error(result.error || 'No se pudo actualizar el estado del usuario')
+        toast.warning(result.error || 'No se pudo actualizar el estado del usuario')
         return
       }
 
@@ -290,35 +411,105 @@ export function UserManagement() {
 
       toast.success(nextStatus === 'active' ? 'Usuario reactivado correctamente' : 'Usuario desactivado correctamente')
       refreshUsers()
+      refreshUserQuota()
     } finally {
       setIsUpdatingStatusFromDetail(false)
     }
-  }, [refreshUsers, updateUser, user?.id])
+  }, [refreshUserQuota, refreshUsers, updateUser, user?.id])
 
   if (authGuard) return authGuard
   if (accessDenied) return accessDenied
 
+  const canCreateUsers = !userQuota || userQuota.allowed
+  const quotaLimitLabel = userQuota?.limit === null ? 'ilimitado' : userQuota?.limit
+  const showQuotaNotice = Boolean(userQuota && (userQuota.expired || !userQuota.allowed || !isSuperAdmin))
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Usuarios</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {stats.total} usuarios registrados · {stats.active} activos
+          <h2 className="text-2xl font-bold tracking-tight">Gestión de Usuarios</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {stats.total} usuarios registrados ·{' '}
+            <span className="text-emerald-600 dark:text-emerald-400 font-medium">{stats.active} activos</span>
+            {stats.inactive > 0 && (
+              <> · <span className="text-rose-500 dark:text-rose-400">{stats.inactive} inactivos</span></>
+            )}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => syncUsers()} disabled={dataLoading}>
+        <div className="flex gap-2 flex-shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              await syncUsers()
+              await refreshUserQuota()
+            }}
+            disabled={dataLoading}
+          >
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${dataLoading ? 'animate-spin' : ''}`} />
             Sincronizar
           </Button>
-          <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
+          <Button
+            size="sm"
+            onClick={() => {
+              if (!canCreateUsers) {
+                toast.error(userQuota?.message || 'No se puede agregar usuarios con el plan actual')
+                return
+              }
+              setIsCreateDialogOpen(true)
+            }}
+            disabled={isLoadingUserQuota || !canCreateUsers}
+            title={!canCreateUsers ? userQuota?.message : undefined}
+          >
             <UserPlus className="h-3.5 w-3.5 mr-1.5" />
             Nuevo Usuario
           </Button>
         </div>
       </div>
+
+      {showQuotaNotice ? (
+        <div
+          className={`flex flex-col gap-2 rounded-lg border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between ${
+            userQuota?.blocked || !userQuota?.allowed
+              ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
+          }`}
+        >
+          <div>
+            <p className="font-medium">
+              {userQuota?.plan?.name ? `Plan ${userQuota.plan.name}` : 'Plan actual'}
+            </p>
+            <p className="text-xs opacity-90">
+              {userQuota?.message}
+              {userQuota && userQuota.allowed && !userQuota.blocked
+                ? ` Cupo: ${userQuota.current}/${quotaLimitLabel}.`
+                : null}
+            </p>
+          </div>
+          {(userQuota?.blocked || !userQuota?.allowed) && !isSuperAdmin ? (
+            <div className="flex flex-wrap gap-2">
+              {userQuota?.overLimit ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setActiveTab('users')
+                    setStatusFilter('active')
+                    setRoleFilter('all')
+                  }}
+                >
+                  Ver usuarios activos
+                </Button>
+              ) : null}
+              <Button size="sm" variant="outline" onClick={() => router.push('/admin/subscriptions')}>
+                Ver planes
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Stats Cards */}
       <UserStatsCards stats={dashboardStats} isLoading={dataLoading} />
@@ -344,6 +535,7 @@ export function UserManagement() {
             onRoleFilterChange={setRoleFilter}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
+            showGlobalRoles={isSuperAdmin}
           />
 
           <Card className="border shadow-sm overflow-hidden">
@@ -379,34 +571,58 @@ export function UserManagement() {
         </TabsContent>
       </Tabs>
 
-      {/* Create Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+      {/* ── Create Dialog ─────────────────────────────────────────────────── */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={(open) => { setIsCreateDialogOpen(open); if (!open) resetCreateForm() }}>
+        <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Crear Nuevo Usuario</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4" />
+              Crear Nuevo Usuario
+            </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-5 py-4">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Nombre Completo</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="create-name">
+                  Nombre completo <span className="text-red-500">*</span>
+                </Label>
                 <Input
+                  id="create-name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value })
+                    if (formErrors.name) setFormErrors((prev) => ({ ...prev, name: undefined }))
+                  }}
                   placeholder="Juan Pérez"
+                  className={formErrors.name ? 'border-red-400 focus-visible:ring-red-400' : ''}
                 />
+                {formErrors.name && (
+                  <p className="text-xs text-red-500">{formErrors.name}</p>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="create-email">
+                  Email <span className="text-red-500">*</span>
+                </Label>
                 <Input
+                  id="create-email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="juan@ejemplo.com"
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value })
+                    if (formErrors.email) setFormErrors((prev) => ({ ...prev, email: undefined }))
+                  }}
+                  placeholder="juan@empresa.com"
                   type="email"
+                  className={formErrors.email ? 'border-red-400 focus-visible:ring-red-400' : ''}
                 />
+                {formErrors.email && (
+                  <p className="text-xs text-red-500">{formErrors.email}</p>
+                )}
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Rol</Label>
                 <Select
                   value={formData.role}
@@ -424,36 +640,42 @@ export function UserManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Departamento</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="create-dept">Departamento</Label>
                 <Input
+                  id="create-dept"
                   value={formData.department}
                   onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  placeholder="Ej: Ventas"
                 />
               </div>
             </div>
-            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 text-sm text-yellow-800 dark:bg-yellow-900/10 dark:border-yellow-800 dark:text-yellow-300">
-              <AlertTriangle className="h-4 w-4 inline mr-2" />
-              Se crea la cuenta y sincroniza perfil/rol automáticamente.
-              {(formData.role === 'vendedor' || formData.role === 'tecnico') && (
-                <span className="block mt-1 text-xs">
-                  Después de crear, editá el usuario para asignarle una sucursal.
-                </span>
-              )}
+
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 flex gap-2 dark:bg-amber-900/10 dark:border-amber-800">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-800 dark:text-amber-300">
+                <p>Se creará la cuenta y sincronizará perfil/rol automáticamente.</p>
+                {(formData.role === 'vendedor' || formData.role === 'tecnico') && (
+                  <p className="mt-1 font-medium">Después de crear, editá el usuario para asignarle una sucursal.</p>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleCreateSubmit} disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserPlus className="h-4 w-4 mr-2" />}
               Crear Usuario
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      {/* ── Edit Dialog ───────────────────────────────────────────────────── */}
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open)
+        if (!open) setSelectedUser(null)
+      }}>
         <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle>Editar Usuario</DialogTitle>
@@ -507,27 +729,47 @@ export function UserManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
+      {/* ── Delete / Deactivate Dialog ────────────────────────────────────── */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>¿Estás seguro?</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <UserX className="h-5 w-5" />
+              Desactivar usuario
+            </DialogTitle>
           </DialogHeader>
-          <p className="text-gray-500">
-            Esta acción marcará al usuario <strong>{selectedUser?.name}</strong> como inactivo.
-            No podrá acceder al sistema hasta que sea reactivado.
-          </p>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Vas a desactivar la cuenta de{' '}
+              <span className="font-semibold text-foreground">{selectedUser?.name}</span>.
+            </p>
+            <div className="rounded-lg border border-rose-200 bg-rose-50 dark:border-rose-900/40 dark:bg-rose-900/10 p-3 text-xs text-rose-700 dark:text-rose-300 space-y-1">
+              <p>• El usuario <strong>no podrá acceder</strong> al sistema.</p>
+              <p>• Sus datos y configuración se conservarán.</p>
+              <p>• Podés reactivarlo en cualquier momento.</p>
+            </div>
+            {deleteError && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20 p-3 text-xs text-amber-800 dark:text-amber-300 flex gap-2 items-start">
+                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleDeleteSubmit} disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Desactivar Usuario
+            <Button variant="outline" onClick={() => { setIsDeleteDialogOpen(false); setDeleteError(null) }}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteSubmit}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserX className="h-4 w-4 mr-2" />}
+              Desactivar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* View Detail Dialog */}
+      {/* ── View Detail Dialog ────────────────────────────────────────────── */}
       <UserDetailDialog
         user={selectedUser}
         open={isViewDialogOpen}
@@ -535,9 +777,74 @@ export function UserManagement() {
         onEdit={openEditDialog}
         onDeactivate={(targetUser) => handleSetStatusFromDetail(targetUser, 'inactive')}
         onReactivate={(targetUser) => handleSetStatusFromDetail(targetUser, 'active')}
+        onResendInvite={async (user) => {
+          const result = await resendInvitation(user.id)
+          if (result.success && result.invite_link) {
+            setInviteLink(result.invite_link)
+            setCopiedLink(false)
+            setIsInviteDialogOpen(true)
+          }
+          return result
+        }}
         isUpdatingStatus={isUpdatingStatusFromDetail}
         currentUserId={user?.id}
       />
+
+      {/* ── Invite Link Dialog ────────────────────────────────────────────── */}
+      <Dialog open={isInviteDialogOpen} onOpenChange={(open) => { setIsInviteDialogOpen(open); if (!open) setInviteLink(null) }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-5 w-5" />
+              Invitación enviada
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Se ha enviado un correo automáticamente para que el usuario configure su contraseña. Si lo prefieres, también puedes compartirle este enlace directo:
+            </p>
+            {inviteLink ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono text-muted-foreground break-all select-all">
+                    {inviteLink}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-shrink-0 h-8 w-8 p-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(inviteLink)
+                      setCopiedLink(true)
+                      setTimeout(() => setCopiedLink(false), 2000)
+                    }}
+                    title="Copiar enlace"
+                  >
+                    {copiedLink ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  </Button>
+                </div>
+                {copiedLink && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">¡Enlace copiado!</p>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-3 text-xs text-blue-700 dark:text-blue-300">
+                <Link2 className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                El usuario recibirá un email de confirmación. Una vez que lo confirme, podrá usar "Olvidé mi contraseña" para configurar su acceso.
+              </div>
+            )}
+            <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+              <p>• El enlace expira en <strong>24 horas</strong>.</p>
+              <p>• Si expira, podés generar uno nuevo desde Supabase o desde el perfil del usuario.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => { setIsInviteDialogOpen(false); setInviteLink(null) }}>
+              Entendido
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -135,11 +135,17 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
     const planGate = await canCreateResource(organization.id, 'products')
 
     if (!planGate.allowed) {
+      const planName = planGate.plan?.name || planGate.plan?.code || 'actual'
+      const limitText = planGate.limit === null ? 'ilimitados' : String(planGate.limit)
       return NextResponse.json(
         {
           success: false,
-          error: `Tu plan ${planGate.plan.name} permite hasta ${planGate.limit} productos. Actualiza el plan para crear mas.`,
-          code: 'PLAN_LIMIT_REACHED',
+          error: planGate.blocked
+            ? 'No se puede crear el producto porque la suscripcion esta suspendida o cancelada. Reactiva la suscripcion para habilitar mas productos.'
+            : planGate.expired
+              ? `No hay cupo para crear este producto. Como el plan vencio, la organizacion quedo con el limite Free de ${limitText} productos. Elimina productos que no uses o actualiza el plan.`
+              : `No hay cupo para crear este producto. El plan ${planName} permite ${limitText} productos. Elimina productos que no uses o actualiza el plan.`,
+          code: planGate.blocked ? 'SUBSCRIPTION_BLOCKED' : 'PLAN_LIMIT_REACHED',
           resource: 'products',
           current: planGate.current,
           limit: planGate.limit,
