@@ -6,13 +6,13 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Smartphone, Loader2, Eye, EyeOff, ArrowRight, Shield, CheckCircle2, Lock, Sparkles } from 'lucide-react'
+import { Loader2, Eye, EyeOff, ArrowRight, Shield, CheckCircle2, Lock, Building2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import Link from 'next/link'
 import { validatePassword } from '@/lib/auth/password-validation'
+import { usePlatformBranding } from '@/hooks/use-platform-branding'
 
 export default function ResetPasswordContent() {
   const [password, setPassword] = useState('')
@@ -25,13 +25,10 @@ export default function ResetPasswordContent() {
   const [validatingToken, setValidatingToken] = useState(true)
   
   const router = useRouter()
-  const searchParams = useSearchParams()
   const supabase = createClient()
+  const { branding } = usePlatformBranding()
 
-  // Validar que tenemos un token válido
   useEffect(() => {
-    // Establece la sesión a partir de los tokens del hash (#access_token=...),
-    // por si el SDK aún no procesó la URL (detectSessionInUrl asíncrono).
     const establishSessionFromHash = async (): Promise<boolean> => {
       if (typeof window === 'undefined') return false
       const hash = window.location.hash?.startsWith('#')
@@ -50,7 +47,6 @@ export default function ResetPasswordContent() {
         return false
       }
 
-      // Limpiar el hash para no reprocesarlo ni exponer los tokens en la URL.
       window.history.replaceState(null, '', window.location.pathname + window.location.search)
       return true
     }
@@ -59,7 +55,6 @@ export default function ResetPasswordContent() {
       try {
         let { data: { session } } = await supabase.auth.getSession()
 
-        // Fallback: si no hay sesión todavía, intentar con el hash.
         if (!session) {
           const ok = await establishSessionFromHash()
           if (ok) {
@@ -89,7 +84,6 @@ export default function ResetPasswordContent() {
     setLoading(true)
     setError('')
 
-    // Validaciones
     if (password !== confirmPassword) {
       setError('Las contraseñas no coinciden')
       setLoading(false)
@@ -104,373 +98,316 @@ export default function ResetPasswordContent() {
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: password
-      })
-
+      const { error } = await supabase.auth.updateUser({ password })
       if (error) {
-        console.error('Reset password error:', error)
         setError(error.message || 'Error al actualizar la contraseña')
       } else {
         setSuccess(true)
         toast.success('Contraseña actualizada exitosamente')
-        
-        // Redirigir al dashboard después de 2 segundos
-        setTimeout(() => {
-          router.push('/dashboard')
-        }, 2000)
+        setTimeout(() => router.push('/dashboard'), 2000)
       }
     } catch (err) {
-      console.error('Unexpected error:', err)
       setError('Ocurrió un error inesperado. Intenta de nuevo.')
     } finally {
       setLoading(false)
     }
   }
 
+  const reqs = [
+    { label: '8+ caracteres', met: password.length >= 8 },
+    { label: 'Mayúscula', met: /[A-Z]/.test(password) },
+    { label: 'Minúscula', met: /[a-z]/.test(password) },
+    { label: 'Número', met: /[0-9]/.test(password) }
+  ]
+  const strength = reqs.filter(r => r.met).length
+
   if (validatingToken) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/30">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
-          <p className="text-sm text-slate-600 dark:text-slate-400">Validando enlace...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (success) {
-    return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/30">
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
         <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center space-y-6 max-w-md"
+          animate={{ opacity: [0.5, 1, 0.5] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          className="flex flex-col items-center gap-4"
         >
-          <div className="mx-auto w-20 h-20 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
-            <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
+          <div className="relative">
+            <div className="absolute inset-0 blur-xl bg-blue-500/30 rounded-full" />
+            <Loader2 className="h-10 w-10 animate-spin text-blue-500 relative z-10" />
           </div>
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-              ¡Contraseña actualizada!
-            </h2>
-            <p className="text-slate-600 dark:text-slate-400">
-              Tu contraseña ha sido actualizada exitosamente. Redirigiendo al panel...
-            </p>
-          </div>
+          <p className="text-sm font-medium text-slate-400 tracking-wide">Autenticando sesión...</p>
         </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen w-full flex relative overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 dark:from-slate-950 dark:via-blue-950/20 dark:to-indigo-950/30">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))] opacity-40" />
-      
-      {/* Floating Orbs */}
-      <div className="absolute top-20 left-20 w-72 h-72 bg-blue-400/20 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-20 right-20 w-96 h-96 bg-indigo-400/20 rounded-full blur-3xl animate-pulse delay-1000" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-violet-400/10 rounded-full blur-3xl animate-pulse delay-500" />
-
-      {/* Left Panel - Branding */}
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6 }}
-        className="hidden lg:flex w-1/2 relative flex-col justify-between p-12 text-white overflow-hidden"
-      >
-        {/* Gradient Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700" />
-        
-        {/* Mesh Gradient Overlay */}
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1),transparent_50%)]" />
-        </div>
-
-        {/* Animated Shapes */}
-        <motion.div
-          animate={{
-            scale: [1, 1.2, 1],
-            rotate: [0, 90, 0],
-          }}
-          transition={{
-            duration: 20,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-          className="absolute top-10 right-10 w-64 h-64 bg-blue-400/20 rounded-full blur-3xl"
+    <div className="min-h-screen w-full flex items-center justify-center bg-[#030712] relative overflow-hidden selection:bg-blue-500/30 font-sans">
+      {/* Dynamic Ambient Background */}
+      <div className="absolute inset-0 w-full h-full pointer-events-none">
+        <motion.div 
+          animate={{ x: [0, 40, 0], y: [0, -40, 0], scale: [1, 1.1, 1] }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 rounded-full blur-[140px] mix-blend-screen" 
         />
-        <motion.div
-          animate={{
-            scale: [1, 1.3, 1],
-            rotate: [0, -90, 0],
-          }}
-          transition={{
-            duration: 25,
-            repeat: Infinity,
-            ease: "linear"
-          }}
-          className="absolute bottom-10 left-10 w-80 h-80 bg-violet-400/20 rounded-full blur-3xl"
+        <motion.div 
+          animate={{ x: [0, -30, 0], y: [0, 30, 0], scale: [1, 1.2, 1] }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+          className="absolute top-[20%] right-[-10%] w-[40%] h-[40%] bg-violet-600/15 rounded-full blur-[120px] mix-blend-screen" 
         />
-
-        {/* Logo */}
-        <div className="relative z-10 flex items-center gap-3">
-          <motion.div
-            whileHover={{ scale: 1.05, rotate: 5 }}
-            className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/20 shadow-2xl"
-          >
-            <Smartphone className="h-7 w-7 text-white" />
-          </motion.div>
-          <div>
-            <span className="text-2xl font-bold tracking-tight">4G POS</span>
-            <p className="text-xs text-blue-200/80 font-medium">Business Suite</p>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="relative z-10 space-y-8 max-w-lg">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <h1 className="text-5xl font-bold tracking-tight leading-tight mb-4">
-              Protege tu{' '}
-              <span className="bg-gradient-to-r from-blue-200 via-cyan-200 to-indigo-200 bg-clip-text text-transparent">
-                cuenta
-              </span>
-            </h1>
-            <p className="text-lg text-blue-100/90 leading-relaxed">
-              Crea una contraseña segura para mantener tu información protegida. 
-              Asegúrate de usar una combinación de letras, números y caracteres especiales.
-            </p>
-          </motion.div>
-
-          {/* Security Tips */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="space-y-3"
-          >
-            <h3 className="text-sm font-semibold text-blue-200/80 uppercase tracking-wider">
-              Consejos de seguridad
-            </h3>
-            {[
-              'Usa al menos 8 caracteres',
-              'Incluye mayúsculas y minúsculas',
-              'Agrega números y símbolos',
-              'Evita información personal',
-            ].map((tip, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6 + i * 0.1 }}
-                className="flex items-center gap-3 text-blue-100/80"
-              >
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-300" />
-                <span className="text-sm">{tip}</span>
-              </motion.div>
-            ))}
-          </motion.div>
-        </div>
-      </motion.div>
-
-      {/* Right Panel - Reset Form */}
-      <div className="flex-1 flex items-center justify-center p-4 lg:p-8 relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="w-full max-w-[460px]"
-        >
-          <Card className="shadow-2xl border-slate-200/60 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl overflow-hidden">
-            {/* Card Header with Gradient */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
-            
-            <CardHeader className="space-y-1 pb-6 pt-8">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-                  <Lock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <CardTitle className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
-                  Nueva Contraseña
-                </CardTitle>
-              </div>
-              <CardDescription className="text-base">
-                Ingresa tu nueva contraseña para restablecer el acceso
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-6 pb-8">
-              <form onSubmit={handleResetPassword} className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Nueva contraseña
-                  </Label>
-                  <div className="relative group">
-                    <Input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      className="h-11 bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:focus:border-blue-500 transition-all pr-11 pl-4 group-hover:border-slate-300 dark:group-hover:border-slate-700"
-                      disabled={loading}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                    <div className="absolute inset-0 -z-10 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-lg blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Confirmar contraseña
-                  </Label>
-                  <div className="relative group">
-                    <Input
-                      id="confirmPassword"
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                      className="h-11 bg-slate-50 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 focus:border-blue-500 dark:focus:border-blue-500 transition-all pr-11 pl-4 group-hover:border-slate-300 dark:group-hover:border-slate-700"
-                      disabled={loading}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
-                    >
-                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                    <div className="absolute inset-0 -z-10 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-lg blur opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                  </div>
-                </div>
-
-                {/* Password Requirements */}
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-800">
-                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                    Requisitos de contraseña:
-                  </p>
-                  <ul className="space-y-1 text-xs text-slate-600 dark:text-slate-400">
-                    <li className={cn(
-                      "flex items-center gap-2",
-                      password.length >= 8 && "text-green-600 dark:text-green-400"
-                    )}>
-                      <div className={cn(
-                        "w-1 h-1 rounded-full",
-                        password.length >= 8 ? "bg-green-600" : "bg-slate-400"
-                      )} />
-                      Mínimo 8 caracteres
-                    </li>
-                    <li className={cn(
-                      "flex items-center gap-2",
-                      /[A-Z]/.test(password) && "text-green-600 dark:text-green-400"
-                    )}>
-                      <div className={cn(
-                        "w-1 h-1 rounded-full",
-                        /[A-Z]/.test(password) ? "bg-green-600" : "bg-slate-400"
-                      )} />
-                      Una letra mayúscula
-                    </li>
-                    <li className={cn(
-                      "flex items-center gap-2",
-                      /[a-z]/.test(password) && "text-green-600 dark:text-green-400"
-                    )}>
-                      <div className={cn(
-                        "w-1 h-1 rounded-full",
-                        /[a-z]/.test(password) ? "bg-green-600" : "bg-slate-400"
-                      )} />
-                      Una letra minúscula
-                    </li>
-                    <li className={cn(
-                      "flex items-center gap-2",
-                      /[0-9]/.test(password) && "text-green-600 dark:text-green-400"
-                    )}>
-                      <div className={cn(
-                        "w-1 h-1 rounded-full",
-                        /[0-9]/.test(password) ? "bg-green-600" : "bg-slate-400"
-                      )} />
-                      Un número
-                    </li>
-                  </ul>
-                </div>
-
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3.5 rounded-lg flex items-start gap-2.5 border border-red-200 dark:border-red-900/50"
-                  >
-                    <Shield className="h-4 w-4 mt-0.5 shrink-0" />
-                    <span className="text-xs leading-relaxed">{error}</span>
-                  </motion.div>
-                )}
-
-                <Button
-                  type="submit"
-                  className="w-full h-11 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:from-blue-700 hover:via-indigo-700 hover:to-violet-700 text-white font-semibold transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] group relative overflow-hidden"
-                  disabled={loading}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Actualizando contraseña...
-                    </>
-                  ) : (
-                    <>
-                      Restablecer Contraseña
-                      <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
-                    </>
-                  )}
-                </Button>
-              </form>
-
-              <div className="text-center pt-2">
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  ¿Recordaste tu contraseña?{' '}
-                  <Link 
-                    href="/login" 
-                    className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold hover:underline transition-colors inline-flex items-center gap-1 group"
-                  >
-                    Volver al login
-                    <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
-                  </Link>
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Trust Badges */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.8 }}
-            className="mt-8 flex items-center justify-center gap-6 text-xs text-slate-500 dark:text-slate-400"
-          >
-            <div className="flex items-center gap-1.5">
-              <Shield className="h-3.5 w-3.5 text-green-600" />
-              <span>Conexión segura</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-              <span>Encriptación SSL</span>
-            </div>
-          </motion.div>
-        </motion.div>
+        <motion.div 
+          animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
+          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+          className="absolute bottom-[-20%] left-[20%] w-[40%] h-[40%] bg-indigo-600/15 rounded-full blur-[120px] mix-blend-screen" 
+        />
+        <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center opacity-[0.03]" />
       </div>
+
+      <AnimatePresence mode="wait">
+        {!success ? (
+          <motion.div
+            key="form"
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -20 }}
+            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+            className="w-full max-w-md relative z-10 px-4"
+          >
+            {/* Main Card */}
+            <div className="backdrop-blur-2xl bg-white/[0.03] border border-white/[0.08] shadow-2xl rounded-[32px] overflow-hidden relative group">
+              {/* Card top highlight */}
+              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-blue-400/50 to-transparent opacity-50" />
+              
+              <div className="p-8 sm:p-10 space-y-8">
+                {/* Header */}
+                <div className="space-y-4 text-center">
+                  <motion.div 
+                    initial={{ scale: 0, rotate: -15 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: "spring", damping: 12, delay: 0.2 }}
+                    className="flex items-center justify-center mx-auto"
+                  >
+                    {branding.logoUrl ? (
+                      <div className="flex h-16 items-center">
+                        <img src={branding.logoUrl} alt={branding.platformName} className="h-16 w-auto max-w-[200px] object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]" />
+                      </div>
+                    ) : (
+                      <div className="w-16 h-16 bg-gradient-to-tr from-blue-600/20 to-violet-600/20 rounded-2xl flex items-center justify-center border border-white/10 shadow-[0_0_40px_rgba(37,99,235,0.15)] relative">
+                        <div className="absolute inset-0 rounded-2xl border border-white/5 bg-gradient-to-tr from-white/5 to-transparent" />
+                        <Building2 className="h-7 w-7 text-blue-300 relative z-10" />
+                      </div>
+                    )}
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="space-y-1.5"
+                  >
+                    <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
+                      Nueva contraseña
+                    </h2>
+                    <p className="text-sm text-slate-400">
+                      Asegura tu cuenta de {branding.platformName}
+                    </p>
+                  </motion.div>
+                </div>
+
+                <form onSubmit={handleResetPassword} className="space-y-6">
+                  {/* Password Input */}
+                  <motion.div 
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="space-y-2.5"
+                  >
+                    <Label className="text-xs font-medium text-slate-300 ml-1">Tu nueva contraseña</Label>
+                    <div className="relative group/input">
+                      <Input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="h-12 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:bg-white/5 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all duration-300 rounded-xl pr-11 shadow-inner shadow-black/20"
+                        disabled={loading}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+
+                    {/* Animated Strength Meter */}
+                    <div className="pt-3">
+                      <div className="flex gap-1.5 h-1 w-full bg-black/40 rounded-full overflow-hidden p-0.5">
+                        {[1, 2, 3, 4].map((level) => (
+                          <div 
+                            key={level} 
+                            className={cn(
+                              "h-full flex-1 rounded-full transition-all duration-500",
+                              password.length === 0 ? "bg-transparent" :
+                              level <= strength ? 
+                                (strength <= 2 ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" : 
+                                strength === 3 ? "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]" : 
+                                "bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]")
+                              : "bg-transparent"
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-y-2 gap-x-4">
+                        {reqs.map((req, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <div className={cn(
+                              "w-1 h-1 rounded-full transition-colors duration-300",
+                              req.met ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" : "bg-slate-700"
+                            )} />
+                            <span className={cn(
+                              "text-[11px] transition-colors duration-300",
+                              req.met ? "text-slate-200 font-medium" : "text-slate-500"
+                            )}>{req.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* Confirm Password Input */}
+                  <motion.div 
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="space-y-2.5"
+                  >
+                    <Label className="text-xs font-medium text-slate-300 ml-1">Repite la contraseña</Label>
+                    <div className="relative group/input">
+                      <Input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="h-12 bg-black/20 border-white/10 text-white placeholder:text-slate-600 focus:bg-white/5 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all duration-300 rounded-xl pr-11 shadow-inner shadow-black/20"
+                        disabled={loading}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </motion.div>
+
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0, y: -10 }}
+                        animate={{ opacity: 1, height: 'auto', y: 0 }}
+                        exit={{ opacity: 0, height: 0, y: -10 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 mt-2">
+                          <Shield className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                          <p className="text-xs text-red-200/90 leading-relaxed font-medium">{error}</p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6 }}
+                    className="pt-4"
+                  >
+                    <Button
+                      type="submit"
+                      disabled={loading || strength < 3 || password !== confirmPassword}
+                      className="w-full h-12 bg-white text-black hover:bg-slate-200 transition-all duration-300 rounded-xl font-semibold text-sm relative overflow-hidden group shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:shadow-[0_0_40px_rgba(255,255,255,0.25)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                    >
+                      <span className="relative z-10 flex items-center justify-center gap-2">
+                        {loading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin text-slate-600" />
+                            Guardando...
+                          </>
+                        ) : (
+                          <>
+                            Guardar contraseña
+                            <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                          </>
+                        )}
+                      </span>
+                    </Button>
+                  </motion.div>
+                </form>
+              </div>
+
+              {/* Card Footer */}
+              <div className="px-8 py-5 border-t border-white/[0.05] bg-black/20 text-center backdrop-blur-md">
+                <Link 
+                  href="/login"
+                  className="text-xs font-medium text-slate-400 hover:text-white transition-colors inline-flex items-center gap-1.5 group"
+                >
+                  <ArrowRight className="h-3 w-3 rotate-180 group-hover:-translate-x-1 transition-transform opacity-70" />
+                  Volver al inicio de sesión
+                </Link>
+              </div>
+            </div>
+
+            {/* Bottom badges */}
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 }}
+              className="mt-8 flex justify-center gap-8 text-[11px] text-slate-500 font-medium"
+            >
+              <div className="flex items-center gap-2">
+                <Shield className="h-3.5 w-3.5 text-blue-400/50" />
+                <span>Cifrado Extremo</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="success"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-sm relative z-10 px-4"
+          >
+            <div className="backdrop-blur-2xl bg-white/[0.03] border border-white/[0.08] shadow-2xl rounded-[32px] p-10 text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent opacity-50" />
+              <div className="absolute inset-0 bg-emerald-500/5 blur-3xl rounded-full pointer-events-none" />
+              
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", damping: 15, delay: 0.1 }}
+                className="w-20 h-20 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-emerald-500/20 relative z-10"
+              >
+                <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+              </motion.div>
+              
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="relative z-10"
+              >
+                <h2 className="text-2xl font-semibold text-white mb-3 tracking-tight">¡Contraseña lista!</h2>
+                <p className="text-sm text-slate-400 leading-relaxed mb-8">
+                  Tu contraseña ha sido actualizada con éxito. Preparando tu entorno de trabajo...
+                </p>
+                <div className="flex justify-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-emerald-400/50" />
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
