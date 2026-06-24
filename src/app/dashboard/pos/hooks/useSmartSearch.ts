@@ -233,7 +233,7 @@ export function useSmartSearch({
     
     // Buscar sinónimos
     Object.entries(synonyms).forEach(([key, values]) => {
-      if (key.includes(lowerQuery) || values.some(v => v.includes(lowerQuery))) {
+      if (key.includes(lowerQuery) || lowerQuery.includes(key) || values.some(v => v.includes(lowerQuery) || lowerQuery.includes(v))) {
         relatedWords.push(key, ...values)
       }
     })

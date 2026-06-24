@@ -1140,7 +1140,8 @@ function POSPageContent() {
         product.name.toLowerCase().includes(searchLower) ||
         categoryName.toLowerCase().includes(searchLower) ||
         product.sku.toLowerCase().includes(searchLower) ||
-        (product.barcode && product.barcode.includes(debouncedSearchTerm))
+        (product.barcode && product.barcode.includes(debouncedSearchTerm)) ||
+        smartSearchResults.some(res => res.product.id === product.id)
 
       const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory
       const matchesFeatured = !showFeatured || (product as any).featured === true  // CORREGIDO: verificación explícita
@@ -1170,7 +1171,7 @@ function POSPageContent() {
     // }
 
     return result
-  }, [inventoryProducts, debouncedSearchTerm, selectedCategory, showFeatured, priceRange, stockFilter])
+  }, [inventoryProducts, debouncedSearchTerm, smartSearchResults, selectedCategory, showFeatured, priceRange, stockFilter])
 
   // Ordenar productos por separado para evitar recalcular filtrado
   const filteredProducts = useMemo(() => {
