@@ -46,7 +46,7 @@ async function handler(
       settingsQuery,
       userSupabase.from('organization_settings').select('display_name').maybeSingle(),
       orgId
-        ? adminSupabase.from('organizations').select('name, marketplace_public').eq('id', orgId).maybeSingle()
+        ? adminSupabase.from('organizations').select('name, marketplace_public, slug').eq('id', orgId).maybeSingle()
         : Promise.resolve({ data: null }),
       userSupabase.from('branches').select('phone, email, address, city').eq('is_default', true).maybeSingle(),
     ])
@@ -73,6 +73,7 @@ async function handler(
       email:   ci.email   || branch?.email   || '',
       address: ci.address || branch?.address || '',
       marketplacePublic: organization?.marketplace_public !== false,
+      slug: organization?.slug || ci.slug || '',
     }
 
     return NextResponse.json({

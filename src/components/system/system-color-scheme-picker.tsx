@@ -14,6 +14,8 @@ interface SystemColorSchemePickerProps {
   onChange: (scheme: SystemColorScheme) => void
   disabled?: boolean
   className?: string
+  labels?: Partial<Record<SystemColorScheme, { label: string; description: string; badge?: string }>>
+  footerText?: string
 }
 
 export function SystemColorSchemePicker({
@@ -21,6 +23,8 @@ export function SystemColorSchemePicker({
   onChange,
   disabled = false,
   className,
+  labels,
+  footerText = 'El esquema elegido impacta botones principales, estados destacados, enlaces y acentos del panel.',
 }: SystemColorSchemePickerProps) {
   const selectedValue = value ?? DEFAULT_SYSTEM_COLOR_SCHEME
 
@@ -29,6 +33,7 @@ export function SystemColorSchemePicker({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {SYSTEM_COLOR_SCHEME_OPTIONS.map((scheme) => {
           const isActive = selectedValue === scheme.value
+          const text = labels?.[scheme.value] ?? scheme
 
           return (
             <button
@@ -48,15 +53,15 @@ export function SystemColorSchemePicker({
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-foreground">{scheme.label}</span>
-                    {scheme.badge ? (
+                    <span className="text-sm font-semibold text-foreground">{text.label}</span>
+                    {text.badge ? (
                       <Badge variant="secondary" className="text-[10px]">
-                        {scheme.badge}
+                        {text.badge}
                       </Badge>
                     ) : null}
                   </div>
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    {scheme.description}
+                    {text.description}
                   </p>
                 </div>
 
@@ -87,7 +92,7 @@ export function SystemColorSchemePicker({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        El esquema elegido impacta botones principales, estados destacados, enlaces y acentos del panel.
+        {footerText}
       </p>
     </div>
   )

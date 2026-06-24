@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -355,7 +355,13 @@ const InventoryReports: React.FC = () => {
         supabase
         .from('product_movements')
         .select(`
-          *,
+          id,
+          created_at,
+          type,
+          movement_type,
+          quantity,
+          reason,
+          notes,
           product:products(name, sale_price, purchase_price)
         `)
         .gte('created_at', selectedDateRange.from.toISOString())
@@ -373,9 +379,12 @@ const InventoryReports: React.FC = () => {
         supabase
         .from('sales')
         .select(`
-          *,
+          id,
+          total_amount,
           sale_items (
-            *,
+            product_id,
+            quantity,
+            subtotal,
             products (name, category:categories(name), purchase_price)
           )
         `)
@@ -555,10 +564,6 @@ const InventoryReports: React.FC = () => {
     }
   }, [selectedBranchId, supabase, selectedDateRange])
 
-  useEffect(() => {
-    generateReport()
-  }, [generateReport])
-
   // Datos filtrados por los selectores de Categoría / Proveedor.
   // El recorte (top-N) se aplica DESPUÉS del filtro para que elegir una categoría
   // no vacíe la tabla por culpa de un top global calculado sobre todas las categorías.
@@ -653,9 +658,16 @@ const InventoryReports: React.FC = () => {
   if (!reportData) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-500" />
-          <p className="text-sm text-gray-500 dark:text-gray-400">Generando reporte...</p>
+        <div className="text-center max-w-md">
+          <BarChart3 className="h-10 w-10 mx-auto mb-4 text-blue-500" />
+          <h3 className="text-lg font-semibold text-foreground mb-1">Generar reporte de inventario</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            El reporte consulta productos, proveedores, movimientos y ventas. Generalo solo cuando necesites analizar o exportar la informacion.
+          </p>
+          <Button onClick={generateReport} disabled={isGenerating} className="bg-blue-600 hover:bg-blue-700">
+            <RefreshCw className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
+            {isGenerating ? 'Generando...' : 'Generar reporte'}
+          </Button>
         </div>
       </div>
     )

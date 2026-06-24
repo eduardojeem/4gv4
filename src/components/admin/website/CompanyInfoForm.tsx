@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles, MessageCircle, Building2, Upload, Info } from 'lucide-react'
+import { Loader2, Save, Phone, Mail, MapPin, Clock, Check, Sparkles, MessageCircle, Building2, Upload, Info, Globe } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { CompanyInfo } from '@/types/website-settings'
@@ -97,8 +97,9 @@ const HEADER_PREVIEW_STYLES: Record<string, {
 }
 
 export function CompanyInfoForm() {
-  const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
+  const { settings, isLoading, error, isSaving, refetch } = useAdminWebsiteSettings()
   const [draft, setDraft] = useState<CompanyInfo | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -162,6 +163,13 @@ export function CompanyInfoForm() {
       nextErrors.address = 'La dirección debe tener al menos 4 caracteres.'
     }
 
+    // Slug: validar solo caracteres permitidos y longitud
+    if (formData.slug && !/^[a-z0-9-]+$/.test(formData.slug)) {
+      nextErrors.slug = 'Solo se permiten letras minúsculas, números y guiones.'
+    } else if (formData.slug && formData.slug.length < 3) {
+      nextErrors.slug = 'La ruta pública debe tener al menos 3 caracteres.'
+    }
+
     // Logo: allow relative/storage paths ("/...") and validate only absolute URLs.
     if (formData.logoUrl) {
       const value = formData.logoUrl.trim()
@@ -198,10 +206,24 @@ export function CompanyInfoForm() {
       facebook: formData.facebook || '',
       tiktok: formData.tiktok || '',
       marketplacePublic: formData.marketplacePublic !== false,
+      slug: formData.slug || '',
     }
 
-    const result = await updateSetting('company_info', sanitizedData)
-    if (result.success) {
+    setIsSyncing(true)
+    try {
+      const syncRes = await fetch('/api/admin/website/sync-company', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sanitizedData),
+      })
+      const syncBody = await syncRes.json().catch(() => ({}))
+
+      if (!syncRes.ok || syncBody?.success === false) {
+        toast.error(syncBody?.error || 'Error al sincronizar datos. Verifique si el enlace web ya está en uso.')
+        return
+      }
+
+      await refetch()
       toast.success('Información de empresa actualizada', {
         description: 'Los cambios se reflejarán en el portal público',
         icon: <Check className="h-4 w-4" />,
@@ -210,19 +232,13 @@ export function CompanyInfoForm() {
       // This prevents the form from briefly showing stale data (e.g. logo disappearing)
       setTimeout(() => setDraft(null), 300)
 
-      fetch('/api/admin/website/sync-company', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: sanitizedData.name,
-          phone: sanitizedData.phone,
-          address: sanitizedData.address,
-          email: sanitizedData.email,
-          marketplacePublic: sanitizedData.marketplacePublic,
-        }),
-      }).catch(() => null)
-    } else {
-      toast.error(result.error || 'Error al guardar')
+      if (sanitizedData.slug) {
+        window.dispatchEvent(new CustomEvent('website-slug-updated', { detail: sanitizedData.slug }))
+      }
+    } catch {
+      toast.error('No se pudo guardar la información de la empresa')
+    } finally {
+      setIsSyncing(false)
     }
   }
 
@@ -335,30 +351,57 @@ export function CompanyInfoForm() {
         </div>
       </SectionCard>
 
-      <SectionCard icon={Building2} title="Visibilidad publica" description="Controla si la empresa aparece en marketplace y si su sitio publico y ecommerce quedan accesibles">
-        <div className="flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="marketplacePublic" className="text-sm font-semibold">Visibilidad publica</Label>
-              <span
-                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                  formData.marketplacePublic !== false
-                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
-                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                }`}
-              >
-                {formData.marketplacePublic !== false ? 'Publico' : 'Privado'}
+      <SectionCard icon={Globe} title="Enlace y visibilidad" description="Configura la dirección de tu portal y su visibilidad">
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="slug" className="text-sm font-medium">Ruta pública / Enlace web</Label>
+            <div className="flex overflow-hidden rounded-md border ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+              <span className="flex shrink-0 items-center border-r bg-muted/40 px-3 text-xs text-muted-foreground whitespace-nowrap">
+                {typeof window !== 'undefined' ? window.location.host : '4g.com.py'}/
               </span>
+              <Input
+                id="slug"
+                value={formData.slug || ''}
+                onChange={(e) => handleChange('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                placeholder="mi-empresa"
+                maxLength={50}
+                aria-invalid={!!errors.slug}
+                className="h-11 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Si esta activo, tu empresa aparece en el marketplace y tambien quedan accesibles su pagina publica y catalogo online.
-            </p>
+            {errors.slug ? (
+              <p className="text-xs text-destructive">{errors.slug}</p>
+            ) : (
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                ⚠️ Si cambiás esta ruta, los enlaces antiguos que hayas compartido dejarán de funcionar.
+              </p>
+            )}
           </div>
-          <Switch
-            id="marketplacePublic"
-            checked={formData.marketplacePublic !== false}
-            onCheckedChange={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
-          />
+
+          <div className="flex flex-col gap-4 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="marketplacePublic" className="text-sm font-semibold">Visibilidad en Marketplace</Label>
+                <span
+                  className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                    formData.marketplacePublic !== false
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {formData.marketplacePublic !== false ? 'Público' : 'Privado'}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Si está activo, tu empresa aparecerá listada en el marketplace general. (Tu sitio directo siempre funcionará).
+              </p>
+            </div>
+            <Switch
+              id="marketplacePublic"
+              checked={formData.marketplacePublic !== false}
+              onCheckedChange={(checked) => setDraft((current) => ({ ...(current ?? formData), marketplacePublic: checked }))}
+            />
+          </div>
         </div>
       </SectionCard>
 
@@ -706,8 +749,8 @@ export function CompanyInfoForm() {
             Descartar
           </Button>
         )}
-        <Button type="submit" disabled={isSaving || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl md:px-6">
-          {isSaving ? (
+        <Button type="submit" disabled={isSaving || isSyncing || !hasChanges} size="lg" className="h-14 rounded-full px-8 shadow-2xl md:h-12 md:rounded-xl md:px-6">
+          {isSaving || isSyncing ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               <span className="hidden md:inline">Guardando...</span>

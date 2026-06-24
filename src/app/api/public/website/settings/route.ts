@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
     if (!normalized.company_info.name?.trim()) {
       normalized.company_info.name = organization.name
     }
+    normalized.company_info.slug = organization.slug
 
     normalized.checkout = {
       ...normalized.checkout,

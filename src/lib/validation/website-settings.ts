@@ -47,6 +47,8 @@ export const CompanyInfoSchema = z.object({
   tiktok: z.string().max(100).optional().or(z.literal('')),
   marketplacePublic: z.boolean().optional(),
   servicesPageEnabled: z.boolean().optional(),
+  processSectionEnabled: z.boolean().optional().default(true),
+  slug: z.string().optional(),
 }).passthrough()
 
 // Esquema para contenido del hero
@@ -60,10 +62,15 @@ export const HeroContentSchema = z.object({
   subtitle: z.string()
     .min(10, 'Subtítulo debe tener al menos 10 caracteres')
     .max(300, 'Subtítulo no puede exceder 300 caracteres'),
+  trustBadges: z.array(z.string().max(50)).optional(),
+  ctaPrimaryText: z.string().max(50).optional(),
+  ctaSecondaryText: z.string().max(50).optional(),
+  trackRepairText: z.string().max(100).optional(),
 })
 
 // Esquema para estadísticas del hero
 export const HeroStatsSchema = z.object({
+  enabled: z.boolean().optional().default(true),
   repairs: z.string()
     .min(1, 'Estadística de reparaciones requerida')
     .max(20, 'Estadística no puede exceder 20 caracteres')
@@ -179,7 +186,9 @@ export const TestimonialSchema = z.object({
   comment: z.string()
     .min(10, 'Comentario debe tener al menos 10 caracteres')
     .max(500, 'Comentario no puede exceder 500 caracteres'),
-  active: z.boolean().optional().default(true)
+  active: z.boolean().optional().default(true),
+  role: z.string().optional(),
+  avatarUrl: z.string().optional()
 })
 
 // Esquema para array de testimonios

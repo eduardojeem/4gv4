@@ -22,8 +22,11 @@ export interface CompanyInfo {
   tiktok?: string
   servicesPageEnabled?: boolean
   marketplacePublic?: boolean
+  processSectionEnabled?: boolean
+  slug?: string
 }
 export interface HeroStats {
+  enabled?: boolean
   repairs: string
   satisfaction: string
   avgTime: string
@@ -33,6 +36,10 @@ export interface HeroContent {
   badge: string
   title: string
   subtitle: string
+  trustBadges?: string[]
+  ctaPrimaryText?: string
+  ctaSecondaryText?: string
+  trackRepairText?: string
 }
 
 export interface OffersSectionSettings {

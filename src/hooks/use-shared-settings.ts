@@ -81,6 +81,7 @@ export interface SharedSettings {
 }
 
 export type SharedSettingsSource = 'remote' | 'cache' | 'default'
+const SETTINGS_CACHE_KEY = 'admin.shared-settings.cache'
 
 export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   companyName: 'Mi Empresa',
@@ -111,6 +112,29 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   maintenanceMode: false
 }
 
+function readSettingsCache(): SharedSettings | null {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const cached = window.localStorage.getItem(SETTINGS_CACHE_KEY)
+    if (!cached) return null
+    const parsed = JSON.parse(cached)
+    return { ...DEFAULT_SHARED_SETTINGS, ...parsed }
+  } catch {
+    return null
+  }
+}
+
+function writeSettingsCache(settings: SharedSettings) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(settings))
+  } catch {
+    // Cache failure should never block settings usage.
+  }
+}
+
 // ============================================================================
 // Mapper
 // ============================================================================
@@ -124,23 +148,23 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
     companyAddress: data.company_address || DEFAULT_SHARED_SETTINGS.companyAddress,
     city: data.city || DEFAULT_SHARED_SETTINGS.city,
     currency: data.currency || DEFAULT_SHARED_SETTINGS.currency,
-    taxRate: Number(data.tax_rate) || DEFAULT_SHARED_SETTINGS.taxRate,
+    taxRate: data.tax_rate === null || data.tax_rate === undefined ? DEFAULT_SHARED_SETTINGS.taxRate : Number(data.tax_rate),
     theme: data.theme || DEFAULT_SHARED_SETTINGS.theme,
     primaryColor: data.primary_color || DEFAULT_SHARED_SETTINGS.primaryColor,
-    sessionTimeout: data.session_timeout || DEFAULT_SHARED_SETTINGS.sessionTimeout,
-    lowStockThreshold: data.low_stock_threshold || DEFAULT_SHARED_SETTINGS.lowStockThreshold,
+    sessionTimeout: data.session_timeout ?? DEFAULT_SHARED_SETTINGS.sessionTimeout,
+    lowStockThreshold: data.low_stock_threshold ?? DEFAULT_SHARED_SETTINGS.lowStockThreshold,
     autoBackup: data.auto_backup ?? DEFAULT_SHARED_SETTINGS.autoBackup,
     dateFormat: data.date_format || DEFAULT_SHARED_SETTINGS.dateFormat,
     timeZone: data.time_zone || DEFAULT_SHARED_SETTINGS.timeZone,
     language: data.language || DEFAULT_SHARED_SETTINGS.language,
-    itemsPerPage: data.items_per_page || DEFAULT_SHARED_SETTINGS.itemsPerPage,
-    retentionDays: data.retention_days || DEFAULT_SHARED_SETTINGS.retentionDays,
+    itemsPerPage: data.items_per_page ?? DEFAULT_SHARED_SETTINGS.itemsPerPage,
+    retentionDays: data.retention_days ?? DEFAULT_SHARED_SETTINGS.retentionDays,
     emailNotifications: data.email_notifications ?? DEFAULT_SHARED_SETTINGS.emailNotifications,
     smsNotifications: data.sms_notifications ?? DEFAULT_SHARED_SETTINGS.smsNotifications,
     allowRegistration: data.allow_registration ?? DEFAULT_SHARED_SETTINGS.allowRegistration,
     requireEmailVerification: data.require_email_verification ?? DEFAULT_SHARED_SETTINGS.requireEmailVerification,
-    maxLoginAttempts: data.max_login_attempts || DEFAULT_SHARED_SETTINGS.maxLoginAttempts,
-    passwordMinLength: data.password_min_length || DEFAULT_SHARED_SETTINGS.passwordMinLength,
+    maxLoginAttempts: data.max_login_attempts ?? DEFAULT_SHARED_SETTINGS.maxLoginAttempts,
+    passwordMinLength: data.password_min_length ?? DEFAULT_SHARED_SETTINGS.passwordMinLength,
     requireTwoFactor: data.require_two_factor ?? DEFAULT_SHARED_SETTINGS.requireTwoFactor,
     maintenanceMode: data.maintenance_mode ?? DEFAULT_SHARED_SETTINGS.maintenanceMode
   }
@@ -181,14 +205,17 @@ export function useSharedSettings() {
         setOriginalSettings(mapped)
         originalRef.current = JSON.stringify(mapped)
         setSettingsSource('remote')
+        writeSettingsCache(mapped)
         return
       }
 
       // No data in DB — use defaults
-      setSettings(DEFAULT_SHARED_SETTINGS)
-      setOriginalSettings(DEFAULT_SHARED_SETTINGS)
-      originalRef.current = JSON.stringify(DEFAULT_SHARED_SETTINGS)
-      setSettingsSource('default')
+      const cachedSettings = readSettingsCache()
+      const fallback = cachedSettings || DEFAULT_SHARED_SETTINGS
+      setSettings(fallback)
+      setOriginalSettings(fallback)
+      originalRef.current = JSON.stringify(fallback)
+      setSettingsSource(cachedSettings ? 'cache' : 'default')
     } catch (err: unknown) {
       const error = normalizeSupabaseError(err)
       console.error('Error loading settings:', error)
@@ -259,6 +286,7 @@ export function useSharedSettings() {
       originalRef.current = JSON.stringify(withOrgData)
       setError(null)
       setSettingsSource('remote')
+      writeSettingsCache(withOrgData)
       return { success: true }
     } catch (err: unknown) {
       const error = normalizeSupabaseError(err)

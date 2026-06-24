@@ -60,6 +60,13 @@ export default function WebsiteAdminPage() {
       .then((d: { organization?: { slug?: string } } | null) => {
         if (d?.organization?.slug) setOrgSlug(d.organization.slug)
       })
+
+    const handleSlugUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<string>
+      setOrgSlug(customEvent.detail)
+    }
+    window.addEventListener('website-slug-updated', handleSlugUpdate)
+    return () => window.removeEventListener('website-slug-updated', handleSlugUpdate)
   }, [])
 
   return (

@@ -14,6 +14,7 @@ import { usePublicCart } from '@/hooks/use-public-cart'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -79,14 +80,8 @@ export function ProductCard(props: ProductCardProps) {
   const imageSrc = resolveProductImageUrl(product.image)
 
   // ── Tenant prefix ────────────────────────────────────────────────────────
-  const pathSegments = pathname.split('/').filter(Boolean)
-  const tenantPrefix =
-    pathSegments.length > 1 &&
-    ['inicio', 'productos', 'ofertas', 'mis-reparaciones', 'carrito', 'track', 'cliente'].includes(
-      pathSegments[1]
-    )
-      ? `/${pathSegments[0]}`
-      : ''
+  const tenantSlug = getTenantSlugFromPathname(pathname)
+  const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
   const productHref = `${tenantPrefix}/productos/${product.id}`
 

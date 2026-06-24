@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -76,13 +76,17 @@ interface AdvancedSearchProps {
   onClearFilters: () => void
   results?: SearchResult[]
   isLoading?: boolean
+  categoryOptions?: { label: string; value: string }[]
+  supplierOptions?: { label: string; value: string }[]
 }
 
 const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
   onSearch,
   onClearFilters,
   results = [],
-  isLoading = false
+  isLoading = false,
+  categoryOptions = [],
+  supplierOptions = []
 }) => {
   // Estados
   const [filters, setFilters] = useState<SearchFilter[]>([])
@@ -94,8 +98,34 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [quickFilters, setQuickFilters] = useState<string[]>([])
 
+  const effectiveCategoryOptions = useMemo(() => (
+    categoryOptions.length > 0
+      ? categoryOptions
+      : [
+          { label: 'Smartphones', value: 'smartphones' },
+          { label: 'Laptops', value: 'laptops' },
+          { label: 'Tablets', value: 'tablets' },
+          { label: 'Accesorios', value: 'accesorios' },
+          { label: 'Audio', value: 'audio' },
+          { label: 'Gaming', value: 'gaming' }
+        ]
+  ), [categoryOptions])
+
+  const effectiveSupplierOptions = useMemo(() => (
+    supplierOptions.length > 0
+      ? supplierOptions
+      : [
+          { label: 'Apple Inc.', value: 'apple' },
+          { label: 'Samsung', value: 'samsung' },
+          { label: 'Lenovo', value: 'lenovo' },
+          { label: 'HP', value: 'hp' },
+          { label: 'Dell', value: 'dell' },
+          { label: 'Sony', value: 'sony' }
+        ]
+  ), [supplierOptions])
+
   // Filtros disponibles
-  const availableFilters: SearchFilter[] = [
+  const availableFilters: SearchFilter[] = useMemo(() => [
     {
       id: 'search',
       name: 'Búsqueda General',
@@ -108,28 +138,14 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
       name: 'Categoría',
       type: 'multiselect',
       value: [],
-      options: [
-        { label: 'Smartphones', value: 'smartphones' },
-        { label: 'Laptops', value: 'laptops' },
-        { label: 'Tablets', value: 'tablets' },
-        { label: 'Accesorios', value: 'accesorios' },
-        { label: 'Audio', value: 'audio' },
-        { label: 'Gaming', value: 'gaming' }
-      ]
+      options: effectiveCategoryOptions
     },
     {
       id: 'supplier',
       name: 'Proveedor',
       type: 'multiselect',
       value: [],
-      options: [
-        { label: 'Apple Inc.', value: 'apple' },
-        { label: 'Samsung', value: 'samsung' },
-        { label: 'Lenovo', value: 'lenovo' },
-        { label: 'HP', value: 'hp' },
-        { label: 'Dell', value: 'dell' },
-        { label: 'Sony', value: 'sony' }
-      ]
+      options: effectiveSupplierOptions
     },
     {
       id: 'priceRange',
@@ -177,17 +193,11 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
       name: 'Tiene Imagen',
       type: 'checkbox',
       value: false
-    },
-    {
-      id: 'isPromoted',
-      name: 'Producto Promocionado',
-      type: 'checkbox',
-      value: false
     }
-  ]
+  ], [effectiveCategoryOptions, effectiveSupplierOptions])
 
   // Búsquedas guardadas mock
-  const mockSavedSearches: SavedSearch[] = [
+  const mockSavedSearches: SavedSearch[] = useMemo(() => [
     {
       id: '1',
       name: 'Productos con Stock Bajo',
@@ -219,13 +229,20 @@ const AdvancedSearch: React.FC<AdvancedSearchProps> = ({
       createdAt: new Date('2024-01-05'),
       category: 'Análisis'
     }
-  ]
+  ], [availableFilters])
 
   // Efectos
   useEffect(() => {
-    setFilters(availableFilters.map(f => ({ ...f })))
+    setFilters(prev => {
+      if (prev.length === 0) return availableFilters.map(f => ({ ...f }))
+
+      return availableFilters.map(filter => {
+        const current = prev.find(f => f.id === filter.id)
+        return current ? { ...filter, value: current.value } : { ...filter }
+      })
+    })
     setSavedSearches(mockSavedSearches)
-  }, [])
+  }, [availableFilters, mockSavedSearches])
 
   // Funciones
   const updateFilter = (filterId: string, value: any) => {

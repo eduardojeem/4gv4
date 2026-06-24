@@ -13,14 +13,21 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       headerStyle: 'glass',
       headerColor: '',
       showTopBar: true,
+      servicesPageEnabled: true,
+      processSectionEnabled: true,
       marketplacePublic: true
     },
     hero_content: {
       badge: 'Servicio técnico especializado',
       title: 'Reparación profesional para tu equipo',
-      subtitle: 'Diagnóstico claro, repuestos de calidad y seguimiento en línea.'
+      subtitle: 'Diagnóstico claro, repuestos de calidad y seguimiento en línea.',
+      trustBadges: ['Garantía escrita', 'Repuestos originales', 'Técnicos certificados'],
+      ctaPrimaryText: 'Ver productos',
+      ctaSecondaryText: 'Escribinos',
+      trackRepairText: '¿Tenés una reparación? Rastreá tu equipo',
     },
     hero_stats: {
+      enabled: true,
       repairs: '0+',
       satisfaction: '0%',
       avgTime: '24h'

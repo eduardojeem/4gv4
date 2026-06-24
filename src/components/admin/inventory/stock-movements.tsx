@@ -53,20 +53,18 @@ interface MovementSummary {
   totalEntradas: number
   totalSalidas: number
   totalAjustes: number
+  totalTransferencias: number
 }
 
 type ProductMovementRow = {
   id: string
   product_id: string
   product?: { name?: string; sku?: string } | null
-  type?: string | null
   movement_type?: string | null
   quantity?: number | null
   previous_stock?: number | null
   new_stock?: number | null
-  reason?: string | null
   notes?: string | null
-  reference?: string | null
   reference_id?: string | null
   user_id?: string | null
   created_at: string
@@ -118,7 +116,16 @@ const StockMovements: React.FC = () => {
         supabase
         .from('product_movements')
         .select(`
-          *,
+          id,
+          product_id,
+          movement_type,
+          quantity,
+          previous_stock,
+          new_stock,
+          notes,
+          reference_id,
+          user_id,
+          created_at,
           product:products(name, sku)
         `, { count: 'exact' }),
         selectedBranchId
@@ -142,7 +149,7 @@ const StockMovements: React.FC = () => {
       // Supabase no soporta filtrado profundo en relaciones fácilmente con OR
       // Por simplicidad, filtramos por razón o referencia aquí, y si es posible por producto
       if (searchTerm) {
-        query = query.or(`reason.ilike.%${searchTerm}%,reference.ilike.%${searchTerm}%`)
+        query = query.ilike('notes', `%${searchTerm}%`)
       }
 
       // Paginación
@@ -159,12 +166,12 @@ const StockMovements: React.FC = () => {
         id: movement.id,
         product_id: movement.product_id,
         product: { name: movement.product?.name || 'Producto Desconocido', sku: movement.product?.sku || 'N/A' },
-        type: normalizeMovementType(movement.type ?? movement.movement_type),
+        type: normalizeMovementType(movement.movement_type),
         quantity: Number(movement.quantity || 0),
         previous_stock: Number(movement.previous_stock || 0),
         new_stock: Number(movement.new_stock || 0),
-        reason: movement.reason || movement.notes || movement.movement_type || 'Sin motivo',
-        reference: movement.reference || movement.reference_id || '',
+        reason: movement.notes || movement.movement_type || 'Sin motivo',
+        reference: movement.reference_id || '',
         user_id: movement.user_id || 'system',
         created_at: movement.created_at,
         notes: movement.notes || ''
@@ -174,38 +181,54 @@ const StockMovements: React.FC = () => {
       setTotalCount(count || 0)
 
       // Calcular resumen branch-aware con una consulta mínima separada
-      let summaryQuery = withBranchFilter(
-        supabase
-          .from('product_movements')
-          .select('movement_type, created_at'),
-        selectedBranchId
-      )
+      const countMovements = async (types?: string[]) => {
+        let countQuery = withBranchFilter(
+          supabase
+            .from('product_movements')
+            .select('id', { count: 'exact', head: true }),
+          selectedBranchId
+        )
 
-      if (filterDateFrom) {
-        summaryQuery = summaryQuery.gte('created_at', `${filterDateFrom}T00:00:00`)
+        if (filterDateFrom) {
+          countQuery = countQuery.gte('created_at', `${filterDateFrom}T00:00:00`)
+        }
+
+        if (filterDateTo) {
+          countQuery = countQuery.lte('created_at', `${filterDateTo}T23:59:59`)
+        }
+
+        if (types?.length) {
+          countQuery = countQuery.in('movement_type', types)
+        }
+
+        const { count: movementCount, error: countError } = await countQuery
+        if (countError) throw countError
+        return movementCount || 0
       }
 
-      if (filterDateTo) {
-        summaryQuery = summaryQuery.lte('created_at', `${filterDateTo}T23:59:59`)
-      }
-
-      const { data: summaryData, error: summaryError } = await summaryQuery
-
-      if (summaryError) throw summaryError
-
-      const normalizedSummary = (summaryData || []).map((movement) =>
-        normalizeMovementType((movement as { type?: string; movement_type?: string }).type ?? (movement as { movement_type?: string }).movement_type)
-      )
+      const [totalMovements, totalEntradas, totalSalidas, totalAjustes, totalTransferencias] = await Promise.all([
+        countMovements(),
+        countMovements(movementTypeFilters.entrada),
+        countMovements(movementTypeFilters.salida),
+        countMovements(movementTypeFilters.ajuste),
+        countMovements(movementTypeFilters.transferencia),
+      ])
 
       setSummary({
-        totalMovements: normalizedSummary.length,
-        totalEntradas: normalizedSummary.filter((type) => type === 'entrada').length,
-        totalSalidas: normalizedSummary.filter((type) => type === 'salida').length,
-        totalAjustes: normalizedSummary.filter((type) => type === 'ajuste').length
+        totalMovements,
+        totalEntradas,
+        totalSalidas,
+        totalAjustes,
+        totalTransferencias,
       })
 
     } catch (error) {
-      console.error('Error fetching movements:', error)
+      const normalizedError = error instanceof Error
+        ? { message: error.message, name: error.name }
+        : error && typeof error === 'object'
+          ? error
+          : { message: String(error) }
+      console.error('Error fetching movements:', normalizedError)
     } finally {
       setLoading(false)
     }
@@ -283,7 +306,7 @@ const StockMovements: React.FC = () => {
 
       {/* Resumen */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card className="dark:bg-gray-800 dark:border-gray-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -328,6 +351,18 @@ const StockMovements: React.FC = () => {
                   <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{summary.totalAjustes}</p>
                 </div>
                 <BarChart3 className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="dark:bg-gray-800 dark:border-gray-700">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Transferencias</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{summary.totalTransferencias}</p>
+                </div>
+                <RefreshCw className="h-8 w-8 text-purple-600 dark:text-purple-400" />
               </div>
             </CardContent>
           </Card>
@@ -455,9 +490,9 @@ const StockMovements: React.FC = () => {
                     <div className="text-right">
                       <div className="flex items-center space-x-2 mb-1 justify-end">
                         <span className={`text-lg font-semibold ${
-                          movementType === 'entrada' || movementType === 'devolucion' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                          movement.new_stock >= movement.previous_stock ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
-                          {(movementType === 'entrada' || movementType === 'devolucion') ? '+' : '-'}{Math.abs(movement.quantity)}
+                          {movement.new_stock >= movement.previous_stock ? '+' : '-'}{Math.abs(movement.quantity)}
                         </span>
                         <Button
                           size="sm"

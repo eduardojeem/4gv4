@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { Loader2, Save, ArrowUp, ArrowDown, Plus, Trash2, Footprints, Check } from 'lucide-react'
 import { ProcessStep } from '@/types/website-settings'
@@ -16,8 +17,11 @@ import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 export function ProcessStepsEditor() {
   const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
   const [stepsDraft, setStepsDraft] = useState<ProcessStep[] | null>(null)
+  const [processEnabledDraft, setProcessEnabledDraft] = useState<boolean | null>(null)
+  
   const steps = stepsDraft ?? settings?.process_steps ?? getWebsiteSettingsDefaults().process_steps
-  const hasChanges = stepsDraft !== null
+  const processEnabled = processEnabledDraft ?? settings?.company_info?.processSectionEnabled ?? getWebsiteSettingsDefaults().company_info.processSectionEnabled
+  const hasChanges = stepsDraft !== null || processEnabledDraft !== null
 
   const dirtyCtx = useWebsiteEditorDirty()
   useEffect(() => {
@@ -31,13 +35,32 @@ export function ProcessStepsEditor() {
       toast.error('Pasos incompletos', { description: 'Cada paso debe tener título (mín. 2 chars) y descripción (mín. 5 chars).' })
       return
     }
-    const normalized = steps.map((s, i) => ({ ...s, number: i + 1 }))
-    const result = await updateSetting('process_steps', normalized)
-    if (result.success) {
-      toast.success('Pasos del proceso actualizados', { icon: <Check className="h-4 w-4" /> })
-      setStepsDraft(null)
+
+    if (processEnabledDraft !== null) {
+      const newCompanyInfo = {
+        ...getWebsiteSettingsDefaults().company_info,
+        ...settings?.company_info,
+        processSectionEnabled: processEnabledDraft
+      }
+      const resultCi = await updateSetting('company_info', newCompanyInfo)
+      if (!resultCi.success) {
+        toast.error(resultCi.error || 'Error al guardar estado de la sección')
+        return
+      }
+      setProcessEnabledDraft(null)
+    }
+
+    if (stepsDraft !== null) {
+      const normalized = steps.map((s, i) => ({ ...s, number: i + 1 }))
+      const result = await updateSetting('process_steps', normalized)
+      if (result.success) {
+        toast.success('Pasos del proceso actualizados', { icon: <Check className="h-4 w-4" /> })
+        setStepsDraft(null)
+      } else {
+        toast.error(result.error || 'Error al guardar')
+      }
     } else {
-      toast.error(result.error || 'Error al guardar')
+      toast.success('Configuración guardada correctamente', { icon: <Check className="h-4 w-4" /> })
     }
   }
 
@@ -94,10 +117,20 @@ export function ProcessStepsEditor() {
             </p>
           </div>
         </div>
-        <Button onClick={handleAdd} size="sm" className="shrink-0 gap-2">
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Agregar paso</span>
-        </Button>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="enable-process" className="text-sm font-medium">Mostrar sección</Label>
+            <Switch
+              id="enable-process"
+              checked={processEnabled !== false}
+              onCheckedChange={(checked) => setProcessEnabledDraft(checked)}
+            />
+          </div>
+          <Button onClick={handleAdd} size="sm" className="shrink-0 gap-2">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Agregar paso</span>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -156,7 +189,7 @@ export function ProcessStepsEditor() {
           <Button
             type="button"
             variant="ghost"
-            onClick={() => setStepsDraft(null)}
+            onClick={() => { setStepsDraft(null); setProcessEnabledDraft(null); }}
             className="h-14 rounded-full px-6 shadow-2xl bg-background/80 backdrop-blur border md:h-12 md:rounded-xl md:px-4"
           >
             Descartar

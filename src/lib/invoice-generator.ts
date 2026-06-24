@@ -16,6 +16,7 @@ export interface InvoiceData {
     sellerTaxId?: string
     sellerPhone?: string
     sellerEmail?: string
+    sellerLogoUrl?: string
 
     // Customer info
     customerName?: string
@@ -161,6 +162,7 @@ export function formatInvoiceHTML(invoice: InvoiceData): string {
 </head>
 <body>
   <div class="header">
+    ${invoice.sellerLogoUrl ? `<div style="text-align: center; margin-bottom: 10px;"><img src="${invoice.sellerLogoUrl}" alt="Logo" style="max-height: 80px; max-width: 150px; object-fit: contain;" /></div>` : ''}
     <div class="company-name">${invoice.sellerName}</div>
     ${invoice.sellerAddress ? `<div>${invoice.sellerAddress}</div>` : ''}
     ${invoice.sellerTaxId ? `<div>RUC: ${invoice.sellerTaxId}</div>` : ''}

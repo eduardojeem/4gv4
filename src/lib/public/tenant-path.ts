@@ -1,4 +1,5 @@
 import { headers } from 'next/headers'
+import { isTenantPublicSection } from '@/lib/saas/tenant'
 
 export async function getPublicTenantPathPrefix() {
   const headerStore = await headers()
@@ -9,7 +10,8 @@ export async function getPublicTenantPathPrefix() {
 
 export function prefixPublicTenantPath(prefix: string, href: string) {
   if (!prefix) return href
-  if (!['/inicio', '/productos', '/ofertas', '/mis-reparaciones', '/track', '/carrito', '/perfil'].some((path) => href === path || href.startsWith(`${path}/`) || href.startsWith(`${path}?`) || href.startsWith(`${path}#`))) {
+  const section = href.split(/[/?#]/)[1]
+  if (!isTenantPublicSection(section)) {
     return href
   }
 

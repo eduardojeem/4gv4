@@ -6,7 +6,7 @@ import { getOrganizationPlanInfo } from '@/lib/saas/subscription-service'
 import { MODULE_TRIAL_DAYS } from '@/lib/saas/plan-features'
 
 const TRIALABLE_MODULES = new Set([
-  'inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'analytics', 'promotions',
+  'inventory', 'inventory_admin', 'pos', 'repairs', 'crm', 'ecommerce', 'delivery', 'analytics', 'promotions', 'security', 'credits',
 ])
 
 // POST — Inicia una prueba de 7 días de un módulo que el plan no incluye.

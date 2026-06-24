@@ -18,6 +18,7 @@ import {
 } from '@/lib/invoice-generator'
 
 import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { config } from '@/lib/config'
 
 interface ReceiptViewerProps {
@@ -54,13 +55,16 @@ export function ReceiptViewer({
     onNewSale
 }: ReceiptViewerProps) {
     const { settings } = useSharedSettings()
+    const { settings: websiteSettings } = useAdminWebsiteSettings()
+    const logoUrl = websiteSettings?.company_info?.logoUrl
     
     const companyInfo = {
         name: settings.companyName || config.company.name,
         address: settings.companyAddress || config.company.address,
         phone: settings.companyPhone || config.company.phone,
         email: settings.companyEmail || config.company.email,
-        ruc: settings.companyRuc
+        ruc: settings.companyRuc,
+        logoUrl: logoUrl
     }
 
     const handlePrint = () => {
@@ -72,6 +76,7 @@ export function ReceiptViewer({
             sellerTaxId: companyInfo.ruc,
             sellerPhone: companyInfo.phone,
             sellerEmail: companyInfo.email,
+            sellerLogoUrl: companyInfo.logoUrl,
             customerName: customerName || 'Cliente General',
             items: items.map(item => ({
                 description: item.name,
@@ -124,6 +129,11 @@ export function ReceiptViewer({
                 <div className="bg-white border-2 border-gray-200 rounded-lg p-6 space-y-4">
                     {/* Header */}
                     <div className="text-center border-b pb-4">
+                        {companyInfo.logoUrl && (
+                            <div className="flex justify-center mb-2">
+                                <img src={companyInfo.logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
+                            </div>
+                        )}
                         <h3 className="text-xl font-bold uppercase">{companyInfo.name}</h3>
                         <p className="text-sm text-gray-600">{companyInfo.address}</p>
                         {companyInfo.ruc && (
@@ -256,6 +266,7 @@ export function ReceiptViewer({
                                         sellerTaxId: companyInfo.ruc,
                                         sellerPhone: companyInfo.phone,
                                         sellerEmail: companyInfo.email,
+                                        sellerLogoUrl: companyInfo.logoUrl,
                                         customerName: customerName || 'Cliente General',
                                         items: items.map(item => ({
                                             description: item.name,
@@ -304,6 +315,7 @@ export function ReceiptViewer({
                                         sellerTaxId: companyInfo.ruc,
                                         sellerPhone: companyInfo.phone,
                                         sellerEmail: companyInfo.email,
+                                        sellerLogoUrl: companyInfo.logoUrl,
                                         customerName: customerName || 'Cliente General',
                                         items: items.map(item => ({
                                             description: item.name,
@@ -346,6 +358,7 @@ export function ReceiptViewer({
                                         sellerTaxId: companyInfo.ruc,
                                         sellerPhone: companyInfo.phone,
                                         sellerEmail: companyInfo.email,
+                                        sellerLogoUrl: companyInfo.logoUrl,
                                         customerName: customerName || 'Cliente General',
                                         items: items.map(item => ({
                                             description: item.name,
@@ -394,6 +407,7 @@ export function ReceiptViewer({
                                         sellerTaxId: companyInfo.ruc,
                                         sellerPhone: companyInfo.phone,
                                         sellerEmail: companyInfo.email,
+                                        sellerLogoUrl: companyInfo.logoUrl,
                                         customerName: customerName || 'Cliente General',
                                         items: items.map(item => ({
                                             description: item.name,
@@ -452,6 +466,7 @@ export function ReceiptViewer({
                                         sellerName: companyInfo.name,
                                         sellerAddress: companyInfo.address,
                                         sellerTaxId: companyInfo.ruc,
+                                        sellerLogoUrl: companyInfo.logoUrl,
                                         items: items.map(i => ({
                                             description: i.name,
                                             quantity: i.quantity,

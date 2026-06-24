@@ -20,6 +20,7 @@ import {
   Package, 
   Plus, 
   RefreshCw,
+  ArrowRight,
   Bell,
   CheckCircle,
   XCircle,
@@ -80,6 +81,8 @@ interface Product {
   supplier: string
 }
 
+const PRODUCT_PAGE_SIZE = 25
+
 const StockControl: React.FC = () => {
   // Estados
   const [movements, setMovements] = useState<StockMovement[]>([])
@@ -88,33 +91,57 @@ const StockControl: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false)
   const [isAlertSettingsOpen, setIsAlertSettingsOpen] = useState(false)
-  const [movementType, setMovementType] = useState<'entrada' | 'salida' | 'ajuste'>('entrada')
+  const [movementType, setMovementType] = useState<'entrada' | 'salida' | 'ajuste' | 'transferencia'>('entrada')
   const [movementQuantity, setMovementQuantity] = useState<number>(0)
   const [movementReason, setMovementReason] = useState('')
   const [movementReference, setMovementReference] = useState('')
   const [movementCost, setMovementCost] = useState<number>(0)
   const [movementSupplier, setMovementSupplier] = useState('')
+  const [transferToBranchId, setTransferToBranchId] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   const [filterDate, setFilterDate] = useState<string>('')
+  const [productSearchInput, setProductSearchInput] = useState('')
+  const [productSearch, setProductSearch] = useState('')
+  const [productPage, setProductPage] = useState(1)
+  const [productTotalCount, setProductTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   
   const supabase = createClient()
-  const { selectedBranchId } = useBranch()
+  const { branches, selectedBranch, selectedBranchId } = useBranch()
 
   // Cargar datos de Supabase
   const fetchData = useCallback(async () => {
     setIsLoading(true)
     try {
       // 1. Cargar Productos
-      const { data: productsData, error: productsError } = await supabase
+      const productFrom = (productPage - 1) * PRODUCT_PAGE_SIZE
+      const productTo = productFrom + PRODUCT_PAGE_SIZE - 1
+      let productsQuery = supabase
         .from('products')
         .select(`
-          *,
+          id,
+          name,
+          sku,
+          stock_quantity,
+          min_stock,
+          max_stock,
+          purchase_price,
+          sale_price,
           category:categories(name),
           supplier:suppliers(name)
-        `)
+        `, { count: 'exact' })
+        .order('name', { ascending: true })
+        .range(productFrom, productTo)
+
+      const normalizedSearch = productSearch.trim()
+      if (normalizedSearch) {
+        productsQuery = productsQuery.or(`name.ilike.%${normalizedSearch}%,sku.ilike.%${normalizedSearch}%`)
+      }
+
+      const { data: productsData, error: productsError, count: productsCount } = await productsQuery
       
       if (productsError) throw productsError
+      setProductTotalCount(productsCount || 0)
 
       const branchAwareProducts = await (loadBranchInventoryStockMap as any)(
         supabase,
@@ -170,8 +197,9 @@ const StockControl: React.FC = () => {
           productId: m.product_id,
           productName: m.product?.name || 'Desconocido',
           productSku: m.product?.sku || '',
-          type: (m.movement_type === 'entry' || m.movement_type === 'entrada') ? 'entrada' : 
-                (m.movement_type === 'exit' || m.movement_type === 'salida' || m.movement_type === 'sale') ? 'salida' : 'ajuste',
+          type: (m.movement_type === 'entry' || m.movement_type === 'entrada' || m.movement_type === 'in') ? 'entrada' :
+                (m.movement_type === 'exit' || m.movement_type === 'salida' || m.movement_type === 'sale' || m.movement_type === 'out') ? 'salida' :
+                (m.movement_type === 'transfer' || m.movement_type === 'transferencia') ? 'transferencia' : 'ajuste',
           quantity: m.quantity,
           previousStock: m.previous_stock,
           newStock: m.new_stock,
@@ -229,6 +257,7 @@ const StockControl: React.FC = () => {
         // Fallback: Generar alertas locales basadas en productos cargados
         const localAlerts: StockAlert[] = formattedProducts
           .filter(p => p.stock <= p.minStock)
+          .slice(0, 25)
           .map(p => ({
             id: `local-alert-${p.id}`,
             productId: p.id,
@@ -250,12 +279,32 @@ const StockControl: React.FC = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedBranchId, supabase])
+  }, [productPage, productSearch, selectedBranchId, supabase])
 
   // Efectos
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setProductSearch(productSearchInput)
+    }, 350)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [productSearchInput])
+
+  useEffect(() => {
+    setProductPage(1)
+  }, [productSearch])
+
+  useEffect(() => {
+    if (movementType !== 'transferencia') return
+    if (transferToBranchId && transferToBranchId !== selectedBranchId) return
+
+    const fallbackDestination = branches.find((branch) => branch.id !== selectedBranchId)?.id || ''
+    setTransferToBranchId(fallbackDestination)
+  }, [branches, movementType, selectedBranchId, transferToBranchId])
 
   // Funciones utilitarias
   const getAlertSeverityColor = (severity: string) => {
@@ -295,6 +344,54 @@ const StockControl: React.FC = () => {
     setIsLoading(true)
     
     try {
+      if (movementType === 'transferencia') {
+        if (!selectedBranchId) {
+          alert('Selecciona una sucursal origen antes de transferir stock.')
+          setIsLoading(false)
+          return
+        }
+
+        if (!transferToBranchId) {
+          alert('Selecciona una sucursal destino.')
+          setIsLoading(false)
+          return
+        }
+
+        if (selectedBranchId === transferToBranchId) {
+          alert('La sucursal origen y destino deben ser diferentes.')
+          setIsLoading(false)
+          return
+        }
+
+        if (movementQuantity > selectedProduct.stock) {
+          alert(`Stock insuficiente en la sucursal origen. Disponible: ${selectedProduct.stock}.`)
+          setIsLoading(false)
+          return
+        }
+
+        const { error: transferError } = await supabase.rpc('transfer_branch_inventory_stock', {
+          p_product_id: selectedProduct.id,
+          p_from_branch_id: selectedBranchId,
+          p_to_branch_id: transferToBranchId,
+          p_quantity: movementQuantity,
+          p_reason: movementReason || null,
+          p_reference_id: movementReference || null
+        })
+
+        if (transferError) throw transferError
+
+        await fetchData()
+        setIsMovementDialogOpen(false)
+        setSelectedProduct(null)
+        setMovementQuantity(0)
+        setMovementReason('')
+        setMovementReference('')
+        setMovementCost(0)
+        setMovementSupplier('')
+        setTransferToBranchId('')
+        return
+      }
+
       const newStock = movementType === 'entrada'
         ? selectedProduct.stock + movementQuantity
         : selectedProduct.stock - movementQuantity
@@ -304,6 +401,7 @@ const StockControl: React.FC = () => {
         setIsLoading(false)
         return
       }
+
       if (selectedBranchId) {
         const { error: branchError } = await supabase.rpc('set_branch_inventory_stock', {
           p_product_id: selectedProduct.id,
@@ -316,35 +414,17 @@ const StockControl: React.FC = () => {
 
         if (branchError) throw branchError
       } else {
-      // Intentar usar RPC primero
-      const { error: rpcError } = await supabase.rpc('update_product_stock', {
-        product_id: selectedProduct.id,
-        quantity_change: movementType === 'entrada' ? movementQuantity : -movementQuantity,
-        movement_type: movementType === 'entrada' ? 'entry' : movementType === 'salida' ? 'exit' : 'adjustment',
-        reason: movementReason,
-        notes: movementReason // Intentar ambos nombres de parámetro por si acaso
-      })
+        const { error: rpcError } = await supabase.rpc('update_product_stock', {
+          product_id: selectedProduct.id,
+          quantity_change: movementType === 'entrada' ? movementQuantity : -movementQuantity,
+          movement_type: movementType === 'entrada' ? 'entry' : movementType === 'salida' ? 'exit' : 'adjustment',
+          reason: movementReason,
+          notes: movementReason
+        })
 
-      if (rpcError) {
-        console.warn('RPC update_product_stock failed, falling back to direct update:', rpcError)
-        
-        // Fallback: Actualización directa
-        const { error: updateError } = await supabase
-          .from('products')
-          .update({ stock_quantity: newStock }) // Probar stock_quantity
-          .eq('id', selectedProduct.id)
-
-        if (updateError) {
-           // Si falla stock_quantity, probar stock
-           const { error: updateError2 } = await supabase
-             .from('products')
-             .update({ stock: newStock })
-             .eq('id', selectedProduct.id)
-             
-           if (updateError2) throw updateError2
+        if (rpcError) {
+          throw new Error(rpcError.message || 'No se pudo registrar el movimiento de stock.')
         }
-      }
-
       }
 
       await fetchData() // Recargar datos
@@ -357,10 +437,11 @@ const StockControl: React.FC = () => {
       setMovementReference('')
       setMovementCost(0)
       setMovementSupplier('')
+      setTransferToBranchId('')
 
     } catch (error) {
       console.error('Error creating movement:', error)
-      alert('Error al crear movimiento. Por favor intente nuevamente.')
+      alert(error instanceof Error ? error.message : 'Error al crear movimiento. Por favor intente nuevamente.')
     } finally {
       setIsLoading(false)
     }
@@ -412,6 +493,8 @@ const StockControl: React.FC = () => {
 
   const activeAlerts = alerts.filter(alert => alert.isActive)
   const criticalAlerts = activeAlerts.filter(alert => alert.severity === 'critical')
+  const hasPreviousProductPage = productPage > 1
+  const hasNextProductPage = productPage * PRODUCT_PAGE_SIZE < productTotalCount
 
   const exportFilteredMovements = () => {
     const rows = [
@@ -596,13 +679,14 @@ const StockControl: React.FC = () => {
                     <SelectTrigger className="w-40 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">
                       <SelectValue placeholder="Filtrar por tipo" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="entrada">Entradas</SelectItem>
-                      <SelectItem value="salida">Salidas</SelectItem>
-                      <SelectItem value="ajuste">Ajustes</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="entrada">Entradas</SelectItem>
+                    <SelectItem value="salida">Salidas</SelectItem>
+                    <SelectItem value="ajuste">Ajustes</SelectItem>
+                    <SelectItem value="transferencia">Transferencias</SelectItem>
+                  </SelectContent>
+                </Select>
                   <Input
                     type="date"
                     value={filterDate}
@@ -642,7 +726,7 @@ const StockControl: React.FC = () => {
                       <div className="text-right">
                         <div className="flex items-center space-x-2">
                           <span className="text-lg font-semibold dark:text-gray-100">
-                            {movement.type === 'entrada' ? '+' : '-'}{movement.quantity}
+                            {movement.newStock >= movement.previousStock ? '+' : '-'}{movement.quantity}
                           </span>
                           <span className="text-sm text-gray-500 dark:text-gray-400">
                             ({movement.previousStock} → {movement.newStock})
@@ -765,7 +849,7 @@ const StockControl: React.FC = () => {
                       </div>
                       <div className="text-right">
                         <p className="font-semibold text-sm dark:text-gray-200">
-                          {movement.type === 'entrada' ? '+' : '-'}{movement.quantity}
+                          {movement.newStock >= movement.previousStock ? '+' : '-'}{movement.quantity}
                         </p>
                       </div>
                     </div>
@@ -786,11 +870,48 @@ const StockControl: React.FC = () => {
               Registrar Movimiento de Stock
             </DialogTitle>
             <DialogDescription className="dark:text-gray-400">
-              Registra una entrada, salida o ajuste de inventario
+              Registra una entrada, salida, ajuste o transferencia entre sucursales
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            <div className="space-y-2 rounded-lg border p-3 dark:border-gray-700">
+              <Label className="dark:text-gray-300">Buscar producto</Label>
+              <Input
+                value={productSearchInput}
+                onChange={(e) => setProductSearchInput(e.target.value)}
+                placeholder="Nombre o SKU"
+                className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100"
+              />
+              <div className="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+                <span>
+                  Mostrando {products.length} de {productTotalCount} productos encontrados
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setProductPage((current) => Math.max(1, current - 1))}
+                    disabled={!hasPreviousProductPage || isLoading}
+                    className="h-8 dark:border-gray-700 dark:text-gray-300"
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setProductPage((current) => current + 1)}
+                    disabled={!hasNextProductPage || isLoading}
+                    className="h-8 dark:border-gray-700 dark:text-gray-300"
+                  >
+                    Siguiente
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="dark:text-gray-300">Producto</Label>
@@ -813,7 +934,7 @@ const StockControl: React.FC = () => {
 
               <div className="space-y-2">
                 <Label className="dark:text-gray-300">Tipo de Movimiento</Label>
-                <Select value={movementType} onValueChange={(value: 'entrada' | 'salida' | 'ajuste') => setMovementType(value)}>
+                <Select value={movementType} onValueChange={(value: 'entrada' | 'salida' | 'ajuste' | 'transferencia') => setMovementType(value)}>
                   <SelectTrigger className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100">
                     <SelectValue />
                   </SelectTrigger>
@@ -821,10 +942,45 @@ const StockControl: React.FC = () => {
                     <SelectItem value="entrada">Entrada</SelectItem>
                     <SelectItem value="salida">Salida</SelectItem>
                     <SelectItem value="ajuste">Ajuste</SelectItem>
+                    <SelectItem value="transferencia">Transferencia</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
+            {movementType === 'transferencia' && (
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 items-end rounded-lg border p-3 dark:border-gray-700">
+                <div className="space-y-2">
+                  <Label className="dark:text-gray-300">Sucursal origen</Label>
+                  <div className="rounded-md border px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
+                    {selectedBranch?.name || 'Selecciona una sucursal activa'}
+                  </div>
+                </div>
+                <ArrowRight className="hidden md:block h-5 w-5 text-gray-400 mb-2" />
+                <div className="space-y-2">
+                  <Label className="dark:text-gray-300">Sucursal destino</Label>
+                  <Select value={transferToBranchId} onValueChange={setTransferToBranchId}>
+                    <SelectTrigger className="dark:bg-gray-900 dark:border-gray-600 dark:text-gray-100">
+                      <SelectValue placeholder="Seleccionar destino" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches
+                        .filter((branch) => branch.id !== selectedBranchId)
+                        .map((branch) => (
+                          <SelectItem key={branch.id} value={branch.id}>
+                            {branch.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {branches.length < 2 && (
+                  <p className="md:col-span-3 text-sm text-amber-600 dark:text-amber-400">
+                    Necesitas al menos dos sucursales activas para registrar una transferencia.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -897,14 +1053,18 @@ const StockControl: React.FC = () => {
                   <div>
                     <p className="text-blue-700 dark:text-blue-400">Cambio</p>
                     <p className="font-semibold dark:text-gray-200">
-                      {movementType === 'entrada' ? '+' : '-'}{movementQuantity}
+                      {movementType === 'entrada'
+                        ? '+'
+                        : movementType === 'transferencia'
+                          ? '-'
+                          : '-'}{movementQuantity}
                     </p>
                   </div>
                   <div>
                     <p className="text-blue-700 dark:text-blue-400">Stock Final</p>
                     <p className="font-semibold dark:text-gray-200">
-                      {movementType === 'entrada' 
-                        ? selectedProduct.stock + movementQuantity 
+                      {movementType === 'entrada'
+                        ? selectedProduct.stock + movementQuantity
                         : Math.max(0, selectedProduct.stock - movementQuantity)}
                     </p>
                   </div>
@@ -919,7 +1079,13 @@ const StockControl: React.FC = () => {
             </Button>
             <Button 
               onClick={handleCreateMovement}
-              disabled={!selectedProduct || movementQuantity <= 0 || !movementReason || isLoading}
+              disabled={
+                !selectedProduct ||
+                movementQuantity <= 0 ||
+                !movementReason ||
+                isLoading ||
+                (movementType === 'transferencia' && (!selectedBranchId || !transferToBranchId || selectedBranchId === transferToBranchId))
+              }
               className="bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700 text-white"
             >
               {isLoading ? (
@@ -977,4 +1143,3 @@ const StockControl: React.FC = () => {
 }
 
 export default StockControl
-

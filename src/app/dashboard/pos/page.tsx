@@ -49,11 +49,11 @@ import { createReceiptData, printReceipt, downloadReceipt, shareReceipt } from '
 import { VirtualizedProductGrid } from './components/VirtualizedProductList'
 import { formatStockStatus } from '@/lib/inventory-manager'
 import { createClient as createSupabaseClient } from '@/lib/supabase/client'
-import { config, isDemoNoDb, getTaxConfig, getFeatureFlag } from '@/lib/config'
+import { config, isDemoNoDb, getFeatureFlag } from '@/lib/config'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { SupabaseStatus } from '@/components/supabase-status'
-import { formatCurrency } from '@/lib/currency'
+import { formatCurrency as formatCurrencyBase } from '@/lib/currency'
 import { 
   calculateRepairTotal, 
   createRepairCartItem, 
@@ -143,6 +143,16 @@ export default function POSPage() {
 
 function POSPageContent() {
   const { settings } = useSharedSettings()
+  const taxPercentage = Number.isFinite(settings.taxRate) ? settings.taxRate : 10
+  const taxRate = taxPercentage / 100
+  const formatCurrency = useCallback(
+    (amount: number) => formatCurrencyBase(amount, {
+      currency: settings.currency || 'PYG',
+      minimumFractionDigits: settings.currency === 'PYG' ? 0 : 2,
+      maximumFractionDigits: settings.currency === 'PYG' ? 0 : 2,
+    }),
+    [settings.currency]
+  )
   
   const companyInfo = useMemo(() => ({
     name: settings.companyName || config.company.name,
@@ -468,8 +478,8 @@ function POSPageContent() {
     replaceCart,
     checkAvailability: checkCartAvailability
   } = useOptimizedCart(inventoryProducts, {
-    taxRate: getTaxConfig().rate,
-    pricesIncludeTax: (getTaxConfig() as any).pricesIncludeTax
+    taxRate,
+    pricesIncludeTax: config.pricesIncludeTax
   })
 
   const handleWholesaleToggle = useCallback((value: boolean) => {
@@ -1248,7 +1258,7 @@ function POSPageContent() {
       return calculateRepairTotal({
         laborCost,
         partsCost: 0,
-        taxRate: getTaxConfig().percentage,
+        taxRate: taxPercentage,
         pricesIncludeTax: true
       })
     })
@@ -1305,7 +1315,8 @@ function POSPageContent() {
     totalSavings,
     paymentMethod,
     cashReceived,
-    roundToTwo
+    roundToTwo,
+    taxPercentage
   ])
 
   const getTotalPaid = useCallback(() => {
@@ -2793,7 +2804,7 @@ function POSPageContent() {
                 cartTax={unifiedCalculations.tax}
                 cartTotal={unifiedCalculations.total}
                 cartItemCount={unifiedCalculations.totalItemCount}
-                taxRate={getTaxConfig().rate}
+                taxRate={taxRate}
                 canCheckout={canCheckout}
                 checkoutDisabledReason={checkoutDisabledReason}
               />
@@ -2859,7 +2870,7 @@ function POSPageContent() {
                   cartTax={unifiedCalculations.tax}
                   cartTotal={unifiedCalculations.total}
                   cartItemCount={unifiedCalculations.totalItemCount}
-                  taxRate={getTaxConfig().rate}
+                  taxRate={taxRate}
                   canCheckout={canCheckout}
                   checkoutDisabledReason={checkoutDisabledReason}
                 />

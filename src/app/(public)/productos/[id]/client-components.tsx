@@ -12,6 +12,7 @@ import { PublicProduct } from '@/types/public'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePathname } from 'next/navigation'
 import { usePublicCart } from '@/hooks/use-public-cart'
+import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 
 interface ProductGalleryProps {
   product: PublicProduct
@@ -152,11 +153,8 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
   const { settings } = useWebsiteSettings()
   const pathname = usePathname()
   const { addProduct } = usePublicCart()
-  const pathSegments = pathname.split('/').filter(Boolean)
-  const tenantPrefix =
-    pathSegments.length > 1 && ['inicio', 'productos', 'mis-reparaciones', 'track', 'carrito'].includes(pathSegments[1])
-      ? `/${pathSegments[0]}`
-      : ''
+  const tenantSlug = getTenantSlugFromPathname(pathname)
+  const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
   const companyInfo = settings?.company_info
   const envSupportPhone = (

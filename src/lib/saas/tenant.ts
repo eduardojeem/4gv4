@@ -1,7 +1,20 @@
 import type { NextRequest } from 'next/server'
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1'])
-const TENANT_PATH_SECTIONS = new Set(['inicio', 'productos', 'ofertas', 'servicios', 'mis-reparaciones', 'track', 'carrito', 'cliente'])
+
+export const TENANT_PUBLIC_SECTION_NAMES = [
+  'inicio',
+  'productos',
+  'ofertas',
+  'servicios',
+  'mis-reparaciones',
+  'track',
+  'carrito',
+  'cliente',
+  'perfil',
+] as const
+
+const TENANT_PATH_SECTIONS = new Set<string>(TENANT_PUBLIC_SECTION_NAMES)
 
 function stripPort(host: string) {
   return host.split(':')[0]?.toLowerCase() ?? ''
@@ -65,17 +78,19 @@ export function getTenantSlugFromPath(pathname: string) {
   return slugifyTenantName(maybeSlug)
 }
 
-const TENANT_PUBLIC_SECTIONS = ['inicio', 'productos', 'ofertas', 'servicios', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil']
-
 /**
  * Client-safe: extract the tenant slug from a public pathname like
  * `/precimax-celulares/inicio`. Returns '' when the path isn't a tenant route.
  */
 export function getTenantSlugFromPathname(pathname: string): string {
   const segments = pathname.split('/').filter(Boolean)
-  return segments.length > 1 && TENANT_PUBLIC_SECTIONS.includes(segments[1])
+  return segments.length > 1 && TENANT_PATH_SECTIONS.has(segments[1])
     ? segments[0]
     : ''
+}
+
+export function isTenantPublicSection(section: string | undefined): boolean {
+  return !!section && TENANT_PATH_SECTIONS.has(section)
 }
 
 /** Append `?org=<slug>` (or `&org=`) to a public API URL so it resolves the right tenant. */

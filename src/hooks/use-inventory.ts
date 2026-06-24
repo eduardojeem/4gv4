@@ -103,6 +103,48 @@ function toProductApiPayload(productData: Partial<Product>) {
   return payload
 }
 
+const supplierApiFields = [
+  'name',
+  'contact_name',
+  'email',
+  'phone',
+  'address',
+  'city',
+  'country',
+  'website',
+  'tax_id',
+  'payment_terms',
+  'credit_limit',
+  'current_debt',
+  'rating',
+  'status',
+  'category',
+  'notes',
+  'is_active',
+] as const
+
+function toSupplierApiPayload(supplierData: Partial<Supplier>) {
+  const source = supplierData as Record<string, unknown>
+  const payload: Record<string, unknown> = {}
+
+  for (const field of supplierApiFields) {
+    if (source[field] !== undefined) payload[field] = source[field]
+  }
+
+  return payload
+}
+
+function getDayRange(date: string) {
+  const start = new Date(`${date}T00:00:00`)
+  if (Number.isNaN(start.getTime())) return null
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+  return { start: start.toISOString(), end: end.toISOString() }
+}
+
+const STOCK_FILTER_SCAN_LIMIT = 250
+const STOCK_FILTER_MAX_SCANNED_ROWS = 2000
+
 export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInventoryProps = {}) {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -117,8 +159,16 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   const [filters, setFilters] = useState({
     search: '',
     category: 'all',
+    supplier: 'all',
     status: 'all',
-    stockStatus: 'all' // 'low', 'out', 'normal', 'high'
+    stockStatus: 'all', // 'low', 'out', 'normal', 'high'
+    minPrice: null as number | null,
+    maxPrice: null as number | null,
+    minStock: null as number | null,
+    maxStock: null as number | null,
+    hasImage: false,
+    dateAdded: '',
+    lastMovement: '',
   })
 
   const supabase = createClient()
@@ -133,38 +183,39 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
   const fetchCategories = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*, products(count)')
-      
-      if (error) throw error
-      
-      setCategories(data.map((c: any) => ({
+      const response = await fetch('/api/categories', { cache: 'no-store' })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudieron cargar las categorias')
+      }
+
+      setCategories((payload.data || []).map((c: any) => ({
         ...c,
-        productCount: c.products?.[0]?.count || 0
+        productCount: c.products_count ?? c.productCount ?? 0
       })))
     } catch (err) {
       console.error('Error fetching categories:', err)
     }
-  }, [supabase])
+  }, [])
 
   const fetchSuppliers = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*, products(count)')
-        .order('name')
-      
-      if (error) throw error
+      const response = await fetch('/api/suppliers?limit=100', { cache: 'no-store' })
+      const payload = await response.json().catch(() => null)
 
-      setSuppliers(data.map((s: any) => ({
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudieron cargar los proveedores')
+      }
+
+      setSuppliers((payload.data || []).map((s: any) => ({
         ...s,
-        productCount: s.products?.[0]?.count || 0
+        productCount: s.productCount ?? s.products_count ?? 0
       })))
     } catch (err) {
       console.error('Error fetching suppliers:', err)
     }
-  }, [supabase])
+  }, [])
 
   const fetchProducts = useCallback(async () => {
     setLoading(true)
@@ -196,20 +247,71 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
         }
       }
 
+      if (filters.supplier !== 'all') {
+        baseQuery = baseQuery.eq('supplier_id', filters.supplier)
+      }
+
       if (filters.status !== 'all') {
         baseQuery = baseQuery.eq('status', filters.status)
       }
-      // Con filtro de stock aplicamos filtro antes de paginar para mantener totalCount correcto.
+
+      if (typeof filters.minPrice === 'number') {
+        baseQuery = baseQuery.gte('sale_price', filters.minPrice)
+      }
+
+      if (typeof filters.maxPrice === 'number') {
+        baseQuery = baseQuery.lte('sale_price', filters.maxPrice)
+      }
+
+      if (typeof filters.minStock === 'number') {
+        baseQuery = baseQuery.gte('stock_quantity', filters.minStock)
+      }
+
+      if (typeof filters.maxStock === 'number') {
+        baseQuery = baseQuery.lte('stock_quantity', filters.maxStock)
+      }
+
+      if (filters.hasImage) {
+        baseQuery = baseQuery.not('image_url', 'is', null)
+      }
+
+      const dateAddedRange = filters.dateAdded ? getDayRange(filters.dateAdded) : null
+      if (dateAddedRange) {
+        baseQuery = baseQuery.gte('created_at', dateAddedRange.start).lt('created_at', dateAddedRange.end)
+      }
+
+      const lastMovementRange = filters.lastMovement ? getDayRange(filters.lastMovement) : null
+      if (lastMovementRange) {
+        baseQuery = baseQuery.gte('updated_at', lastMovementRange.start).lt('updated_at', lastMovementRange.end)
+      }
+
+      // Con filtros de stock calculados contra dos columnas, evitamos leer todo el catálogo.
+      // Escaneamos lotes acotados hasta llenar la página solicitada. El total se informa como
+      // mínimo conocido cuando el filtro no puede calcularse completamente en PostgREST.
       if (filters.stockStatus !== 'all') {
-        const { data: fullData, error } = await baseQuery.order('created_at', { ascending: false })
-        if (error) throw error
-
-        const filteredData = (fullData as Product[]).filter((p) => matchesStockStatus(p, filters.stockStatus))
         const from = (page - 1) * pageSize
-        const to = from + pageSize
+        const wanted = from + pageSize
+        const filteredData: Product[] = []
+        let scanned = 0
+        let hasMoreRows = true
 
-        setProducts(filteredData.slice(from, to))
-        setTotalCount(filteredData.length)
+        while (filteredData.length < wanted && scanned < STOCK_FILTER_MAX_SCANNED_ROWS && hasMoreRows) {
+          const rangeFrom = scanned
+          const rangeTo = scanned + STOCK_FILTER_SCAN_LIMIT - 1
+          const { data, error } = await baseQuery
+            .order('created_at', { ascending: false })
+            .range(rangeFrom, rangeTo)
+
+          if (error) throw error
+
+          const batch = (data || []) as Product[]
+          hasMoreRows = batch.length === STOCK_FILTER_SCAN_LIMIT
+          scanned += batch.length
+          filteredData.push(...batch.filter((p) => matchesStockStatus(p, filters.stockStatus)))
+        }
+
+        setProducts(filteredData.slice(from, wanted))
+        setTotalCount(hasMoreRows ? Math.max(filteredData.length, wanted + 1) : filteredData.length)
         return
       }
 
@@ -245,7 +347,21 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
 
   useEffect(() => {
     setPage(1)
-  }, [filters.search, filters.category, filters.status, filters.stockStatus, pageSize])
+  }, [
+    filters.search,
+    filters.category,
+    filters.supplier,
+    filters.status,
+    filters.stockStatus,
+    filters.minPrice,
+    filters.maxPrice,
+    filters.minStock,
+    filters.maxStock,
+    filters.hasImage,
+    filters.dateAdded,
+    filters.lastMovement,
+    pageSize,
+  ])
 
   // Operaciones CRUD
   const createProduct = async (productData: Partial<Product>) => {
@@ -307,34 +423,57 @@ export function useInventory({ initialPage = 1, initialPageSize = 10 }: UseInven
   // Supplier CRUD
   const createSupplier = async (supplierData: Partial<Supplier>) => {
     try {
-      const { error } = await supabase.from('suppliers').insert([supplierData])
-      if (error) throw error
+      const response = await fetch('/api/suppliers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toSupplierApiPayload(supplierData)),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.success) {
+        return { success: false, error: payload?.error || 'No se pudo crear el proveedor' }
+      }
+
       await fetchSuppliers()
       return { success: true }
     } catch (err: any) {
-      return { success: false, error: err.message }
+      return { success: false, error: err?.message || 'No se pudo crear el proveedor' }
     }
   }
 
   const updateSupplier = async (id: string, supplierData: Partial<Supplier>) => {
     try {
-      const { error } = await supabase.from('suppliers').update(supplierData).eq('id', id)
-      if (error) throw error
+      const response = await fetch('/api/suppliers', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...toSupplierApiPayload(supplierData) }),
+      })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.success) {
+        return { success: false, error: payload?.error || 'No se pudo actualizar el proveedor' }
+      }
+
       await fetchSuppliers()
       return { success: true }
     } catch (err: any) {
-      return { success: false, error: err.message }
+      return { success: false, error: err?.message || 'No se pudo actualizar el proveedor' }
     }
   }
 
   const deleteSupplier = async (id: string) => {
     try {
-      const { error } = await supabase.from('suppliers').delete().eq('id', id)
-      if (error) throw error
+      const response = await fetch(`/api/suppliers?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.success) {
+        return { success: false, error: payload?.error || 'No se pudo eliminar el proveedor' }
+      }
+
       await fetchSuppliers()
       return { success: true }
     } catch (err: any) {
-      return { success: false, error: err.message }
+      return { success: false, error: err?.message || 'No se pudo eliminar el proveedor' }
     }
   }
 

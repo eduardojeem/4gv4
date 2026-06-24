@@ -94,6 +94,14 @@ export default function InventoryManagement() {
   const [successMessage, setSuccessMessage] = useState('')
   const [actionError, setActionError] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const categoryOptions = useMemo(
+    () => categories.map((category) => ({ label: category.name, value: category.id })),
+    [categories]
+  )
+  const supplierOptions = useMemo(
+    () => suppliers.map((supplier) => ({ label: supplier.name, value: supplier.id })),
+    [suppliers]
+  )
 
   const parseNumberInput = (rawValue: string, parser: (value: string) => number) => {
     const trimmed = rawValue.trim()
@@ -225,86 +233,62 @@ export default function InventoryManagement() {
 
   const getFieldError = (field: string) => validationErrors.find(e => e.field === field)?.message
 
-  const toLowerSafe = (value?: string | null) => (value || '').toLowerCase()
-
-  const getStockDerivedStatus = (product: Product) => {
-    if (product.stock_quantity === 0) return 'out_of_stock'
-    if (product.stock_quantity <= product.min_stock) return 'low_stock'
-    return product.status
-  }
-
   const handleAdvancedSearch = (activeFilters: AdvancedSearchFilter[]) => {
     const byId = new Map(activeFilters.map((f) => [f.id, f]))
-    const search = String(byId.get('search')?.value || '').trim().toLowerCase()
+    const search = String(byId.get('search')?.value || '').trim()
     const categoriesFilter = Array.isArray(byId.get('category')?.value) ? (byId.get('category')?.value as string[]) : []
     const suppliersFilter = Array.isArray(byId.get('supplier')?.value) ? (byId.get('supplier')?.value as string[]) : []
     const statusFilter = Array.isArray(byId.get('status')?.value) ? (byId.get('status')?.value as string[]) : []
     const priceRange = Array.isArray(byId.get('priceRange')?.value) ? (byId.get('priceRange')?.value as number[]) : null
     const stockRange = Array.isArray(byId.get('stockRange')?.value) ? (byId.get('stockRange')?.value as number[]) : null
     const dateAdded = String(byId.get('dateAdded')?.value || '')
+    const lastMovement = String(byId.get('lastMovement')?.value || '')
     const hasImage = Boolean(byId.get('hasImage')?.value)
+    const stockStatus = statusFilter.includes('out_of_stock')
+      ? 'out'
+      : statusFilter.includes('low_stock')
+        ? 'low'
+        : 'all'
+    const productStatus = statusFilter.find((status) => ['active', 'inactive', 'discontinued'].includes(status)) || 'all'
 
-    const filtered = products.filter((product) => {
-      const productName = toLowerSafe(product.name)
-      const sku = toLowerSafe(product.sku)
-      const description = toLowerSafe(product.description)
-      const categoryName = toLowerSafe(product.category?.name)
-      const supplierName = toLowerSafe(product.supplier?.name)
-
-      if (search && !productName.includes(search) && !sku.includes(search) && !description.includes(search)) {
-        return false
-      }
-
-      if (
-        categoriesFilter.length > 0 &&
-        !categoriesFilter.some((value) => categoryName.includes(String(value).toLowerCase()))
-      ) {
-        return false
-      }
-
-      if (
-        suppliersFilter.length > 0 &&
-        !suppliersFilter.some((value) => supplierName.includes(String(value).toLowerCase()))
-      ) {
-        return false
-      }
-
-      if (priceRange && typeof priceRange[0] === 'number' && typeof priceRange[1] === 'number') {
-        if (product.sale_price < priceRange[0] || product.sale_price > priceRange[1]) return false
-      }
-
-      if (stockRange && typeof stockRange[0] === 'number' && typeof stockRange[1] === 'number') {
-        if (product.stock_quantity < stockRange[0] || product.stock_quantity > stockRange[1]) return false
-      }
-
-      if (statusFilter.length > 0) {
-        const derivedStatus = getStockDerivedStatus(product)
-        if (!statusFilter.includes(derivedStatus) && !statusFilter.includes(product.status)) return false
-      }
-
-      if (dateAdded && !product.created_at?.startsWith(dateAdded)) return false
-      if (hasImage && !product.image_url) return false
-
-      return true
-    })
-
-    setSearchResults(
-      filtered.map((product) => ({
-        id: product.id,
-        name: product.name,
-        sku: product.sku,
-        category: product.category?.name || '-',
-        supplier: product.supplier?.name || '-',
-        price: product.sale_price,
-        stock: product.stock_quantity,
-        status: getStockDerivedStatus(product),
-        lastMovement: new Date(product.updated_at)
-      }))
-    )
+    setSearchResults([])
+    setPage(1)
+    setActiveTab('products')
+    setFilters(prev => ({
+      ...prev,
+      search,
+      category: categoriesFilter[0] || 'all',
+      supplier: suppliersFilter[0] || 'all',
+      status: productStatus,
+      stockStatus,
+      minPrice: priceRange && typeof priceRange[0] === 'number' ? priceRange[0] : null,
+      maxPrice: priceRange && typeof priceRange[1] === 'number' ? priceRange[1] : null,
+      minStock: stockRange && typeof stockRange[0] === 'number' ? stockRange[0] : null,
+      maxStock: stockRange && typeof stockRange[1] === 'number' ? stockRange[1] : null,
+      hasImage,
+      dateAdded,
+      lastMovement,
+    }))
   }
 
   const clearAdvancedSearch = () => {
     setSearchResults([])
+    setPage(1)
+    setFilters(prev => ({
+      ...prev,
+      search: '',
+      category: 'all',
+      supplier: 'all',
+      status: 'all',
+      stockStatus: 'all',
+      minPrice: null,
+      maxPrice: null,
+      minStock: null,
+      maxStock: null,
+      hasImage: false,
+      dateAdded: '',
+      lastMovement: '',
+    }))
   }
 
   const handleExportProducts = () => {
@@ -646,7 +630,14 @@ export default function InventoryManagement() {
         </TabsContent>
 
         <TabsContent value="search">
-          <AdvancedSearch onSearch={handleAdvancedSearch} onClearFilters={clearAdvancedSearch} results={searchResults} />
+          <AdvancedSearch
+            onSearch={handleAdvancedSearch}
+            onClearFilters={clearAdvancedSearch}
+            results={searchResults}
+            isLoading={loading}
+            categoryOptions={categoryOptions}
+            supplierOptions={supplierOptions}
+          />
         </TabsContent>
 
         <TabsContent value="stock-control">

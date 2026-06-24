@@ -116,6 +116,7 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
     .in('organization_id', organizationIds)
     .eq('is_active', true)
     .eq('visibility', 'public')
+    .gt('stock_quantity', 0)
     .order('featured', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(limit * 4)
@@ -147,6 +148,7 @@ export async function getMarketplaceProducts(limit = 48): Promise<MarketplacePro
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
+    .gt('stock_quantity', 0)
     .order('featured', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -204,6 +206,7 @@ export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]>
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
+    .gt('stock_quantity', 0)
     .limit(2000)
 
   if (error || !data) return []
@@ -249,6 +252,7 @@ export async function getMarketplaceBrands(limit = 50): Promise<MarketplaceBrand
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
+    .gt('stock_quantity', 0)
     .limit(3000)
 
   if (error || !data) return []
@@ -323,6 +327,7 @@ export async function getPublicOrganizationPage(slug: string) {
     .eq('organization_id', organization.id)
     .eq('is_active', true)
     .eq('visibility', 'public')
+    .gt('stock_quantity', 0)
     .order('featured', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(24)

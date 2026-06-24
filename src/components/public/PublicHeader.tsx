@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { LogOut } from 'lucide-react'
 import { useRouter, usePathname } from 'next/navigation'
+import { getTenantSlugFromPathname, isTenantPublicSection } from '@/lib/saas/tenant'
 
 export function PublicHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -59,14 +60,11 @@ export function PublicHeader() {
   const showTopBar = companyInfo?.showTopBar !== false
   const canAccessDashboard = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'
   const isWholesaleUser = hasPermission(WHOLESALE_PRICE_PERMISSION)
-  const pathSegments = pathname.split('/').filter(Boolean)
-  const pathTenantSlug =
-    pathSegments.length > 1 && ['inicio', 'productos', 'ofertas', 'servicios', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil'].includes(pathSegments[1])
-      ? pathSegments[0]
-      : ''
+  const pathTenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = pathTenantSlug ? `/${pathTenantSlug}` : ''
   const withTenantPrefix = (href: string) => {
-    if (!tenantPrefix || !['/inicio', '/productos', '/ofertas', '/servicios', '/mis-reparaciones', '/track', '/carrito', '/perfil'].some((path) => href === path || href.startsWith(`${path}/`) || href.startsWith(`${path}#`))) {
+    const section = href.split(/[/?#]/)[1]
+    if (!tenantPrefix || !isTenantPublicSection(section)) {
       return href
     }
 

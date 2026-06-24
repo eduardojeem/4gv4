@@ -47,11 +47,20 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
 const noopSubscribe = () => () => {}
 
 // ── Trust badges ──────────────────────────────────────────────────────────
-const TRUST_BADGES = [
+const DEFAULT_TRUST_BADGES = [
   { icon: CheckCircle, label: 'Garantía escrita' },
   { icon: Star,         label: 'Repuestos originales' },
   { icon: Wrench,       label: 'Técnicos certificados' },
 ]
+
+function getTrustBadges(customBadges?: string[]) {
+  if (!customBadges || customBadges.length === 0) return DEFAULT_TRUST_BADGES
+  const icons = [CheckCircle, Star, Wrench]
+  return customBadges.map((label, i) => ({
+    icon: icons[i % icons.length],
+    label
+  }))
+}
 
 export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneClean, contactHref }: HeroSectionProps) {
   const pathname = usePathname()
@@ -128,7 +137,7 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
 
             {/* Trust badges */}
             <div className="mt-6 flex flex-wrap gap-3">
-              {TRUST_BADGES.map(({ icon: Icon, label }) => (
+              {getTrustBadges(heroContent.trustBadges).map(({ icon: Icon, label }) => (
                 <div key={label} className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 ring-1 ring-white/15 backdrop-blur-sm">
                   <Icon className="h-3.5 w-3.5 text-emerald-300" />
                   {label}
@@ -141,14 +150,14 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
               <Button asChild size="lg" className={`rounded-xl bg-white ${brand.ctaBtn} font-bold shadow-lg shadow-black/20 hover:bg-white/90`}>
                 <Link href={`${tenantPrefix}/productos`}>
                   <ShoppingBag className="mr-2 h-5 w-5" />
-                  Ver productos
+                  {heroContent.ctaPrimaryText || 'Ver productos'}
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="rounded-xl border-white/25 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20">
                 <a href={contactHref} target={phoneClean ? '_blank' : undefined} rel={phoneClean ? 'noopener noreferrer' : undefined}>
                   <MessageCircle className="mr-2 h-5 w-5" />
-                  Escribinos
+                  {heroContent.ctaSecondaryText || 'Escribinos'}
                 </a>
               </Button>
             </div>
@@ -160,7 +169,7 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
                 className={`inline-flex items-center gap-1.5 text-sm font-medium ${brand.text200} underline-offset-4 transition-colors hover:text-white hover:underline`}
               >
                 <Wrench className="h-3.5 w-3.5" />
-                ¿Tenés una reparación? Rastreá tu equipo
+                {heroContent.trackRepairText || '¿Tenés una reparación? Rastreá tu equipo'}
               </Link>
             </div>
           </div>
@@ -174,14 +183,16 @@ export function HeroSection({ companyInfo, heroStats, heroContent, brand, phoneC
                 <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
 
                 {/* Stats grid */}
-                <div className="grid grid-cols-3 gap-3 border-b border-white/15 pb-6">
-                  <AnimatedStat value={heroStats.repairs}      label="Reparaciones" />
-                  <AnimatedStat value={heroStats.satisfaction} label="Satisfacción"  />
-                  <AnimatedStat value={heroStats.avgTime}      label="Tiempo prom."  />
-                </div>
+                {heroStats.enabled !== false && (
+                  <div className="grid grid-cols-3 gap-3 border-b border-white/15 pb-6">
+                    <AnimatedStat value={heroStats.repairs}      label="Reparaciones" />
+                    <AnimatedStat value={heroStats.satisfaction} label="Satisfacción"  />
+                    <AnimatedStat value={heroStats.avgTime}      label="Tiempo prom."  />
+                  </div>
+                )}
 
                 {/* Quick links */}
-                <div className="mt-6 space-y-3">
+                <div className={`space-y-3 ${heroStats.enabled !== false ? 'mt-6' : ''}`}>
                   <Link
                     href={`${tenantPrefix}/productos`}
                     className="flex items-center justify-between rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20"

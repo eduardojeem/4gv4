@@ -25,7 +25,7 @@ export const DEFAULT_PLATFORM_BRANDING: PlatformBranding = {
   marketplaceTagline: 'Empresas y productos',
   primaryCtaLabel: 'Crear empresa',
   primaryCtaHref: '/register',
-  secondaryCtaLabel: 'Ver tiendas',
+  secondaryCtaLabel: 'Ver productos',
   secondaryCtaHref: '/marketplace',
   loginEyebrow: 'Panel interno',
   loginSubtitle: 'Panel de administracion y staff',

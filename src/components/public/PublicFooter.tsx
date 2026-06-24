@@ -4,16 +4,14 @@ import Link from 'next/link'
 import { Mail, Phone, MapPin, Clock } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePathname } from 'next/navigation'
+import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 
 export function PublicFooter() {
   const { settings } = useWebsiteSettings()
   const pathname = usePathname()
   const company = settings?.company_info
-  const pathSegments = pathname.split('/').filter(Boolean)
-  const tenantPrefix =
-    pathSegments.length > 1 && ['inicio', 'productos', 'ofertas', 'mis-reparaciones', 'track', 'carrito'].includes(pathSegments[1])
-      ? `/${pathSegments[0]}`
-      : ''
+  const tenantSlug = getTenantSlugFromPathname(pathname)
+  const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
   const phoneDisplay = company?.phone || process.env.NEXT_PUBLIC_COMPANY_PHONE || ''
   const emailDisplay = company?.email || process.env.NEXT_PUBLIC_COMPANY_EMAIL || ''

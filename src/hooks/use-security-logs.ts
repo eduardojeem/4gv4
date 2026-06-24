@@ -26,15 +26,28 @@ export interface SecurityStats {
   uniqueIPs: number
 }
 
-type SecurityLogFilters = {
+export type SecurityLogFilters = {
   limit?: number
+  page?: number
+  pageSize?: number
   severity?: string
   timeRange?: string
+  search?: string
+  userId?: string
+}
+
+export type SecurityLogUserOption = {
+  id: string
+  name: string
 }
 
 type SecurityLogsResponse = {
   logs: SecurityLog[]
   stats: SecurityStats
+  totalCount?: number
+  page?: number
+  pageSize?: number
+  users?: SecurityLogUserOption[]
   error?: string
 }
 
@@ -57,7 +70,14 @@ let logsCache: SecurityLogsCache | null = null
 const CACHE_TTL = 2 * 60 * 1000
 
 function buildFilterKey(filters?: SecurityLogFilters) {
-  return `${filters?.timeRange || '24h'}|${filters?.severity || 'all'}|${filters?.limit || 200}`
+  return [
+    filters?.timeRange || '24h',
+    filters?.severity || 'all',
+    filters?.search || '',
+    filters?.userId || 'all',
+    filters?.page || 1,
+    filters?.pageSize || filters?.limit || 20,
+  ].join('|')
 }
 
 function buildUrl(filters?: SecurityLogFilters) {
@@ -66,6 +86,10 @@ function buildUrl(filters?: SecurityLogFilters) {
   if (filters?.timeRange) params.set('timeRange', filters.timeRange)
   if (filters?.severity && filters.severity !== 'all') params.set('severity', filters.severity)
   if (filters?.limit) params.set('limit', String(filters.limit))
+  if (filters?.page) params.set('page', String(filters.page))
+  if (filters?.pageSize) params.set('pageSize', String(filters.pageSize))
+  if (filters?.search) params.set('search', filters.search)
+  if (filters?.userId && filters.userId !== 'all') params.set('userId', filters.userId)
 
   const query = params.toString()
   return `/api/admin/security/logs${query ? `?${query}` : ''}`
@@ -74,6 +98,8 @@ function buildUrl(filters?: SecurityLogFilters) {
 export function useSecurityLogs() {
   const [logs, setLogs] = useState<SecurityLog[]>(logsCache?.data.logs || [])
   const [stats, setStats] = useState<SecurityStats>(logsCache?.data.stats || EMPTY_STATS)
+  const [totalCount, setTotalCount] = useState(logsCache?.data.totalCount || logsCache?.data.logs.length || 0)
+  const [users, setUsers] = useState<SecurityLogUserOption[]>(logsCache?.data.users || [])
   const [isLoading, setIsLoading] = useState(logsCache === null)
   const [error, setError] = useState<string | null>(null)
 
@@ -83,6 +109,8 @@ export function useSecurityLogs() {
     if (!forceRefresh && logsCache && logsCache.filterKey === filterKey && Date.now() - logsCache.timestamp < CACHE_TTL) {
       setLogs(logsCache.data.logs)
       setStats(logsCache.data.stats)
+      setTotalCount(logsCache.data.totalCount ?? logsCache.data.logs.length)
+      setUsers(logsCache.data.users || [])
       setError(null)
       setIsLoading(false)
       return
@@ -101,6 +129,8 @@ export function useSecurityLogs() {
 
       setLogs(payload.logs)
       setStats(payload.stats)
+      setTotalCount(payload.totalCount ?? payload.logs.length)
+      setUsers(payload.users || [])
 
       logsCache = {
         data: payload,
@@ -111,6 +141,8 @@ export function useSecurityLogs() {
       const message = err instanceof Error ? err.message : 'No se pudieron cargar los eventos de seguridad.'
       setLogs([])
       setStats(EMPTY_STATS)
+      setTotalCount(0)
+      setUsers([])
       setError(message)
     } finally {
       setIsLoading(false)
@@ -120,6 +152,8 @@ export function useSecurityLogs() {
   return {
     logs,
     stats,
+    totalCount,
+    users,
     isLoading,
     error,
     fetchSecurityLogs,

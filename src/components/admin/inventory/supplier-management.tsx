@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,7 +29,7 @@ import {
   Save,
   Star
 } from 'lucide-react'
-import { useInventory, Supplier, Product } from '@/hooks/use-inventory'
+import { useInventory, Supplier } from '@/hooks/use-inventory'
 import { createClient } from '@/lib/supabase/client'
 
 // Interfaces for UI state (extending the hook interface if needed)
@@ -43,6 +43,8 @@ interface SupplierProduct {
   stock: number
   status: string
 }
+
+const SUPPLIER_PRODUCTS_PAGE_SIZE = 10
 
 const SupplierManagement: React.FC = () => {
   const { 
@@ -66,6 +68,8 @@ const SupplierManagement: React.FC = () => {
   const [editingSupplier, setEditingSupplier] = useState<Partial<Supplier>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [productsLoading, setProductsLoading] = useState(false)
+  const [supplierProductsPage, setSupplierProductsPage] = useState(1)
+  const [supplierProductsTotalCount, setSupplierProductsTotalCount] = useState(0)
 
   const supabase = createClient()
 
@@ -99,6 +103,8 @@ const SupplierManagement: React.FC = () => {
   })
 
   const categories = Array.from(new Set(suppliers.map(s => s.category).filter(Boolean))) as string[]
+  const hasPreviousSupplierProductsPage = supplierProductsPage > 1
+  const hasNextSupplierProductsPage = supplierProductsPage * SUPPLIER_PRODUCTS_PAGE_SIZE < supplierProductsTotalCount
 
   // Handlers
   const handleAddSupplier = async () => {
@@ -157,7 +163,10 @@ const SupplierManagement: React.FC = () => {
 
   const handleDeleteSupplier = async (supplierId: string) => {
     if (confirm('¿Estás seguro de que deseas eliminar este proveedor?')) {
-      await deleteSupplier(supplierId)
+      const result = await deleteSupplier(supplierId)
+      if (!result.success) {
+        setErrors({ form: result.error || 'Error al eliminar proveedor' })
+      }
     }
   }
 
@@ -166,18 +175,20 @@ const SupplierManagement: React.FC = () => {
     setIsEditDialogOpen(true)
   }
 
-  const openDetailDialog = async (supplier: Supplier) => {
-    setSelectedSupplier(supplier)
-    setIsDetailDialogOpen(true)
-    
-    // Fetch products for this supplier
+  const fetchSupplierProducts = useCallback(async (supplierId: string, page: number) => {
     setProductsLoading(true)
     try {
-      const { data, error } = await supabase
+      const from = (page - 1) * SUPPLIER_PRODUCTS_PAGE_SIZE
+      const to = from + SUPPLIER_PRODUCTS_PAGE_SIZE - 1
+      const { data, error, count } = await supabase
         .from('products')
-        .select('id, name, sku, purchase_price, stock_quantity, status')
-        .eq('supplier_id', supplier.id)
+        .select('id, name, sku, purchase_price, stock_quantity, status', { count: 'exact' })
+        .eq('supplier_id', supplierId)
+        .order('name', { ascending: true })
+        .range(from, to)
       
+      if (error) throw error
+
       if (data) {
         setSupplierProducts(data.map(p => ({
           id: p.id,
@@ -188,11 +199,25 @@ const SupplierManagement: React.FC = () => {
           status: p.status
         })))
       }
+      setSupplierProductsTotalCount(count || 0)
     } catch (err) {
       console.error('Error fetching supplier products:', err)
     } finally {
       setProductsLoading(false)
     }
+  }, [supabase])
+
+  const openDetailDialog = async (supplier: Supplier) => {
+    setSelectedSupplier(supplier)
+    setIsDetailDialogOpen(true)
+    setSupplierProductsPage(1)
+    await fetchSupplierProducts(supplier.id, 1)
+  }
+
+  const goToSupplierProductsPage = async (page: number) => {
+    if (!selectedSupplier) return
+    setSupplierProductsPage(page)
+    await fetchSupplierProducts(selectedSupplier.id, page)
   }
 
   if (loading) {
@@ -705,7 +730,36 @@ const SupplierManagement: React.FC = () => {
 
               <TabsContent value="products">
                 <div className="space-y-4">
-                  <h4 className="font-semibold text-gray-900 dark:text-white">Productos Suministrados</h4>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="font-semibold text-gray-900 dark:text-white">Productos Suministrados</h4>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Mostrando {supplierProducts.length} de {supplierProductsTotalCount} productos
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => goToSupplierProductsPage(Math.max(1, supplierProductsPage - 1))}
+                        disabled={!hasPreviousSupplierProductsPage || productsLoading}
+                        className="dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
+                      >
+                        Anterior
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => goToSupplierProductsPage(supplierProductsPage + 1)}
+                        disabled={!hasNextSupplierProductsPage || productsLoading}
+                        className="dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
+                      >
+                        Siguiente
+                      </Button>
+                    </div>
+                  </div>
                   {productsLoading ? (
                     <div className="text-center py-4">Cargando productos...</div>
                   ) : supplierProducts.length > 0 ? (

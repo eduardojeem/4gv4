@@ -1,4 +1,5 @@
 import type { PublicProduct } from '@/types/public'
+import { getTenantSlugFromPathname as getSharedTenantSlugFromPathname } from '@/lib/saas/tenant'
 
 export type PublicCartItem = {
   productId: string
@@ -16,10 +17,7 @@ export function getPublicCartStorageKey(tenantSlug: string | null | undefined) {
 }
 
 export function getTenantSlugFromPathname(pathname: string) {
-  const [maybeSlug, section] = pathname.split('/').filter(Boolean)
-  return maybeSlug && ['inicio', 'productos', 'ofertas', 'mis-reparaciones', 'track', 'carrito', 'cliente'].includes(section || '')
-    ? maybeSlug
-    : null
+  return getSharedTenantSlugFromPathname(pathname) || null
 }
 
 export function getPublicCartItems(tenantSlug: string | null | undefined): PublicCartItem[] {

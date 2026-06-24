@@ -142,6 +142,7 @@ export interface Database {
           new_values: Json | null
           old_values: Json | null
           branch_id: string | null
+          organization_id: string | null
         }
         Insert: {
           id?: string
@@ -158,6 +159,7 @@ export interface Database {
           new_values?: Json | null
           old_values?: Json | null
           branch_id?: string | null
+          organization_id?: string | null
         }
         Update: {
           id?: string
@@ -174,6 +176,7 @@ export interface Database {
           new_values?: Json | null
           old_values?: Json | null
           branch_id?: string | null
+          organization_id?: string | null
         }
         Relationships: []
       }

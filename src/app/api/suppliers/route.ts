@@ -17,6 +17,10 @@ const supplierSchema = z.object({
   country: z.string().trim().max(120).optional().nullable(),
   postal_code: z.string().trim().max(40).optional().nullable(),
   website: z.string().trim().max(240).optional().nullable(),
+  category: z.string().trim().max(120).optional().nullable(),
+  payment_terms: z.string().trim().max(200).optional().nullable(),
+  credit_limit: z.number().min(0).optional().nullable(),
+  current_debt: z.number().min(0).optional().nullable(),
   rating: z.number().min(0).max(5).optional().nullable(),
   notes: z.string().trim().max(2000).optional().nullable(),
   is_active: z.boolean().optional(),
@@ -56,7 +60,27 @@ export const GET = withTenantAuth({ permission: 'inventory.products.read', modul
 
     let query = supabase
       .from('suppliers')
-      .select('*', { count: 'exact' })
+      .select(`
+        id,
+        name,
+        contact_name,
+        email,
+        phone,
+        address,
+        city,
+        country,
+        website,
+        tax_id,
+        payment_terms,
+        credit_limit,
+        current_debt,
+        rating,
+        status,
+        is_active,
+        category,
+        notes,
+        created_at
+      `, { count: 'exact' })
       .eq('organization_id', organization.id)
 
     if (search) {
@@ -73,6 +97,29 @@ export const GET = withTenantAuth({ permission: 'inventory.products.read', modul
     if (error) throw error
 
     const rows = data ?? []
+    const supplierIds = rows.map((supplier) => supplier.id)
+    const productCounts = new Map<string, number>()
+
+    if (supplierIds.length > 0) {
+      const { data: productRows, error: productsError } = await supabase
+        .from('products')
+        .select('supplier_id')
+        .eq('organization_id', organization.id)
+        .in('supplier_id', supplierIds)
+
+      if (productsError) throw productsError
+
+      for (const product of productRows ?? []) {
+        if (!product.supplier_id) continue
+        productCounts.set(product.supplier_id, (productCounts.get(product.supplier_id) ?? 0) + 1)
+      }
+    }
+
+    const suppliersWithCounts = rows.map((supplier) => ({
+      ...supplier,
+      productCount: productCounts.get(supplier.id) ?? 0,
+    }))
+
     const stats = {
       total_suppliers: count ?? rows.length,
       active_suppliers: rows.filter((supplier) => supplier.status === 'active' || supplier.is_active === true).length,
@@ -83,10 +130,11 @@ export const GET = withTenantAuth({ permission: 'inventory.products.read', modul
       total_amount: 0,
     }
 
-    return NextResponse.json({ success: true, data: rows, count: count ?? 0, stats })
+    return NextResponse.json({ success: true, data: suppliersWithCounts, count: count ?? 0, stats })
   } catch (error) {
     logger.error('Suppliers API GET error', { error })
-    return NextResponse.json({ success: false, error: 'No se pudieron cargar los proveedores.' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'No se pudieron cargar los proveedores.'
+    return NextResponse.json({ success: false, error: message || 'No se pudieron cargar los proveedores.' }, { status: 500 })
   }
 })
 

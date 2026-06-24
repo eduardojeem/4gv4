@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 
 interface PublicRepairReadyNotificationsProps {
   userId: string
@@ -90,11 +91,8 @@ function formatRelativeTime(date: string): string {
 
 export function PublicRepairReadyNotifications({ userId }: PublicRepairReadyNotificationsProps) {
   const pathname = usePathname()
-  const pathSegments = pathname.split('/').filter(Boolean)
-  const tenantPrefix =
-    pathSegments.length > 1 && ['inicio', 'productos', 'ofertas', 'mis-reparaciones', 'track', 'carrito', 'cliente'].includes(pathSegments[1])
-      ? `/${pathSegments[0]}`
-      : ''
+  const tenantSlug = getTenantSlugFromPathname(pathname)
+  const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
   const repairsHref = `${tenantPrefix}/mis-reparaciones`
   const supabase = useMemo(() => createClient(), [])
   const [customerId, setCustomerId] = useState<string | null>(null)

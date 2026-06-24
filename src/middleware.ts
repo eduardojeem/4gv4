@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { normalizeRole } from '@/lib/auth/role-utils'
-import { getTenantSlugFromPath, getTenantSlugFromRequest } from '@/lib/saas/tenant'
+import { getTenantSlugFromPath, getTenantSlugFromRequest, isTenantPublicSection } from '@/lib/saas/tenant'
 import { ACTIVE_ORGANIZATION_COOKIE } from '@/lib/saas/active-organization'
 
 const PROXY_AUTH_TIMEOUT_MS = 4000
@@ -28,6 +28,55 @@ function redirectLegacyPublicPath(request: NextRequest) {
   url.pathname = `/${DEFAULT_PUBLIC_ORG_SLUG}${pathname}`
 
   return NextResponse.redirect(url, 308)
+}
+
+async function redirectOrganizationSlugAlias(request: NextRequest) {
+  const [maybeSlug, section] = request.nextUrl.pathname.split('/').filter(Boolean)
+  if (!maybeSlug || !isTenantPublicSection(section)) {
+    return null
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !supabaseKey || supabaseUrl === 'your_supabase_project_url') {
+    return null
+  }
+
+  try {
+    const aliasUrl = new URL('/rest/v1/organization_slug_aliases', supabaseUrl)
+    aliasUrl.searchParams.set('old_slug', `eq.${maybeSlug}`)
+    aliasUrl.searchParams.set('select', 'new_slug')
+    aliasUrl.searchParams.set('limit', '1')
+
+    const response = await withTimeout(
+      fetch(aliasUrl, {
+        headers: {
+          apikey: supabaseKey,
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+      }),
+      1000,
+      null
+    )
+
+    if (!response?.ok) {
+      return null
+    }
+
+    const aliases = await response.json().catch(() => []) as Array<{ new_slug?: string }>
+    const newSlug = aliases[0]?.new_slug
+    if (!newSlug || newSlug === maybeSlug) {
+      return null
+    }
+
+    const url = request.nextUrl.clone()
+    const parts = url.pathname.split('/').filter(Boolean)
+    parts[0] = newSlug
+    url.pathname = `/${parts.join('/')}`
+    return NextResponse.redirect(url, 308)
+  } catch {
+    return null
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T): Promise<T> {
@@ -105,6 +154,11 @@ export async function middleware(request: NextRequest) {
   const legacyPublicRedirect = redirectLegacyPublicPath(request)
   if (legacyPublicRedirect) {
     return legacyPublicRedirect
+  }
+
+  const slugAliasRedirect = await redirectOrganizationSlugAlias(request)
+  if (slugAliasRedirect) {
+    return slugAliasRedirect
   }
 
   const requestHeaders = new Headers(request.headers)

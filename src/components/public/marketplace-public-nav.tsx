@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { Building2, Grid3X3, LayoutDashboard, LayoutGrid, LogOut, Menu, Package, Rocket, Search, ShoppingBag, Store, User, UserPlus, X } from 'lucide-react'
+import { Building2, Grid3X3, Home, LayoutDashboard, LayoutGrid, LogOut, Menu, Package, Rocket, Search, ShoppingBag, Store, User, UserPlus, X } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -21,10 +21,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
 
 const navItems = [
-  { href: '/marketplace', label: 'Inicio', icon: Store, exact: true },
+  { href: '/marketplace', label: 'Inicio', icon: Home, exact: true },
   { href: '/marketplace/productos', label: 'Productos', icon: Package, exact: false },
   { href: '/marketplace/categorias', label: 'Categorías', icon: Grid3X3, exact: false },
-  { href: '/marketplace/empresas', label: 'Empresas', icon: Building2, exact: false },
+  { href: '/marketplace/empresas', label: 'Tiendas', icon: Store, exact: false },
 ]
 
 const marketplaceLoginHref = '/login?redirect=/marketplace'

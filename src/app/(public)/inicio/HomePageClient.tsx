@@ -102,7 +102,9 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
       <ServicesGrid services={safeServices} />
 
       {/* ── Trust / secondary ── */}
-      <ProcessSteps brand={brand} steps={processSteps} />
+      {company_info.processSectionEnabled !== false && (
+        <ProcessSteps brand={brand} steps={processSteps} />
+      )}
 
       <BranchLocations branches={branches} brand={brand} />
 

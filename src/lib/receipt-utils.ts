@@ -602,7 +602,7 @@ const generatePrintHTML = (receiptData: ReceiptData, companyInfo?: CompanyInfo):
     <body>
       <!-- Encabezado -->
       <div class="header">
-        <div class="logo">4G</div>
+        <div class="logo">${company.name ? company.name.substring(0, 2).toUpperCase() : 'Mi'}</div>
         <h1>${company.name}</h1>
         <div class="subtitle">Reparación y Service</div>
         ${'ruc' in company && company.ruc ? `<p style="font-weight: bold; font-size: 10px;">RUC: ${company.ruc}</p>` : ''}

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import {
   Save, RotateCcw, AlertCircle, HelpCircle,
-  Loader2, Globe, Package, Bell, Shield, Palette, Building2
+  Loader2, Globe, Package, Palette, Building2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -11,11 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
@@ -28,6 +26,7 @@ import {
   type SystemColorScheme,
 } from '@/lib/theme/color-schemes'
 import { SystemColorSchemePicker } from '@/components/system/system-color-scheme-picker'
+import { getAdminSettingsText } from '@/lib/i18n/admin-settings'
 
 export default function AdminSettingsPage() {
   const {
@@ -42,8 +41,9 @@ export default function AdminSettingsPage() {
     saveSettings,
     resetSettings
   } = useSharedSettings()
-  const { isSuperAdmin, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
   const { setTheme, setColorScheme } = useTheme()
+  const t = getAdminSettingsText(settings.language)
 
   const [activeTab, setActiveTab] = useState('company')
 
@@ -81,7 +81,7 @@ export default function AdminSettingsPage() {
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-7 w-7 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">
-            {authLoading ? 'Verificando permisos...' : 'Cargando configuración...'}
+            {authLoading ? t.loadingAuth : t.loadingSettings}
           </p>
         </div>
       </div>
@@ -97,11 +97,11 @@ export default function AdminSettingsPage() {
           <CardContent className="flex flex-col items-center gap-4 p-6">
             <AlertCircle className="h-10 w-10 text-destructive" />
             <div className="text-center">
-              <h3 className="text-lg font-semibold">Error al cargar</h3>
+              <h3 className="text-lg font-semibold">{t.errorTitle}</h3>
               <p className="text-sm text-muted-foreground mt-1">{error}</p>
             </div>
             <Button onClick={() => window.location.reload()} variant="outline" size="sm">
-              Reintentar
+              {t.retry}
             </Button>
           </CardContent>
         </Card>
@@ -112,9 +112,9 @@ export default function AdminSettingsPage() {
   const handleSave = async () => {
     const result = await saveSettings()
     if (result.success) {
-      toast.success('Configuración guardada')
+      toast.success(t.saved)
     } else {
-      toast.error(result.error || 'Error al guardar')
+      toast.error(result.error || t.saveError)
     }
   }
 
@@ -122,10 +122,12 @@ export default function AdminSettingsPage() {
     resetSettings()
     setTheme(originalSettings.theme as 'light' | 'dark' | 'system')
     setColorScheme(isSystemColorScheme(originalSettings.primaryColor) ? originalSettings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME)
-    toast.info('Cambios descartados')
+    toast.info(t.discarded)
   }
 
   const selectedColorScheme = getSystemColorSchemeOption(settings.primaryColor)
+  const selectedColorSchemeText = t.appearance.colorSchemes[selectedColorScheme.value] ?? selectedColorScheme
+  const timeZoneOptions = Object.entries(t.regional.timeZones)
   const quickColorValue = ['blue', 'green', 'purple', 'orange', 'red'].includes(settings.primaryColor)
     ? settings.primaryColor
     : '__catalog__'
@@ -135,15 +137,15 @@ export default function AdminSettingsPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Configuración</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t.title}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Ajustes generales del sistema y la empresa
+            {t.subtitle}
           </p>
         </div>
         {hasChanges && (
           <Badge variant="secondary" className="self-start sm:self-auto text-xs gap-1">
             <AlertCircle className="h-3 w-3" />
-            {changedFields} cambio{changedFields !== 1 ? 's' : ''} sin guardar
+            {changedFields} {t.unsaved}
           </Badge>
         )}
       </div>
@@ -152,7 +154,7 @@ export default function AdminSettingsPage() {
       {error && canRenderFallback && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Usando datos en caché</AlertTitle>
+          <AlertTitle>{t.cacheTitle}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -161,16 +163,16 @@ export default function AdminSettingsPage() {
       {hasChanges && (
         <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-primary/5">
           <span className="text-sm font-medium text-primary">
-            Hay cambios sin guardar
+            {t.unsavedBar}
           </span>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={handleReset} disabled={isSaving}>
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-              Descartar
+              {t.discard}
             </Button>
             <Button size="sm" onClick={handleSave} disabled={isSaving}>
               {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
-              {isSaving ? 'Guardando...' : 'Guardar'}
+              {isSaving ? t.saving : t.save}
             </Button>
           </div>
         </div>
@@ -178,29 +180,19 @@ export default function AdminSettingsPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
-        <TabsList className="h-9 w-full justify-start">
+        <TabsList className="h-auto w-full justify-start overflow-x-auto">
           <TabsTrigger value="company" className="text-xs gap-1.5">
             <Building2 className="h-3.5 w-3.5" />
-            Empresa
+            {t.tabs.company}
           </TabsTrigger>
           <TabsTrigger value="appearance" className="text-xs gap-1.5">
             <Palette className="h-3.5 w-3.5" />
-            Apariencia
+            {t.tabs.appearance}
           </TabsTrigger>
           <TabsTrigger value="inventory" className="text-xs gap-1.5">
             <Package className="h-3.5 w-3.5" />
-            Inventario
+            {t.tabs.inventory}
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="text-xs gap-1.5">
-            <Bell className="h-3.5 w-3.5" />
-            Alertas
-          </TabsTrigger>
-          {isSuperAdmin && (
-            <TabsTrigger value="security" className="text-xs gap-1.5">
-              <Shield className="h-3.5 w-3.5" />
-              Seguridad global
-            </TabsTrigger>
-          )}
         </TabsList>
 
         {/* Company Tab */}
@@ -209,34 +201,34 @@ export default function AdminSettingsPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-blue-500" />
-                Información de la Empresa
+                {t.company.title}
               </CardTitle>
-              <CardDescription>Estos datos aparecen en tickets, facturas y la página pública</CardDescription>
+              <CardDescription>{t.company.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="companyName">Nombre <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="companyName">{t.company.name} <span className="text-destructive">*</span></Label>
                   <Input id="companyName" value={settings.companyName} onChange={(e) => updateSetting('companyName', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyRuc">RUC</Label>
+                  <Label htmlFor="companyRuc">{t.company.ruc}</Label>
                   <Input id="companyRuc" value={settings.companyRuc} onChange={(e) => updateSetting('companyRuc', e.target.value)} placeholder="80012345-6" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyEmail">Email <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="companyEmail">{t.company.email} <span className="text-destructive">*</span></Label>
                   <Input id="companyEmail" type="email" value={settings.companyEmail} onChange={(e) => updateSetting('companyEmail', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyPhone">Teléfono</Label>
+                  <Label htmlFor="companyPhone">{t.company.phone}</Label>
                   <Input id="companyPhone" value={settings.companyPhone} onChange={(e) => updateSetting('companyPhone', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="city">Ciudad</Label>
+                  <Label htmlFor="city">{t.company.city}</Label>
                   <Input id="city" value={settings.city} onChange={(e) => updateSetting('city', e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="currency">Moneda</Label>
+                  <Label htmlFor="currency">{t.company.currency}</Label>
                   <Select value={settings.currency} onValueChange={(v) => updateSetting('currency', v)}>
                     <SelectTrigger id="currency"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -248,23 +240,23 @@ export default function AdminSettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="taxRate" className="flex items-center gap-1.5">
-                    IVA (%)
+                    {t.company.tax}
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild><HelpCircle className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
-                        <TooltipContent><p>Se muestra en tickets y se usa para cálculos</p></TooltipContent>
+                        <TooltipContent><p>{t.company.taxHelp}</p></TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </Label>
                   <Input id="taxRate" type="number" min="0" max="100" value={settings.taxRate} onChange={(e) => updateSetting('taxRate', parseFloat(e.target.value) || 0)} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="sessionTimeout">Sesión (minutos)</Label>
+                  <Label htmlFor="sessionTimeout">{t.company.session}</Label>
                   <Input id="sessionTimeout" type="number" min="5" max="480" value={settings.sessionTimeout} onChange={(e) => updateSetting('sessionTimeout', parseInt(e.target.value) || 60)} />
                 </div>
               </div>
               <div className="space-y-2 pt-2">
-                <Label htmlFor="companyAddress">Dirección</Label>
+                <Label htmlFor="companyAddress">{t.company.address}</Label>
                 <Textarea id="companyAddress" value={settings.companyAddress} onChange={(e) => updateSetting('companyAddress', e.target.value)} rows={2} className="resize-none" />
               </div>
             </CardContent>
@@ -275,35 +267,39 @@ export default function AdminSettingsPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Globe className="h-4 w-4 text-blue-500" />
-                Regional
+                {t.regional.title}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
-                  <Label>Idioma</Label>
+                  <Label>{t.regional.language}</Label>
                   <Select value={settings.language} onValueChange={(v) => updateSetting('language', v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="es">Español</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="pt">Português</SelectItem>
+                      <SelectItem value="es">{t.regional.spanish}</SelectItem>
+                      <SelectItem value="en">{t.regional.english}</SelectItem>
+                      <SelectItem value="pt">{t.regional.portuguese}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Zona Horaria</Label>
+                  <Label>{t.regional.timeZone}</Label>
                   <Select value={settings.timeZone} onValueChange={(v) => updateSetting('timeZone', v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="America/Asuncion">Asunción (GMT-4)</SelectItem>
-                      <SelectItem value="America/Argentina/Buenos_Aires">Buenos Aires (GMT-3)</SelectItem>
-                      <SelectItem value="UTC">UTC</SelectItem>
+                      {timeZoneOptions.map(([value, label]) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      ))}
+                      {!t.regional.timeZones[settings.timeZone as keyof typeof t.regional.timeZones] && settings.timeZone ? (
+                        <SelectItem value={settings.timeZone}>{settings.timeZone}</SelectItem>
+                      ) : null}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">{t.regional.timeZoneHelp}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Formato de Fecha</Label>
+                  <Label>{t.regional.dateFormat}</Label>
                   <Select value={settings.dateFormat} onValueChange={(v) => updateSetting('dateFormat', v)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -324,56 +320,61 @@ export default function AdminSettingsPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Palette className="h-4 w-4 text-violet-500" />
-                Apariencia
+                {t.appearance.title}
               </CardTitle>
-              <CardDescription>Tema y colores del sistema</CardDescription>
+              <CardDescription>{t.appearance.description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Tema</Label>
+                  <Label>{t.appearance.theme}</Label>
                   <Select value={settings.theme} onValueChange={handleThemeChange}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="light">Claro</SelectItem>
-                      <SelectItem value="dark">Oscuro</SelectItem>
-                      <SelectItem value="system">Sistema</SelectItem>
+                      <SelectItem value="light">{t.appearance.light}</SelectItem>
+                      <SelectItem value="dark">{t.appearance.dark}</SelectItem>
+                      <SelectItem value="system">{t.appearance.system}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Color rápido</Label>
+                  <Label>{t.appearance.quickColor}</Label>
                   <Select value={quickColorValue} onValueChange={(v) => { if (v !== '__catalog__') handleColorChange(v as SystemColorScheme) }}>
-                    <SelectTrigger><SelectValue placeholder="Elegir color" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t.appearance.chooseColor} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__catalog__">Catálogo completo</SelectItem>
-                      <SelectItem value="blue">Azul</SelectItem>
-                      <SelectItem value="green">Verde</SelectItem>
-                      <SelectItem value="purple">Púrpura</SelectItem>
-                      <SelectItem value="orange">Naranja</SelectItem>
-                      <SelectItem value="red">Rojo</SelectItem>
+                      <SelectItem value="__catalog__">{t.appearance.catalog}</SelectItem>
+                      <SelectItem value="blue">{t.appearance.blue}</SelectItem>
+                      <SelectItem value="green">{t.appearance.green}</SelectItem>
+                      <SelectItem value="purple">{t.appearance.purple}</SelectItem>
+                      <SelectItem value="orange">{t.appearance.orange}</SelectItem>
+                      <SelectItem value="red">{t.appearance.red}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
               <div className="mt-4 space-y-3 rounded-xl border border-primary/10 bg-primary/5 p-4">
-                <Label>Catálogo de esquemas</Label>
-                <SystemColorSchemePicker value={settings.primaryColor} onChange={handleColorChange} />
+                <Label>{t.appearance.schemeCatalog}</Label>
+                <SystemColorSchemePicker
+                  value={settings.primaryColor}
+                  onChange={handleColorChange}
+                  labels={t.appearance.colorSchemes}
+                  footerText={t.appearance.colorSchemeFooter}
+                />
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold">{selectedColorScheme.label}</p>
-                    <p className="text-xs text-muted-foreground">{selectedColorScheme.description}</p>
+                    <p className="text-sm font-semibold">{selectedColorSchemeText.label}</p>
+                    <p className="text-xs text-muted-foreground">{selectedColorSchemeText.description}</p>
                   </div>
                   <div className="flex gap-2">
-                    <span className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">Primario</span>
-                    <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">Superficie</span>
+                    <span className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">{t.appearance.primary}</span>
+                    <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">{t.appearance.surface}</span>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2 pt-2">
-                <Label>Registros por página</Label>
+                <Label>{t.appearance.perPage}</Label>
                 <Select value={String(settings.itemsPerPage)} onValueChange={(v) => updateSetting('itemsPerPage', parseInt(v))}>
                   <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -394,103 +395,19 @@ export default function AdminSettingsPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Package className="h-4 w-4 text-violet-500" />
-                Inventario
+                {t.inventory.title}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Umbral de stock bajo</Label>
+                <Label>{t.inventory.lowStock}</Label>
                 <Input type="number" min="1" value={settings.lowStockThreshold} onChange={(e) => updateSetting('lowStockThreshold', parseInt(e.target.value) || 10)} />
-                <p className="text-xs text-muted-foreground">Cantidad mínima antes de alertar</p>
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-medium">Respaldo automático</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Crear respaldos del sistema</p>
-                </div>
-                <Switch checked={settings.autoBackup} onCheckedChange={(v) => updateSetting('autoBackup', v)} />
+                <p className="text-xs text-muted-foreground">{t.inventory.lowStockHelp}</p>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Notifications Tab */}
-        <TabsContent value="notifications" className="space-y-5 mt-0">
-          <Card className="border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Bell className="h-4 w-4 text-emerald-500" />
-                Notificaciones
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div>
-                  <Label className="text-sm font-medium">Email</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Notificaciones por correo</p>
-                </div>
-                <Switch checked={settings.emailNotifications} onCheckedChange={(v) => updateSetting('emailNotifications', v)} />
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div>
-                  <Label className="text-sm font-medium">SMS</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Alertas críticas por mensaje</p>
-                </div>
-                <Switch checked={settings.smsNotifications} onCheckedChange={(v) => updateSetting('smsNotifications', v)} />
-              </div>
-              {isSuperAdmin && (
-                <div className="flex items-center justify-between p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
-                  <div>
-                    <Label className="text-sm font-medium">Modo mantenimiento</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">Desactiva el acceso público</p>
-                  </div>
-                  <Switch checked={settings.maintenanceMode} onCheckedChange={(v) => updateSetting('maintenanceMode', v)} />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Security Tab */}
-        {isSuperAdmin && <TabsContent value="security" className="space-y-5 mt-0">
-          <Card className="border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Shield className="h-4 w-4 text-red-500" />
-                Seguridad
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Longitud mínima de contraseña</Label>
-                <Input type="number" min="6" max="32" value={settings.passwordMinLength} onChange={(e) => updateSetting('passwordMinLength', parseInt(e.target.value) || 8)} />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div>
-                  <Label className="text-sm font-medium">Permitir registro</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Nuevos usuarios pueden crear cuenta</p>
-                </div>
-                <Switch checked={settings.allowRegistration} onCheckedChange={(v) => updateSetting('allowRegistration', v)} />
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div>
-                  <Label className="text-sm font-medium">Verificación de email</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Requerir verificación al registrarse</p>
-                </div>
-                <Switch checked={settings.requireEmailVerification} onCheckedChange={(v) => updateSetting('requireEmailVerification', v)} />
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg border">
-                <div>
-                  <Label className="text-sm font-medium">Dos factores (2FA)</Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">Código adicional al iniciar sesión</p>
-                </div>
-                <Switch checked={settings.requireTwoFactor} onCheckedChange={(v) => updateSetting('requireTwoFactor', v)} />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>}
       </Tabs>
     </div>
   )

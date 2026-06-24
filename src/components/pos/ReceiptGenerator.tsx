@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Printer, Download, Share2, CheckCircle2 } from 'lucide-react'
 import { getTaxConfig, config } from '@/lib/config'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
+import { useAdminWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import QRCode from 'qrcode'
 
 interface CartItem {
@@ -73,7 +74,10 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
   onShare,
   formatCurrency
 }) => {
+  const componentRef = useRef<HTMLDivElement>(null)
   const { settings } = useSharedSettings()
+  const { settings: websiteSettings } = useAdminWebsiteSettings()
+  const logoUrl = websiteSettings?.company_info?.logoUrl
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('')
   
   const companyInfo = {
@@ -86,7 +90,8 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
       ? settings.companyEmail
       : config.company.email,
     ruc: settings.companyRuc || config.company.ruc,
-    website: 'www.4gcelulares.com'
+    website: settings.companyName ? `www.${settings.companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com` : 'www.miempresa.com',
+    logoUrl: logoUrl
   }
 
   // Generar código QR
@@ -134,11 +139,15 @@ export const ReceiptGenerator: React.FC<ReceiptGeneratorProps> = ({
     <div id="receipt-content" className="max-w-md mx-auto bg-card text-foreground rounded-lg shadow-lg border border-border">
       {/* Encabezado mejorado con logo */}
       <div className="text-center border-b-2 border-dashed border-border pb-4 mb-4 bg-gradient-to-b from-primary/5 to-transparent pt-4">
-        {/* Logo placeholder - reemplazar con imagen real */}
+        {/* Initials placeholder */}
         <div className="flex justify-center mb-2">
-          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-bold text-2xl">
-            4G
-          </div>
+          {logoUrl ? (
+            <img src={logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
+          ) : (
+            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-bold text-2xl">
+              {companyInfo.name ? companyInfo.name.substring(0, 2).toUpperCase() : 'Mi'}
+            </div>
+          )}
         </div>
         <h1 className="text-2xl font-bold uppercase tracking-tight">{companyInfo.name}</h1>
         <p className="text-sm font-medium text-primary">Reparación y Service</p>

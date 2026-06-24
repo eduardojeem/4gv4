@@ -3,6 +3,7 @@ import useSWR, { mutate } from 'swr'
 import { WebsiteSettings } from '@/types/website-settings'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { usePathname } from 'next/navigation'
+import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 
 type FetchError = Error & { status?: number }
 type RealtimeClient = ReturnType<typeof createSupabaseClient>
@@ -81,11 +82,7 @@ function releaseAdminWebsiteSettingsRealtime() {
 
 export function useWebsiteSettings() {
   const pathname = usePathname()
-  const pathSegments = pathname.split('/').filter(Boolean)
-  const tenantSlug =
-    pathSegments.length > 1 && ['inicio', 'productos', 'ofertas', 'servicios', 'mis-reparaciones', 'track', 'carrito', 'cliente', 'perfil'].includes(pathSegments[1])
-      ? pathSegments[0]
-      : ''
+  const tenantSlug = getTenantSlugFromPathname(pathname)
   const cacheKey = tenantSlug ? `${WEBSITE_SETTINGS_CACHE_KEY}?org=${encodeURIComponent(tenantSlug)}` : WEBSITE_SETTINGS_CACHE_KEY
 
   const fetcher = useMemo(() => async () => {

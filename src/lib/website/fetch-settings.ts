@@ -54,6 +54,9 @@ export async function fetchWebsiteSettings(): Promise<WebsiteSettings | null> {
     if (organization && !normalized.company_info.name?.trim()) {
       normalized.company_info.name = organization.name
     }
+    if (organization) {
+      normalized.company_info.slug = organization.slug
+    }
 
     return normalized
   } catch {

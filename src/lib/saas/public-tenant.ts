@@ -71,5 +71,23 @@ export async function resolvePublicOrganizationBySlug(
     throw error
   }
 
-  return (data as PublicOrganization | null) ?? null
+  if (data) {
+    return data as PublicOrganization
+  }
+
+  const { data: aliasRow, error: aliasError } = await supabase
+    .from('organization_slug_aliases')
+    .select('organization:organizations(id, name, slug, plan, logo_url, marketplace_public)')
+    .eq('old_slug', slug)
+    .maybeSingle()
+
+  if (aliasError) {
+    return null
+  }
+
+  const organization = Array.isArray(aliasRow?.organization)
+    ? aliasRow?.organization[0]
+    : aliasRow?.organization
+
+  return (organization as PublicOrganization | null) ?? null
 }
