@@ -578,8 +578,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, nextSession) => {
+      async (event, nextSession) => {
         if (!isMounted) return
+
+        // Flujo de recuperación de contraseña (enlace implícito con #access_token).
+        // El SDK del navegador detecta la sesión en el hash y emite PASSWORD_RECOVERY;
+        // llevamos al usuario al formulario sin importar en qué página haya caído.
+        if (event === 'PASSWORD_RECOVERY' && typeof window !== 'undefined') {
+          if (!window.location.pathname.startsWith('/auth/reset-password')) {
+            window.location.replace('/auth/reset-password')
+            return
+          }
+        }
+
         const nextUser = nextSession?.user
 
         try {
