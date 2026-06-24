@@ -17,6 +17,7 @@ import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
 import { logAuthEventClient } from '@/lib/auth-event-client'
 import { SaaSPublicNav } from '@/components/public/saas-public-nav'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
+import { siteUrl } from '@/lib/site-url'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -170,18 +171,12 @@ export default function LoginPage() {
 
     try {
       setResetLoading(true)
-      // Usar la URL canonica configurada para no generar enlaces a localhost
-      // cuando el reset se dispara desde un entorno de desarrollo.
-      const baseUrl =
-        process.env.NEXT_PUBLIC_SITE_URL ||
-        process.env.NEXT_PUBLIC_APP_URL ||
-        (typeof window !== 'undefined' ? window.location.origin : '')
-
       const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
         // Apuntar directo a la pagina (client-side) para que el SDK del
         // navegador pueda leer la sesion del hash (#access_token). El callback
-        // del servidor no puede leer el hash y rebota a /login.
-        redirectTo: baseUrl ? `${baseUrl}/auth/reset-password` : undefined,
+        // del servidor no puede leer el hash y rebota a /login. Usa la URL
+        // canonica para no generar enlaces a localhost desde dev.
+        redirectTo: siteUrl('/auth/reset-password'),
       })
 
       if (error) {

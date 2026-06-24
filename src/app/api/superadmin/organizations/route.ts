@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
+import { siteUrl } from '@/lib/site-url'
 
 function slugify(value: string) {
   return value
@@ -121,10 +122,6 @@ export async function POST(request: NextRequest) {
 
   if (ownerEmail) {
     try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      const origin = request.headers.get('origin') ?? new URL(request.url).origin
-
       // Invite owner via Supabase auth (sends magic link)
       const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(ownerEmail, {
         data: {
@@ -135,8 +132,9 @@ export async function POST(request: NextRequest) {
           registration_type: 'company_owner',
         },
         // Pasa por /auth/confirm (no protegida) para establecer la sesion del
-        // hash antes de entrar a /dashboard/onboarding (ruta protegida).
-        redirectTo: `${origin}/auth/confirm?next=/dashboard/onboarding`,
+        // hash antes de entrar a /dashboard/onboarding (ruta protegida). Usa la
+        // URL canonica para no generar enlaces a localhost desde dev.
+        redirectTo: siteUrl('/auth/confirm?next=/dashboard/onboarding'),
       })
 
       if (inviteError) {

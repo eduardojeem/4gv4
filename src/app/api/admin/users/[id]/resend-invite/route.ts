@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { withAdminAuth, AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { logger } from '@/lib/logger'
 import { sendEmail, renderBrandedEmail } from '@/lib/email/resend'
+import { siteUrl } from '@/lib/site-url'
 
 async function handler(
   request: NextRequest,
@@ -43,12 +44,11 @@ async function handler(
     }
 
     // Generate recovery link
-    const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://servix360.org'
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
       email,
       options: {
-        redirectTo: `${siteUrl}/auth/callback?next=/auth/reset-password`,
+        redirectTo: siteUrl('/auth/callback?next=/auth/reset-password'),
       },
     })
 

@@ -5,6 +5,7 @@ import { withAdminAuth } from '@/lib/api/withAdminAuth'
 import { logger } from '@/lib/logger'
 import { sendEmail, renderBrandedEmail } from '@/lib/email/resend'
 import { canCreateResource } from '@/lib/saas/subscription-service'
+import { siteUrl } from '@/lib/site-url'
 
 type ImportUser = {
   name: string
@@ -365,12 +366,11 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
             // Generate a password-recovery link so the admin can share it
             // with the new user to let them set their own password.
             try {
-              const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://servix360.org'
               const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
                 type: 'recovery',
                 email,
                 options: {
-                  redirectTo: `${siteUrl}/auth/callback?next=/auth/reset-password`,
+                  redirectTo: siteUrl('/auth/callback?next=/auth/reset-password'),
                 },
               })
               inviteLink = (linkData as any)?.properties?.action_link ?? null
