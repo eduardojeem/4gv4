@@ -134,7 +134,9 @@ export async function POST(request: NextRequest) {
           selected_plan: plan,
           registration_type: 'company_owner',
         },
-        redirectTo: `${origin}/auth/callback?next=/dashboard/onboarding`,
+        // Pasa por /auth/confirm (no protegida) para establecer la sesion del
+        // hash antes de entrar a /dashboard/onboarding (ruta protegida).
+        redirectTo: `${origin}/auth/confirm?next=/dashboard/onboarding`,
       })
 
       if (inviteError) {
