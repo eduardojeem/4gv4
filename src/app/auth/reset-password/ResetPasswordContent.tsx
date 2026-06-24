@@ -30,16 +30,49 @@ export default function ResetPasswordContent() {
 
   // Validar que tenemos un token válido
   useEffect(() => {
+    // Establece la sesión a partir de los tokens del hash (#access_token=...),
+    // por si el SDK aún no procesó la URL (detectSessionInUrl asíncrono).
+    const establishSessionFromHash = async (): Promise<boolean> => {
+      if (typeof window === 'undefined') return false
+      const hash = window.location.hash?.startsWith('#')
+        ? window.location.hash.slice(1)
+        : ''
+      if (!hash) return false
+
+      const params = new URLSearchParams(hash)
+      const access_token = params.get('access_token')
+      const refresh_token = params.get('refresh_token')
+      if (!access_token || !refresh_token) return false
+
+      const { error } = await supabase.auth.setSession({ access_token, refresh_token })
+      if (error) {
+        console.error('setSession from hash failed:', error.message)
+        return false
+      }
+
+      // Limpiar el hash para no reprocesarlo ni exponer los tokens en la URL.
+      window.history.replaceState(null, '', window.location.pathname + window.location.search)
+      return true
+    }
+
     const validateSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error || !session) {
+        let { data: { session } } = await supabase.auth.getSession()
+
+        // Fallback: si no hay sesión todavía, intentar con el hash.
+        if (!session) {
+          const ok = await establishSessionFromHash()
+          if (ok) {
+            ({ data: { session } } = await supabase.auth.getSession())
+          }
+        }
+
+        if (!session) {
           toast.error('El enlace de recuperación es inválido o ha expirado')
           setTimeout(() => router.push('/login'), 2000)
           return
         }
-        
+
         setValidatingToken(false)
       } catch (err) {
         console.error('Error validating session:', err)

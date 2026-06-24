@@ -171,9 +171,12 @@ export default function LoginPage() {
     try {
       setResetLoading(true)
       const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+        // Apuntar directo a la pagina (client-side) para que el SDK del
+        // navegador pueda leer la sesion del hash (#access_token). El callback
+        // del servidor no puede leer el hash y rebota a /login.
         redirectTo:
           typeof window !== 'undefined'
-            ? `${window.location.origin}/auth/callback?next=/auth/reset-password`
+            ? `${window.location.origin}/auth/reset-password`
             : undefined,
       })
 
