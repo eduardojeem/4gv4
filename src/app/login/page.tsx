@@ -170,14 +170,18 @@ export default function LoginPage() {
 
     try {
       setResetLoading(true)
+      // Usar la URL canonica configurada para no generar enlaces a localhost
+      // cuando el reset se dispara desde un entorno de desarrollo.
+      const baseUrl =
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        (typeof window !== 'undefined' ? window.location.origin : '')
+
       const { error } = await supabase.auth.resetPasswordForEmail(targetEmail, {
         // Apuntar directo a la pagina (client-side) para que el SDK del
         // navegador pueda leer la sesion del hash (#access_token). El callback
         // del servidor no puede leer el hash y rebota a /login.
-        redirectTo:
-          typeof window !== 'undefined'
-            ? `${window.location.origin}/auth/reset-password`
-            : undefined,
+        redirectTo: baseUrl ? `${baseUrl}/auth/reset-password` : undefined,
       })
 
       if (error) {
