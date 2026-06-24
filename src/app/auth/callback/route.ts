@@ -48,6 +48,8 @@ export async function GET(request: NextRequest) {
       message: error.message,
       status: error.status,
     })
+    // Código presente pero inválido/expirado → error real.
+    return NextResponse.redirect(new URL('/login?error=auth_callback_error', request.url))
   }
 
   // 2) Token-hash flow (invitaciones / recovery generados en el servidor) → ?token_hash=&type=
@@ -61,16 +63,19 @@ export async function GET(request: NextRequest) {
       message: error.message,
       status: error.status,
     })
+    // Token presente pero inválido/expirado/consumido → error real.
+    return NextResponse.redirect(new URL('/login?error=auth_callback_error', request.url))
   }
 
-  // Diagnóstico: qué parámetros llegaron realmente al callback.
-  console.error('[auth/callback] no valid auth params', {
-    hasCode: Boolean(code),
-    hasTokenHash: Boolean(tokenHash),
-    type,
+  // 3) Flujo implícito: la sesión viene en el hash (#access_token=...), que el
+  // servidor NO puede leer. Reenviamos a la página cliente destino (next)
+  // conservando el hash (el navegador lo arrastra al seguir el redirect) para
+  // que el SDK del navegador establezca la sesión allí.
+  // IMPORTANTE: no agregar ?error=, porque supabase-js descarta los tokens del
+  // hash si detecta un parámetro de error en la URL.
+  console.warn('[auth/callback] no query token; forwarding hash to client page', {
+    next,
     paramKeys: Array.from(requestUrl.searchParams.keys()),
   })
-
-  // Si hay error o no hay código/token, redirigir a login
-  return NextResponse.redirect(new URL('/login?error=auth_callback_error', request.url))
+  return buildRedirect(request, requestUrl.origin, next)
 }
