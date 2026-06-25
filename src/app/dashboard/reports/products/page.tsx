@@ -42,6 +42,8 @@ import { es } from 'date-fns/locale'
 
 import { createClient } from '@/lib/supabase/client'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
+import { cn } from '@/lib/utils'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 
 // Datos mock eliminados
 
@@ -50,6 +52,7 @@ export default function ProductReportsPage() {
   const canExport = canExportReports(planCode) // exportar: Basic en adelante
   const reportBrand = organizationName || 'Mi Negocio'
   const supabase = useMemo(() => createClient(), [])
+  const canViewCost = useCanViewCost()
   const [loading, setLoading] = useState(true)
   const [products, setProducts] = useState<any[]>([])
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -618,6 +621,7 @@ export default function ProductReportsPage() {
             </Card>
           </motion.div>
 
+          {canViewCost && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -637,6 +641,7 @@ export default function ProductReportsPage() {
               </CardContent>
             </Card>
           </motion.div>
+          )}
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -656,6 +661,7 @@ export default function ProductReportsPage() {
             </Card>
           </motion.div>
 
+          {canViewCost && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -673,6 +679,7 @@ export default function ProductReportsPage() {
               </CardContent>
             </Card>
           </motion.div>
+          )}
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -695,11 +702,11 @@ export default function ProductReportsPage() {
 
         {/* Tabs de Reportes */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className={cn('grid w-full', canViewCost ? 'grid-cols-4' : 'grid-cols-3')}>
             <TabsTrigger value="overview">Resumen</TabsTrigger>
             <TabsTrigger value="sales">Ventas</TabsTrigger>
             <TabsTrigger value="inventory">Inventario</TabsTrigger>
-            <TabsTrigger value="profitability">Rentabilidad</TabsTrigger>
+            {canViewCost && <TabsTrigger value="profitability">Rentabilidad</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -827,6 +834,7 @@ export default function ProductReportsPage() {
             </Card>
           </TabsContent>
 
+          {canViewCost && (
           <TabsContent value="profitability" className="space-y-6">
             {/* Análisis de Rentabilidad */}
             <Card>
@@ -871,6 +879,7 @@ export default function ProductReportsPage() {
               </CardContent>
             </Card>
           </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>

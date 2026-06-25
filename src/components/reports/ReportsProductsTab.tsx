@@ -63,6 +63,8 @@ interface ReportsProductsTabProps {
   productTrendRef: React.RefObject<HTMLDivElement | null>
   selectedProductSalesColor: string
   selectedProductQtyColor: string
+  /** Solo admin/super_admin ve la ganancia. */
+  canViewCost?: boolean
 }
 
 export function ReportsProductsTab({
@@ -85,7 +87,8 @@ export function ReportsProductsTab({
   selectedProductTrend,
   productTrendRef,
   selectedProductSalesColor,
-  selectedProductQtyColor
+  selectedProductQtyColor,
+  canViewCost = false
 }: ReportsProductsTabProps) {
   return (
     <TabsContent value="products" className="space-y-4">
@@ -224,7 +227,9 @@ export function ReportsProductsTab({
                 </div>
                 <div className="text-right">
                   <p className="font-bold">{formatFullPrice(product.sales)}</p>
-                  <p className="text-xs text-green-600 font-medium">G: {formatFullPrice(product.profit)}</p>
+                  {canViewCost && (
+                    <p className="text-xs text-green-600 font-medium">G: {formatFullPrice(product.profit)}</p>
+                  )}
                 </div>
               </div>
             ))}
@@ -232,8 +237,8 @@ export function ReportsProductsTab({
           <div className="flex justify-end mt-4">
             <Button variant="outline" onClick={() => {
               const BOM = '\uFEFF'
-              const headers = ['Rank', 'Producto', 'Categoría', 'Ventas', 'Ganancia', 'Cantidad', 'Participación %']
-              const rows = visibleProducts.map((p, i) => [String(i + 1), p.name, p.category || '', String(p.sales), String(p.profit), String(p.quantity), ((p.share || 0).toFixed(1))])
+              const headers = ['Rank', 'Producto', 'Categoría', 'Ventas', ...(canViewCost ? ['Ganancia'] : []), 'Cantidad', 'Participación %']
+              const rows = visibleProducts.map((p, i) => [String(i + 1), p.name, p.category || '', String(p.sales), ...(canViewCost ? [String(p.profit)] : []), String(p.quantity), ((p.share || 0).toFixed(1))])
               const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
               const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' })
               const url = window.URL.createObjectURL(blob)

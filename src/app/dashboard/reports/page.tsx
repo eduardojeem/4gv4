@@ -42,6 +42,7 @@ import { isCompletedSaleStatus } from '@/lib/sales-status'
 import { createClient } from '@/lib/supabase/client'
 import { RealtimeChannel } from '@supabase/supabase-js'
 import { ReportsProductsTab } from '@/components/reports/ReportsProductsTab'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 
 // Sanitiza una celda CSV: previene inyección de fórmulas y escapa comas/comillas/saltos.
 function csvCell(value: unknown): string {
@@ -85,6 +86,7 @@ interface KpiDelta {
 export default function ReportsPage() {
   const { planCode, organizationName } = useSubscriptionStatus()
   const canExport = canExportReports(planCode) // exportar/descargar: Basic en adelante
+  const canViewCost = useCanViewCost()
   const reportBrand = organizationName || 'Mi Negocio'
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
     from: new Date(new Date().setDate(new Date().getDate() - 30)),
@@ -642,7 +644,7 @@ export default function ReportsPage() {
                 'Órdenes': totalOrders,
                 'Clientes': totalCustomers,
                 'Valor Promedio': formatFullPrice(avgOrderValue),
-                'Ganancia Estimada': formatFullPrice(totalProfit),
+                ...(canViewCost ? { 'Ganancia Estimada': formatFullPrice(totalProfit) } : {}),
                 'Reparaciones Totales': repairsMetrics.total,
                 'Tasa de Finalización': `${repairsMetrics.completionRate.toFixed(0)}%`
               }}
@@ -744,6 +746,7 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
+        {canViewCost && (
         <Card className="border-l-4 border-l-indigo-500 shadow-sm">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -760,6 +763,7 @@ export default function ReportsPage() {
             </div>
           </CardContent>
         </Card>
+        )}
       </div>
 
       {/* Gráficos y análisis */}
@@ -896,6 +900,7 @@ export default function ReportsPage() {
           productTrendRef={productTrendRef}
           selectedProductSalesColor={selectedProductSalesColor}
           selectedProductQtyColor={selectedProductQtyColor}
+          canViewCost={canViewCost}
         />
 
         <TabsContent value="categories" className="space-y-4">
