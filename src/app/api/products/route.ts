@@ -11,7 +11,7 @@ import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBran
 import { canCreateResource } from '@/lib/saas/subscription-service'
 
 // GET /api/products - Get products with variants
-export const GET = withTenantAuth({ permission: 'inventory.products.read', module: 'inventory' }, async (request, { user, organization }) => {
+export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     
@@ -118,7 +118,7 @@ export const GET = withTenantAuth({ permission: 'inventory.products.read', modul
 })
 
 // POST /api/products - Create new product
-export const POST = withTenantAuth({ permission: 'inventory.products.create', module: 'inventory' }, async (request, { user, organization }) => {
+export const POST = withTenantAuth({ permission: 'products.create', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const body = await request.json()
     const supabase = await createClient()
@@ -295,7 +295,7 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
 })
 
 // PUT /api/products - Update product
-export const PUT = withTenantAuth({ permission: 'inventory.products.update', module: 'inventory' }, async (request, { user, organization }) => {
+export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const body = await request.json()
     const supabase = await createClient()
@@ -460,7 +460,7 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
 })
 
 // DELETE /api/products - Delete products (single or bulk)
-export const DELETE = withTenantAuth({ permission: 'inventory.products.delete', module: 'inventory' }, async (request, { user, organization }) => {
+export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'inventory' }, async (request, { user, organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const idsParam = searchParams.get('ids')

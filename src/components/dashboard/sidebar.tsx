@@ -11,6 +11,7 @@ import { config } from '@/lib/config'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { useAuth } from '@/contexts/auth-context'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
+import { usePermissions } from '@/hooks/use-permissions'
 import type { UserRole } from '@/lib/auth/roles-permissions'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
@@ -37,7 +38,7 @@ import {
   Rocket
 } from 'lucide-react'
 
-type NavItem = { name: string; href: string; icon: LucideIcon; roles: UserRole[]; description?: string }
+type NavItem = { name: string; href: string; icon: LucideIcon; roles?: UserRole[]; permission?: string; description?: string }
 
 const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
   {
@@ -45,31 +46,31 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor', 'tecnico'] },
       { name: 'Onboarding', href: '/dashboard/onboarding', icon: Rocket, roles: ['admin', 'vendedor', 'tecnico'], description: 'Configuracion inicial' },
-      { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, roles: ['admin', 'vendedor'] },
-      { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, roles: ['admin', 'vendedor'] },
-      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor'] },
+      { name: 'Punto de Venta', href: '/dashboard/pos', icon: ShoppingCart, permission: 'pos.read' },
+      { name: 'Caja', href: '/dashboard/pos/caja', icon: CreditCard, permission: 'pos.read' },
+      { name: 'POS Dashboard', href: '/dashboard/pos/dashboard', icon: LayoutDashboard, permission: 'pos.read' },
     ],
   },
   {
     label: 'Operaciones',
     items: [
-      { name: 'Clientes', href: '/dashboard/customers', icon: Users, roles: ['admin', 'vendedor'] },
-      { name: 'Créditos', href: '/dashboard/credits', icon: CreditCard, roles: ['admin', 'vendedor'] },
-      { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, roles: ['admin', 'vendedor'] },
-      { name: 'Productos', href: '/dashboard/products', icon: Package, roles: ['admin', 'vendedor'] },
-      { name: 'Marcas', href: '/dashboard/brands', icon: Building2, roles: ['admin'] },
-      { name: 'Categorías', href: '/dashboard/categories', icon: Tag, roles: ['admin', 'vendedor'] },
-      { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, roles: ['admin', 'vendedor'] },
+      { name: 'Clientes', href: '/dashboard/customers', icon: Users, permission: 'customers.read' },
+      { name: 'Créditos', href: '/dashboard/credits', icon: CreditCard, permission: 'credits.read' },
+      { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, permission: 'orders.read' },
+      { name: 'Productos', href: '/dashboard/products', icon: Package, permission: 'products.read' },
+      { name: 'Marcas', href: '/dashboard/brands', icon: Building2, permission: 'products.manage' },
+      { name: 'Categorías', href: '/dashboard/categories', icon: Tag, permission: 'products.read' },
+      { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, permission: 'promotions.read' },
       { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['admin'] },
-      { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, roles: ['admin', 'vendedor', 'tecnico'] },
+      { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, permission: 'repairs.read' },
       { name: 'Panel Técnico', href: '/dashboard/technician', icon: Activity, roles: ['admin', 'tecnico'], description: 'Operativo para técnicos' },
     ],
   },
   {
     label: 'Análisis',
     items: [
-      { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, roles: ['admin', 'vendedor'] },
-      { name: 'Administración', href: '/admin', icon: Settings, roles: ['admin'] },
+      { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, permission: 'reports.read' },
+      { name: 'Administración', href: '/admin', icon: Settings, roles: ['super_admin', 'admin'] },
     ],
   },
 ]
@@ -84,6 +85,7 @@ export const Sidebar = memo(function Sidebar() {
   const [onboardingDone, setOnboardingDone] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const { hasPermission } = usePermissions()
 
   // Read role directly from auth context — single source of truth
   const userRole = (user?.role ?? 'vendedor') as UserRole
@@ -136,15 +138,25 @@ export const Sidebar = memo(function Sidebar() {
     const filterFn = (item: NavItem) => {
       // Hide onboarding link once setup is complete
       if (item.href === '/dashboard/onboarding' && onboardingDone) return false
-      // Always enforce role restrictions — never bypass in dev
-      if (userRole === 'super_admin') return item.roles.includes('admin') || item.roles.includes('super_admin')
-      return item.roles.includes(userRole)
+      
+      // If the item has a specific permission requirement, check that first
+      if (item.permission) {
+        return hasPermission(item.permission)
+      }
+
+      // Fallback to strict role checking for items without granular permissions
+      if (item.roles) {
+        if (userRole === 'super_admin') return item.roles.includes('admin') || item.roles.includes('super_admin')
+        return item.roles.includes(userRole)
+      }
+
+      return false // if no permission and no roles, hide it
     }
     return NAV_GROUPS.map(group => ({
       label: group.label,
       items: group.items.filter(filterFn)
     })).filter(group => group.items.length > 0)
-  }, [userRole, onboardingDone])
+  }, [userRole, onboardingDone, hasPermission])
 
   return (
     <>

@@ -111,6 +111,7 @@ export function buildPromoApplication(promo: PromoBenefit, subscription: Subscri
         current_period_starts_at: now.toISOString(),
         current_period_ends_at: addDurationFromLatest(now, subscription.current_period_ends_at, durationValue, durationUnit),
         cancel_at_period_end: false,
+        payment_status: 'paid',
       },
       requiresBillingAction: false,
     }
@@ -122,6 +123,7 @@ export function buildPromoApplication(promo: PromoBenefit, subscription: Subscri
         status: 'trialing',
         trial_ends_at: addDurationFromLatest(now, subscription.trial_ends_at, durationValue, durationUnit),
         cancel_at_period_end: false,
+        payment_status: 'paid',
       },
       requiresBillingAction: false,
     }
@@ -132,6 +134,7 @@ export function buildPromoApplication(promo: PromoBenefit, subscription: Subscri
       status: 'active',
       current_period_ends_at: addDurationFromLatest(now, subscription.current_period_ends_at, durationValue, durationUnit),
       cancel_at_period_end: false,
+      payment_status: 'paid',
     },
     requiresBillingAction: false,
   }

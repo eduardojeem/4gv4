@@ -111,7 +111,7 @@ async function assertUniqueName(
   return null
 }
 
-export const GET = withTenantAuth({ permission: 'inventory.products.read', module: 'inventory' }, async (request, { organization }) => {
+export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const isActive = searchParams.get('is_active')
@@ -155,9 +155,9 @@ export const GET = withTenantAuth({ permission: 'inventory.products.read', modul
         products_count: productCounts.get(category.id) ?? 0,
       })),
       permissions: {
-        canCreate: roleHasPermission(organization.role as OrganizationRole, 'inventory.products.create'),
-        canUpdate: roleHasPermission(organization.role as OrganizationRole, 'inventory.products.update'),
-        canDelete: roleHasPermission(organization.role as OrganizationRole, 'inventory.products.delete'),
+        canCreate: roleHasPermission(organization.role as OrganizationRole, 'products.create'),
+        canUpdate: roleHasPermission(organization.role as OrganizationRole, 'products.update'),
+        canDelete: roleHasPermission(organization.role as OrganizationRole, 'products.delete'),
       },
     })
   } catch (error) {
@@ -166,7 +166,7 @@ export const GET = withTenantAuth({ permission: 'inventory.products.read', modul
   }
 })
 
-export const POST = withTenantAuth({ permission: 'inventory.products.create', module: 'inventory' }, async (request, { organization }) => {
+export const POST = withTenantAuth({ permission: 'products.create', module: 'inventory' }, async (request, { organization }) => {
   try {
     const validation = categorySchema.safeParse(await request.json())
 
@@ -218,7 +218,7 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
   }
 })
 
-export const PUT = withTenantAuth({ permission: 'inventory.products.update', module: 'inventory' }, async (request, { organization }) => {
+export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (request, { organization }) => {
   try {
     const validation = categoryUpdateSchema.safeParse(await request.json())
 
@@ -259,7 +259,7 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
   }
 })
 
-export const DELETE = withTenantAuth({ permission: 'inventory.products.delete', module: 'inventory' }, async (request, { organization }) => {
+export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'inventory' }, async (request, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')

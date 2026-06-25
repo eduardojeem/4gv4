@@ -214,6 +214,110 @@ export const PERMISSIONS: Record<string, Permission> = {
     description: 'Control total sobre promociones',
     resource: 'promotions',
     action: 'manage'
+  },
+
+  // Punto de Venta
+  'pos.read': {
+    id: 'pos.read',
+    name: 'Acceso a POS',
+    description: 'Permite acceder al punto de venta y caja',
+    resource: 'pos',
+    action: 'read'
+  },
+  'pos.manage': {
+    id: 'pos.manage',
+    name: 'Gestionar POS',
+    description: 'Permite gestionar aperturas y cierres de caja en POS',
+    resource: 'pos',
+    action: 'manage'
+  },
+
+  // Precios
+  'prices.cost.read': {
+    id: 'prices.cost.read',
+    name: 'Ver Precio de Costo',
+    description: 'Permite ver los precios de costo (compra) de los productos',
+    resource: 'prices',
+    action: 'read'
+  },
+  'prices.wholesale.read': {
+    id: 'prices.wholesale.read',
+    name: 'Ver Precio Mayorista',
+    description: 'Permite ver los precios al por mayor',
+    resource: 'prices',
+    action: 'read'
+  },
+  'prices.retail.read': {
+    id: 'prices.retail.read',
+    name: 'Ver Precios de Venta',
+    description: 'Permite ver los precios de venta al público',
+    resource: 'prices',
+    action: 'read'
+  },
+
+  // Secciones Operativas
+  'customers.read': {
+    id: 'customers.read',
+    name: 'Ver Clientes',
+    description: 'Permite ver la sección de clientes',
+    resource: 'customers',
+    action: 'read'
+  },
+  'customers.update': {
+    id: 'customers.update',
+    name: 'Editar Clientes',
+    description: 'Permite editar información de los clientes',
+    resource: 'customers',
+    action: 'update'
+  },
+  'customers.manage': {
+    id: 'customers.manage',
+    name: 'Gestionar Clientes',
+    description: 'Permite crear y eliminar clientes',
+    resource: 'customers',
+    action: 'manage'
+  },
+  'orders.read': {
+    id: 'orders.read',
+    name: 'Ver Pedidos',
+    description: 'Permite ver la sección de pedidos',
+    resource: 'orders',
+    action: 'read'
+  },
+  'orders.manage': {
+    id: 'orders.manage',
+    name: 'Gestionar Pedidos',
+    description: 'Permite crear y editar pedidos',
+    resource: 'orders',
+    action: 'manage'
+  },
+  'credits.read': {
+    id: 'credits.read',
+    name: 'Ver Créditos',
+    description: 'Permite ver la sección de créditos',
+    resource: 'credits',
+    action: 'read'
+  },
+  'credits.manage': {
+    id: 'credits.manage',
+    name: 'Gestionar Créditos',
+    description: 'Permite abonar y gestionar créditos',
+    resource: 'credits',
+    action: 'manage'
+  },
+  'repairs.read': {
+    id: 'repairs.read',
+    name: 'Ver Reparaciones',
+    description: 'Permite ver la sección de reparaciones',
+    resource: 'repairs',
+    action: 'read'
+  },
+  'repairs.manage': {
+    id: 'repairs.manage',
+    name: 'Gestionar Reparaciones',
+    description: 'Permite crear y editar reparaciones',
+    resource: 'repairs',
+    action: 'manage'
   }
 }
 
@@ -245,7 +349,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
       PERMISSIONS['reports.create'],
       PERMISSIONS['promotions.read'],
       PERMISSIONS['promotions.create'],
-      PERMISSIONS['promotions.update']
+      PERMISSIONS['promotions.update'],
+      PERMISSIONS['pos.read'],
+      PERMISSIONS['prices.retail.read'],
+      PERMISSIONS['customers.read'],
+      PERMISSIONS['orders.read'],
+      PERMISSIONS['credits.read'],
+      PERMISSIONS['repairs.read']
     ]
   },
   tecnico: {
@@ -257,7 +367,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
       PERMISSIONS['products.update'],
       PERMISSIONS['inventory.read'],
       PERMISSIONS['inventory.update'],
-      PERMISSIONS['reports.read']
+      PERMISSIONS['reports.read'],
+      PERMISSIONS['repairs.read'],
+      PERMISSIONS['repairs.manage'],
+      PERMISSIONS['prices.retail.read'],
+      PERMISSIONS['pos.read'],
+      PERMISSIONS['pos.manage'],
+      PERMISSIONS['customers.read']
     ]
   },
   cliente: {

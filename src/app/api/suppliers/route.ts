@@ -45,7 +45,7 @@ function normalizePayload(payload: Partial<z.infer<typeof supplierSchema>>) {
   return normalized
 }
 
-export const GET = withTenantAuth({ permission: 'inventory.products.read', module: 'inventory' }, async (request, { organization }) => {
+export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (request, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search')?.trim()
@@ -138,7 +138,7 @@ export const GET = withTenantAuth({ permission: 'inventory.products.read', modul
   }
 })
 
-export const POST = withTenantAuth({ permission: 'inventory.products.create', module: 'inventory' }, async (request, { organization }) => {
+export const POST = withTenantAuth({ permission: 'products.create', module: 'inventory' }, async (request, { organization }) => {
   try {
     const validation = supplierSchema.safeParse(await request.json())
     if (!validation.success) {
@@ -165,7 +165,7 @@ export const POST = withTenantAuth({ permission: 'inventory.products.create', mo
   }
 })
 
-export const PUT = withTenantAuth({ permission: 'inventory.products.update', module: 'inventory' }, async (request, { organization }) => {
+export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (request, { organization }) => {
   try {
     const validation = supplierUpdateSchema.safeParse(await request.json())
     if (!validation.success) {
@@ -190,7 +190,7 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
   }
 })
 
-export const DELETE = withTenantAuth({ permission: 'inventory.products.delete', module: 'inventory' }, async (request, { organization }) => {
+export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'inventory' }, async (request, { organization }) => {
   try {
     const { searchParams } = new URL(request.url)
     const ids = (searchParams.get('ids') || searchParams.get('id') || '')

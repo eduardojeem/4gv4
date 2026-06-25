@@ -320,7 +320,9 @@ export function useCashRegister() {
                 .select('*')
                 .eq('register_id', registerId)
                 .is('date', null)
-            
+                .order('created_at', { ascending: false })
+                .limit(1)
+
             sessionQuery = withBranchFilter(sessionQuery, selectedBranchId)
             const { data: session, error: sessionError } = await sessionQuery.maybeSingle()
 

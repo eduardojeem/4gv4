@@ -12,10 +12,10 @@ export type Permission =
   | 'billing.manage'
   | 'users.manage'
   | 'settings.manage'
-  | 'inventory.products.read'
-  | 'inventory.products.create'
-  | 'inventory.products.update'
-  | 'inventory.products.delete'
+  | 'products.read'
+  | 'products.create'
+  | 'products.update'
+  | 'products.delete'
   | 'inventory.stock.manage'
   | 'pos.sales.read'
   | 'pos.sales.create'
@@ -40,10 +40,10 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'billing.manage',
     'users.manage',
     'settings.manage',
-    'inventory.products.read',
-    'inventory.products.create',
-    'inventory.products.update',
-    'inventory.products.delete',
+    'products.read',
+    'products.create',
+    'products.update',
+    'products.delete',
     'inventory.stock.manage',
     'pos.sales.read',
     'pos.sales.create',
@@ -65,10 +65,10 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
   admin: [
     'users.manage',
     'settings.manage',
-    'inventory.products.read',
-    'inventory.products.create',
-    'inventory.products.update',
-    'inventory.products.delete',
+    'products.read',
+    'products.create',
+    'products.update',
+    'products.delete',
     'inventory.stock.manage',
     'pos.sales.read',
     'pos.sales.create',
@@ -88,9 +88,9 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'analytics.read',
   ],
   manager: [
-    'inventory.products.read',
-    'inventory.products.create',
-    'inventory.products.update',
+    'products.read',
+    'products.create',
+    'products.update',
     'inventory.stock.manage',
     'pos.sales.read',
     'pos.sales.create',
@@ -107,10 +107,10 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'ecommerce.orders.manage',
     'analytics.read',
   ],
-  cashier: ['inventory.products.read', 'pos.sales.read', 'pos.sales.create', 'pos.cash.manage', 'crm.customers.read'],
-  technician: ['inventory.products.read', 'inventory.stock.manage', 'repairs.orders.read', 'repairs.orders.update'],
+  cashier: ['products.read', 'pos.sales.read', 'pos.sales.create', 'pos.cash.manage', 'crm.customers.read'],
+  technician: ['products.read', 'inventory.stock.manage', 'repairs.orders.read', 'repairs.orders.update'],
   seller: [
-    'inventory.products.read',
+    'products.read',
     'pos.sales.read',
     'pos.sales.create',
     'crm.customers.read',

@@ -71,13 +71,13 @@ export async function GET() {
     }
 
     const organization = await getCurrentOrganizationContext(auth.user.id)
-      ?? (auth.role === 'super_admin' ? null : await resolveFallbackOrganization(auth.user.id))
+      ?? (auth.role === 'super_admin' || auth.role === 'admin' ? null : await resolveFallbackOrganization(auth.user.id))
 
-    if (!organization && auth.role === 'super_admin') {
+    if (!organization && (auth.role === 'super_admin' || auth.role === 'admin')) {
       return NextResponse.json({ branches: [] })
     }
 
-    if (!organization && auth.role !== 'super_admin') {
+    if (!organization && auth.role !== 'super_admin' && auth.role !== 'admin') {
       return NextResponse.json({ error: 'No se pudo resolver la organizacion activa.' }, { status: 403 })
     }
 

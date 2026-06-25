@@ -457,7 +457,7 @@ export async function getSubscriptionStatus(organizationId: string): Promise<{
   const periodEndsAt = data?.current_period_ends_at ? new Date(data.current_period_ends_at).getTime() : null
   const isExpired = Boolean(
     (status && EXPIRED_STATUSES.has(status)) ||
-    paymentStatus === 'unpaid' ||
+    (paymentStatus === 'unpaid' && !(status === 'active' && periodEndsAt !== null && periodEndsAt > Date.now())) ||
     (status === 'active' && periodEndsAt !== null && periodEndsAt <= Date.now())
   )
   let trialDaysLeft: number | null = null

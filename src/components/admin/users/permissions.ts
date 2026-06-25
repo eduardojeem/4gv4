@@ -7,6 +7,12 @@ const LABELS: Record<string,string> = {
   users: 'Usuarios',
   settings: 'Configuración',
   promotions: 'Promociones',
+  pos: 'Punto de Venta',
+  prices: 'Precios',
+  customers: 'Clientes',
+  orders: 'Pedidos',
+  credits: 'Créditos',
+  repairs: 'Reparaciones',
 }
 
 const grouped: Record<string, { id: string; label: string; permissions: { id: string; label: string }[] }> = {}

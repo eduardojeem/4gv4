@@ -9,7 +9,6 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -106,6 +105,11 @@ const RESOURCE_LABELS: Record<string, string> = {
   settings: 'Configuracion',
   promotions: 'Promociones',
   customers: 'Clientes',
+  pos: 'Punto de Venta',
+  prices: 'Precios',
+  orders: 'Pedidos',
+  credits: 'Créditos',
+  repairs: 'Reparaciones',
 }
 
 const ACTION_LABELS: Record<keyof PermissionActions, string> = {
@@ -302,32 +306,19 @@ export function UserDetailDialog({
     const fallbackDirectPermissions = normalizePermissionList(user.permissions)
 
     try {
-      const [rpcResult, directResult] = await Promise.all([
-        supabase.rpc('get_user_permissions', { p_user_id: user.id }),
-        supabase
-          .from('user_permissions')
-          .select('permission')
-          .eq('user_id', user.id)
-          .eq('is_active', true),
-      ])
+      const { data: directData, error: directError } = await supabase
+        .from('user_permissions')
+        .select('permission')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
 
-      const { data: rpcData, error: rpcError } = rpcResult
-      const { data: directData, error: directError } = directResult
-
-      if (!rpcError && rpcData) {
-        setPermissions(rpcData as PermissionsMatrix)
-      } else {
-        setPermissions(buildPermissionsFromRoleAndExtra(user.role, fallbackDirectPermissions))
-        setPermissionsNotice(
-          'No se pudo usar RPC de permisos. Se muestra calculo por rol y permisos directos.',
-        )
-      }
+      // El RPC de base de datos está desactualizado respecto a roles-permissions.ts.
+      // Usamos siempre la lógica local que es la fuente de verdad (igual que Editar).
+      setPermissions(buildPermissionsFromRoleAndExtra(user.role, fallbackDirectPermissions))
 
       if (directError) {
         setDirectPermissions(fallbackDirectPermissions)
-        setPermissionsNotice(
-          'No se pudo cargar permisos directos desde base de datos. Se muestra fallback del perfil.',
-        )
+        console.warn('No se pudo cargar permisos directos. Usando fallback del perfil.', directError)
       } else {
         const merged = new Set([
           ...fallbackDirectPermissions,
@@ -402,10 +393,18 @@ export function UserDetailDialog({
     return buildPermissionsFromRoleAndExtra(user.role, Array.from(effectivePermissions))
   }, [permissions, user, effectivePermissions])
 
-  const unknownDirectPermissions = useMemo(
-    () => directPermissions.filter((permission) => !PERMISSIONS[permission]),
-    [directPermissions],
-  )
+  const specialPermissions = useMemo(() => {
+    const special: string[] = []
+    if (effectivePermissions.has(WHOLESALE_PRICE_PERMISSION)) {
+      special.push(PERMISSIONS[WHOLESALE_PRICE_PERMISSION]?.name || 'Precios Mayoristas')
+    }
+    directPermissions.forEach((permission) => {
+      if (!PERMISSIONS[permission] && permission !== WHOLESALE_PRICE_PERMISSION) {
+        special.push(permission)
+      }
+    })
+    return special
+  }, [effectivePermissions, directPermissions])
 
   const permissionRows = useMemo(() => Object.entries(mappedPermissions || {}), [mappedPermissions])
 
@@ -443,14 +442,6 @@ export function UserDetailDialog({
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300'
     }
-  }
-
-  const getPermissionIcon = (hasPermission: boolean) => {
-    return hasPermission ? (
-      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-    ) : (
-      <XCircle className="h-4 w-4 text-gray-400 dark:text-gray-600" />
-    )
   }
 
   const handleCopy = useCallback(async (value: string, label: string) => {
@@ -639,116 +630,116 @@ export function UserDetailDialog({
             </div>
           </div>
 
-          <Tabs defaultValue="info" className="flex flex-col flex-1 min-h-0 overflow-hidden px-4 md:px-8 pb-4 md:pb-8 pt-4">
-            <TabsList className="w-full sm:w-fit grid grid-cols-3 bg-slate-100/80 dark:bg-slate-900/80 p-1 rounded-xl shrink-0">
-              <TabsTrigger value="info" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm transition-all">
-                <User className="h-4 w-4 mr-2" />
-                Detalles
+          <Tabs defaultValue="info" className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-4 md:px-8 md:pb-8">
+            <TabsList className="grid h-auto w-full shrink-0 grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-950 lg:w-[520px]">
+              <TabsTrigger value="info" className="min-w-0 rounded-md px-2 py-2 text-xs font-medium data-[state=active]:bg-slate-100 data-[state=active]:shadow-none dark:data-[state=active]:bg-slate-900 sm:text-sm">
+                <User className="mr-1.5 h-4 w-4 shrink-0" />
+                <span className="truncate">Detalles</span>
               </TabsTrigger>
-              <TabsTrigger value="activity" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm transition-all">
-                <Activity className="h-4 w-4 mr-2" />
-                Actividad
+              <TabsTrigger value="activity" className="min-w-0 rounded-md px-2 py-2 text-xs font-medium data-[state=active]:bg-slate-100 data-[state=active]:shadow-none dark:data-[state=active]:bg-slate-900 sm:text-sm">
+                <Activity className="mr-1.5 h-4 w-4 shrink-0" />
+                <span className="truncate">Actividad</span>
               </TabsTrigger>
-              <TabsTrigger value="permissions" className="rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow-sm transition-all">
-                <Shield className="h-4 w-4 mr-2" />
-                Permisos
+              <TabsTrigger value="permissions" className="min-w-0 rounded-md px-2 py-2 text-xs font-medium data-[state=active]:bg-slate-100 data-[state=active]:shadow-none dark:data-[state=active]:bg-slate-900 sm:text-sm">
+                <Shield className="mr-1.5 h-4 w-4 shrink-0" />
+                <span className="truncate">Permisos</span>
               </TabsTrigger>
             </TabsList>
 
-            <div className="flex-1 overflow-y-auto mt-6 pr-2 custom-scrollbar">
-              <TabsContent value="info" className="m-0 space-y-8 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-0 md:pr-2">
+              <TabsContent value="info" className="m-0 space-y-4">
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)]">
                   {/* Contact Info */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                  <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <h3 className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100">
+                      <div className="rounded-lg bg-slate-100 p-1.5 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                         <Mail className="h-3.5 w-3.5" />
                       </div>
                       Contacto y Perfil
                     </h3>
-                    <div className="space-y-1 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/30 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800/60 shadow-sm">
-                      <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                      <div className="flex flex-col justify-between gap-2 px-4 py-3 sm:flex-row sm:items-start">
                         <div className="flex items-center gap-3 shrink-0">
                           <Mail className="h-4 w-4 text-slate-400" />
                           <span className="text-sm text-slate-500 dark:text-slate-400">Correo</span>
                         </div>
-                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100 break-all text-left sm:text-right">{user.email}</span>
+                        <span className="break-all text-left text-sm font-medium text-slate-900 dark:text-slate-100 sm:text-right">{user.email}</span>
                       </div>
                       {user.phone ? (
-                        <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                        <div className="flex flex-col justify-between gap-2 px-4 py-3 sm:flex-row sm:items-start">
                           <div className="flex items-center gap-3 shrink-0">
                             <Phone className="h-4 w-4 text-slate-400" />
                             <span className="text-sm text-slate-500 dark:text-slate-400">Teléfono</span>
                           </div>
-                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100 text-left sm:text-right">{user.phone}</span>
+                          <span className="text-left text-sm font-medium text-slate-900 dark:text-slate-100 sm:text-right">{user.phone}</span>
                         </div>
                       ) : null}
                       {user.department ? (
-                        <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                        <div className="flex flex-col justify-between gap-2 px-4 py-3 sm:flex-row sm:items-start">
                           <div className="flex items-center gap-3 shrink-0">
                             <Building2 className="h-4 w-4 text-slate-400" />
                             <span className="text-sm text-slate-500 dark:text-slate-400">Departamento</span>
                           </div>
-                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100 text-left sm:text-right">{user.department}</span>
+                          <span className="text-left text-sm font-medium text-slate-900 dark:text-slate-100 sm:text-right">{user.department}</span>
                         </div>
                       ) : null}
                     </div>
                   </div>
 
                   {/* Account Info */}
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">
+                  <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <h3 className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100">
+                      <div className="rounded-lg bg-slate-100 p-1.5 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                         <Calendar className="h-3.5 w-3.5" />
                       </div>
                       Sistema
                     </h3>
-                    <div className="space-y-1 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/30 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800/60 shadow-sm">
-                      <div className="p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                      <div className="flex flex-col justify-between gap-2 px-4 py-3 sm:flex-row sm:items-start">
                         <div className="flex items-center gap-3 shrink-0">
                           <Calendar className="h-4 w-4 text-slate-400" />
                           <span className="text-sm text-slate-500 dark:text-slate-400">Creación</span>
                         </div>
-                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100 text-left xl:text-right">{formatDateTime(user.createdAt)}</span>
+                        <span className="text-left text-sm font-medium text-slate-900 dark:text-slate-100 sm:text-right">{formatDateTime(user.createdAt)}</span>
                       </div>
-                      <div className="p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                      <div className="flex flex-col justify-between gap-2 px-4 py-3 sm:flex-row sm:items-start">
                         <div className="flex items-center gap-3 shrink-0">
                           <Clock className="h-4 w-4 text-slate-400" />
                           <span className="text-sm text-slate-500 dark:text-slate-400">Acceso</span>
                         </div>
-                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100 text-left xl:text-right">{formatDateTime(user.lastLogin)}</span>
+                        <span className="text-left text-sm font-medium text-slate-900 dark:text-slate-100 sm:text-right">{formatDateTime(user.lastLogin)}</span>
                       </div>
-                      <div className="p-4 flex flex-col gap-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                      <div className="flex flex-col gap-2 px-4 py-3">
                         <div className="flex items-center gap-3">
                           <Hash className="h-4 w-4 text-slate-400" />
                           <span className="text-sm text-slate-500 dark:text-slate-400">ID de Usuario</span>
                         </div>
-                        <span className="text-xs font-mono bg-slate-100 dark:bg-slate-900 p-2.5 rounded-lg text-slate-600 dark:text-slate-400 break-all select-all border border-slate-200/50 dark:border-slate-800/50">{user.id}</span>
+                        <span className="select-all break-all rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-mono text-xs leading-5 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">{user.id}</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 {user.notes ? (
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
+                    <h3 className="flex items-center gap-2 border-b border-amber-200/70 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-900/40 dark:text-amber-200">
+                      <div className="rounded-lg bg-amber-100 p-1.5 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                         <AlertCircle className="h-3.5 w-3.5" />
                       </div>
                       Notas Adicionales
                     </h3>
-                    <div className="p-5 rounded-2xl border border-amber-200/50 dark:border-amber-900/30 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm">
+                    <div className="px-4 py-3">
                       <p className="text-sm text-amber-900 dark:text-amber-200/80 leading-relaxed whitespace-pre-wrap">{user.notes}</p>
                     </div>
                   </div>
                 ) : null}
               </TabsContent>
 
-              <TabsContent value="activity" className="m-0 space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-                <div className="flex flex-col h-full bg-white/50 dark:bg-slate-900/30 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 p-6 shadow-sm">
-                  <div className="flex items-center justify-between gap-4 mb-6">
+              <TabsContent value="activity" className="m-0">
+                <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                  <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                      <div className="rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                         <Activity className="h-4 w-4" />
                       </div>
                       <div>
@@ -763,19 +754,19 @@ export function UserDetailDialog({
                       size="sm"
                       onClick={() => void loadActivity()}
                       disabled={isLoadingActivity}
-                      className="h-8 rounded-lg"
+                      className="h-8 w-full rounded-lg sm:w-auto"
                     >
-                      <RefreshCw className={cn("h-3.5 w-3.5 mr-2", isLoadingActivity && 'animate-spin')} />
+                      <RefreshCw className={cn('mr-2 h-3.5 w-3.5', isLoadingActivity && 'animate-spin')} />
                       Actualizar
                     </Button>
                   </div>
 
-                  <div className="flex-1 relative min-h-[300px]">
+                  <div className="relative min-h-[360px] flex-1 p-4">
                     {isLoadingActivity ? (
-                      <div className="absolute inset-0 flex flex-col space-y-4">
-                        {[1, 2, 3].map(i => (
+                      <div className="space-y-4">
+                        {[1, 2, 3, 4].map(i => (
                           <div key={i} className="flex gap-4">
-                            <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
+                            <Skeleton className="h-9 w-9 flex-shrink-0 rounded-full" />
                             <div className="space-y-2 flex-1">
                               <Skeleton className="h-4 w-1/3" />
                               <Skeleton className="h-3 w-1/2" />
@@ -784,103 +775,116 @@ export function UserDetailDialog({
                         ))}
                       </div>
                     ) : activityError ? (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center max-w-sm dark:border-red-900/40 dark:bg-red-950/20">
+                      <div className="flex min-h-[300px] items-center justify-center">
+                        <div className="max-w-sm rounded-lg border border-red-200 bg-red-50 p-6 text-center dark:border-red-900/40 dark:bg-red-950/20">
                           <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-3 opacity-80" />
                           <p className="text-sm text-red-800 dark:text-red-300 font-medium">{activityError}</p>
                         </div>
                       </div>
                     ) : (
-                      <UserActivityTimeline logs={timelineLogs} className="min-h-[400px] h-[500px] xl:h-[600px] pr-2 w-full" limit={50} />
+                      <UserActivityTimeline logs={timelineLogs} className="h-[52vh] min-h-[360px] w-full pr-2" limit={50} />
                     )}
                   </div>
                 </div>
               </TabsContent>
 
-              <TabsContent value="permissions" className="m-0 space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+              <TabsContent value="permissions" className="m-0 space-y-4">
                 {permissionsNotice ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300 flex items-center gap-3">
-                    <AlertCircle className="h-4 w-4 shrink-0" />
+                  <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                     <p>{permissionsNotice}</p>
                   </div>
                 ) : null}
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {[
-                    { label: 'Otorgados por rol', value: rolePermissions.size, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-                    { label: 'Asignados directo', value: directPermissions.length, color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-100 dark:bg-violet-900/30' },
-                    { label: 'Total Efectivos', value: effectivePermissions.size, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' }
+                    { label: 'Por rol', value: rolePermissions.size, helper: getRoleLabel(user.role), color: 'text-blue-700 dark:text-blue-300' },
+                    { label: 'Directos', value: directPermissions.length, helper: 'Asignados al usuario', color: 'text-violet-700 dark:text-violet-300' },
+                    { label: 'Efectivos', value: effectivePermissions.size, helper: `${totalGrantedActions} acciones`, color: 'text-emerald-700 dark:text-emerald-300' }
                   ].map((stat, i) => (
-                    <div key={i} className="rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/30 p-5 flex items-center justify-between shadow-sm">
-                      <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{stat.label}</span>
-                      <div className={cn("h-8 px-3 rounded-lg flex items-center justify-center text-sm font-bold", stat.bg, stat.color)}>
-                        {stat.value}
+                    <div key={i} className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                      <p className="text-xs font-medium uppercase text-slate-500 dark:text-slate-400">{stat.label}</p>
+                      <div className="mt-2 flex items-end justify-between gap-3">
+                        <span className={cn('text-2xl font-semibold leading-none', stat.color)}>{stat.value}</span>
+                        <span className="truncate text-xs text-slate-500 dark:text-slate-400">{stat.helper}</span>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="bg-white/50 dark:bg-slate-900/30 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden shadow-sm">
-                  <div className="p-5 border-b border-slate-200/60 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-800/20">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                  <div className="flex flex-col gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
                       <Shield className="h-4 w-4 text-slate-500" />
                       Matriz de Accesos
                     </h3>
+                    <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />Permitido</span>
+                      <span className="flex items-center gap-1.5"><XCircle className="h-3.5 w-3.5 text-slate-400" />Sin acceso</span>
+                    </div>
                   </div>
                   
-                  <div className="p-5">
+                  <div className="p-4">
                     {isLoadingPermissions ? (
                       <div className="space-y-4">
                         {[1, 2, 3].map(i => (
-                          <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                          <Skeleton key={i} className="h-20 w-full rounded-lg" />
                         ))}
                       </div>
                     ) : permissionRows.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                         {permissionRows
                           .sort(([resourceA], [resourceB]) => resourceA.localeCompare(resourceB))
                           .map(([resource, perms]) => (
-                            <div key={resource} className="group rounded-xl border border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-900/50 p-4 hover:shadow-sm hover:border-slate-200 dark:hover:border-slate-700 transition-all">
-                              <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-                                <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                                {RESOURCE_LABELS[resource] || resource}
-                              </h4>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
+                            <div key={resource} className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/50">
+                              <div className="mb-3 flex items-center justify-between gap-3">
+                                <h4 className="min-w-0 truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                  {RESOURCE_LABELS[resource] || resource}
+                                </h4>
+                                <Badge variant="outline" className="shrink-0 rounded-md text-[11px]">
+                                  {ACTION_ORDER.filter((action) => perms[action]).length}/{ACTION_ORDER.length}
+                                </Badge>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:grid-cols-2 xl:grid-cols-5">
                                 {ACTION_ORDER.map((action) => {
-                                  const granted = Boolean(perms[action]);
+                                  const granted = Boolean(perms[action])
                                   return (
-                                    <div key={action} className="flex items-center gap-2.5">
-                                      <div className={cn("flex items-center justify-center h-5 w-5 rounded-md shrink-0", granted ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-slate-100 dark:bg-slate-800 text-slate-400")}>
-                                        {granted ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                                      </div>
-                                      <span className={cn("text-sm font-medium", granted ? "text-slate-700 dark:text-slate-300" : "text-slate-400 dark:text-slate-500")}>
-                                        {ACTION_LABELS[action]}
-                                      </span>
+                                    <div
+                                      key={action}
+                                      className={cn(
+                                        'flex min-h-9 items-center gap-2 rounded-md border px-2 py-1.5 text-xs font-medium',
+                                        granted
+                                          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                          : 'border-slate-200 bg-white text-slate-400 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-500',
+                                      )}
+                                    >
+                                      {granted ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> : <XCircle className="h-3.5 w-3.5 shrink-0" />}
+                                      <span className="truncate">{ACTION_LABELS[action]}</span>
                                     </div>
-                                  );
+                                  )
                                 })}
                               </div>
                             </div>
                           ))}
                       </div>
                     ) : (
-                      <div className="text-center py-12">
-                        <Shield className="h-12 w-12 mx-auto mb-4 text-slate-300 dark:text-slate-600" />
-                        <p className="text-sm font-medium text-slate-500">No hay permisos detallados disponibles</p>
+                      <div className="flex min-h-[240px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 p-6 text-center dark:border-slate-800">
+                        <Shield className="mb-3 h-10 w-10 text-slate-300 dark:text-slate-600" />
+                        <p className="text-sm font-medium text-slate-600 dark:text-slate-300">No hay permisos detallados disponibles</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {unknownDirectPermissions.length > 0 ? (
-                  <div className="rounded-2xl border border-slate-200/60 bg-slate-50/50 p-5 dark:border-slate-800/60 dark:bg-slate-900/30 shadow-sm">
-                    <p className="text-xs uppercase tracking-wider font-semibold text-slate-500 mb-3 flex items-center gap-2">
+                {specialPermissions.length > 0 ? (
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
                       <AlertCircle className="h-3.5 w-3.5" />
                       Permisos especiales
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {unknownDirectPermissions.map((permission) => (
-                        <Badge key={permission} variant="secondary" className="font-mono text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
+                      {specialPermissions.map((permission) => (
+                        <Badge key={permission} variant="secondary" className="rounded-md text-xs font-medium">
                           {permission}
                         </Badge>
                       ))}

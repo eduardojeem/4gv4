@@ -514,12 +514,15 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
     if (context.organizationId && nextRole !== 'super_admin') {
       const { error: memberError } = await supabaseAdmin
         .from('organization_members')
-        .update({
-          role: mapAppRoleToOrgRole(nextRole),
-          status: nextStatus === 'active' ? 'active' : 'suspended',
-        })
-        .eq('organization_id', context.organizationId)
-        .eq('user_id', userId)
+        .upsert(
+          {
+            organization_id: context.organizationId,
+            user_id: userId,
+            role: mapAppRoleToOrgRole(nextRole),
+            status: nextStatus === 'active' ? 'active' : 'suspended',
+          },
+          { onConflict: 'organization_id,user_id' }
+        )
 
       if (memberError) throw memberError
     }

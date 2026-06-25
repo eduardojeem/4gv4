@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 
 export const GET = withTenantAuth(
-  { permission: 'inventory.products.read', module: 'inventory' },
+  { permission: 'products.read', module: 'inventory' },
   async (request) => {
     try {
       const { searchParams } = new URL(request.url)

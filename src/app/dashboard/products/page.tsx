@@ -116,7 +116,7 @@ export default function ProductsPage() {
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const canCreateProducts =
-    hasPermission("inventory.products.create") ||
+    hasPermission("products.create") ||
     hasPermission("products.create") ||
     hasPermission("products.manage");
 

@@ -16,7 +16,7 @@ import {
 type ProductRouteContext = { params: Promise<{ id: string }> }
 
 // GET /api/products/[id] - Obtener producto especifico (usuario autenticado)
-export const GET = withTenantAuth({ permission: 'inventory.products.read', module: 'inventory' }, async (
+export const GET = withTenantAuth({ permission: 'products.read', module: 'inventory' }, async (
   request: NextRequest,
   { user, organization },
   routeContext?: unknown
@@ -79,7 +79,7 @@ export const GET = withTenantAuth({ permission: 'inventory.products.read', modul
 })
 
 // PUT /api/products/[id] - Actualizar producto especifico (staff only)
-export const PUT = withTenantAuth({ permission: 'inventory.products.update', module: 'inventory' }, async (
+export const PUT = withTenantAuth({ permission: 'products.update', module: 'inventory' }, async (
   request: NextRequest,
   { user, organization },
   routeContext?: unknown
@@ -278,7 +278,7 @@ export const PUT = withTenantAuth({ permission: 'inventory.products.update', mod
 })
 
 // DELETE /api/products/[id] - Eliminar producto especifico (staff only)
-export const DELETE = withTenantAuth({ permission: 'inventory.products.delete', module: 'inventory' }, async (
+export const DELETE = withTenantAuth({ permission: 'products.delete', module: 'inventory' }, async (
   _request: NextRequest,
   { organization },
   routeContext?: unknown
