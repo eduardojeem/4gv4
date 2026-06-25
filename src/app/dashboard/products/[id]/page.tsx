@@ -42,6 +42,7 @@ type Json = Database['public']['Tables']['products']['Row']['dimensions']
 import { ProductModal } from '@/components/dashboard/product-modal'
 import Image from 'next/image'
 import { resolveProductImageUrl } from '@/lib/images'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 
 interface ProductImage {
   id: string
@@ -64,6 +65,7 @@ interface StockMovement {
 export default function ProductDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const canViewCost = useCanViewCost()
   const { toast } = useToast()
   const productId = params.id as string
 
@@ -708,19 +710,23 @@ export default function ProductDetailPage() {
                               <span className="text-sm text-gray-500 dark:text-gray-400">Valor en Stock</span>
                               <span className="font-medium dark:text-gray-200">{formatCurrency(product.stock_quantity * product.sale_price)}</span>
                             </div>
+                            {canViewCost && (
                             <div className="flex justify-between">
                               <span className="text-sm text-gray-500 dark:text-gray-400">Margen por Unidad</span>
                               <span className="font-medium dark:text-gray-200">{formatCurrency(product.sale_price - (product.purchase_price || 0))}</span>
                             </div>
+                            )}
+                            {canViewCost && (
                             <div className="flex justify-between">
                               <span className="text-sm text-gray-500 dark:text-gray-400">Margen %</span>
                               <span className="font-medium dark:text-gray-200">
-                                {product.purchase_price ? 
-                                  `${(((product.sale_price - product.purchase_price) / product.purchase_price) * 100).toFixed(1)}%` : 
+                                {product.purchase_price ?
+                                  `${(((product.sale_price - product.purchase_price) / product.purchase_price) * 100).toFixed(1)}%` :
                                   'N/A'
                                 }
                               </span>
                             </div>
+                            )}
                           </div>
                         </div>
                         
@@ -775,7 +781,7 @@ export default function ProductDetailPage() {
                     <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Precio de Venta</label>
                     <p className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(product.sale_price)}</p>
                   </div>
-                  {product.purchase_price != null && (
+                  {canViewCost && product.purchase_price != null && (
                   <div>
                     <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Precio de Costo</label>
                     <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(product.purchase_price)}</p>

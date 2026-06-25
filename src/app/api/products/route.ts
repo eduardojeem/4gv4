@@ -5,6 +5,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { productSchema, productUpdateSchema } from '@/lib/validation/schemas'
 import type { AppRole } from '@/lib/auth/role-utils'
+import { stripProductCost } from '@/lib/auth/role-utils'
 import { getRequestedBranchId, getDefaultBranch, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { applyBranchInventoryToProducts, loadBranchInventoryStockMap, upsertBranchInventoryStock } from '@/lib/branches/inventory'
 import { canCreateResource } from '@/lib/saas/subscription-service'
@@ -81,10 +82,15 @@ export const GET = withTenantAuth({ permission: 'inventory.products.read', modul
       ? branchAwareProducts.filter((product) => Number(product.stock_quantity || 0) > 0)
       : branchAwareProducts
 
+    // Ocultar el costo (purchase_price) a roles sin permiso: solo admin/super_admin.
+    const visibleProducts = filteredProducts.map((product) =>
+      stripProductCost(product as Record<string, unknown>, user.role)
+    )
+
     return NextResponse.json({
       success: true,
       data: {
-        products: filteredProducts,
+        products: visibleProducts,
         total: branchScoped && inStock ? filteredProducts.length : (count || 0),
         page,
         per_page: perPage

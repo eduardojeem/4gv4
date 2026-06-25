@@ -25,6 +25,7 @@ import { Product } from '@/types/products'
 import { getStockStatus, isLowStock } from '@/lib/products-dashboard-utils'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 
 export interface ProductQuickViewModalProps {
   product: Product | null
@@ -54,13 +55,14 @@ export function ProductQuickViewModal({
   onEdit,
   onViewFullDetails,
 }: ProductQuickViewModalProps) {
+  const canViewCost = useCanViewCost()
   if (!product) return null
 
   const stockStatus = getStockStatus(product)
   const statusConfig = STOCK_LABEL[stockStatus]
 
   const margin =
-    product.purchase_price && product.purchase_price > 0 && product.sale_price > 0
+    canViewCost && product.purchase_price && product.purchase_price > 0 && product.sale_price > 0
       ? ((product.sale_price - product.purchase_price) / product.sale_price) * 100
       : null
 
@@ -142,32 +144,36 @@ export function ProductQuickViewModal({
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center">
             <TrendingUp className="h-4 w-4 mr-2 text-emerald-600" /> Precios
           </h3>
-          <div className="grid grid-cols-3 gap-4">
+          <div className={cn('grid gap-4', canViewCost ? 'grid-cols-3' : 'grid-cols-1')}>
             <div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Precio de venta</p>
               <p className="text-lg font-bold text-gray-900 dark:text-gray-50">{formatCurrency(product.sale_price)}</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Costo</p>
-              <p className="text-base font-semibold text-gray-600 dark:text-gray-300">
-                {product.purchase_price ? formatCurrency(product.purchase_price) : '—'}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Margen</p>
-              {margin !== null ? (
-                <Badge
-                  className={cn(
-                    'text-white border-0',
-                    margin >= 20 ? 'bg-emerald-500' : margin >= 10 ? 'bg-amber-500' : 'bg-red-500',
-                  )}
-                >
-                  {margin.toFixed(1)}%
-                </Badge>
-              ) : (
-                <span className="text-sm text-gray-400">—</span>
-              )}
-            </div>
+            {canViewCost && (
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Costo</p>
+                <p className="text-base font-semibold text-gray-600 dark:text-gray-300">
+                  {product.purchase_price ? formatCurrency(product.purchase_price) : '—'}
+                </p>
+              </div>
+            )}
+            {canViewCost && (
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Margen</p>
+                {margin !== null ? (
+                  <Badge
+                    className={cn(
+                      'text-white border-0',
+                      margin >= 20 ? 'bg-emerald-500' : margin >= 10 ? 'bg-amber-500' : 'bg-red-500',
+                    )}
+                  >
+                    {margin.toFixed(1)}%
+                  </Badge>
+                ) : (
+                  <span className="text-sm text-gray-400">—</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

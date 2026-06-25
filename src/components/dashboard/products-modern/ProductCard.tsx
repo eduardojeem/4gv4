@@ -20,6 +20,7 @@ import { Product } from '@/types/products'
 import { getStockStatus } from '@/lib/products-dashboard-utils'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 
 export interface ProductCardProps {
   product: Product
@@ -48,6 +49,7 @@ export const ProductCard = React.memo(function ProductCard({
   const [imageError, setImageError] = useState(false)
   const [localActive, setLocalActive] = useState(product.is_active)
   const [togglingActive, setTogglingActive] = useState(false)
+  const canViewCost = useCanViewCost()
 
   const stockStatus = getStockStatus(product)
 
@@ -81,8 +83,8 @@ export const ProductCard = React.memo(function ProductCard({
   const statusConfig = stockStatusConfig[stockStatus]
   const StatusIcon = statusConfig.icon
 
-  // Margin calculation
-  const margin = product.purchase_price && product.purchase_price > 0 && product.sale_price > 0
+  // Margin calculation — solo admin/super_admin ve costo y margen
+  const margin = canViewCost && product.purchase_price && product.purchase_price > 0 && product.sale_price > 0
     ? Math.round(((product.sale_price - product.purchase_price) / product.sale_price) * 100)
     : null
 
@@ -304,7 +306,7 @@ export const ProductCard = React.memo(function ProductCard({
                 {formatCurrency(product.sale_price)}
               </span>
             </div>
-            {product.purchase_price && product.purchase_price > 0 && (
+            {canViewCost && product.purchase_price && product.purchase_price > 0 && (
               <div className="text-right">
                 <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider mb-0.5">Costo</p>
                 <span className="text-sm font-semibold text-gray-400 dark:text-gray-500">

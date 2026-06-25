@@ -49,6 +49,7 @@ import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
 import { ImageUploader } from '@/components/dashboard/products/ImageUploader'
 import { generateEAN13 } from '@/lib/validations/product-validation'
+import { useCanViewCost } from '@/hooks/use-can-view-cost'
 import { productSchema, ProductFormValues } from '@/lib/validations/product-schema'
 import { CategoryModal } from '@/components/categories/CategoryModal'
 import { SupplierModal } from './supplier-modal'
@@ -115,6 +116,7 @@ export function ProductModal({
   const { createCategory } = useCategories()
   const { createSupplier } = useSuppliers()
   const { createBrand } = useBrands()
+  const canViewCost = useCanViewCost()
 
   // Local state for lists to support instant updates
   const [localCategories, setLocalCategories] = useState<Category[]>(categories ?? [])
@@ -381,7 +383,14 @@ export function ProductModal({
 
     try {
       const cleanedData = cleanProductData(values)
-      
+
+      // El costo (purchase_price) es editable solo por admin/super_admin.
+      // Para el resto, no se envía: en edición se preserva el valor actual y
+      // en creación queda en el default de la base.
+      if (!canViewCost) {
+        delete (cleanedData as Record<string, unknown>).purchase_price
+      }
+
       // Ensure we're not sending an ID for new products
       if (!product && 'id' in cleanedData) {
         delete (cleanedData as any).id
@@ -962,6 +971,7 @@ export function ProductModal({
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {canViewCost && (
                       <FormField
                         control={form.control}
                         name="purchase_price"
@@ -972,9 +982,9 @@ export function ProductModal({
                               Precio de Compra (Costo) <FieldRequirement required />
                             </FormLabel>
                             <FormControl>
-                              <Input 
-                                type="number" 
-                                step="0.01" 
+                              <Input
+                                type="number"
+                                step="0.01"
                                 className="text-lg"
                                 {...field}
                               />
@@ -983,6 +993,7 @@ export function ProductModal({
                           </FormItem>
                         )}
                       />
+                      )}
 
                       <FormField
                         control={form.control}
@@ -1002,7 +1013,7 @@ export function ProductModal({
                               />
                             </FormControl>
                             <FormMessage />
-                            {purchasePrice > 0 && salePrice > 0 && (
+                            {canViewCost && purchasePrice > 0 && salePrice > 0 && (
                               <div className="flex items-center justify-between text-xs">
                                 <span className="text-gray-600 dark:text-gray-400">Margen:</span>
                                 <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">

@@ -24,3 +24,31 @@ export function isWholesale(raw?: string | null): boolean {
   const r = raw.toLowerCase().trim()
   return r === 'mayorista' || r === 'client_mayorista'
 }
+
+/**
+ * Solo admin y super_admin pueden ver el costo (purchase_price) y el margen de
+ * los productos. El resto de roles (vendedor, técnico, cliente) no.
+ */
+export function canViewProductCost(raw?: string | null): boolean {
+  const role = normalizeRole(raw)
+  return role === 'admin' || role === 'super_admin'
+}
+
+/** Campos sensibles de costo que deben ocultarse a roles sin permiso. */
+export const PRODUCT_COST_FIELDS = ['purchase_price'] as const
+
+/**
+ * Devuelve una copia del producto sin los campos de costo cuando el rol no
+ * tiene permiso para verlos. Para no-admins, omite purchase_price.
+ */
+export function stripProductCost<T extends Record<string, unknown>>(
+  product: T,
+  role?: string | null
+): T {
+  if (canViewProductCost(role)) return product
+  const clone: Record<string, unknown> = { ...product }
+  for (const field of PRODUCT_COST_FIELDS) {
+    delete clone[field]
+  }
+  return clone as T
+}
