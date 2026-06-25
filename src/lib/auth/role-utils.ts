@@ -25,27 +25,33 @@ export function isWholesale(raw?: string | null): boolean {
   return r === 'mayorista' || r === 'client_mayorista'
 }
 
+/** Permiso específico que habilita ver el costo a un usuario no-admin. */
+export const PRODUCT_COST_PERMISSION = 'products.read_cost'
+
 /**
- * Solo admin y super_admin pueden ver el costo (purchase_price) y el margen de
- * los productos. El resto de roles (vendedor, técnico, cliente) no.
+ * Puede ver el costo (purchase_price) y el margen quien sea admin/super_admin,
+ * o quien tenga el permiso específico products.read_cost (asignable por usuario
+ * desde el modal de edición).
  */
-export function canViewProductCost(raw?: string | null): boolean {
+export function canViewProductCost(raw?: string | null, permissions?: string[] | null): boolean {
   const role = normalizeRole(raw)
-  return role === 'admin' || role === 'super_admin'
+  if (role === 'admin' || role === 'super_admin') return true
+  return Array.isArray(permissions) && permissions.includes(PRODUCT_COST_PERMISSION)
 }
 
 /** Campos sensibles de costo que deben ocultarse a roles sin permiso. */
 export const PRODUCT_COST_FIELDS = ['purchase_price'] as const
 
 /**
- * Devuelve una copia del producto sin los campos de costo cuando el rol no
- * tiene permiso para verlos. Para no-admins, omite purchase_price.
+ * Devuelve una copia del producto sin los campos de costo cuando el usuario no
+ * tiene permiso para verlos. Para no-admins sin el permiso, omite purchase_price.
  */
 export function stripProductCost<T extends Record<string, unknown>>(
   product: T,
-  role?: string | null
+  role?: string | null,
+  permissions?: string[] | null
 ): T {
-  if (canViewProductCost(role)) return product
+  if (canViewProductCost(role, permissions)) return product
   const clone: Record<string, unknown> = { ...product }
   for (const field of PRODUCT_COST_FIELDS) {
     delete clone[field]

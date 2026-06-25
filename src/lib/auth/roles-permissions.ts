@@ -11,6 +11,7 @@ export interface Permission {
 }
 
 export const WHOLESALE_PRICE_PERMISSION = 'products.read_wholesale_prices'
+export const PRODUCT_COST_PERMISSION = 'products.read_cost'
 
 export interface RolePermissions {
   role: UserRole
@@ -40,6 +41,13 @@ export const PERMISSIONS: Record<string, Permission> = {
     id: WHOLESALE_PRICE_PERMISSION,
     name: 'Ver Precios Mayoristas',
     description: 'Permite visualizar precios mayoristas en la tienda pública',
+    resource: 'products',
+    action: 'read'
+  },
+  [PRODUCT_COST_PERMISSION]: {
+    id: PRODUCT_COST_PERMISSION,
+    name: 'Ver Precios de Costo',
+    description: 'Permite ver el costo y el margen de los productos (además de admin)',
     resource: 'products',
     action: 'read'
   },

@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 import type { SupabaseUser } from '@/hooks/use-users-supabase'
 import { PERMISSION_GROUPS } from './permissions'
-import { ROLE_PERMISSIONS, WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/roles-permissions'
+import { ROLE_PERMISSIONS, WHOLESALE_PRICE_PERMISSION, PRODUCT_COST_PERMISSION } from '@/lib/auth/roles-permissions'
 import { BranchAssignment } from './BranchAssignment'
 import { UserAvatarUpload } from './user-avatar-upload'
 
@@ -129,6 +129,7 @@ export function EditUserForm({
   }, [roleEffective, specificPermissions])
 
   const hasWholesalePermission = specificPermissions.includes(WHOLESALE_PRICE_PERMISSION)
+  const hasCostPermission = specificPermissions.includes(PRODUCT_COST_PERMISSION)
 
   const filteredPermissionGroups = useMemo(() => {
     const normalizedSearch = permissionSearch.trim().toLowerCase()
@@ -338,6 +339,31 @@ export function EditUserForm({
                   checked={hasWholesalePermission}
                   onCheckedChange={(checked) => {
                     const next = setPermission(specificPermissions, WHOLESALE_PRICE_PERMISSION, checked)
+                    form.setValue('permissions', next, { shouldDirty: true, shouldTouch: true })
+                  }}
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Precios de costo */}
+          <section>
+            <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 p-5 dark:border-emerald-900/40 dark:bg-emerald-900/10 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Ver precios de costo</h4>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                    Permite ver el costo y el margen de los productos. Los administradores ya lo ven siempre.
+                  </p>
+                  <p className="text-[11px] font-mono text-emerald-700/80 dark:text-emerald-300/80">
+                    {PRODUCT_COST_PERMISSION}
+                  </p>
+                </div>
+                <Switch
+                  checked={hasCostPermission}
+                  onCheckedChange={(checked) => {
+                    const next = setPermission(specificPermissions, PRODUCT_COST_PERMISSION, checked)
                     form.setValue('permissions', next, { shouldDirty: true, shouldTouch: true })
                   }}
                   disabled={isSubmitting}
