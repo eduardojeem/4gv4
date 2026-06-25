@@ -25,7 +25,6 @@ import {
   Link2,
 } from 'lucide-react'
 import { UserStatsCards } from './user-stats-cards'
-import { UserAvatarUpload } from './user-avatar-upload'
 import { UserActivityTimeline } from './user-activity-timeline'
 import { UsersTable } from './users-table'
 import { UsersFilters } from './users-filters'
@@ -132,7 +131,6 @@ export function UserManagement() {
     department: '',
     status: 'active' as SupabaseUser['status'],
     notes: '',
-    permissions: [] as string[]
   })
   const [formErrors, setFormErrors] = useState<{ name?: string; email?: string }>({})
 
@@ -260,7 +258,6 @@ export function UserManagement() {
       department: '',
       status: 'active',
       notes: '',
-      permissions: []
     })
     setFormErrors({})
   }
@@ -676,56 +673,45 @@ export function UserManagement() {
         setIsEditDialogOpen(open)
         if (!open) setSelectedUser(null)
       }}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader className="px-6 pt-6 pb-2">
-            <DialogTitle>Editar Usuario</DialogTitle>
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-[720px]">
+          <DialogHeader className="border-b px-6 py-4">
+            <DialogTitle>Editar usuario</DialogTitle>
+            <DialogDescription>
+              Actualiza la información, el rol y los permisos de la cuenta.
+            </DialogDescription>
           </DialogHeader>
-          
-          <div className="flex-1 overflow-auto px-6">
-            {selectedUser && (
-              <div className="grid gap-6 py-4">
-                {isLoadingEditPermissions ? (
-                  <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                    Cargando permisos especificos...
-                  </div>
-                ) : null}
-                <div className="flex justify-center">
-                  <UserAvatarUpload
-                    userName={selectedUser.name}
-                    currentAvatarUrl={selectedUser.avatar_url}
-                    onUpload={handleAvatarUpload}
-                  />
-                </div>
-                <EditUserForm
-                  user={selectedUser}
-                  isSubmitting={isSubmitting}
-                  canAssignSuperAdmin={isSuperAdmin}
-                  onSubmit={async (values) => {
-                    setIsSubmitting(true)
-                    try {
-                      const result = await updateUser(selectedUser.id, values)
-                      if (result.success) {
-                        setIsEditDialogOpen(false)
-                        setSelectedUser((current) => {
-                          if (!current || current.id !== selectedUser.id) return current
-                          return {
-                            ...current,
-                            ...values,
-                          }
-                        })
-                        refreshUsers()
-                      } else if (result.error) {
-                        toast.error(result.error)
+
+          {selectedUser && (
+            <EditUserForm
+              user={selectedUser}
+              isSubmitting={isSubmitting}
+              canAssignSuperAdmin={isSuperAdmin}
+              onAvatarUpload={handleAvatarUpload}
+              isLoadingPermissions={isLoadingEditPermissions}
+              onSubmit={async (values) => {
+                setIsSubmitting(true)
+                try {
+                  const result = await updateUser(selectedUser.id, values)
+                  if (result.success) {
+                    setIsEditDialogOpen(false)
+                    setSelectedUser((current) => {
+                      if (!current || current.id !== selectedUser.id) return current
+                      return {
+                        ...current,
+                        ...values,
                       }
-                    } finally {
-                      setIsSubmitting(false)
-                    }
-                  }}
-                  onCancel={() => setIsEditDialogOpen(false)}
-                />
-              </div>
-            )}
-          </div>
+                    })
+                    refreshUsers()
+                  } else if (result.error) {
+                    toast.error(result.error)
+                  }
+                } finally {
+                  setIsSubmitting(false)
+                }
+              }}
+              onCancel={() => setIsEditDialogOpen(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
