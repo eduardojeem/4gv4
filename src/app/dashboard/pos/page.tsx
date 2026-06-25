@@ -928,7 +928,10 @@ function POSPageContent() {
   // Estados para búsqueda avanzada
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'stock' | 'category'>('name')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
-  const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: 1000000 })
+  // Sin tope superior por defecto: un máximo fijo (p.ej. 1.000.000) ocultaba
+  // del POS cualquier producto más caro (celulares, etc.) sin que el usuario
+  // pudiera notarlo (no hay control de precio en esta vista).
+  const [priceRange, setPriceRange] = useState<{ min: number, max: number }>({ min: 0, max: Number.POSITIVE_INFINITY })
   const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock'>('all')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
   const activeFiltersCount = useMemo(() => {
@@ -965,7 +968,16 @@ function POSPageContent() {
         if (prefs.viewMode) setViewMode(prefs.viewMode)
         if (prefs.sortBy) setSortBy(prefs.sortBy)
         if (prefs.sortOrder) setSortOrder(prefs.sortOrder)
-        if (prefs.priceRange) setPriceRange(prefs.priceRange)
+        // No restauramos un tope superior heredado: si el valor guardado tiene
+        // un máximo finito (cap viejo de 1.000.000), lo ignoramos para no
+        // volver a ocultar productos caros. Solo respetamos un mínimo > 0.
+        if (prefs.priceRange && typeof prefs.priceRange.min === 'number') {
+          const min = prefs.priceRange.min > 0 ? prefs.priceRange.min : 0
+          const max = typeof prefs.priceRange.max === 'number' && prefs.priceRange.max > 1000000
+            ? prefs.priceRange.max
+            : Number.POSITIVE_INFINITY
+          setPriceRange({ min, max })
+        }
         if (prefs.stockFilter) setStockFilter(prefs.stockFilter)
         if (prefs.recentSearches) setRecentSearches(prefs.recentSearches)
         if (typeof prefs.sidebarCollapsed === 'boolean') setSidebarCollapsed(prefs.sidebarCollapsed)
