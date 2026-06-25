@@ -483,7 +483,10 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
   if (typeof body?.avatar_url === 'string') profilePayload.avatar_url = body.avatar_url
   if (typeof body?.role === 'string') profilePayload.role = nextRole
   if (typeof body?.status === 'string') profilePayload.status = nextStatus
-  if (Array.isArray(body?.permissions)) profilePayload.permissions = body.permissions
+  // NOTA: los permisos específicos ahora se persisten SOLO en la tabla
+  // user_permissions (fuente de verdad única, ver bloque más abajo). Ya no se
+  // escribe la columna profiles.permissions; queda vestigial hasta dropearla en
+  // una migración futura. La lectura (GET) aún la usa como fallback.
 
   const { data: updatedProfile, error: updateError } = await supabaseAdmin
     .from('profiles')

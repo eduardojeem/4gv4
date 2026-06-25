@@ -254,12 +254,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
   },
   cliente: {
     role: 'cliente',
-    description: 'Cliente con acceso de solo lectura',
+    description: 'Cliente con acceso de solo lectura al catálogo',
     level: 1,
     permissions: [
-      PERMISSIONS['products.read'],
-      PERMISSIONS['inventory.read'],
-      PERMISSIONS['reports.read']
+      PERMISSIONS['products.read']
     ]
   }
 }
