@@ -13,13 +13,24 @@
  */
 const FALLBACK_SITE_URL = 'https://servix360.org'
 
+function isLocalhost(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(url)
+}
+
 export function getSiteUrl(): string {
   const fromEnv =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
     (typeof window !== 'undefined' ? window.location.origin : '')
 
-  const base = fromEnv || FALLBACK_SITE_URL
+  let base = fromEnv || FALLBACK_SITE_URL
+
+  // Red de seguridad: en producción nunca generar enlaces a localhost
+  // (env mal configurada en Vercel o acción disparada desde un dev server).
+  if (process.env.NODE_ENV === 'production' && isLocalhost(base)) {
+    base = FALLBACK_SITE_URL
+  }
+
   return base.replace(/\/+$/, '')
 }
 
