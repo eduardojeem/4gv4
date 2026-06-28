@@ -20,6 +20,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   LogOut,
+  Bell,
   Mail,
   Menu,
   MoreHorizontal,
@@ -146,6 +147,7 @@ const navItems: NavItem[] = [
   },
   { title: 'Audit Logs', href: '/superadmin/audit-logs', icon: Shield, description: 'Registro de auditoria y trazabilidad', section: 'system' },
   { title: 'Emails', href: '/superadmin/emails', icon: Mail, description: 'Plantillas transaccionales', section: 'system' },
+  { title: 'Notificaciones', href: '/superadmin/notifications', icon: Bell, description: 'Notificaciones globales a tenants', section: 'system' },
   { title: 'Configuracion', href: '/superadmin/settings', icon: Settings, description: 'Parametros globales del sistema', section: 'system' },
   {
     title: 'Mantenimiento',
@@ -676,49 +678,38 @@ export function SuperAdminShell({
   const { signOut, user } = useAuth()
   const defaultExpandedItems = useMemo(() => new Set<string>(), [])
 
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
+  const [collapsedSections, setCollapsedSections] = useState<Set<NavSection>>(new Set())
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
+  // Read persisted sidebar state after hydration to avoid SSR/client mismatch
+  useEffect(() => {
     try {
       const stored = window.localStorage.getItem('sa_sidebar_expanded')
-      if (!stored) return new Set()
-
-      const parsed = JSON.parse(stored) as unknown
-      if (Array.isArray(parsed)) {
-        return new Set(parsed.filter((value): value is string => typeof value === 'string'))
+      if (stored) {
+        const parsed = JSON.parse(stored) as unknown
+        if (Array.isArray(parsed)) {
+          setExpandedItems(new Set(parsed.filter((v): v is string => typeof v === 'string')))
+        }
       }
-    } catch {
-      // Ignore malformed local state.
-    }
-
-    return new Set()
-  })
-  const [collapsedSections, setCollapsedSections] = useState<Set<NavSection>>(() => {
-    if (typeof window === 'undefined') return new Set()
+    } catch { /* ignore */ }
 
     try {
       const stored = window.localStorage.getItem('sa_sidebar_collapsed_sections')
-      if (!stored) return new Set()
-
-      const parsed = JSON.parse(stored) as unknown
-      if (Array.isArray(parsed)) {
-        return new Set(parsed.filter((value): value is NavSection => sectionOrder.includes(value as NavSection)))
+      if (stored) {
+        const parsed = JSON.parse(stored) as unknown
+        if (Array.isArray(parsed)) {
+          setCollapsedSections(new Set(parsed.filter((v): v is NavSection => sectionOrder.includes(v as NavSection))))
+        }
       }
-    } catch {
-      // Ignore malformed local state.
-    }
-
-    return new Set()
-  })
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false
+    } catch { /* ignore */ }
 
     try {
-      return window.localStorage.getItem('sa_sidebar_collapsed') === '1'
-    } catch {
-      return false
-    }
-  })
+      if (window.localStorage.getItem('sa_sidebar_collapsed') === '1') {
+        setIsCollapsed(true)
+      }
+    } catch { /* ignore */ }
+  }, [])
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
 
