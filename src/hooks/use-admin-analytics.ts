@@ -47,6 +47,8 @@ export interface SimpleSeriesPoint {
   label: string
   value: number
   secondaryValue?: number
+  // Index signature para compatibilidad con los tipos de datos de Recharts (Pie/Bar).
+  [key: string]: string | number | undefined
 }
 
 export interface FinanceComparisonPoint {

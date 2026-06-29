@@ -75,6 +75,10 @@ async function handler(
       to: email,
       subject: 'Configura tu acceso al sistema',
       html,
+      log: {
+        organizationId: context.organizationId ?? undefined,
+        customerName: fullName || undefined,
+      },
     })
 
     if (!ok && error) {

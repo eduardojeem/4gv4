@@ -11,10 +11,25 @@ export function InventoryTabs() {
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
-        <TabsTrigger value="overview">Repuestos</TabsTrigger>
-        <TabsTrigger value="services">Servicios</TabsTrigger>
-        <TabsTrigger value="movements">Movimientos</TabsTrigger>
+      <TabsList className="bg-background/40 backdrop-blur-md border border-border/50 p-1 mb-6 rounded-full inline-flex mx-auto">
+        <TabsTrigger 
+          value="overview" 
+          className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
+        >
+          Repuestos
+        </TabsTrigger>
+        <TabsTrigger 
+          value="services" 
+          className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
+        >
+          Servicios
+        </TabsTrigger>
+        <TabsTrigger 
+          value="movements" 
+          className="rounded-full px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg transition-all duration-300"
+        >
+          Movimientos
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="overview">

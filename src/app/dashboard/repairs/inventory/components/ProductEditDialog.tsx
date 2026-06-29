@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { logger } from '@/lib/logger'
 import { useState, useEffect } from 'react'
@@ -119,7 +119,7 @@ export function ProductEditDialog({
       newErrors.wholesale_price = 'El precio mayorista no puede ser negativo'
     }
 
-    if (!formData.stock_quantity || parseInt(formData.stock_quantity) < 0) {
+    if (formData.stock_quantity === '' || parseInt(formData.stock_quantity) < 0) {
       newErrors.stock_quantity = 'El stock no puede ser negativo'
     }
 

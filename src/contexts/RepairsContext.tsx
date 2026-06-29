@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { mapSupabaseRepairToUi } from '@/utils/repair-mapping'
 import { useBranch } from '@/contexts/branch-context'
-import { branchHeaders, withBranchFilter } from '@/lib/branches/client'
+import { branchHeaders } from '@/lib/branches/client'
 
 // ============================================================================
 // Types
@@ -14,6 +14,20 @@ import { branchHeaders, withBranchFilter } from '@/lib/branches/client'
 
 // Importar tipos centralizados
 import { Repair, RepairStatus, RepairPriority, RepairDeliveryOutcome } from '@/types/repairs'
+
+type SupabaseRepairPayload = Parameters<typeof mapSupabaseRepairToUi>[0]
+type RepairPartFormInput = {
+    name?: string
+    cost?: number
+    quantity?: number
+    supplier?: string
+    partNumber?: string
+}
+type RepairNoteFormInput = {
+    id?: string | number
+    text?: string
+    isInternal?: boolean
+}
 
 export interface RepairFormData {
     customer_id: string
@@ -35,16 +49,17 @@ export interface RepairFormData {
     warrantyType?: 'labor' | 'parts' | 'full'
     warrantyNotes?: string
     metadata?: Record<string, unknown>
-    parts?: any[]
-    notes?: any[]
+    parts?: RepairPartFormInput[]
+    notes?: RepairNoteFormInput[]
+    images?: string[]
 }
 
 export type RepairUpdateData = Omit<Partial<Repair>, 'customer' | 'technician' | 'images' | 'parts' | 'notes'> & {
     customer_id?: string
     technician_id?: string
     images?: string[]
-    parts?: any[]
-    notes?: any[]
+    parts?: RepairPartFormInput[]
+    notes?: RepairNoteFormInput[]
 }
 
 export interface RepairsContextValue {
@@ -122,8 +137,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             if (fetchError) throw fetchError
 
             // Transform data to match Repair interface
-            const transformedData = (data || []).map((repair: any) => {
-                const mapped = mapSupabaseRepairToUi(repair)
+            const transformedData = (data || []).map((repair) => {
+                const mapped = mapSupabaseRepairToUi(repair as SupabaseRepairPayload)
                 return { ...mapped, dbStatus: mapped.status }
             })
 
@@ -142,7 +157,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         try {
             setError(null)
 
-            const { parts, notes, ...repairData } = data
+            const { parts, notes, images, ...repairData } = data
 
             let warrantyExpiresAt = null
             if (repairData.warrantyMonths && repairData.warrantyMonths > 0) {
@@ -179,17 +194,18 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     warranty_expires_at: warrantyExpiresAt,
                     ...(selectedBranchId ? { branch_id: selectedBranchId } : {}),
                     received_at: new Date().toISOString(),
-                    parts: parts?.map((p: any) => ({
+                    parts: parts?.map((p) => ({
                         part_name: p.name,
                         unit_cost: p.cost,
                         quantity: p.quantity,
                         supplier: p.supplier,
                         part_number: p.partNumber,
                     })) ?? [],
-                    notes: notes?.map((n: any) => ({
+                    notes: notes?.map((n) => ({
                         note_text: n.text,
                         is_internal: n.isInternal,
                     })) ?? [],
+                    images: Array.isArray(images) ? images : [],
                 }),
             })
 
@@ -222,176 +238,28 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         try {
             setError(null)
 
-            // Extract parts and notes to handle separately
-            const { parts, notes, customer, technician, images, ...repairData } = data as any
-
-            const dbUpdateData: any = {}
-
-            // Map UI fields to DB columns
-            if (repairData.brand !== undefined) dbUpdateData.device_brand = repairData.brand
-            if (repairData.model !== undefined) dbUpdateData.device_model = repairData.model
-            if (repairData.deviceType !== undefined) dbUpdateData.device_type = repairData.deviceType
-            if (repairData.issue !== undefined) dbUpdateData.problem_description = repairData.issue
-            if (repairData.description !== undefined) dbUpdateData.diagnosis = repairData.description
-            if (repairData.accessType !== undefined) dbUpdateData.access_type = repairData.accessType
-            if (repairData.accessPassword !== undefined) dbUpdateData.access_password = repairData.accessPassword
-            if (repairData.status !== undefined) dbUpdateData.status = repairData.status
-            if (repairData.priority !== undefined) dbUpdateData.priority = repairData.priority
-            if (repairData.urgency !== undefined) dbUpdateData.urgency = repairData.urgency
-            if (repairData.customer_id !== undefined) dbUpdateData.customer_id = repairData.customer_id
-            if (repairData.technician_id !== undefined) dbUpdateData.technician_id = repairData.technician_id
-            if (repairData.estimatedCost !== undefined) dbUpdateData.estimated_cost = repairData.estimatedCost
-            if (repairData.laborCost !== undefined) dbUpdateData.labor_cost = repairData.laborCost
-            if (repairData.finalCost !== undefined) dbUpdateData.final_cost = repairData.finalCost
-            
-            // Warranty fields
-            if (repairData.warrantyMonths !== undefined) {
-                dbUpdateData.warranty_months = repairData.warrantyMonths
-                
-                // Recalculate expiration if warranty months changed
-                if (repairData.warrantyMonths > 0) {
-                    const expirationDate = new Date()
-                    expirationDate.setMonth(expirationDate.getMonth() + repairData.warrantyMonths)
-                    dbUpdateData.warranty_expires_at = expirationDate.toISOString()
-                } else {
-                    dbUpdateData.warranty_expires_at = null
-                }
+            const { customer, technician, ...payload } = data as RepairUpdateData & {
+                customer?: unknown
+                technician?: unknown
             }
-            if (repairData.warrantyType !== undefined) dbUpdateData.warranty_type = repairData.warrantyType
-            if (repairData.warrantyNotes !== undefined) dbUpdateData.warranty_notes = repairData.warrantyNotes
+            void customer
+            void technician
 
-            // Only update repair if there are fields to update
-            if (Object.keys(dbUpdateData).length > 0) {
-                let updateQuery = supabase
-                    .from('repairs')
-                    .update(dbUpdateData)
-                    .eq('id', id)
-                updateQuery = withBranchFilter(updateQuery, selectedBranchId)
-                const { error: updateError } = await updateQuery
+            const response = await fetch(`/api/repairs/${id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...branchHeaders(selectedBranchId),
+                },
+                body: JSON.stringify(payload),
+            })
+            const body = await response.json().catch(() => null) as { repair?: unknown; error?: string } | null
 
-                if (updateError) throw updateError
+            if (!response.ok || !body?.repair) {
+                throw new Error(body?.error || 'No se pudo actualizar la reparacion')
             }
 
-            // Handle Parts - Strategy: Delete all and re-insert (simplest for syncing list)
-            if (parts) {
-                // 1. Delete existing parts
-                const { error: deletePartsError } = await supabase
-                    .from('repair_parts')
-                    .delete()
-                    .eq('repair_id', id)
-                
-                if (deletePartsError) throw deletePartsError
-
-                // 2. Insert new parts
-                if (parts.length > 0) {
-                    const partsToInsert = parts.map((p: any) => ({
-                        repair_id: id,
-                        part_name: p.name,
-                        unit_cost: p.cost,
-                        quantity: p.quantity,
-                        supplier: p.supplier,
-                        part_number: p.partNumber
-                    }))
-
-                    const { error: insertPartsError } = await supabase
-                        .from('repair_parts')
-                        .insert(partsToInsert)
-                    
-                    if (insertPartsError) throw insertPartsError
-                }
-            }
-
-            // Handle Notes - Strategy: Upsert existing, Insert new, Delete missing
-            if (notes) {
-                // 1. Get all current note IDs for this repair
-                const { data: currentNotes } = await supabase
-                    .from('repair_notes')
-                    .select('id')
-                    .eq('repair_id', id)
-                
-                const currentIds = (currentNotes || []).map((n: any) => n.id)
-                const incomingIds = notes.filter((n: any) => n.id).map((n: any) => n.id)
-                
-                // 2. Delete notes that are no longer in the list
-                const idsToDelete = currentIds.filter((cid: number) => !incomingIds.includes(cid))
-                
-                if (idsToDelete.length > 0) {
-                    const { error: deleteNotesError } = await supabase
-                        .from('repair_notes')
-                        .delete()
-                        .in('id', idsToDelete)
-
-                    if (deleteNotesError) throw deleteNotesError
-                }
-
-                // 3. Upsert (Update/Insert) notes
-                if (notes.length > 0) {
-                    const notesToUpsert = notes.map((n: any) => {
-                        const notePayload: any = {
-                            repair_id: id,
-                            note_text: n.text,
-                            is_internal: n.isInternal
-                        }
-                        if (n.id) notePayload.id = n.id
-                        // If it's a new note, we might want to set author if available, 
-                        // but for now we let DB default or handle it.
-                        return notePayload
-                    })
-
-                    const { error: upsertNotesError } = await supabase
-                        .from('repair_notes')
-                        .upsert(notesToUpsert)
-                    
-                    if (upsertNotesError) throw upsertNotesError
-                }
-            }
-
-            // Handle Images - Strategy: replace full gallery with current form state
-            if (images) {
-                const { error: deleteImagesError } = await supabase
-                    .from('repair_images')
-                    .delete()
-                    .eq('repair_id', id)
-
-                if (deleteImagesError) throw deleteImagesError
-
-                const normalizedImages = (images as any[])
-                    .map((img: any) => typeof img === 'string' ? img : img?.url)
-                    .filter((url: string | undefined) => typeof url === 'string' && url.length > 0)
-
-                if (normalizedImages.length > 0) {
-                    const imagesToInsert = normalizedImages.map((url: string) => ({
-                        repair_id: id,
-                        image_url: url,
-                        image_type: 'general'
-                    }))
-
-                    const { error: insertImagesError } = await supabase
-                        .from('repair_images')
-                        .insert(imagesToInsert)
-
-                    if (insertImagesError) throw insertImagesError
-                }
-            }
-
-            // Fetch final state with all relations
-            let finalRepairQuery = supabase
-                .from('repairs')
-                .select(`
-          *,
-          customer:customers(name, phone, email),
-          technician:profiles(id, full_name),
-          images:repair_images(id, image_url, description),
-          parts:repair_parts(*),
-          notes:repair_notes(*)
-        `)
-                .eq('id', id)
-            finalRepairQuery = withBranchFilter(finalRepairQuery, selectedBranchId)
-            const { data: finalRepair, error: fetchError } = await finalRepairQuery.single() // We query by ID in the context of previous operations, but need to be sure we get the right one
-
-            if (fetchError) throw fetchError
-
-            const mapped = mapSupabaseRepairToUi(finalRepair)
+            const mapped = mapSupabaseRepairToUi(body.repair as SupabaseRepairPayload)
             const transformed = { ...mapped, dbStatus: mapped.status }
 
             setRepairs(prev =>
@@ -405,21 +273,22 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al actualizar reparación: ' + error.message)
             return null
         }
-    }, [selectedBranchId, supabase])
+    }, [selectedBranchId])
 
     // Delete repair
     const deleteRepair = useCallback(async (id: string): Promise<boolean> => {
         try {
             setError(null)
 
-            let deleteQuery = supabase
-                .from('repairs')
-                .delete()
-                .eq('id', id)
-            deleteQuery = withBranchFilter(deleteQuery, selectedBranchId)
-            const { error: deleteError } = await deleteQuery
+            const response = await fetch(`/api/repairs/${id}`, {
+                method: 'DELETE',
+                headers: branchHeaders(selectedBranchId),
+            })
+            const payload = await response.json().catch(() => null) as { error?: string } | null
 
-            if (deleteError) throw deleteError
+            if (!response.ok) {
+                throw new Error(payload?.error || 'No se pudo eliminar la reparacion')
+            }
 
             setRepairs(prev => prev.filter(repair => repair.id !== id))
             toast.success('Reparación eliminada exitosamente')
@@ -430,7 +299,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al eliminar reparación: ' + error.message)
             return false
         }
-    }, [selectedBranchId, supabase])
+    }, [selectedBranchId])
 
     // Update status
     const updateStatus = useCallback(async (
@@ -448,27 +317,17 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                 },
                 body: JSON.stringify({ stage: status }),
             })
-            const payload = await response.json().catch(() => null)
+            const payload = await response.json().catch(() => null) as { ok?: boolean; repair?: unknown; error?: string } | null
 
             if (!response.ok || payload?.ok === false) {
                 throw new Error(payload?.error || 'No se pudo actualizar estado')
             }
 
-            let updatedRepairQuery = supabase
-                .from('repairs')
-                .select(`
-          *,
-          customer:customers(name, phone, email),
-          technician:profiles(id, full_name),
-          images:repair_images(id, image_url, description)
-        `)
-                .eq('id', id)
-            updatedRepairQuery = withBranchFilter(updatedRepairQuery, selectedBranchId)
-            const { data: updatedRepair, error: updateError } = await updatedRepairQuery.single()
+            if (!payload?.repair) {
+                throw new Error('No se pudo recargar la reparacion')
+            }
 
-            if (updateError || !updatedRepair) throw updateError || new Error('No se pudo recargar la reparacion')
-
-            const mapped = mapSupabaseRepairToUi(updatedRepair)
+            const mapped = mapSupabaseRepairToUi(payload.repair as SupabaseRepairPayload)
             const transformed = { ...mapped, dbStatus: mapped.status }
 
             setRepairs(prev =>
@@ -494,7 +353,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al actualizar estado: ' + error.message)
             return false
         }
-    }, [selectedBranchId, supabase])
+    }, [selectedBranchId])
 
     // Deliver repair with outcome
     const deliverRepair = useCallback(async (
@@ -504,34 +363,23 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     ): Promise<boolean> => {
         try {
             setError(null)
-            const now = new Date().toISOString()
-            const updateData: Record<string, unknown> = {
-                status: 'entregado',
-                picked_up_at: now,
-                delivery_outcome: outcome,
-                completed_at: now,
+            const response = await fetch(`/api/repairs/${id}/delivery`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...branchHeaders(selectedBranchId),
+                },
+                body: JSON.stringify({ outcome, note }),
+            })
+            const payload = await response.json().catch(() => null) as { repair?: unknown; error?: string } | null
+
+            if (!response.ok || !payload?.repair) {
+                throw new Error(payload?.error || 'No se pudo registrar la entrega')
             }
-            if (note?.trim()) {
-                updateData.solution = note.trim()
-            }
 
-            // Optimistic update
-            setRepairs(prev =>
-                prev.map(r =>
-                    r.id === id
-                        ? { ...r, status: 'entregado' as RepairStatus, deliveryOutcome: outcome, pickedUpAt: now }
-                        : r
-                )
-            )
-
-            let updateQuery = supabase
-                .from('repairs')
-                .update(updateData)
-                .eq('id', id)
-            updateQuery = withBranchFilter(updateQuery, selectedBranchId)
-            const { error: updateError } = await updateQuery
-
-            if (updateError) throw updateError
+            const mapped = mapSupabaseRepairToUi(payload.repair as SupabaseRepairPayload)
+            const transformed = { ...mapped, dbStatus: mapped.status }
+            setRepairs(prev => prev.map(r => r.id === id ? transformed : r))
 
             toast.success('Reparación marcada como entregada')
             return true
@@ -539,11 +387,9 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             const error = err as Error
             setError(error)
             toast.error('Error al registrar entrega: ' + error.message)
-            // Revert optimistic update
-            await fetchRepairs()
             return false
         }
-    }, [fetchRepairs, selectedBranchId, supabase])
+    }, [selectedBranchId])
 
     // Assign technician
     const assignTechnician = useCallback(async (
@@ -553,22 +399,21 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         try {
             setError(null)
 
-            let updatedRepairQuery = supabase
-                .from('repairs')
-                .update({ technician_id: technicianId })
-                .eq('id', repairId)
-                .select(`
-          *,
-          customer:customers(name, phone, email),
-          technician:profiles(id, full_name),
-          images:repair_images(id, image_url, description)
-        `)
-            updatedRepairQuery = withBranchFilter(updatedRepairQuery, selectedBranchId)
-            const { data: updatedRepair, error: updateError } = await updatedRepairQuery.single()
+            const response = await fetch(`/api/repairs/${repairId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...branchHeaders(selectedBranchId),
+                },
+                body: JSON.stringify({ technician_id: technicianId }),
+            })
+            const payload = await response.json().catch(() => null) as { repair?: unknown; error?: string } | null
 
-            if (updateError) throw updateError
+            if (!response.ok || !payload?.repair) {
+                throw new Error(payload?.error || 'No se pudo asignar tecnico')
+            }
 
-            const mapped = mapSupabaseRepairToUi(updatedRepair)
+            const mapped = mapSupabaseRepairToUi(payload.repair as SupabaseRepairPayload)
             const transformed = { ...mapped, dbStatus: mapped.status }
 
             setRepairs(prev =>
@@ -583,7 +428,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al asignar técnico: ' + error.message)
             return false
         }
-    }, [selectedBranchId, supabase])
+    }, [selectedBranchId])
 
     // Add images to repair
     const addImages = useCallback(async (
@@ -593,26 +438,23 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     ): Promise<boolean> => {
         try {
             if (!urls || urls.length === 0) return true
-            const payload = urls.map(url => ({
-                repair_id: repairId,
-                image_url: url,
-                image_type: imageType
-            }))
-            const { error: insertError } = await supabase
-                .from('repair_images')
-                .insert(payload)
-            if (insertError) throw insertError
-            setRepairs(prev => prev.map(r => 
-                r.id === repairId 
-                    ? { 
-                        ...r, 
-                        images: [
-                            ...(Array.isArray(r.images) ? r.images : []), 
-                            ...urls.map(u => ({ id: u, url: u }))
-                        ] 
-                      } 
-                    : r
-            ))
+            const response = await fetch(`/api/repairs/${repairId}/images`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...branchHeaders(selectedBranchId),
+                },
+                body: JSON.stringify({ urls, imageType }),
+            })
+            const payload = await response.json().catch(() => null) as { repair?: unknown; error?: string } | null
+
+            if (!response.ok || !payload?.repair) {
+                throw new Error(payload?.error || 'No se pudieron agregar imagenes')
+            }
+
+            const mapped = mapSupabaseRepairToUi(payload.repair as SupabaseRepairPayload)
+            const transformed = { ...mapped, dbStatus: mapped.status }
+            setRepairs(prev => prev.map(r => r.id === repairId ? transformed : r))
             toast.success('Imágenes agregadas a la reparación')
             return true
         } catch (err) {
@@ -621,7 +463,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
             toast.error('Error al agregar imágenes: ' + error.message)
             return false
         }
-    }, [supabase])
+    }, [selectedBranchId])
 
     // Get repairs by status
     const getRepairsByStatus = useCallback((status: RepairStatus): Repair[] => {
@@ -687,32 +529,8 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
                     ...(selectedBranchId ? { filter: `branch_id=eq.${selectedBranchId}` } : {}),
                 },
                 async (payload) => {
-                    // Fetch full repair with relations
                     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                        let query = supabase
-                            .from('repairs')
-                            .select(`
-                *,
-                customer:customers(name, phone, email),
-                technician:profiles(id, full_name),
-                images:repair_images(id, image_url, description)
-              `)
-                            .eq('id', payload.new.id)
-                        query = withBranchFilter(query, selectedBranchId)
-                        const { data } = await query.single()
-
-                        if (data) {
-                            const mapped = mapSupabaseRepairToUi(data)
-                            const transformed = { ...mapped, dbStatus: mapped.status }
-
-                            if (payload.eventType === 'INSERT') {
-                                setRepairs(prev => [transformed, ...prev])
-                            } else {
-                                setRepairs(prev =>
-                                    prev.map(repair => repair.id === transformed.id ? transformed : repair)
-                                )
-                            }
-                        }
+                        await fetchRepairs()
                     } else if (payload.eventType === 'DELETE') {
                         setRepairs(prev => prev.filter(repair => repair.id !== payload.old.id))
                     }
@@ -723,7 +541,7 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
         return () => {
             supabase.removeChannel(channel)
         }
-    }, [selectedBranchId, shouldLoadRepairs, supabase])
+    }, [fetchRepairs, selectedBranchId, shouldLoadRepairs, supabase])
 
     // Create context value object
     const contextValue = useMemo<RepairsContextValue>(() => ({

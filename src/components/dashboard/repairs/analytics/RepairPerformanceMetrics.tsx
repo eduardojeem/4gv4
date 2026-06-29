@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
 import { AreaChart } from 'recharts/es6/chart/AreaChart';
 import { Area } from 'recharts/es6/cartesian/Area';
 import { XAxis } from 'recharts/es6/cartesian/XAxis';
@@ -297,228 +298,275 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
         </Tabs>
       </div>
 
-      {/* Métricas principales con gradientes vibrantes */}
+      {/* Métricas principales con diseño glassmorphism */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:rotate-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Total Reparaciones</CardTitle>
-            <div className="p-2 bg-white/20 rounded-full backdrop-blur-sm">
+        {/* Card 1: Total Reparaciones */}
+        <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group">
+          <div className="absolute inset-0 opacity-[0.03] bg-gradient-to-br from-cyan-400 to-blue-600 group-hover:opacity-10 transition-opacity duration-300" />
+          <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-cyan-400 to-blue-600 opacity-50" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+            <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">Total Reparaciones</CardTitle>
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 shadow-sm group-hover:scale-110 transition-transform duration-300">
               <Activity className="h-4 w-4 text-white" />
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white mb-1">
+          <CardContent className="relative z-10">
+            <div className="text-3xl font-black tracking-tight mb-1 text-foreground">
               {performanceMetrics.current.totalRepairs}
             </div>
             {performanceMetrics.changes.totalRepairs !== undefined && (
-              <div className="flex items-center gap-1 text-xs text-white/90">
-                {performanceMetrics.changes.totalRepairs > 0 ? (
-                  <TrendingUp className="h-3 w-3" />
-                ) : performanceMetrics.changes.totalRepairs < 0 ? (
-                  <TrendingDown className="h-3 w-3" />
-                ) : null}
-                <span>
+              <div className="flex items-center gap-1.5 text-sm mt-2">
+                <span className={cn(
+                  "flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold",
+                  performanceMetrics.changes.totalRepairs > 0 ? "bg-green-500/10 text-green-600 dark:text-green-400" : 
+                  performanceMetrics.changes.totalRepairs < 0 ? "bg-red-500/10 text-red-600 dark:text-red-400" : 
+                  "bg-slate-500/10 text-slate-600 dark:text-slate-400"
+                )}>
+                  {performanceMetrics.changes.totalRepairs > 0 ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : performanceMetrics.changes.totalRepairs < 0 ? (
+                    <TrendingDown className="h-3 w-3" />
+                  ) : null}
                   {performanceMetrics.changes.totalRepairs > 0 ? '+' : ''}{performanceMetrics.changes.totalRepairs}%
                 </span>
-                <span className="text-white/70">vs anterior</span>
+                <span className="text-muted-foreground text-xs font-medium">vs anterior</span>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-emerald-400 via-green-500 to-teal-600 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:rotate-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Completadas</CardTitle>
-            <div className="p-2 bg-white/20 rounded-full backdrop-blur-sm">
+        {/* Card 2: Completadas */}
+        <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group">
+          <div className="absolute inset-0 opacity-[0.03] bg-gradient-to-br from-emerald-400 to-teal-600 group-hover:opacity-10 transition-opacity duration-300" />
+          <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-emerald-400 to-teal-600 opacity-50" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+            <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">Completadas</CardTitle>
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-sm group-hover:scale-110 transition-transform duration-300">
               <CheckCircle2 className="h-4 w-4 text-white" />
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white mb-1">
+          <CardContent className="relative z-10">
+            <div className="text-3xl font-black tracking-tight mb-1 text-foreground">
               {performanceMetrics.current.completedRepairs}
             </div>
             {performanceMetrics.changes.completedRepairs !== undefined && (
-              <div className="flex items-center gap-1 text-xs text-white/90">
-                {performanceMetrics.changes.completedRepairs > 0 ? (
-                  <TrendingUp className="h-3 w-3" />
-                ) : performanceMetrics.changes.completedRepairs < 0 ? (
-                  <TrendingDown className="h-3 w-3" />
-                ) : null}
-                <span>
+              <div className="flex items-center gap-1.5 text-sm mt-2">
+                <span className={cn(
+                  "flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold",
+                  performanceMetrics.changes.completedRepairs > 0 ? "bg-green-500/10 text-green-600 dark:text-green-400" : 
+                  performanceMetrics.changes.completedRepairs < 0 ? "bg-red-500/10 text-red-600 dark:text-red-400" : 
+                  "bg-slate-500/10 text-slate-600 dark:text-slate-400"
+                )}>
+                  {performanceMetrics.changes.completedRepairs > 0 ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : performanceMetrics.changes.completedRepairs < 0 ? (
+                    <TrendingDown className="h-3 w-3" />
+                  ) : null}
                   {performanceMetrics.changes.completedRepairs > 0 ? '+' : ''}{performanceMetrics.changes.completedRepairs}%
                 </span>
-                <span className="text-white/70">vs anterior</span>
+                <span className="text-muted-foreground text-xs font-medium">vs anterior</span>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-orange-400 via-amber-500 to-yellow-500 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:rotate-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Tiempo Promedio</CardTitle>
-            <div className="p-2 bg-white/20 rounded-full backdrop-blur-sm">
+        {/* Card 3: Tiempo Promedio */}
+        <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group">
+          <div className="absolute inset-0 opacity-[0.03] bg-gradient-to-br from-orange-400 to-yellow-500 group-hover:opacity-10 transition-opacity duration-300" />
+          <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-orange-400 to-yellow-500 opacity-50" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+            <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">Tiempo Promedio</CardTitle>
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-orange-400 to-yellow-500 shadow-sm group-hover:scale-110 transition-transform duration-300">
               <Clock className="h-4 w-4 text-white" />
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white mb-1">
+          <CardContent className="relative z-10">
+            <div className="text-3xl font-black tracking-tight mb-1 text-foreground">
               {Math.round(performanceMetrics.current.avgRepairTime)} días
             </div>
-            <p className="text-xs text-white/80">
+            <p className="text-xs text-muted-foreground font-medium mt-2">
               Por reparación completada
             </p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-500 via-violet-600 to-indigo-700 border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 hover:rotate-1">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Ingresos</CardTitle>
-            <div className="p-2 bg-white/20 rounded-full backdrop-blur-sm">
+        {/* Card 4: Ingresos */}
+        <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group">
+          <div className="absolute inset-0 opacity-[0.03] bg-gradient-to-br from-purple-500 to-indigo-600 group-hover:opacity-10 transition-opacity duration-300" />
+          <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-purple-500 to-indigo-600 opacity-50" />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+            <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">Ingresos</CardTitle>
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 shadow-sm group-hover:scale-110 transition-transform duration-300">
               <Target className="h-4 w-4 text-white" />
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white mb-1 flex items-center gap-1">
-              <GSIcon className="h-5 w-5" />
+          <CardContent className="relative z-10">
+            <div className="text-3xl font-black tracking-tight mb-1 text-foreground flex items-center gap-1.5">
+              <GSIcon className="h-6 w-6 text-muted-foreground/50" />
               {performanceMetrics.current.revenue.toLocaleString()}
             </div>
             {performanceMetrics.changes.revenue !== undefined && (
-              <div className="flex items-center gap-1 text-xs text-white/90">
-                {performanceMetrics.changes.revenue > 0 ? (
-                  <TrendingUp className="h-3 w-3" />
-                ) : performanceMetrics.changes.revenue < 0 ? (
-                  <TrendingDown className="h-3 w-3" />
-                ) : null}
-                <span>
+              <div className="flex items-center gap-1.5 text-sm mt-2">
+                <span className={cn(
+                  "flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold",
+                  performanceMetrics.changes.revenue > 0 ? "bg-green-500/10 text-green-600 dark:text-green-400" : 
+                  performanceMetrics.changes.revenue < 0 ? "bg-red-500/10 text-red-600 dark:text-red-400" : 
+                  "bg-slate-500/10 text-slate-600 dark:text-slate-400"
+                )}>
+                  {performanceMetrics.changes.revenue > 0 ? (
+                    <TrendingUp className="h-3 w-3" />
+                  ) : performanceMetrics.changes.revenue < 0 ? (
+                    <TrendingDown className="h-3 w-3" />
+                  ) : null}
                   {performanceMetrics.changes.revenue > 0 ? '+' : ''}{performanceMetrics.changes.revenue}%
                 </span>
-                <span className="text-white/70">vs anterior</span>
+                <span className="text-muted-foreground text-xs font-medium">vs anterior</span>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Métricas de eficiencia con diseño vibrante */}
+      {/* Métricas de eficiencia con diseño premium */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="bg-gradient-to-br from-rose-100 via-pink-50 to-rose-50 dark:from-rose-950/30 dark:via-pink-950/20 dark:to-rose-950/30 border-rose-200 dark:border-rose-800 shadow-lg hover:shadow-xl transition-all duration-300">
+        {/* Tasa de Completado */}
+        <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-md transition-all duration-300 group">
+          <div className="absolute inset-0 opacity-[0.03] bg-gradient-to-br from-rose-400 to-pink-600 group-hover:opacity-10 transition-opacity duration-300" />
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2 text-rose-700 dark:text-rose-300">
-              <div className="p-2 bg-rose-500/20 rounded-full">
-                <Target className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+            <CardTitle className="text-base flex items-center gap-3 text-muted-foreground group-hover:text-foreground transition-colors">
+              <div className="p-2 bg-gradient-to-br from-rose-400/20 to-pink-600/20 rounded-xl">
+                <Target className="h-5 w-5 text-rose-500" />
               </div>
               Tasa de Completado
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-3xl font-bold text-rose-700 dark:text-rose-300">
+          <CardContent className="relative z-10">
+            <div className="space-y-4 mt-2">
+              <div className="flex justify-between items-end">
+                <span className="text-4xl font-black tracking-tight text-foreground">
                   {Math.round(performanceMetrics.completionRate)}%
                 </span>
                 <Badge 
-                  variant={performanceMetrics.completionRate >= 80 ? 'default' : 'secondary'}
-                  className={performanceMetrics.completionRate >= 80 
-                    ? 'bg-green-500 hover:bg-green-600 text-white' 
-                    : 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                  }
+                  variant="outline"
+                  className={cn(
+                    "mb-1",
+                    performanceMetrics.completionRate >= 80 
+                      ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" 
+                      : "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20"
+                  )}
                 >
                   {performanceMetrics.completionRate >= 80 ? 'Excelente' : 'Mejorable'}
                 </Badge>
               </div>
-              <div className="relative">
+              <div className="relative pt-2">
                 <Progress 
                   value={performanceMetrics.completionRate} 
-                  className="h-3 bg-rose-200 dark:bg-rose-800"
+                  className="h-2 bg-rose-500/10"
                 />
                 <div 
-                  className="absolute top-0 left-0 h-3 bg-gradient-to-r from-rose-400 to-pink-500 rounded-full transition-all duration-500"
+                  className="absolute top-2 left-0 h-2 bg-gradient-to-r from-rose-400 to-pink-500 rounded-full transition-all duration-1000 ease-out"
                   style={{ width: `${performanceMetrics.completionRate}%` }}
                 />
               </div>
-              <p className="text-xs text-rose-600 dark:text-rose-400">
-                {performanceMetrics.current.completedRepairs} de {performanceMetrics.current.totalRepairs} reparaciones
+              <p className="text-sm font-medium text-muted-foreground">
+                <strong className="text-foreground">{performanceMetrics.current.completedRepairs}</strong> de {performanceMetrics.current.totalRepairs} reparaciones completadas
               </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-emerald-100 via-green-50 to-teal-50 dark:from-emerald-950/30 dark:via-green-950/20 dark:to-teal-950/30 border-emerald-200 dark:border-emerald-800 shadow-lg hover:shadow-xl transition-all duration-300">
+        {/* Entregas a Tiempo */}
+        <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-md transition-all duration-300 group">
+          <div className="absolute inset-0 opacity-[0.03] bg-gradient-to-br from-emerald-400 to-teal-600 group-hover:opacity-10 transition-opacity duration-300" />
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-              <div className="p-2 bg-emerald-500/20 rounded-full">
-                <Zap className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <CardTitle className="text-base flex items-center gap-3 text-muted-foreground group-hover:text-foreground transition-colors">
+              <div className="p-2 bg-gradient-to-br from-emerald-400/20 to-teal-600/20 rounded-xl">
+                <Zap className="h-5 w-5 text-emerald-500" />
               </div>
               Entregas a Tiempo
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-3xl font-bold text-emerald-700 dark:text-emerald-300">
+          <CardContent className="relative z-10">
+            <div className="space-y-4 mt-2">
+              <div className="flex justify-between items-end">
+                <span className="text-4xl font-black tracking-tight text-foreground">
                   {Math.round(performanceMetrics.onTimeRate)}%
                 </span>
                 <Badge 
-                  variant={performanceMetrics.onTimeRate >= 70 ? 'default' : 'destructive'}
-                  className={performanceMetrics.onTimeRate >= 70 
-                    ? 'bg-green-500 hover:bg-green-600 text-white' 
-                    : 'bg-red-500 hover:bg-red-600 text-white'
-                  }
+                  variant="outline"
+                  className={cn(
+                    "mb-1",
+                    performanceMetrics.onTimeRate >= 70 
+                      ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" 
+                      : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                  )}
                 >
                   {performanceMetrics.onTimeRate >= 70 ? 'Bueno' : 'Crítico'}
                 </Badge>
               </div>
-              <div className="relative">
+              <div className="relative pt-2">
                 <Progress 
                   value={performanceMetrics.onTimeRate} 
-                  className="h-3 bg-emerald-200 dark:bg-emerald-800"
+                  className="h-2 bg-emerald-500/10"
                 />
                 <div 
-                  className="absolute top-0 left-0 h-3 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all duration-500"
+                  className="absolute top-2 left-0 h-2 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all duration-1000 ease-out"
                   style={{ width: `${performanceMetrics.onTimeRate}%` }}
                 />
               </div>
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">
-                Meta: ≤7 días por reparación
+              <p className="text-sm font-medium text-muted-foreground">
+                Meta operativa: <strong className="text-foreground">≤7 días</strong> por reparación
               </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-100 via-orange-50 to-yellow-50 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-yellow-950/30 border-amber-200 dark:border-amber-800 shadow-lg hover:shadow-xl transition-all duration-300">
+        {/* Reparaciones Urgentes */}
+        <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-md transition-all duration-300 group">
+          <div className="absolute inset-0 opacity-[0.03] bg-gradient-to-br from-amber-400 to-orange-600 group-hover:opacity-10 transition-opacity duration-300" />
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2 text-amber-700 dark:text-amber-300">
-              <div className="p-2 bg-amber-500/20 rounded-full">
-                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <CardTitle className="text-base flex items-center gap-3 text-muted-foreground group-hover:text-foreground transition-colors">
+              <div className="p-2 bg-gradient-to-br from-amber-400/20 to-orange-600/20 rounded-xl">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
               </div>
               Reparaciones Urgentes
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-3xl font-bold text-amber-700 dark:text-amber-300">
+          <CardContent className="relative z-10">
+            <div className="space-y-4 mt-2">
+              <div className="flex justify-between items-end">
+                <span className="text-4xl font-black tracking-tight text-foreground">
                   {performanceMetrics.current.urgentRepairs}
                 </span>
                 <Badge 
-                  variant={performanceMetrics.current.urgentRepairs > 5 ? 'destructive' : 'secondary'}
-                  className={performanceMetrics.current.urgentRepairs > 5 
-                    ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
-                    : 'bg-green-500 hover:bg-green-600 text-white'
-                  }
+                  variant="outline"
+                  className={cn(
+                    "mb-1",
+                    performanceMetrics.current.urgentRepairs > 5 
+                      ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20 animate-pulse" 
+                      : "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"
+                  )}
                 >
                   {performanceMetrics.current.urgentRepairs > 5 ? 'Alto' : 'Normal'}
                 </Badge>
               </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${
-                  performanceMetrics.current.urgentRepairs > 5 
-                    ? 'bg-red-500 animate-pulse' 
-                    : 'bg-green-500'
-                }`} />
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Requieren atención inmediata
-                </p>
+              
+              <div className="pt-4 pb-1">
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-background/50 border border-border/50 shadow-sm">
+                  <div className="relative flex h-3 w-3">
+                    <span className={cn(
+                      "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                      performanceMetrics.current.urgentRepairs > 5 ? "bg-red-400" : "bg-green-400"
+                    )}></span>
+                    <span className={cn(
+                      "relative inline-flex rounded-full h-3 w-3",
+                      performanceMetrics.current.urgentRepairs > 5 ? "bg-red-500" : "bg-green-500"
+                    )}></span>
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Requieren <strong className="text-foreground">atención inmediata</strong>
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -526,10 +574,12 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
       </div>
 
       {/* Gráfico de tendencia */}
-      <Card>
+      <Card className="bg-background/50 backdrop-blur-xl border-border/50 shadow-sm hover:shadow-md transition-shadow">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
+            <div className="p-2 bg-blue-500/10 rounded-lg">
+              <TrendingUp className="h-5 w-5 text-blue-500" />
+            </div>
             Tendencia de los Últimos 7 Días
           </CardTitle>
         </CardHeader>
@@ -564,11 +614,12 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
       </Card>
 
       {/* Top técnicos con diseño mejorado */}
-      <Card className="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-900 dark:via-slate-800 dark:to-indigo-950 border-slate-200 dark:border-slate-700 shadow-lg">
+      <Card className="bg-background/50 backdrop-blur-xl border-border/50 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-gradient-to-br from-amber-400/5 to-orange-600/5 rounded-full blur-3xl -z-10 pointer-events-none" />
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-            <div className="p-2 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full">
-              <Award className="h-5 w-5 text-white" />
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <div className="p-2 bg-gradient-to-br from-yellow-400/20 to-orange-500/20 rounded-xl">
+              <Award className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
             </div>
             Top Técnicos por Eficiencia
           </CardTitle>
@@ -578,56 +629,56 @@ export function RepairPerformanceMetrics({ className }: RepairPerformanceMetrics
             {performanceMetrics.topTechnicians.map((tech: any, index) => {
               const gradients = [
                 'from-yellow-400 via-orange-500 to-red-500', // 1st place - gold
-                'from-gray-300 via-gray-400 to-gray-500',   // 2nd place - silver
+                'from-slate-300 via-slate-400 to-slate-500',   // 2nd place - silver
                 'from-amber-600 via-yellow-700 to-orange-800', // 3rd place - bronze
                 'from-blue-400 via-indigo-500 to-purple-600',  // 4th place
-                'from-green-400 via-teal-500 to-cyan-600'      // 5th place
+                'from-emerald-400 via-teal-500 to-cyan-600'      // 5th place
               ]
               
               return (
                 <div 
                   key={index} 
-                  className="flex items-center justify-between p-4 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm rounded-xl border border-white/20 dark:border-slate-700/50 hover:bg-white/80 dark:hover:bg-slate-800/80 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg"
+                  className="flex items-center justify-between p-4 bg-background/40 backdrop-blur-md rounded-xl border border-border/50 hover:bg-background/80 transition-all duration-300 hover:scale-[1.01] hover:shadow-md group"
                 >
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 bg-gradient-to-br ${gradients[index]} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg relative overflow-hidden`}>
+                    <div className={`w-12 h-12 bg-gradient-to-br ${gradients[index]} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm relative overflow-hidden group-hover:shadow-md transition-shadow`}>
                       <span className="relative z-10">{index + 1}</span>
                       {index === 0 && (
                         <div className="absolute inset-0 bg-gradient-to-br from-yellow-300/30 to-transparent animate-pulse" />
                       )}
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-800 dark:text-slate-200">{tech.name}</p>
-                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                      <p className="font-semibold text-foreground">{tech.name}</p>
+                      <p className="text-sm text-muted-foreground">
                         {tech.completedRepairs} de {tech.totalRepairs} completadas
                       </p>
                       <div className="flex items-center gap-2 mt-1">
-                        <div className="w-16 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                           <div 
                             className={`h-full bg-gradient-to-r ${gradients[index]} rounded-full transition-all duration-500`}
                             style={{ width: `${tech.efficiency}%` }}
                           />
                         </div>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                        <span className="text-xs text-muted-foreground font-medium">
                           {Math.round(tech.efficiency)}%
                         </span>
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="flex items-center gap-1 font-bold text-lg">
+                    <div className="flex items-center gap-1 font-bold text-lg justify-end">
                       <span className={`${
-                        index === 0 ? 'text-yellow-600' :
-                        index === 1 ? 'text-gray-600' :
-                        index === 2 ? 'text-amber-700' :
-                        'text-blue-600'
+                        index === 0 ? 'text-yellow-600 dark:text-yellow-500' :
+                        index === 1 ? 'text-slate-600 dark:text-slate-400' :
+                        index === 2 ? 'text-amber-700 dark:text-amber-600' :
+                        'text-blue-600 dark:text-blue-400'
                       }`}>
                         {Math.round(tech.efficiency)}%
                       </span>
                       {index === 0 && <Award className="h-4 w-4 text-yellow-500" />}
                     </div>
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                      {Math.round(tech.avgTime)} días promedio
+                    <p className="text-sm text-muted-foreground">
+                      {Math.round(tech.avgTime)} días prom.
                     </p>
                   </div>
                 </div>

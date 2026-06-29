@@ -12,6 +12,7 @@ import {
   Receipt,
   ShoppingBag,
   Users,
+  Info,
 } from 'lucide-react'
 import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
@@ -33,6 +34,7 @@ import { BillingProfileForm } from '@/components/admin/subscriptions/BillingProf
 import { PagoparPaymentButton } from '@/components/admin/subscriptions/PagoparPaymentButton'
 import { PlansComparison, type PlanRow } from '@/components/admin/subscriptions/PlansComparison'
 import { PromoCodeRedeemer } from '@/components/admin/subscriptions/PromoCodeRedeemer'
+import { SubscriptionCancellation } from '@/components/admin/subscriptions/SubscriptionCancellation'
 
 const statusLabels: Record<string, string> = {
   active: 'Activo',
@@ -265,6 +267,12 @@ export default async function AdminSubscriptionsPage() {
                 Cambiar plan
               </Link>
             </Button>
+            <SubscriptionCancellation
+              isFreePlan={state.currentPlan.price_monthly <= 0}
+              cancelAtPeriodEnd={subscription?.cancel_at_period_end === true}
+              periodEndDate={subscription?.current_period_ends_at ?? subscription?.trial_ends_at ?? null}
+              currentPlanName={state.currentPlan.name}
+            />
           </div>
         </div>
         <div className="grid border-t bg-muted/30 sm:grid-cols-3">
@@ -298,6 +306,51 @@ export default async function AdminSubscriptionsPage() {
           ))}
         </div>
       )}
+
+      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+        <details className="group">
+          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
+            <div className="text-lg font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <Info className="h-5 w-5" /> ¿Cómo funciona tu suscripción?
+            </div>
+            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
+            </div>
+          </summary>
+          <CardContent className="pt-0 pb-5">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5 p-4 rounded-lg bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                  Límites de Uso
+                </h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Cada plan limita cuántos usuarios, sucursales, cajas registradoras y productos puedes crear. Al llegar al límite, deberás pasar a un plan superior para seguir agregando registros.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-4 rounded-lg bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                  Pagos y Facturación
+                </h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Los cobros son mensuales. Completa los datos en la sección de "Facturación" para habilitar la pasarela de pago seguro (Pagopar) y descargar tus comprobantes de pago.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-4 rounded-lg bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center rounded-full text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                  Cambios de Plan
+                </h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Puedes cambiar de plan cuando quieras. Para bajar a un plan menor (downgrade), primero debes asegurarte de que tu uso actual no supere los límites del nuevo plan.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </details>
+      </Card>
 
       <PromoCodeRedeemer canRedeem={['owner', 'admin'].includes(organization.role)} />
 

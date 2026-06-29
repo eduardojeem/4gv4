@@ -2,12 +2,14 @@
 
 import { useState } from 'react'
 import { DateRange } from 'react-day-picker'
-import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
+import { AlertTriangle, Loader2, RefreshCw, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { usePosStats } from './hooks/usePosStats'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/currency'
 import { cn } from '@/lib/utils'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 
 import { PosDashboardHeader } from './components/PosDashboardHeader'
 import { PosStatsGrid } from './components/PosStatsGrid'
@@ -108,6 +110,52 @@ export default function POSDashboard() {
           onExport={handleExport}
         />
       </div>
+
+      {/* Guía de funcionamiento del Dashboard POS */}
+      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+        <details className="group">
+          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
+            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Dashboard del POS?
+            </div>
+            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
+            </div>
+          </summary>
+          <CardContent className="pt-0 pb-5 text-xs">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                  Filtro por Rango Fechas
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Usa el selector de calendario en la cabecera para filtrar las estadísticas. Puedes analizar las ventas de hoy, ayer, los últimos 7 días o cualquier rango personalizado.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                  Distribución y Tendencia
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Compara los métodos de cobro más utilizados (efectivo, tarjeta, transferencia) en el gráfico circular y monitorea la tendencia de ventas brutas a lo largo de las horas o días.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                  Créditos y Top Ventas
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Supervisa la cartera de créditos emitidos desde el POS y visualiza rápidamente cuáles son los productos más vendidos del catálogo en el periodo seleccionado.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </details>
+      </Card>
 
       {/* Refresh footer (small) */}
       <div className="flex justify-end -mt-2">

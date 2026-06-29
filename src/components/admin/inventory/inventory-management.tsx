@@ -34,7 +34,8 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
-  Layers
+  Layers,
+  Info
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 
@@ -381,6 +382,51 @@ export default function InventoryManagement() {
           </div>
         </div>
       </div>
+
+      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+        <details className="group">
+          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
+            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Inventario?
+            </div>
+            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
+            </div>
+          </summary>
+          <CardContent className="pt-0 pb-5">
+            <div className="grid gap-4 sm:grid-cols-3 text-xs">
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                  Productos y Catálogo
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Registra productos con su SKU, precio de compra/venta y stock. Puedes agruparlos por categorías y asociar proveedores para simplificar el reabastecimiento.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                  Control y Alertas de Stock
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Configura un stock mínimo y máximo para cada artículo. El sistema marcará automáticamente como "Bajo" o "Agotado" aquellos ítems que requieran atención inmediata.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                  Movimientos e Historial
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Cada entrada, salida o ajuste manual queda registrado en el historial de movimientos de stock con fecha, cantidad y responsable, garantizando plena trazabilidad.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </details>
+      </Card>
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

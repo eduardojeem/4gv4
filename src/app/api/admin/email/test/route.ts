@@ -24,7 +24,15 @@ async function handler(request: NextRequest, _ctx: AdminAuthContext) {
     footerNote: 'Este es un email de prueba enviado desde la configuración de la plataforma.',
   })
 
-  const result = await sendEmail({ to, subject: 'Prueba de email — Resend', html })
+  const result = await sendEmail({
+    to,
+    subject: 'Prueba de email — Resend',
+    html,
+    log: {
+      organizationId: _ctx.organizationId ?? undefined,
+      customerName: `Prueba (${_ctx.user.email})`,
+    },
+  })
 
   if (result.skipped) {
     return NextResponse.json(

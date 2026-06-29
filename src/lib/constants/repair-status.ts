@@ -100,6 +100,10 @@ type RepairStatusSource = Pick<Repair, 'status' | 'dbStatus'>
 
 export const COMPLETED_REPAIR_STATUSES = new Set<RepairStatus>(['listo', 'entregado'])
 export const INACTIVE_REPAIR_STATUSES = new Set<RepairStatus>(['listo', 'entregado', 'cancelado'])
+// Estados que cuentan como "trabajo en curso" para la carga del técnico.
+// Fuente única compartida entre el detalle (isActiveRepair) y la agregación
+// server-side de estadísticas (/api/repairs/technicians-stats).
+export const ACTIVE_REPAIR_STATUSES = new Set<RepairStatus>(['recibido', 'diagnostico', 'reparacion', 'pausado'])
 
 export function resolveRepairStatus(repair: RepairStatusSource): RepairStatus {
   return (repair.dbStatus || repair.status) as RepairStatus

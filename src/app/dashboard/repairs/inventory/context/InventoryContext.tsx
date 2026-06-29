@@ -36,11 +36,12 @@ interface InventoryContextValue {
   updateService: (id: string, data: any) => Promise<void>
   updateInventoryProduct: (id: string, data: any) => Promise<void>
   deleteItem: (id: string) => Promise<void>
-  updateStock: (id: string, quantity: number) => Promise<void>
+  updateStock: (id: string, quantity: number, reason?: string) => Promise<void>
   
   // Utilidades
   exportPDF: () => void
   exportExcel: () => void
+  getProductMovements: (id: string) => Promise<{ success: boolean; data: ProductMovement[]; error?: string }>
 }
 
 const InventoryContext = createContext<InventoryContextValue | null>(null)
@@ -71,6 +72,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     updateProduct,
     deleteProduct,
     updateStock: supabaseUpdateStock,
+    getProductMovements,
     getAllMovements,
     createCategory
   } = useProductsSupabase()
@@ -225,24 +227,26 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     }
   }, [deleteProduct, refreshData])
 
-  const updateStock = useCallback(async (id: string, quantity: number) => {
+  const updateStock = useCallback(async (id: string, quantity: number, reason?: string) => {
     try {
       const result = await supabaseUpdateStock(
         id,
         quantity,
         'adjustment',
-        'Ajuste manual desde inventario'
+        reason || 'Ajuste manual desde inventario'
       )
       
       if (result.success) {
         toast.success("Stock actualizado")
         await refreshData()
       } else {
-        throw new Error(result.error)
+        const errorMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error)
+        throw new Error(errorMsg)
       }
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Error updating stock', { error })
-      toast.error("Error al actualizar stock")
+      const message = error?.message || 'Error al actualizar stock'
+      toast.error(message)
       throw error
     }
   }, [supabaseUpdateStock, refreshData])
@@ -281,7 +285,8 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     deleteItem,
     updateStock,
     exportPDF,
-    exportExcel
+    exportExcel,
+    getProductMovements
   }), [
     products,
     services,
@@ -300,7 +305,8 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     deleteItem,
     updateStock,
     exportPDF,
-    exportExcel
+    exportExcel,
+    getProductMovements
   ])
 
   return (

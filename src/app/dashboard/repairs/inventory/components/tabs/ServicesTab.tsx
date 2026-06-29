@@ -26,31 +26,64 @@ import {
   Eye,
   EyeOff,
   Globe,
-  Lock
+  Lock,
+  Wrench
 } from 'lucide-react'
 import { useInventory } from '../../context/InventoryContext'
 import { ServiceDialog } from '../ServiceDialog'
+import { ServiceDetailDialog } from '../ServiceDetailDialog'
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import type { Product } from '@/types/product-unified'
 
 export function ServicesTab() {
   const { services, loading, deleteItem } = useInventory()
   const [searchTerm, setSearchTerm] = useState("")
+  
+  // Dialog States
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingService, setEditingService] = useState<any>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
+  
+  // Selected Data States
+  const [editingService, setEditingService] = useState<Product | null>(null)
+  const [viewingService, setViewingService] = useState<Product | null>(null)
   
   // State for view mode: 'all', 'retail', 'wholesale'
   const [viewMode, setViewMode] = useState<'all' | 'retail' | 'wholesale'>('all')
+  const [serviceToDelete, setServiceToDelete] = useState<Product | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const filteredServices = useMemo(() => {
-    return services.filter(s => 
-      s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      (s.description && s.description.toLowerCase().includes(searchTerm.toLowerCase()))
-    )
-  }, [services, searchTerm])
+    return services.filter(s => {
+      const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (s.description && s.description.toLowerCase().includes(searchTerm.toLowerCase()))
 
-  const handleEdit = (service: any) => {
+      // Filter rows by visibility when in retail/wholesale mode
+      let matchesMode = true
+      if (viewMode === 'retail') matchesMode = (s.visibility || 'public') === 'public'
+      if (viewMode === 'wholesale') matchesMode = s.visibility === 'wholesale'
+
+      return matchesSearch && matchesMode
+    })
+  }, [services, searchTerm, viewMode])
+
+  const handleEdit = (service: Product) => {
     setEditingService(service)
     setIsDialogOpen(true)
+  }
+
+  const handleView = (service: Product) => {
+    setViewingService(service)
+    setIsDetailOpen(true)
   }
 
   const handleNew = () => {
@@ -58,9 +91,18 @@ export function ServicesTab() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (confirm('¿Estás seguro de eliminar este servicio?')) {
-      await deleteItem(id)
+  const handleDelete = (service: Product) => {
+    setServiceToDelete(service)
+  }
+
+  const confirmDelete = async () => {
+    if (!serviceToDelete) return
+    setIsDeleting(true)
+    try {
+      await deleteItem(serviceToDelete.id)
+    } finally {
+      setIsDeleting(false)
+      setServiceToDelete(null)
     }
   }
 
@@ -90,12 +132,20 @@ export function ServicesTab() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+      <Card className="bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-teal-500/5 pointer-events-none" />
+        <CardHeader className="relative z-10 border-b border-border/30 pb-4">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
-              <CardTitle>Catálogo de Servicios</CardTitle>
-              <CardDescription>Gestión de precios para mano de obra y reparaciones</CardDescription>
+              <CardTitle className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent flex items-center gap-2">
+                <span className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+                  <Wrench className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                </span>
+                Catálogo de Servicios
+              </CardTitle>
+              <CardDescription>
+                Gestiona los servicios de reparación y mano de obra
+              </CardDescription>
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
@@ -170,13 +220,13 @@ export function ServicesTab() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={viewMode === 'all' ? 7 : 4} className="text-center py-8">
                       <RefreshCw className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : filteredServices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={viewMode === 'all' ? 7 : 4} className="text-center py-8 text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <Package className="h-12 w-12 opacity-50" />
                         <p>No hay servicios registrados.</p>
@@ -251,8 +301,18 @@ export function ServicesTab() {
                             <Button 
                               variant="ghost" 
                               size="icon" 
+                              onClick={() => handleView(service)}
+                              className="hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/20 h-8 w-8"
+                              title="Ver detalles"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
                               onClick={() => handleEdit(service)}
                               className="hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/20 h-8 w-8"
+                              title="Editar"
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -260,7 +320,8 @@ export function ServicesTab() {
                               variant="ghost" 
                               size="icon" 
                               className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/20 h-8 w-8" 
-                              onClick={() => handleDelete(service.id)}
+                              onClick={() => handleDelete(service)}
+                              title="Eliminar"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -281,6 +342,49 @@ export function ServicesTab() {
         onOpenChange={setIsDialogOpen}
         service={editingService}
       />
+      
+      <ServiceDetailDialog
+        open={isDetailOpen}
+        onOpenChange={setIsDetailOpen}
+        service={viewingService}
+        onEdit={handleEdit}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!serviceToDelete} onOpenChange={(open) => !open && setServiceToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-500" />
+              ¿Eliminar servicio?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Estás a punto de eliminar <strong className="text-foreground">"{serviceToDelete?.name}"</strong>.
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isDeleting ? (
+                <span className="flex items-center gap-2">
+                  <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Eliminando...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  Eliminar
+                </span>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       brand: { name: 'Servix 360', color: '#4f46e5' },
       footerNote: 'Prueba enviada desde Super Admin.',
     }),
+    log: { customerName: `Prueba (${superAdmin.email})` },
   })
 
   await logSuperAdminAction({

@@ -64,7 +64,7 @@ const MetricCard = memo(({
       case 'currency':
         return (
           <div className="flex items-center gap-1">
-            <GSIcon className="h-5 w-5" />
+            <GSIcon className="h-6 w-6 text-muted-foreground/50" />
             {numVal.toLocaleString()}
           </div>
         )
@@ -78,30 +78,40 @@ const MetricCard = memo(({
   }, [format])
 
   return (
-    <Card className={`${gradient} border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105`}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-white">
+    <Card className="relative overflow-hidden bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 group">
+      <div className={`absolute inset-0 opacity-[0.03] bg-gradient-to-br ${gradient} group-hover:opacity-10 transition-opacity duration-300`} />
+      
+      {/* Subtle top border accent */}
+      <div className={`absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r ${gradient} opacity-50`} />
+
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+        <CardTitle className="text-sm font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
           {title}
         </CardTitle>
-        <div className="p-2 bg-white/20 rounded-full backdrop-blur-sm">
+        <div className={`p-2.5 rounded-xl bg-gradient-to-br ${gradient} shadow-sm group-hover:scale-110 transition-transform duration-300`}>
           <Icon className="h-4 w-4 text-white" />
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-bold text-white mb-1">
+      <CardContent className="relative z-10">
+        <div className="text-3xl font-black tracking-tight mb-1 text-foreground">
           {formatValue(value)}
         </div>
         {change !== undefined && (
-          <div className="flex items-center gap-1 text-xs text-white/90">
-            {trend === 'up' ? (
-              <TrendingUp className="h-3 w-3" />
-            ) : trend === 'down' ? (
-              <TrendingDown className="h-3 w-3" />
-            ) : null}
-            <span>
+          <div className="flex items-center gap-1.5 text-sm mt-2">
+            <span className={cn(
+              "flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold",
+              trend === 'up' ? "bg-green-500/10 text-green-600 dark:text-green-400" : 
+              trend === 'down' ? "bg-red-500/10 text-red-600 dark:text-red-400" : 
+              "bg-slate-500/10 text-slate-600 dark:text-slate-400"
+            )}>
+              {trend === 'up' ? (
+                <TrendingUp className="h-3 w-3" />
+              ) : trend === 'down' ? (
+                <TrendingDown className="h-3 w-3" />
+              ) : null}
               {change > 0 ? '+' : ''}{change}%
             </span>
-            <span className="text-white/70">vs anterior</span>
+            <span className="text-muted-foreground text-xs font-medium">vs mes anterior</span>
           </div>
         )}
       </CardContent>
@@ -267,10 +277,12 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Tendencia temporal */}
-        <Card>
+        <Card className="bg-background/50 backdrop-blur-xl border-border/50 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
+              <div className="p-2 bg-blue-500/10 rounded-lg">
+                <TrendingUp className="h-5 w-5 text-blue-500" />
+              </div>
               Tendencias Temporales
             </CardTitle>
           </CardHeader>
@@ -305,10 +317,12 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
         </Card>
 
         {/* Distribución por estado */}
-        <Card>
+        <Card className="bg-background/50 backdrop-blur-xl border-border/50 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
+              <div className="p-2 bg-purple-500/10 rounded-lg">
+                <Activity className="h-5 w-5 text-purple-500" />
+              </div>
               Distribución por Estado
             </CardTitle>
           </CardHeader>
@@ -336,9 +350,14 @@ export function AnalyticsOverview({ className }: AnalyticsOverviewProps) {
       </div>
 
       {/* Dispositivos */}
-      <Card>
+      <Card className="bg-background/50 backdrop-blur-xl border-border/50 shadow-sm hover:shadow-md transition-shadow">
         <CardHeader>
-          <CardTitle>Reparaciones por Tipo de Dispositivo</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <div className="p-2 bg-emerald-500/10 rounded-lg">
+              <Wrench className="h-5 w-5 text-emerald-500" />
+            </div>
+            Reparaciones por Tipo de Dispositivo
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>

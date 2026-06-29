@@ -7,9 +7,10 @@
 
 import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Plus, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { useProductsSupabase } from "@/hooks/useProductsSupabase";
 import { useProductsDashboard } from "@/hooks/useProductsDashboard";
 import { ProductModal } from "@/components/dashboard/product-modal";
@@ -46,6 +47,7 @@ import {
 import type { DashboardMetrics } from "@/types/products-dashboard";
 import type { QuickFilterCounts } from "@/components/dashboard/products-modern/QuickFiltersBar";
 import type { Database } from "@/lib/supabase/types";
+import { PlanLimitBanner } from "@/components/subscription/PlanLimitBanner";
 type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
 export default function ProductsPage() {
@@ -566,6 +568,7 @@ export default function ProductsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50/50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 p-4 sm:p-6 lg:p-8 transition-colors duration-300">
       <div className="max-w-[1800px] mx-auto space-y-6">
+        <PlanLimitBanner resource="products" reloadSignal={totalProducts} />
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
@@ -595,6 +598,52 @@ export default function ProductsPage() {
           onAlertClick={handleAlertClick}
           onDismissAlert={handleDismissAlert}
         />
+
+        {/* Guía de funcionamiento de catálogo de productos */}
+        <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+          <details className="group">
+            <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
+              <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Catálogo de Productos?
+              </div>
+              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+                <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+                <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
+              </div>
+            </summary>
+            <CardContent className="pt-0 pb-5 text-xs">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                  <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                    Ficha y Precios
+                  </h4>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Registra la información clave de cada ítem: código SKU, descripción y costos de compra/venta. Esta información alimenta automáticamente la facturación en el POS y los repuestos en soporte técnico.
+                  </p>
+                </div>
+                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                    Stock y Alertas
+                  </h4>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Configura los mínimos de inventario recomendados. La pestaña superior de alertas te notificará automáticamente cuando un artículo esté por debajo del límite de reabastecimiento o agotado.
+                  </p>
+                </div>
+                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                    Acciones Masivas
+                  </h4>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Selecciona múltiples artículos para realizar importaciones o exportaciones mediante plantillas CSV, así como habilitar, deshabilitar o duplicar productos de manera ágil.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </details>
+        </Card>
 
         {/* Metrics Grid */}
         <MetricsGrid metrics={globalMetrics} onMetricClick={handleMetricClick} />

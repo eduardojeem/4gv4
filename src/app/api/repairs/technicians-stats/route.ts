@@ -3,6 +3,8 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { ACTIVE_REPAIR_STATUSES, COMPLETED_REPAIR_STATUSES } from '@/lib/constants/repair-status'
+import type { RepairStatus } from '@/types/repairs'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +12,8 @@ type TechnicianProfile = {
   id: string
   full_name: string
   role?: string | null
-  specialty?: string | null
+  job_title?: string | null
+  department?: string | null
 }
 
 type BranchAssignment = {
@@ -26,6 +29,8 @@ type RepairStatsRow = {
   status?: string | null
   created_at?: string | null
   completed_at?: string | null
+  delivered_at?: string | null
+  updated_at?: string | null
 }
 
 type TechnicianAggregate = {
@@ -141,30 +146,13 @@ export async function GET(req: NextRequest) {
 
     const profilesQuery = supabase
       .from('profiles')
-      .select('id, full_name, email, role, specialty')
+      .select('id, full_name, email, role, job_title, department')
       .in('id', profileIds)
       .order('full_name')
 
     const { data: profiles, error: profilesError } = await profilesQuery
 
     if (profilesError) {
-      const msg = (profilesError.message || '').toLowerCase()
-      if (msg.includes('specialty') || msg.includes('column')) {
-        const fallbackProfilesQuery = supabase
-          .from('profiles')
-          .select('id, full_name, email, role')
-          .in('id', profileIds)
-          .order('full_name')
-
-        const { data: fallbackProfiles, error: fallbackError } = await fallbackProfilesQuery
-
-        if (fallbackError) throw fallbackError
-
-        const techProfiles = filterTechnicians((fallbackProfiles ?? []) as TechnicianProfile[])
-        const stats = await calculateStats(supabase, techProfiles, organization.id, branchScope.branchId)
-        return Response.json({ technicians: stats })
-      }
-
       throw profilesError
     }
 
@@ -204,12 +192,10 @@ async function calculateStats(
   if (technicians.length === 0) return []
 
   const techIds = technicians.map((technician) => technician.id)
-  const activeStatuses = ['recibido', 'diagnostico', 'reparacion', 'pausado']
-  const completedStatuses = ['listo', 'entregado']
 
   let repairsQuery = supabase
     .from('repairs')
-    .select('technician_id, status, created_at, completed_at')
+    .select('technician_id, status, created_at, completed_at, delivered_at, updated_at')
     .eq('organization_id', organizationId)
     .in('technician_id', techIds)
 
@@ -239,22 +225,26 @@ async function calculateStats(
     const stats = statsMap.get(repair.technician_id)
     if (!stats) continue
 
-    const status = String(repair.status || '').toLowerCase()
+    const status = String(repair.status || '').toLowerCase() as RepairStatus
 
-    if (activeStatuses.includes(status)) {
+    if (ACTIVE_REPAIR_STATUSES.has(status)) {
       stats.activeJobs += 1
     }
 
-    if (completedStatuses.includes(status)) {
+    if (COMPLETED_REPAIR_STATUSES.has(status)) {
       stats.totalCompleted += 1
 
-      if (repair.completed_at && repair.completed_at >= startOfMonth) {
+      // No todas las reparaciones cerradas tienen completed_at poblado;
+      // caemos a delivered_at y luego updated_at para no subcontar.
+      const closedAt = repair.completed_at || repair.delivered_at || repair.updated_at || null
+
+      if (closedAt && closedAt >= startOfMonth) {
         stats.completedThisMonth += 1
       }
 
-      if (repair.created_at && repair.completed_at) {
+      if (repair.created_at && closedAt) {
         const start = new Date(repair.created_at).getTime()
-        const end = new Date(repair.completed_at).getTime()
+        const end = new Date(closedAt).getTime()
         const days = (end - start) / (1000 * 60 * 60 * 24)
         if (days >= 0) {
           stats.completionDaysTotal += days
@@ -269,7 +259,8 @@ async function calculateStats(
     return {
       id: technician.id,
       name: technician.full_name,
-      specialty: technician.specialty || null,
+      // profiles no tiene columna "specialty": usamos el puesto/área disponible.
+      specialty: technician.job_title || technician.department || null,
       activeJobs: stats.activeJobs,
       completedThisMonth: stats.completedThisMonth,
       totalCompleted: stats.totalCompleted,

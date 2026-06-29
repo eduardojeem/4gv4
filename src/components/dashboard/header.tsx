@@ -16,7 +16,8 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Search, LogOut, User, Settings, Menu, Shield, Crown, LayoutDashboard } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { NotificationSystem, useNotifications } from '@/components/dashboard/notification-system'
+import { NotificationSystem, useNotifications, type Notification } from '@/components/dashboard/notification-system'
+import { useGlobalNotifications } from '@/hooks/use-global-notifications'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import { useAuth } from '@/contexts/auth-context'
@@ -54,6 +55,54 @@ export const Header = memo(function Header() {
     generateStockNotifications
   } = useNotifications()
   const shouldTrackStock = user?.role === 'admin' || user?.role === 'vendedor'
+
+  // Notificaciones globales (enviadas por el superadmin)
+  const {
+    items: globalItems,
+    markAsRead: markGlobalAsRead,
+    markAllAsRead: markAllGlobalAsRead,
+    dismiss: dismissGlobal,
+  } = useGlobalNotifications(!!user)
+
+  const globalAsNotifications = useMemo<Notification[]>(() => {
+    const typeMap = { info: 'info', warning: 'warning', success: 'success', danger: 'error' } as const
+    return globalItems.map(g => ({
+      id: g.id,
+      type: typeMap[g.type],
+      category: 'system' as const,
+      title: g.title,
+      message: g.body,
+      timestamp: new Date(g.timestamp),
+      read: g.read,
+    }))
+  }, [globalItems])
+
+  const globalIds = useMemo(() => new Set(globalItems.map(g => g.id)), [globalItems])
+
+  const allNotifications = useMemo(
+    () => [...globalAsNotifications, ...notifications],
+    [globalAsNotifications, notifications],
+  )
+
+  const handleMarkAsRead = useCallback((id: string) => {
+    if (globalIds.has(id)) markGlobalAsRead(id)
+    else markAsRead(id)
+  }, [globalIds, markGlobalAsRead, markAsRead])
+
+  const handleMarkAllAsRead = useCallback(() => {
+    markAllGlobalAsRead()
+    markAllAsRead()
+  }, [markAllGlobalAsRead, markAllAsRead])
+
+  const handleDeleteNotification = useCallback((id: string) => {
+    if (globalIds.has(id)) dismissGlobal(id)
+    else deleteNotification(id)
+  }, [globalIds, dismissGlobal, deleteNotification])
+
+  const handleClearAll = useCallback(() => {
+    globalItems.forEach(g => dismissGlobal(g.id))
+    clearAll()
+  }, [globalItems, dismissGlobal, clearAll])
 
   // Lean low-stock check — only fetches aggregate data, not all products
   const fetchLowStockNotifications = useCallback(async () => {
@@ -246,12 +295,12 @@ export const Header = memo(function Header() {
             </Button>
 
             {/* Notifications */}
-            <NotificationSystem 
-              notifications={notifications}
-              onMarkAsRead={markAsRead}
-              onMarkAllAsRead={markAllAsRead}
-              onDeleteNotification={deleteNotification}
-              onClearAll={clearAll}
+            <NotificationSystem
+              notifications={allNotifications}
+              onMarkAsRead={handleMarkAsRead}
+              onMarkAllAsRead={handleMarkAllAsRead}
+              onDeleteNotification={handleDeleteNotification}
+              onClearAll={handleClearAll}
             />
 
             {/* Theme Toggle */}

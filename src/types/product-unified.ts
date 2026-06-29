@@ -90,18 +90,21 @@ export interface ProductAlert {
 export interface ProductMovement {
   id: string
   product_id: string
-  movement_type: 'entrada' | 'salida' | 'ajuste' | 'venta' | 'reparacion'
+  // La BD puede contener valores en español (legacy) o inglés (nuevo RPC)
+  movement_type: 'in' | 'out' | 'adjustment' | 'transfer' | 'entrada' | 'salida' | 'ajuste' | 'venta' | 'reparacion'
   quantity: number
   previous_stock: number
   new_stock: number
   unit_cost?: number
   total_cost?: number
   reference_id?: string
-  reference_type?: 'sale' | 'purchase' | 'repair' | 'adjustment'
+  reference_type?: string
   notes?: string
   user_id?: string
+  branch_id?: string
   created_at: string
-  product?: Product
+  // El join solo trae name y sku, no el tipo Product completo
+  product?: { name: string; sku: string }
 }
 
 // Product with all relations populated

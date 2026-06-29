@@ -33,14 +33,10 @@ export function RepairHeader({
   ] as const
 
   return (
-    <div className="relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-950 text-white shadow-[0_24px_80px_-40px_rgba(8,15,34,0.75)]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.2),_transparent_38%),radial-gradient(circle_at_bottom_left,_rgba(56,189,248,0.18),_transparent_30%)]" />
-      <div className="absolute -right-20 top-6 h-52 w-52 rounded-full bg-cyan-400/10 blur-3xl" />
-      <div className="absolute -left-16 bottom-0 h-48 w-48 rounded-full bg-blue-500/10 blur-3xl" />
-
-      <div className="relative flex flex-col gap-5 p-5 sm:p-6 lg:p-7">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl space-y-4">
+    <div className="rounded-2xl border border-slate-200 bg-slate-950 text-white shadow-sm dark:border-slate-800">
+      <div className="flex flex-col gap-4 p-4 sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-3xl space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/90">
                 Reparaciones
@@ -56,12 +52,12 @@ export function RepairHeader({
               )}
             </div>
 
-            <div className="space-y-2">
-              <h1 className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                Todo el taller en un solo lugar.
+            <div className="space-y-1">
+              <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
+                Reparaciones
               </h1>
-              <p className="max-w-2xl text-sm leading-6 text-white/70 sm:text-[15px]">
-                Aqui puedes ver que equipos siguen en proceso, cuales necesitan atencion y cuales ya estan listos para entregar.
+              <p className="max-w-2xl text-sm leading-6 text-white/70">
+                Prioriza urgentes, sigue estados y entrega equipos desde una sola vista.
               </p>
             </div>
 
@@ -82,7 +78,29 @@ export function RepairHeader({
           </div>
 
           <div className="flex flex-col gap-3 lg:min-w-[260px] lg:max-w-[300px]">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white/70 backdrop-blur-sm">
+            <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+              <Button
+                onClick={onNewRepair}
+                className="h-10 flex-1 gap-2 rounded-xl bg-emerald-500 text-white shadow-sm shadow-emerald-950/20 hover:bg-emerald-400 focus-visible:ring-2 focus-visible:ring-emerald-200"
+              >
+                <Plus className="h-4 w-4" />
+                Nueva reparacion
+                <kbd className="ml-auto hidden h-6 items-center rounded-full border border-emerald-200/70 bg-emerald-50 px-2 font-mono text-[10px] font-semibold text-emerald-900 sm:inline-flex">
+                  Ctrl + N
+                </kbd>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={onRefresh}
+                disabled={isLoading}
+                className="h-10 gap-2 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+              >
+                <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+                Actualizar
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white/70">
               {urgentRepairs > 0 ? (
                 <span className="inline-flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-red-200" />
@@ -96,28 +114,6 @@ export function RepairHeader({
               ) : (
                 <span>La vista de hoy esta ordenada y sin urgencias visibles.</span>
               )}
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-              <Button
-                onClick={onNewRepair}
-                className="h-11 flex-1 gap-2 rounded-2xl bg-white text-slate-950 hover:bg-white/90"
-              >
-                <Plus className="h-4 w-4" />
-                Nueva reparacion
-                <kbd className="ml-auto hidden h-6 items-center rounded-full border border-slate-300 bg-slate-100 px-2 font-mono text-[10px] font-semibold text-slate-700 sm:inline-flex">
-                  Ctrl + N
-                </kbd>
-              </Button>
-              <Button
-                variant="outline"
-                onClick={onRefresh}
-                disabled={isLoading}
-                className="h-11 gap-2 rounded-2xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
-              >
-                <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
-                Actualizar
-              </Button>
             </div>
           </div>
         </div>

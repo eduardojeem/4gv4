@@ -108,17 +108,32 @@ const ROLE_PERMISSIONS: Record<OrganizationRole, Permission[]> = {
     'analytics.read',
   ],
   cashier: ['products.read', 'pos.sales.read', 'pos.sales.create', 'pos.cash.manage', 'crm.customers.read'],
-  technician: ['products.read', 'inventory.stock.manage', 'repairs.orders.read', 'repairs.orders.update'],
+  technician: [
+    'products.read',
+    'inventory.stock.manage',
+    'repairs.orders.read',
+    'repairs.orders.update',
+    // Acceso a POS / Caja / Clientes (acorde a la matriz de acceso por sección).
+    'pos.sales.read',
+    'pos.sales.create',
+    'pos.cash.manage',
+    'crm.customers.read',
+  ],
   seller: [
     'products.read',
     'pos.sales.read',
     'pos.sales.create',
+    'pos.cash.manage',
     'crm.customers.read',
     'crm.customers.manage',
     'promotions.read',
     'promotions.create',
     'promotions.update',
     'ecommerce.orders.manage',
+    // Reparaciones: ver y registrar (crear). La gestión avanzada (asignar,
+    // cambiar estado) queda para técnico/admin.
+    'repairs.orders.read',
+    'repairs.orders.create',
   ],
   customer: ['repairs.orders.read'],
 }

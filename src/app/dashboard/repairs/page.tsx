@@ -8,8 +8,9 @@ import { logger } from '@/lib/logger'
 
 // Icons
 import {
-  Users, BarChart3, MessageSquare, Package, RefreshCw, ChevronLeft, ChevronRight
+  Users, BarChart3, MessageSquare, Package, RefreshCw, ChevronLeft, ChevronRight, Info
 } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 
 // UI Components
 import { Button } from '@/components/ui/button'
@@ -25,13 +26,14 @@ import { useComponentPreload, useAutoPreload } from '@/hooks/use-component-prelo
 import { useRepairFilters } from '@/hooks/use-repair-filters'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useBranch } from '@/contexts/branch-context'
-import { withBranchFilter } from '@/lib/branches/client'
+import { branchHeaders } from '@/lib/branches/client'
 
 // Repair Components
 import { RepairStats } from '@/components/dashboard/repairs/RepairStats'
 import { RepairFilters } from '@/components/dashboard/repairs/RepairFilters'
 import { RepairList } from '@/components/dashboard/repairs/RepairList'
 import { RepairHeader } from '@/components/dashboard/repairs/RepairHeader'
+import { RepairLimitBanner } from '@/components/dashboard/repairs/RepairLimitBanner'
 import { QuickAccessNav } from '@/components/dashboard/repairs/QuickAccessNav'
 import { RepairViewSelector } from '@/components/dashboard/repairs/RepairViewSelector'
 import { RepairOperationsOverview } from '@/components/dashboard/repairs/RepairOperationsOverview'
@@ -82,8 +84,7 @@ function RepairsPageContent() {
     createRepair,
     updateRepair,
     deleteRepair,
-    refreshRepairs,
-    addImages
+    refreshRepairs
   } = useRepairs()
 
   const { technicians } = useTechnicians()
@@ -125,6 +126,7 @@ function RepairsPageContent() {
   const searchParams = useSearchParams()
   const requestedTechnicianId = searchParams.get('technician') || ''
   const shouldOpenNewRepair = searchParams.get('new') === 'true'
+  const requestedSearch = searchParams.get('search') || ''
 
   const handleDialogClose = useCallback(() => {
     setIsDialogOpen(false)
@@ -175,6 +177,12 @@ function RepairsPageContent() {
     setSelectedRepair(undefined)
     setIsDialogOpen(true)
   }, [isLoading, isDialogOpen, shouldOpenNewRepair])
+
+  useEffect(() => {
+    if (requestedSearch && requestedSearch !== searchTerm) {
+      setSearchTerm(requestedSearch)
+    }
+  }, [requestedSearch, searchTerm, setSearchTerm])
 
   // Preload: Precargar componentes pesados para mejorar UX
   const preload = useComponentPreload({
@@ -276,31 +284,18 @@ function RepairsPageContent() {
 
   const handleQuickPayConfirm = useCallback(async (repairId: string, result: RepairPaymentResult) => {
     try {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-
-      const updateData: Record<string, unknown> = {
-        payment_status: 'pagado',
-        paid_amount: result.amount,
-        updated_at: new Date().toISOString(),
+      const response = await fetch(`/api/repairs/${repairId}/payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...branchHeaders(selectedBranchId),
+        },
+        body: JSON.stringify(result),
+      })
+      const payload = await response.json().catch(() => null) as { error?: string } | null
+      if (!response.ok) {
+        throw new Error(payload?.error || 'No se pudo registrar el pago')
       }
-
-      if (result.markDelivered) {
-        const now = new Date().toISOString()
-        updateData.status = 'entregado'
-        updateData.picked_up_at = now
-        updateData.completed_at = now
-        updateData.delivery_outcome = result.outcome || 'repaired'
-      }
-
-      if (result.note) {
-        updateData.solution = result.note
-      }
-
-      let updateQuery = supabase.from('repairs').update(updateData).eq('id', repairId)
-      updateQuery = withBranchFilter(updateQuery, selectedBranchId)
-      const { error } = await updateQuery
-      if (error) throw error
 
       await refreshRepairs()
       toast.success(result.markDelivered ? 'Pago registrado y equipo entregado' : 'Pago registrado exitosamente')
@@ -351,12 +346,10 @@ function RepairsPageContent() {
             warrantyType: data.warrantyType,
             warrantyNotes: data.warrantyNotes,
             parts: data.parts || [],
-            notes: data.notes || []
+            notes: data.notes || [],
+            images: Array.isArray(d.images) ? d.images : []
           }
           const created = await createRepair(payload)
-          if (created?.id && Array.isArray(d.images) && d.images.length > 0) {
-            await addImages(created.id, d.images, 'general')
-          }
           return created
         })
 
@@ -492,7 +485,7 @@ function RepairsPageContent() {
       return false
     }
     return false
-  }, [dialogMode, selectedRepair, createRepair, updateRepair, addImages, technicianOptions])
+  }, [dialogMode, selectedRepair, createRepair, updateRepair, technicianOptions])
 
   const handleGlobalSearch = useCallback(({ query }: { query: string }) => {
     if (!query || query.length < 2) return []
@@ -597,31 +590,31 @@ function RepairsPageContent() {
   const quickAccessSections = [
     {
       title: 'Técnicos',
-      description: 'Gestionar equipo técnico',
+      description: 'Asigna trabajos, revisa carga de tareas y entra al detalle de cada tecnico.',
       icon: Users,
       path: '/dashboard/repairs/technicians',
-      color: 'blue' as const
+      color: 'sky' as const
     },
     {
       title: 'Analíticas',
-      description: 'Reportes y métricas',
+      description: 'Mide tiempos, volumen de reparaciones, estados y rendimiento del servicio.',
       icon: BarChart3,
       path: '/dashboard/repairs/analytics',
-      color: 'purple' as const
+      color: 'indigo' as const
     },
     {
       title: 'Comunicaciones',
-      description: 'Mensajes y notificaciones',
+      description: 'Gestiona avisos al cliente, mensajes de seguimiento y notificaciones.',
       icon: MessageSquare,
       path: '/dashboard/repairs/communications',
-      color: 'green' as const
+      color: 'teal' as const
     },
     {
       title: 'Inventario',
-      description: 'Piezas y repuestos',
+      description: 'Consulta repuestos, servicios y movimientos usados por el taller.',
       icon: Package,
       path: '/dashboard/repairs/inventory',
-      color: 'orange' as const
+      color: 'amber' as const
     }
   ]
 
@@ -656,7 +649,7 @@ function RepairsPageContent() {
   )
 
   return (
-    <div className="flex flex-col gap-5 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.06),_transparent_30%),linear-gradient(to_bottom,_rgba(248,250,252,0.9),_transparent_26%)] p-4 sm:gap-6 sm:p-5 lg:p-6 dark:bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.09),_transparent_28%),linear-gradient(to_bottom,_rgba(2,6,23,0.82),_transparent_30%)]">
+    <div className="flex flex-col gap-4 bg-slate-50 p-4 sm:p-5 lg:p-6 dark:bg-slate-950">
       <RepairHeader
         onRefresh={refreshRepairs}
         onNewRepair={handleNewRepair}
@@ -668,15 +661,7 @@ function RepairsPageContent() {
         selectedBranchName={selectedBranch?.name}
       />
 
-      <RepairStats repairs={repairs} visibleCount={uiFiltered.length} />
-
-      <RepairOperationsOverview
-        repairs={repairs}
-        filteredCount={uiFiltered.length}
-        selectedBranchName={selectedBranch?.name}
-        statusFilter={statusFilter}
-        onStatusFilterSelect={setStatusFilter}
-      />
+      <RepairLimitBanner reloadSignal={repairs.length} />
 
       <div className="hidden">
         <Collapsible open={quickAccessOpen} onOpenChange={setQuickAccessOpen}>
@@ -711,6 +696,52 @@ function RepairsPageContent() {
       <div className="hidden">
         <RepairStats repairs={repairs} />
       </div>
+
+      {/* Guía de funcionamiento del Taller de Reparaciones */}
+      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+        <details className="group">
+          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
+            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Taller de Reparaciones (Soporte Técnico)?
+            </div>
+            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
+            </div>
+          </summary>
+          <CardContent className="pt-0 pb-5 text-xs">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                  Recepción y Ticket
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Registra el dispositivo del cliente (marca, modelo, falla declarada y contraseña de acceso). El sistema generará un número de ticket de seguimiento y emitirá un comprobante de recepción firmado.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                  Asignación y Diagnóstico
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Asigna la orden a un técnico especialista. El técnico podrá actualizar el estado del servicio en tiempo real (ej: "En Diagnóstico", "Esperando Repuestos", "Listo para Entregar") e ingresar notas internas.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                  Cobro y Entrega
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Al completar la reparación, registra el cobro de la mano de obra y repuestos utilizados. La entrega final del equipo al cliente queda registrada con su respectivo recibo y garantía aplicada.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </details>
+      </Card>
 
       <div className="flex flex-col gap-4">
         <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-4 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70">
@@ -802,6 +833,13 @@ function RepairsPageContent() {
           <RepairEmptyState
             hasFilters={hasActiveFilters}
             onNewRepair={handleNewRepair}
+            onClearFilters={() => {
+              setSearchTerm('')
+              setStatusFilter('all')
+              setPriorityFilter('all')
+              setTechnicianFilter('all')
+              setDateRange(undefined)
+            }}
           />
         ) : viewMode === 'table' ? (
           <RepairList
@@ -854,6 +892,14 @@ function RepairsPageContent() {
             </div>
           </div>
         )}
+
+        <RepairOperationsOverview
+          repairs={repairs}
+          filteredCount={uiFiltered.length}
+          selectedBranchName={selectedBranch?.name}
+          statusFilter={statusFilter}
+          onStatusFilterSelect={setStatusFilter}
+        />
 
         <QuickAccessNav sections={quickAccessSections} />
       </div>

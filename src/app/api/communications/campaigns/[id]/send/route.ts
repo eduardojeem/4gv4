@@ -120,6 +120,7 @@ export async function POST(
         customer_name: r.name || null,
         to_email: r.email,
         subject,
+        html_body: html,
         channel: 'email',
         status: ok ? 'sent' : 'failed',
         provider_id: result.id || null,

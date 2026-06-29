@@ -10,7 +10,7 @@ import {
   Clock, X, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Save,
   Printer, Download, Share2, Settings, AlertTriangle,
   Loader2, CheckCircle2, XCircle, Tag, Sparkles, Award, ArrowRight, Wrench,
-  ArrowUpCircle, ArrowDownCircle, MoreHorizontal
+  ArrowUpCircle, ArrowDownCircle, MoreHorizontal, Info
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { useCashRegisterContext } from './contexts/CashRegisterContext'
@@ -2383,6 +2383,54 @@ function POSPageContent() {
           {/* Alertas de inventario desktop */}
           <div className="hidden lg:block px-6 pt-4">
             
+          </div>
+
+          {/* Guía de funcionamiento del POS */}
+          <div className="px-4 lg:px-6 pt-2">
+            <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+              <details className="group">
+                <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-4 pb-2.5">
+                  <div className="text-sm font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                    <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Punto de Venta (POS)?
+                  </div>
+                  <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+                    <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+                    <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
+                  </div>
+                </summary>
+                <CardContent className="pt-0 pb-4 text-xs">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                      <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                        <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                        Venta y Búsqueda
+                      </h4>
+                      <p className="text-muted-foreground leading-relaxed">
+                        Busca productos por nombre, SKU o escaneando el código de barras. Haz clic sobre el ítem para agregarlo al carrito. Puedes mezclar repuestos y servicios de mano de obra.
+                      </p>
+                    </div>
+                    <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                      <h4 className="font-semibold text-foreground flex items-center gap-2">
+                        <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                        Caja Abierta/Cerrada
+                      </h4>
+                      <p className="text-muted-foreground leading-relaxed">
+                        Para operar en el POS, la sucursal debe tener la caja abierta con saldo inicial. Todos los cobros se imputarán y sumarán directamente a la sesión activa del cajero.
+                      </p>
+                    </div>
+                    <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                      <h4 className="font-semibold text-foreground flex items-center gap-2">
+                        <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                        Proceso de Cobro
+                      </h4>
+                      <p className="text-muted-foreground leading-relaxed">
+                        Al presionar "Cobrar", selecciona cliente, el método de pago (efectivo, tarjeta, transferencia o mixto) y genera el comprobante digital o físico para impresión.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </details>
+            </Card>
           </div>
 
           {/* Barra de búsqueda y filtros */}

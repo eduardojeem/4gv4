@@ -23,6 +23,8 @@ import { Label } from '@/components/ui/label'
 import { useInventory } from '../context/InventoryContext'
 import { logger } from '@/lib/logger'
 import type { Product } from '@/types/product-unified'
+import { toast } from 'sonner'
+import { DollarSign, Wrench } from 'lucide-react'
 
 interface ServiceDialogProps {
   open: boolean
@@ -66,13 +68,13 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.price) {
-      alert("Por favor completa el nombre y precio del servicio")
+      toast.error("Por favor completa el nombre y precio del servicio")
       return
     }
 
     setIsSubmitting(true)
     try {
-      const serviceData = {
+      const serviceData: any = {
         name: formData.name,
         description: formData.description,
         sale_price: parseFloat(formData.price),
@@ -83,13 +85,18 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
 
       if (service) {
         await updateService(service.id, serviceData)
+        toast.success("Servicio actualizado correctamente")
       } else {
+        // Generar un SKU único para el nuevo servicio
+        serviceData.sku = `SRV-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`
         await createService(serviceData)
+        toast.success("Servicio creado exitosamente")
       }
 
       onOpenChange(false)
     } catch (error) {
       logger.error('Error saving service', { error })
+      toast.error("Ocurrió un error al guardar el servicio")
     } finally {
       setIsSubmitting(false)
     }
@@ -97,7 +104,7 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px] bg-background/80 backdrop-blur-xl border-border/50 shadow-2xl">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             {service ? "Editar Servicio" : "Agregar Nuevo Servicio"}
@@ -114,13 +121,17 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
               <Label htmlFor="name" className="text-sm font-semibold">
                 Nombre del Servicio
               </Label>
-              <Input
-                id="name"
-                placeholder="Ej: Cambio Pantalla iPhone 13"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="relative">
+                <Wrench className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="name"
+                  placeholder="Ej: Cambio Pantalla iPhone 13"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="pl-9 focus:ring-2 focus:ring-blue-500 bg-background/50"
+                  disabled={isSubmitting}
+                />
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="visibility" className="text-sm font-semibold">
@@ -129,8 +140,9 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
               <Select
                 value={formData.visibility}
                 onValueChange={(value) => setFormData({ ...formData, visibility: value })}
+                disabled={isSubmitting}
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-background/50">
                   <SelectValue placeholder="Seleccionar..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -145,42 +157,54 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
           <div className="grid grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="price" className="text-sm font-semibold text-blue-600 dark:text-blue-400">
-                Precio Cliente ($)
+                Precio Cliente
               </Label>
-              <Input
-                id="price"
-                type="number"
-                placeholder="0.00"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                className="focus:ring-2 focus:ring-blue-500"
-              />
+              <div className="relative">
+                <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-blue-500/70" />
+                <Input
+                  id="price"
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.price}
+                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                  className="pl-9 focus:ring-2 focus:ring-blue-500 bg-background/50"
+                  disabled={isSubmitting}
+                />
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="wholesalePrice" className="text-sm font-semibold text-purple-600 dark:text-purple-400">
-                Precio Mayorista ($)
+                Precio Mayorista
               </Label>
-              <Input
-                id="wholesalePrice"
-                type="number"
-                placeholder="0.00"
-                value={formData.wholesalePrice}
-                onChange={(e) => setFormData({ ...formData, wholesalePrice: e.target.value })}
-                className="focus:ring-2 focus:ring-purple-500"
-              />
+              <div className="relative">
+                <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-purple-500/70" />
+                <Input
+                  id="wholesalePrice"
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.wholesalePrice}
+                  onChange={(e) => setFormData({ ...formData, wholesalePrice: e.target.value })}
+                  className="pl-9 focus:ring-2 focus:ring-purple-500 bg-background/50"
+                  disabled={isSubmitting}
+                />
+              </div>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="cost" className="text-sm font-semibold text-green-600 dark:text-green-400">
-                Costo Estimado ($)
+                Costo Estimado
               </Label>
-              <Input
-                id="cost"
-                type="number"
-                placeholder="0.00"
-                value={formData.cost}
-                onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
-                className="focus:ring-2 focus:ring-green-500"
-              />
+              <div className="relative">
+                <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-green-500/70" />
+                <Input
+                  id="cost"
+                  type="number"
+                  placeholder="0.00"
+                  value={formData.cost}
+                  onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+                  className="pl-9 focus:ring-2 focus:ring-green-500 bg-background/50"
+                  disabled={isSubmitting}
+                />
+              </div>
             </div>
           </div>
           <div className="grid gap-2">
@@ -192,22 +216,24 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
               placeholder="Detalles adicionales..."
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="focus:ring-2 focus:ring-blue-500"
+              className="focus:ring-2 focus:ring-blue-500 bg-background/50"
+              disabled={isSubmitting}
             />
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="mt-2">
           <Button 
             variant="outline" 
             onClick={() => onOpenChange(false)}
-            className="hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="hover:bg-gray-100 dark:hover:bg-gray-800 bg-background/50"
+            disabled={isSubmitting}
           >
             Cancelar
           </Button>
           <Button 
             onClick={handleSubmit} 
             disabled={isSubmitting}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-md"
+            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-md transition-all hover:shadow-lg"
           >
             {isSubmitting ? "Guardando..." : "Guardar Servicio"}
           </Button>

@@ -388,6 +388,10 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
                   to: email,
                   subject: 'Bienvenido al sistema — Configura tu acceso',
                   html,
+                  log: {
+                    organizationId: context.organizationId ?? undefined,
+                    customerName: fullName || undefined,
+                  },
                 })
               }
             } catch (linkErr) {

@@ -86,8 +86,8 @@ export interface OrganizationSubscriptionState {
 // Fallback de seguridad. La fuente de verdad es la tabla `plans` (sincronizada desde
 // subscription_plans por trigger); estos valores solo se usan si la DB no devuelve límites.
 export const DEFAULT_LIMITS: Record<PlanCode, Record<string, number | null>> = {
-  FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null, repairs: 10 },
-  BASIC: { users: 10, branches: 2, cashRegisters: 3, products: 500, categories: null, repairs: 100 },
+  FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null, repairs: 20 },
+  BASIC: { users: 10, branches: 2, cashRegisters: 3, products: 500, categories: null, repairs: 150 },
   PRO: { users: 25, branches: 5, cashRegisters: 10, products: 5000, categories: null, repairs: null },
   ENTERPRISE: { users: null, branches: null, cashRegisters: null, products: null, categories: null, repairs: null },
 }
@@ -388,7 +388,7 @@ export async function getOrganizationPlanInfo(
 }> {
   const supabase = createAdminSupabase()
   const [{ data: sub }, { data: org }, { data: trials }] = await Promise.all([
-    supabase.from('subscriptions').select('plan, payment_status').eq('organization_id', organizationId).maybeSingle(),
+    supabase.from('subscriptions').select('plan, payment_status, cancel_at_period_end, current_period_ends_at').eq('organization_id', organizationId).maybeSingle(),
     supabase.from('organizations').select('plan').eq('id', organizationId).maybeSingle(),
     supabase
       .from('organization_module_trials')
@@ -396,7 +396,23 @@ export async function getOrganizationPlanInfo(
       .eq('organization_id', organizationId),
   ])
 
-  const code = normalizePlanCode(sub?.plan || org?.plan)
+  let code = normalizePlanCode(sub?.plan || org?.plan)
+
+  // Cancelación programada (cancel_at_period_end): cuando vence el período pagado,
+  // la suscripción baja a Gratuito. Se aplica de forma perezosa (sin cron) y se
+  // persiste una sola vez para que sea permanente.
+  const periodEnded = sub?.current_period_ends_at
+    ? new Date(sub.current_period_ends_at).getTime() < Date.now()
+    : false
+  if (sub?.cancel_at_period_end && periodEnded && code !== 'FREE') {
+    code = normalizePlanCode('free')
+    // Limpiamos el período: Free no tiene fecha de cobro y, de quedar una fecha
+    // vencida, isExpired seguiría en true y caparía los límites tras un re-upgrade.
+    await supabase
+      .from('subscriptions')
+      .update({ plan: code, status: 'active', cancel_at_period_end: false, current_period_ends_at: null, updated_at: new Date().toISOString() })
+      .eq('organization_id', organizationId)
+  }
   const { data: plan } = await supabase
     .from('plans')
     .select('name, modules')
@@ -511,7 +527,7 @@ export async function canCreateResource(
 }
 
 /**
- * Reparaciones tienen un límite MENSUAL (ej. free 10/mes, basic 100/mes), no por total.
+ * Reparaciones tienen un límite MENSUAL (free 20/mes, basic 150/mes, pro ilimitado), no por total.
  * Cuenta las reparaciones creadas en el mes calendario en curso para la organización.
  */
 export async function canCreateRepair(
@@ -661,6 +677,10 @@ export async function changePlan(
       organization_id: organizationId,
       plan: code,
       status: 'active',
+      // Un cambio de plan anula una cancelación programada y limpia un período
+      // vencido para que isExpired no quede pegado y cape los límites.
+      cancel_at_period_end: false,
+      current_period_ends_at: null,
       updated_at: now,
     }, { onConflict: 'organization_id' })
 
@@ -672,6 +692,92 @@ export async function changePlan(
     new_values: { plan: code, organization_id: organizationId },
   })
 
+  return { success: true }
+}
+
+/**
+ * Programa la cancelación al fin del período: conserva el plan pagado hasta el
+ * vencimiento y luego baja a Gratuito (ver getOrganizationPlanInfo).
+ * Bloquea si el uso actual supera los límites del plan Gratuito.
+ */
+export async function cancelSubscriptionAtPeriodEnd(
+  organizationId: string,
+): Promise<
+  | { success: true; effectiveUntil: string | null }
+  | { success: false; error: string; conflictingResources?: Array<{ resource: string; current: number; limit: number }> }
+> {
+  const supabase = createAdminSupabase()
+  const { data: sub, error: subError } = await supabase
+    .from('subscriptions')
+    .select('plan, current_period_ends_at')
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+
+  if (subError) return { success: false, error: subError.message }
+
+  if (normalizePlanCode(sub?.plan) === 'FREE') {
+    return { success: false, error: 'Ya estás en el plan Gratuito; no hay una suscripción paga para cancelar.' }
+  }
+
+  // Validar uso contra los límites de Gratuito (bloquear si excede).
+  const freePlan = await getPlanLimits(normalizePlanCode('free') as PlanCode)
+  const usage = await getOrganizationUsage(organizationId)
+  const resourceLabels: Record<string, string> = {
+    users: 'Usuarios', branches: 'Sucursales', cashRegisters: 'Cajas', products: 'Productos',
+  }
+  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'products', 'categories']
+  const conflictingResources: Array<{ resource: string; current: number; limit: number }> = []
+  for (const key of countResources) {
+    const limit = getPlanLimit(freePlan, key)
+    if (limit === null) continue
+    const current = usage[key] ?? 0
+    if (current > limit) {
+      conflictingResources.push({ resource: resourceLabels[key] || key, current, limit })
+    }
+  }
+  if (conflictingResources.length > 0) {
+    return {
+      success: false,
+      error: 'Tu uso actual supera los límites del plan Gratuito. Reducí estos recursos antes de cancelar.',
+      conflictingResources,
+    }
+  }
+
+  const now = new Date().toISOString()
+  const periodEnd = sub?.current_period_ends_at ? new Date(sub.current_period_ends_at) : null
+  const hasFuturePeriod = !!periodEnd && periodEnd.getTime() > Date.now()
+
+  if (hasFuturePeriod) {
+    // Hay período pagado pendiente → programar la baja para esa fecha.
+    const { error } = await supabase
+      .from('subscriptions')
+      .update({ cancel_at_period_end: true, updated_at: now })
+      .eq('organization_id', organizationId)
+    if (error) return { success: false, error: error.message }
+    return { success: true, effectiveUntil: sub?.current_period_ends_at ?? null }
+  }
+
+  // Sin período futuro definido → bajar a Gratuito de inmediato (estado limpio).
+  const freeCode = normalizePlanCode('free')
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ plan: freeCode, status: 'active', cancel_at_period_end: false, current_period_ends_at: null, updated_at: now })
+    .eq('organization_id', organizationId)
+  if (error) return { success: false, error: error.message }
+  return { success: true, effectiveUntil: null }
+}
+
+/** Revierte una cancelación programada (vuelve a renovar normalmente). */
+export async function reactivateSubscription(
+  organizationId: string,
+): Promise<{ success: true } | { success: false; error: string }> {
+  const supabase = createAdminSupabase()
+  const { error } = await supabase
+    .from('subscriptions')
+    .update({ cancel_at_period_end: false, updated_at: new Date().toISOString() })
+    .eq('organization_id', organizationId)
+
+  if (error) return { success: false, error: error.message }
   return { success: true }
 }
 

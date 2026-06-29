@@ -9,6 +9,10 @@ vi.mock('@/lib/auth/require-auth', () => ({
   getAuthResponse: vi.fn(() => null),
 }))
 
+vi.mock('@/lib/saas/context', () => ({
+  getCurrentOrganizationContext: vi.fn(async () => ({ id: 'org-1' })),
+}))
+
 describe('PATCH /api/repairs/:id/status', () => {
   it('returns ok and normalizes stage in demo mode', async () => {
     const { PATCH } = await import('./route')

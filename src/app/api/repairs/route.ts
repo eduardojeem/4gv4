@@ -4,6 +4,10 @@ import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/requi
 import { withBranchFilter } from '@/lib/branches/client'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { canCreateRepair } from '@/lib/saas/subscription-service'
+import {
+  isNextResponse,
+  resolveRepairRouteContext,
+} from '@/app/api/repairs/_lib'
 
 const REPAIR_SELECT_VARIANTS = [
   `
@@ -47,26 +51,20 @@ function organizationRequiredResponse() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireStaff()
-  const authResponse = getAuthResponse(auth)
-  if (authResponse) return authResponse
-  const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
-  const organization = await getCurrentOrganizationContext(staffAuth.user.id)
-
-  if (!organization) {
-    return organizationRequiredResponse()
-  }
-
   try {
+    const ctx = await resolveRepairRouteContext(request)
+    if (isNextResponse(ctx)) return ctx
+
     const body = await request.json() as Record<string, unknown>
-    const { parts, notes, ...repairFields } = body as {
+    const { parts, notes, images, ...repairFields } = body as {
       parts?: Array<Record<string, unknown>>
       notes?: Array<Record<string, unknown>>
+      images?: string[]
       [key: string]: unknown
     }
 
     // Límite mensual de reparaciones según el plan (free 10/mes, basic 100/mes, pro+ ilimitado).
-    const planGate = await canCreateRepair(organization.id)
+    const planGate = await canCreateRepair(ctx.organizationId)
     if (!planGate.allowed) {
       const planName = planGate.plan?.name || planGate.plan?.code || 'actual'
       const limitText = planGate.limit === null ? 'ilimitadas' : String(planGate.limit)
@@ -86,11 +84,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createAdminSupabase()
+    const supabase = ctx.supabase
 
     const { data: newRepair, error: createError } = await supabase
       .from('repairs')
-      .insert({ ...repairFields, organization_id: organization.id })
+      .insert({
+        ...repairFields,
+        organization_id: ctx.organizationId,
+        branch_id: ctx.branchId,
+      })
       .select('id')
       .single()
 
@@ -100,28 +102,54 @@ export async function POST(request: NextRequest) {
 
     const repairId = newRepair.id
 
-    if (parts && parts.length > 0) {
-      const { error: partsError } = await supabase
-        .from('repair_parts')
-        .insert(parts.map((p) => ({ ...p, repair_id: repairId })))
-      if (partsError) {
-        return NextResponse.json({ error: partsError.message }, { status: 500 })
+    try {
+      if (parts && parts.length > 0) {
+        const { error: partsError } = await supabase
+          .from('repair_parts')
+          .insert(parts.map((p) => ({ ...p, repair_id: repairId })))
+        if (partsError) throw partsError
       }
-    }
 
-    if (notes && notes.length > 0) {
-      const { error: notesError } = await supabase
-        .from('repair_notes')
-        .insert(notes.map((n) => ({ ...n, repair_id: repairId })))
-      if (notesError) {
-        return NextResponse.json({ error: notesError.message }, { status: 500 })
+      if (notes && notes.length > 0) {
+        const { error: notesError } = await supabase
+          .from('repair_notes')
+          .insert(notes.map((n) => ({
+            ...n,
+            repair_id: repairId,
+            author_id: ctx.userId,
+            author_name: typeof n.author_name === 'string' ? n.author_name : 'Sistema',
+          })))
+        if (notesError) throw notesError
       }
+
+      if (Array.isArray(images) && images.length > 0) {
+        const imageRows = images
+          .filter((url): url is string => typeof url === 'string' && url.length > 0)
+          .map((url) => ({
+            repair_id: repairId,
+            image_url: url,
+            image_type: 'general',
+          }))
+
+        if (imageRows.length > 0) {
+          const { error: imagesError } = await supabase
+            .from('repair_images')
+            .insert(imageRows)
+          if (imagesError) throw imagesError
+        }
+      }
+    } catch (relatedError) {
+      await supabase.from('repairs').delete().eq('id', repairId)
+      const message = relatedError instanceof Error ? relatedError.message : 'No se pudieron guardar los detalles de la reparacion'
+      return NextResponse.json({ error: message }, { status: 500 })
     }
 
     const { data: fullRepair, error: fetchError } = await supabase
       .from('repairs')
       .select(FULL_REPAIR_SELECT)
       .eq('id', repairId)
+      .eq('organization_id', ctx.organizationId)
+      .eq('branch_id', ctx.branchId)
       .single()
 
     if (fetchError) {

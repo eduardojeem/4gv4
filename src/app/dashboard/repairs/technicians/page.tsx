@@ -75,9 +75,12 @@ export default function TechniciansPage() {
     const highLoadTechnicians = technicianData.filter((tech) => tech.loadState === 'high_load').length
     const totalActiveJobs = technicianData.reduce((sum, tech) => sum + tech.activeJobs, 0)
     const avgJobsPerTech = total > 0 ? totalActiveJobs / total : 0
+    // Promediar solo sobre técnicos con cierres reales; los ociosos (0 días)
+    // sesgaban el promedio del equipo hacia abajo.
+    const techsWithCompletions = technicianData.filter((tech) => tech.avgCompletionDays > 0)
     const avgCompletionDays =
-      technicianData.length > 0
-        ? technicianData.reduce((sum, tech) => sum + tech.avgCompletionDays, 0) / technicianData.length
+      techsWithCompletions.length > 0
+        ? techsWithCompletions.reduce((sum, tech) => sum + tech.avgCompletionDays, 0) / techsWithCompletions.length
         : 0
 
     const topCloser = technicianData.reduce((best, current) => {
@@ -91,7 +94,7 @@ export default function TechniciansPage() {
       highLoadTechnicians,
       totalActiveJobs,
       avgJobsPerTech,
-      avgCompletionTime: avgCompletionDays > 0 ? `${avgCompletionDays.toFixed(1)} dias` : undefined,
+      avgCompletionTime: avgCompletionDays > 0 ? `${avgCompletionDays.toFixed(1)} días` : undefined,
       topCloserName: topCloser?.name,
     }
   }, [technicianData])
@@ -99,63 +102,72 @@ export default function TechniciansPage() {
   const showErrorState = !isLoading && !!error && technicianData.length === 0
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Home className="h-4 w-4" />
+    <div className="flex flex-col gap-8 p-6 md:p-8 w-full max-w-7xl mx-auto animate-in fade-in duration-500">
+      {/* Breadcrumbs */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground/80 font-medium">
+        <Home className="h-4 w-4 hover:text-primary transition-colors cursor-pointer" />
         <ChevronRight className="h-3 w-3" />
-        <span>Reparaciones</span>
+        <span className="hover:text-foreground transition-colors cursor-pointer" onClick={() => router.push('/dashboard/repairs')}>Reparaciones</span>
         <ChevronRight className="h-3 w-3" />
-        <span className="font-medium text-foreground">Tecnicos</span>
+        <span className="text-foreground">Técnicos</span>
       </div>
 
-      <div>
+      <div className="-mt-4">
         <Button
           variant="ghost"
           onClick={() => router.push('/dashboard/repairs')}
-          className="-ml-2 gap-2"
+          className="-ml-4 gap-2 text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
         >
           <ArrowLeft className="h-4 w-4" />
           Volver a Reparaciones
         </Button>
       </div>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between relative">
+        <div className="absolute -top-10 -left-10 w-40 h-40 bg-primary/10 rounded-full blur-3xl -z-10" />
         <div>
-          <h1 className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-3xl font-bold tracking-tight text-transparent">
-            Tecnicos
+          <h1 className="bg-gradient-to-br from-primary via-primary/90 to-primary/50 bg-clip-text text-4xl font-black tracking-tight text-transparent drop-shadow-sm mb-2">
+            Rendimiento de Técnicos
           </h1>
-          <p className="mt-1 text-muted-foreground">
-            Mira la carga real de trabajo de cada tecnico y entra a su detalle con un clic.
+          <p className="text-muted-foreground text-lg max-w-xl leading-relaxed">
+            Monitorea la carga operativa de tu equipo, balancea el trabajo y analiza la eficiencia en tiempo real.
           </p>
           {selectedBranch?.name && (
-            <div className="mt-3">
-              <Badge variant="outline" className="rounded-full px-3 py-1">
-                Sucursal actual: {selectedBranch.name}
+            <div className="mt-4">
+              <Badge variant="outline" className="rounded-full px-4 py-1.5 bg-background/50 backdrop-blur-md border-primary/20 text-primary shadow-sm">
+                Sucursal activa: <strong className="ml-1 font-bold">{selectedBranch.name}</strong>
               </Badge>
             </div>
           )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3 mt-4 md:mt-0">
           <Button
             variant="outline"
             size="icon"
             onClick={handleRefresh}
-            title="Actualizar"
+            title="Actualizar datos"
             disabled={isLoading}
+            className="rounded-full h-10 w-10 border-border/50 bg-background/50 backdrop-blur-md hover:bg-primary/5 hover:border-primary/30 transition-all shadow-sm"
           >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 text-muted-foreground ${isLoading ? 'animate-spin text-primary' : ''}`} />
           </Button>
-          <Button className="gap-2" onClick={handleAddTechnician}>
+          <Button className="gap-2 rounded-full px-6 h-10 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all hover:-translate-y-0.5" onClick={handleAddTechnician}>
             <UserPlus className="h-4 w-4" />
-            Agregar Tecnico
+            <span className="font-semibold">Agregar Técnico</span>
           </Button>
         </div>
       </div>
 
-      <TechnicianStatsGrid {...overallStats} />
+      {/* Stats Overview */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-muted/30 via-transparent to-muted/30 blur-2xl -z-10 rounded-3xl" />
+        <TechnicianStatsGrid {...overallStats} />
+      </div>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      {/* Toolbar & Filters */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-1">
         <TechnicianFilters
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
@@ -165,7 +177,7 @@ export default function TechniciansPage() {
           setSortBy={setSortBy}
         />
 
-        <div className="flex items-center gap-2 rounded-lg border p-1">
+        <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/50 backdrop-blur-md p-1 shadow-sm">
           <Button
             variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
             size="sm"
@@ -173,6 +185,7 @@ export default function TechniciansPage() {
             aria-pressed={viewMode === 'grid'}
             onClick={() => setViewMode('grid')}
             title="Vista de grilla"
+            className={`rounded-lg transition-all ${viewMode === 'grid' ? 'bg-background shadow-sm' : 'hover:bg-muted/50'}`}
           >
             <LayoutGrid className="h-4 w-4" />
           </Button>
@@ -183,80 +196,93 @@ export default function TechniciansPage() {
             aria-pressed={viewMode === 'list'}
             onClick={() => setViewMode('list')}
             title="Vista de lista"
+            className={`rounded-lg transition-all ${viewMode === 'list' ? 'bg-background shadow-sm' : 'hover:bg-muted/50'}`}
           >
             <List className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
+      {/* Error State */}
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="border-destructive/50 bg-destructive/10 text-destructive shadow-sm rounded-xl">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error al cargar datos</AlertTitle>
+          <AlertTitle className="font-bold">Error de sincronización</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <RefreshCw className="mx-auto mb-2 h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Cargando tecnicos...</p>
-          </div>
-        </div>
-      ) : showErrorState ? (
-        <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed px-4 py-12 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
-            <AlertCircle className="h-8 w-8 text-destructive" />
-          </div>
-          <div className="max-w-md space-y-2">
-            <h3 className="text-lg font-semibold">No pudimos cargar los tecnicos</h3>
-            <p className="text-sm text-muted-foreground">
-              Revisa la conexion o la configuracion de datos y vuelve a intentarlo.
-            </p>
-          </div>
-          <Button onClick={handleRefresh} variant="outline" className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Reintentar
-          </Button>
-        </div>
-      ) : filteredTechnicians.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-12">
-          <div className="max-w-md text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-              <UserPlus className="h-8 w-8 text-muted-foreground" />
+      {/* Content Area */}
+      <div className="min-h-[400px]">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-64 space-y-4">
+            <div className="relative">
+              <div className="absolute inset-0 rounded-full blur-xl bg-primary/20 animate-pulse" />
+              <RefreshCw className="relative h-10 w-10 animate-spin text-primary" />
             </div>
-            <h3 className="mb-2 text-lg font-semibold">No hay tecnicos para mostrar</h3>
-            <p className="mb-4 text-sm text-muted-foreground">
-              {searchTerm || statusFilter !== 'all'
-                ? 'No se encontraron resultados con los filtros aplicados.'
-                : selectedBranch?.name
-                  ? `Todavia no hay tecnicos asignados a ${selectedBranch.name}.`
-                  : 'Comienza agregando tecnicos a tu equipo.'}
-            </p>
+            <p className="text-sm font-medium text-muted-foreground animate-pulse">Sincronizando información de técnicos...</p>
           </div>
-        </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredTechnicians.map((tech) => (
-            <TechnicianCard key={tech.id} {...tech} />
-          ))}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-          <div className="hidden border-b bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_minmax(220px,1.2fr)_auto] md:items-center md:gap-4">
-            <span>Tecnico</span>
-            <span>Rendimiento</span>
-            <span>Carga</span>
-            <span className="text-right">Accion</span>
+        ) : showErrorState ? (
+          <div className="flex flex-col items-center justify-center gap-5 rounded-2xl border border-dashed border-destructive/30 bg-destructive/5 px-4 py-16 text-center transition-all">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10 shadow-inner">
+              <AlertCircle className="h-10 w-10 text-destructive" />
+            </div>
+            <div className="max-w-md space-y-2">
+              <h3 className="text-xl font-bold text-foreground">Error al cargar los datos</h3>
+              <p className="text-base text-muted-foreground">
+                Revisa la conexión de red o la configuración y vuelve a intentarlo.
+              </p>
+            </div>
+            <Button onClick={handleRefresh} variant="outline" className="gap-2 mt-2 rounded-full border-destructive/20 hover:bg-destructive hover:text-destructive-foreground transition-all">
+              <RefreshCw className="h-4 w-4" />
+              Reintentar conexión
+            </Button>
           </div>
-          <div className="divide-y">
+        ) : filteredTechnicians.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/50 bg-background/30 backdrop-blur-sm px-4 py-16 transition-all hover:bg-background/50 hover:border-border/80">
+            <div className="max-w-md text-center">
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-muted/50 shadow-inner">
+                <UserPlus className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <h3 className="mb-3 text-xl font-bold text-foreground">No se encontraron técnicos</h3>
+              <p className="mb-6 text-base text-muted-foreground">
+                {searchTerm || statusFilter !== 'all'
+                  ? 'No hay resultados que coincidan con los filtros aplicados en esta vista.'
+                  : selectedBranch?.name
+                    ? `Aún no hay técnicos asignados a la sucursal ${selectedBranch.name}.`
+                    : 'Comienza agregando miembros a tu equipo técnico.'}
+              </p>
+              {(!searchTerm && statusFilter === 'all') && (
+                <Button onClick={handleAddTechnician} className="gap-2 rounded-full px-6 shadow-md hover:shadow-lg transition-all">
+                  <UserPlus className="h-4 w-4" />
+                  Agregar el primer técnico
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : viewMode === 'grid' ? (
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 animate-in slide-in-from-bottom-4 duration-500 fade-in">
             {filteredTechnicians.map((tech) => (
-              <TechnicianListItem key={tech.id} {...tech} />
+              <TechnicianCard key={tech.id} {...tech} />
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-border/50 bg-background/50 backdrop-blur-md shadow-sm animate-in slide-in-from-bottom-4 duration-500 fade-in">
+            <div className="hidden border-b border-border/50 bg-muted/30 px-6 py-4 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_minmax(220px,1.2fr)_auto] md:items-center md:gap-4">
+              <span>Técnico</span>
+              <span>Rendimiento</span>
+              <span>Carga operativa</span>
+              <span className="text-right">Acciones</span>
+            </div>
+            <div className="divide-y divide-border/30 p-1">
+              {filteredTechnicians.map((tech) => (
+                <TechnicianListItem key={tech.id} {...tech} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
+

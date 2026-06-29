@@ -329,6 +329,7 @@ export async function POST(request: Request) {
         plan: subscriptionPlan.name || selectedPlan,
         loginUrl: `${appUrl}/login`,
       }),
+      log: { organizationId: organization.id, customerName: input.fullName },
     }).catch((err) => {
       logger.error('Failed to send welcome email', { error: err, email: input.email })
     })

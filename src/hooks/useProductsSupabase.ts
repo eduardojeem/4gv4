@@ -674,11 +674,12 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
       ])
 
       return { success: true, data }
-    } catch (err) {
-      console.error('Error updating stock:', err)
+    } catch (err: any) {
+      const errorMsg = err?.message || err?.details || JSON.stringify(err)
+      console.error('Error updating stock:', errorMsg, err)
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Error desconocido' 
+        error: errorMsg || 'Error desconocido' 
       }
     }
   }, [selectedBranchId, products, supabase, fetchProducts, fetchDashboardStats, fetchAlerts])

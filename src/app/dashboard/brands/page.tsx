@@ -1,7 +1,7 @@
-﻿'use client'
+'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, RefreshCw, Building2, MoreVertical, Edit, Trash2, CheckCircle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, RefreshCw, Building2, MoreVertical, Edit, Trash2, CheckCircle, XCircle, ChevronLeft, ChevronRight, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -135,6 +135,52 @@ export default function BrandsPage() {
             </Button>
           </div>
         </div>
+
+        {/* Guía de funcionamiento de marcas */}
+        <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+          <details className="group">
+            <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
+              <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Marcas?
+              </div>
+              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+                <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+                <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
+              </div>
+            </summary>
+            <CardContent className="pt-0 pb-5 text-xs">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                  <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                    Marcas y Fabricantes
+                  </h4>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Registra las marcas de repuestos o dispositivos que comercializa tu negocio. Esto te permite clasificar el inventario de manera más clara para las búsquedas.
+                  </p>
+                </div>
+                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                    Filtros y Búsqueda
+                  </h4>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Usa la barra de búsqueda para localizar marcas activas o inactivas. Al asociar una marca a un producto, los clientes podrán filtrar por este atributo en el POS o web.
+                  </p>
+                </div>
+                <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                  <h4 className="font-semibold text-foreground flex items-center gap-2">
+                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                    Habilitar o Deshabilitar
+                  </h4>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Puedes desactivar de forma temporal marcas obsoletas o sin stock para quitarlas del catálogo activo, sin alterar el historial de facturación previo.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </details>
+        </Card>
 
         <div className="flex items-center gap-4">
           <div className="relative flex-1 max-w-sm">

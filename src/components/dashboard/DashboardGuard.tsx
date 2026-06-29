@@ -3,7 +3,9 @@
 import { useAuth } from '@/contexts/auth-context'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Loader2, ShieldAlert } from 'lucide-react'
+import { Loader2, ShieldAlert, Lock } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { canRoleAccessSection } from '@/lib/auth/section-access'
 
 interface DashboardGuardProps {
   children: React.ReactNode
@@ -24,6 +26,11 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
 
   const isInactiveUser = user?.status === 'inactive' || user?.status === 'suspended'
   const isAccessDenied = Boolean(user && isInactiveUser)
+  // Control de acceso por sección (rol vendedor/tecnico). Cierra el acceso por URL
+  // directa, no solo lo oculta del menú.
+  const isSectionDenied = Boolean(
+    user && !isInactiveUser && !canRoleAccessSection(user.role, pathname)
+  )
   const canRequireOnboarding = Boolean(
     user &&
     !isInactiveUser &&
@@ -116,6 +123,25 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
           <p className="text-muted-foreground">
             No tienes permisos para acceder a esta seccion del dashboard.
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isSectionDenied) {
+    return (
+      <div className="flex h-[70vh] items-center justify-center bg-background p-6">
+        <div className="max-w-md text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+            <Lock className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <h2 className="mb-2 text-xl font-semibold text-foreground">
+            Sección no disponible para tu rol
+          </h2>
+          <p className="mb-5 text-muted-foreground">
+            Tu rol no tiene acceso a esta sección. Si creés que es un error, contactá a un administrador.
+          </p>
+          <Button onClick={() => router.replace('/dashboard')}>Volver al inicio</Button>
         </div>
       </div>
     )

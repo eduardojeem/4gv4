@@ -67,6 +67,11 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
           creditCode: credit.id.slice(0, 8),
           brand: { name: organization.name },
         }),
+        log: {
+          organizationId: organization.id,
+          customerId: credit.customer_id,
+          customerName: customer?.name || undefined,
+        },
       })
 
       if (result.ok) {

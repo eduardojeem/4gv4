@@ -31,6 +31,16 @@ export interface SendEmailParams {
   /** Overrides EMAIL_FROM, e.g. `Mi Tienda <noreply@midominio.com>`. */
   from?: string
   replyTo?: string
+  /**
+   * When provided, logs the send attempt to communication_messages.
+   * Requires the 20260612 + 20260625 migrations to be applied.
+   */
+  log?: {
+    organizationId?: string
+    customerId?: string
+    customerName?: string
+    campaignId?: string
+  }
 }
 
 export interface SendEmailResult {
@@ -51,6 +61,16 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       to: params.to,
       subject: params.subject,
     })
+    if (params.log) {
+      void logEmailMessage({
+        ...params.log,
+        to: params.to,
+        subject: params.subject,
+        html: params.html,
+        status: 'failed',
+        error: 'RESEND_API_KEY no configurada',
+      })
+    }
     return { ok: false, skipped: true }
   }
 
@@ -65,13 +85,83 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 
     if (error) {
       console.error('[email] Resend error:', error)
+      if (params.log) {
+        void logEmailMessage({
+          ...params.log,
+          to: params.to,
+          subject: params.subject,
+          html: params.html,
+          status: 'failed',
+          error: error.message,
+        })
+      }
       return { ok: false, error: error.message }
     }
 
+    if (params.log) {
+      void logEmailMessage({
+        ...params.log,
+        to: params.to,
+        subject: params.subject,
+        html: params.html,
+        status: 'sent',
+        providerId: data?.id,
+      })
+    }
     return { ok: true, id: data?.id }
   } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error desconocido'
     console.error('[email] send failed:', err)
-    return { ok: false, error: err instanceof Error ? err.message : 'Error desconocido' }
+    if (params.log) {
+      void logEmailMessage({
+        ...params.log,
+        to: params.to,
+        subject: params.subject,
+        html: params.html,
+        status: 'failed',
+        error: message,
+      })
+    }
+    return { ok: false, error: message }
+  }
+}
+
+/** Fire-and-forget: inserta una fila en communication_messages. */
+async function logEmailMessage(opts: {
+  organizationId?: string
+  customerId?: string
+  customerName?: string
+  campaignId?: string
+  to: string | string[]
+  subject: string
+  html: string
+  status: 'sent' | 'failed'
+  error?: string
+  providerId?: string
+}) {
+  try {
+    const { createAdminSupabase } = await import('@/lib/supabase/admin')
+    const admin = createAdminSupabase()
+    const recipients = Array.isArray(opts.to) ? opts.to : [opts.to]
+    const { error } = await admin.from('communication_messages').insert(
+      recipients.map((email) => ({
+        organization_id: opts.organizationId ?? null,
+        campaign_id: opts.campaignId ?? null,
+        customer_id: opts.customerId ?? null,
+        customer_name: opts.customerName ?? null,
+        to_email: email,
+        subject: opts.subject,
+        content: '',
+        html_body: opts.html,
+        channel: 'email',
+        status: opts.status,
+        provider_id: opts.providerId ?? null,
+        error: opts.error ?? null,
+      }))
+    )
+    if (error) console.error('[email] logEmailMessage insert error:', error.message, error.details)
+  } catch (err) {
+    console.error('[email] logEmailMessage failed:', err)
   }
 }
 

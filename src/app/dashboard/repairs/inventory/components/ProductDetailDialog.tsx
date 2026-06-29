@@ -51,13 +51,29 @@ interface ProductDetailDialogProps {
   onEdit?: (product: Product) => void
 }
 
+// Traduce movement_type (inglés o español) a etiqueta y color legible
+function formatMovementType(type: string): { label: string; className: string } {
+  const map: Record<string, { label: string; className: string }> = {
+    in:         { label: '↑ Entrada',   className: 'bg-green-500 text-white' },
+    entrada:    { label: '↑ Entrada',   className: 'bg-green-500 text-white' },
+    out:        { label: '↓ Salida',    className: 'bg-red-500 text-white' },
+    salida:     { label: '↓ Salida',    className: 'bg-red-500 text-white' },
+    venta:      { label: '↓ Venta',     className: 'bg-red-500 text-white' },
+    adjustment: { label: '⚖ Ajuste',   className: 'bg-blue-500 text-white' },
+    ajuste:     { label: '⚖ Ajuste',   className: 'bg-blue-500 text-white' },
+    transfer:   { label: '⇄ Traslado', className: 'bg-purple-500 text-white' },
+    reparacion: { label: '🔧 Reparación', className: 'bg-amber-500 text-white' },
+  }
+  return map[type] ?? { label: type, className: 'bg-gray-500 text-white' }
+}
+
 export function ProductDetailDialog({
   product,
   open,
   onOpenChange,
   onEdit
 }: ProductDetailDialogProps) {
-  const { updateStock } = useInventory()
+  const { updateStock, getProductMovements } = useInventory()
   const [movements, setMovements] = useState<ProductMovement[]>([])
   const [loadingMovements, setLoadingMovements] = useState(false)
   const [adjustmentQuantity, setAdjustmentQuantity] = useState('')
@@ -73,12 +89,15 @@ export function ProductDetailDialog({
   const loadMovements = async () => {
     if (!product) return
     setLoadingMovements(true)
-    // Aquí cargarías los movimientos del producto
-    // Por ahora simulamos un delay
-    setTimeout(() => {
-      setMovements([])
+    try {
+      const result = await getProductMovements(product.id)
+      setMovements(result?.data || [])
+    } catch (error) {
+      logger.error('Error loading movements', { error })
+      toast.error('Error al cargar historial')
+    } finally {
       setLoadingMovements(false)
-    }, 500)
+    }
   }
 
   const handleStockAdjustment = async () => {
@@ -95,7 +114,7 @@ export function ProductDetailDialog({
 
     setIsAdjusting(true)
     try {
-      await updateStock(product.id, quantity)
+      await updateStock(product.id, quantity, adjustmentReason)
       setAdjustmentQuantity('')
       setAdjustmentReason('')
       loadMovements()
@@ -504,9 +523,10 @@ export function ProductDetailDialog({
                             {new Date(mov.created_at).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
-                            <Badge>
-                              {mov.movement_type}
-                            </Badge>
+                            {(() => {
+                              const { label, className } = formatMovementType(mov.movement_type)
+                              return <Badge className={className}>{label}</Badge>
+                            })()}
                           </TableCell>
                           <TableCell className={mov.quantity > 0 ? 'text-green-600' : 'text-red-600'}>
                             {mov.quantity > 0 ? '+' : ''}{mov.quantity}

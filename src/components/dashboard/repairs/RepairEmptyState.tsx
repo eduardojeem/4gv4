@@ -6,9 +6,10 @@ import { Plus } from 'lucide-react'
 interface RepairEmptyStateProps {
     hasFilters: boolean
     onNewRepair?: () => void
+    onClearFilters?: () => void
 }
 
-export function RepairEmptyState({ hasFilters, onNewRepair }: RepairEmptyStateProps) {
+export function RepairEmptyState({ hasFilters, onNewRepair, onClearFilters }: RepairEmptyStateProps) {
     return (
         <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed rounded-lg">
             <div className="text-center max-w-md">
@@ -21,6 +22,11 @@ export function RepairEmptyState({ hasFilters, onNewRepair }: RepairEmptyStatePr
                         ? 'No se encontraron resultados con los filtros aplicados.'
                         : 'Comienza creando tu primera reparación.'}
                 </p>
+                {hasFilters && onClearFilters && (
+                    <Button variant="outline" onClick={onClearFilters}>
+                        Limpiar filtros
+                    </Button>
+                )}
                 {!hasFilters && onNewRepair && (
                     <Button onClick={onNewRepair}>
                         <Plus className="mr-2 h-4 w-4" />

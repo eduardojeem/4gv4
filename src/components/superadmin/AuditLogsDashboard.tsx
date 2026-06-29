@@ -61,8 +61,6 @@ export type AuditLogRow = {
   userAgent: string | null
   createdAt: string | null
   details: unknown
-  newValues: unknown
-  oldValues: unknown
   resourceName: string | null
   resourceSlug: string | null
 }
@@ -178,11 +176,24 @@ function StatCard({ label, value, sub, icon: Icon, tone = 'default' }: {
 // Details drawer
 // ---------------------------------------------------------------------------
 
+type LogPayload = { details: unknown; new_values: unknown; old_values: unknown } | null
+
 function DetailsDrawer({ log, onClose }: { log: AuditLogRow; onClose: () => void }) {
   const actionMeta = ACTION_META[log.action] ?? { label: log.action, color: 'text-slate-600', icon: Activity, category: 'other' }
   const severityMeta = SEVERITY_META[log.severity] ?? SEVERITY_META.low
   const ActionIcon = actionMeta.icon
   const SeverityIcon = severityMeta.icon
+  const [payload, setPayload] = useState<LogPayload>(null)
+  const [loadingPayload, setLoadingPayload] = useState(false)
+
+  useEffect(() => {
+    setLoadingPayload(true)
+    fetch(`/api/superadmin/audit-logs/${log.id}`)
+      .then((r) => r.json())
+      .then((data) => setPayload(data))
+      .catch(() => {})
+      .finally(() => setLoadingPayload(false))
+  }, [log.id])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -271,36 +282,45 @@ function DetailsDrawer({ log, onClose }: { log: AuditLogRow; onClose: () => void
             </div>
           )}
 
-          {/* Payload */}
-          {(log.details || log.newValues || log.oldValues) && (
-            <div className="space-y-2 rounded-lg border bg-card p-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Payload</h3>
-              {log.newValues != null && (
-                <div>
-                  <p className="text-[11px] font-semibold text-emerald-600">new_values</p>
-                  <pre className="mt-1 max-h-64 overflow-auto rounded bg-slate-950 p-2 text-[11px] text-emerald-100">
-                    {JSON.stringify(log.newValues, null, 2)}
-                  </pre>
-                </div>
-              )}
-              {log.oldValues != null && (
-                <div>
-                  <p className="text-[11px] font-semibold text-orange-600">old_values</p>
-                  <pre className="mt-1 max-h-64 overflow-auto rounded bg-slate-950 p-2 text-[11px] text-orange-100">
-                    {JSON.stringify(log.oldValues, null, 2)}
-                  </pre>
-                </div>
-              )}
-              {log.details != null && (
-                <div>
-                  <p className="text-[11px] font-semibold text-blue-600">details</p>
-                  <pre className="mt-1 max-h-64 overflow-auto rounded bg-slate-950 p-2 text-[11px] text-blue-100">
-                    {JSON.stringify(log.details, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
-          )}
+          {/* Payload — lazy loaded */}
+          <div className="space-y-2 rounded-lg border bg-card p-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Payload</h3>
+            {loadingPayload ? (
+              <p className="text-xs text-slate-400">Cargando...</p>
+            ) : payload ? (
+              <>
+                {payload.new_values != null && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-emerald-600">new_values</p>
+                    <pre className="mt-1 max-h-64 overflow-auto rounded bg-slate-950 p-2 text-[11px] text-emerald-100">
+                      {JSON.stringify(payload.new_values, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {payload.old_values != null && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-orange-600">old_values</p>
+                    <pre className="mt-1 max-h-64 overflow-auto rounded bg-slate-950 p-2 text-[11px] text-orange-100">
+                      {JSON.stringify(payload.old_values, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {payload.details != null && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-blue-600">details</p>
+                    <pre className="mt-1 max-h-64 overflow-auto rounded bg-slate-950 p-2 text-[11px] text-blue-100">
+                      {JSON.stringify(payload.details, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {payload.new_values == null && payload.old_values == null && payload.details == null && (
+                  <p className="text-xs text-slate-400 italic">Sin payload adicional.</p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-slate-400 italic">Sin datos.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -325,15 +345,30 @@ type FilterSeverity = 'all' | 'low' | 'medium' | 'high' | 'critical'
 type FilterCategory = 'all' | 'auth' | 'resource' | 'security' | 'user' | 'platform'
 type DateFilter = 'all' | '1h' | '24h' | '7d' | '30d'
 
-export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
+export function AuditLogsDashboard({
+  rows, period, severityParam, page, pageSize, total,
+}: {
+  rows: AuditLogRow[]
+  period: string
+  severityParam: string
+  page: number
+  pageSize: number
+  total: number
+}) {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [severityFilter, setSeverityFilter] = useState<FilterSeverity>('all')
   const [categoryFilter, setCategoryFilter] = useState<FilterCategory>('all')
-  const [dateFilter, setDateFilter] = useState<DateFilter>('24h')
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [selectedLog, setSelectedLog] = useState<AuditLogRow | null>(null)
+
+  function setUrlParam(key: string, value: string) {
+    const params = new URLSearchParams(window.location.search)
+    if (value) params.set(key, value)
+    else params.delete(key)
+    if (key !== 'page') params.delete('page')
+    router.push(`?${params.toString()}`)
+  }
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
@@ -341,17 +376,12 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
   }
 
   const stats = useMemo(() => {
-    const dayAgo = Date.now() - 24 * 60 * 60 * 1000
-    const recent = rows.filter((r) => r.createdAt && new Date(r.createdAt).getTime() >= dayAgo)
     const critical = rows.filter((r) => r.severity === 'high' || r.severity === 'critical')
-    const recentCritical = recent.filter((r) => r.severity === 'high' || r.severity === 'critical')
-    const uniqueActors = new Set(recent.map((r) => r.userId).filter(Boolean)).size
-    const adminAccess = recent.filter((r) => r.action === 'admin_api_access' || r.action === 'login').length
+    const uniqueActors = new Set(rows.map((r) => r.userId).filter(Boolean)).size
+    const adminAccess = rows.filter((r) => r.action === 'admin_api_access' || r.action === 'login').length
     return {
       total: rows.length,
-      recent: recent.length,
       critical: critical.length,
-      recentCritical: recentCritical.length,
       uniqueActors,
       adminAccess,
     }
@@ -374,23 +404,15 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const now = Date.now()
-    const cutoff = dateFilter === '1h' ? now - 60 * 60 * 1000
-      : dateFilter === '24h' ? now - 24 * 60 * 60 * 1000
-      : dateFilter === '7d' ? now - 7 * 24 * 60 * 60 * 1000
-      : dateFilter === '30d' ? now - 30 * 24 * 60 * 60 * 1000
-      : 0
 
     let list = rows.filter((r) => {
       const matchQ = !q || [
         r.action, r.resource, r.userEmail, r.userName, r.ipAddress,
         r.resourceName, r.resourceId, r.id,
       ].some((v) => v?.toLowerCase().includes(q))
-      const matchSeverity = severityFilter === 'all' || r.severity === severityFilter
       const category = ACTION_META[r.action]?.category ?? 'other'
       const matchCategory = categoryFilter === 'all' || category === categoryFilter
-      const matchDate = cutoff === 0 || (r.createdAt && new Date(r.createdAt).getTime() >= cutoff)
-      return matchQ && matchSeverity && matchCategory && matchDate
+      return matchQ && matchCategory
     })
 
     list = [...list].sort((a, b) => {
@@ -406,7 +428,7 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
     })
 
     return list
-  }, [rows, search, severityFilter, categoryFilter, dateFilter, sortKey, sortDir])
+  }, [rows, search, categoryFilter, sortKey, sortDir])
 
   function exportCsv() {
     const header = ['Fecha', 'Acción', 'Recurso', 'Severidad', 'Usuario', 'Email', 'IP', 'ResourceID']
@@ -432,8 +454,8 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
   const thClass = 'px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400'
   const thBtn = 'flex cursor-pointer select-none items-center whitespace-nowrap hover:text-slate-800 dark:hover:text-slate-200 transition-colors'
 
-  const severityPills: Array<{ key: FilterSeverity; label: string }> = [
-    { key: 'all', label: 'Todas' },
+  const severityPills: Array<{ key: string; label: string }> = [
+    { key: '', label: 'Todas' },
     { key: 'critical', label: 'Crítica' },
     { key: 'high', label: 'Alta' },
     { key: 'medium', label: 'Media' },
@@ -449,12 +471,11 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
     { key: 'user', label: 'Usuario' },
   ]
 
-  const datePills: Array<{ key: DateFilter; label: string }> = [
+  const datePills: Array<{ key: string; label: string }> = [
     { key: '1h', label: '1h' },
     { key: '24h', label: '24h' },
     { key: '7d', label: '7d' },
     { key: '30d', label: '30d' },
-    { key: 'all', label: 'Todo' },
   ]
 
   return (
@@ -486,16 +507,16 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Eventos 24h" value={stats.recent} sub={`${stats.total} totales en BD`} icon={FileText} tone="info" />
+        <StatCard label="Eventos cargados" value={stats.total} sub={`Período: ${period}`} icon={FileText} tone="info" />
         <StatCard
-          label="Críticos 24h"
-          value={stats.recentCritical}
-          sub={`${stats.critical} totales con severidad alta`}
+          label="Alta severidad"
+          value={stats.critical}
+          sub="High + Critical en el período"
           icon={AlertTriangle}
-          tone={stats.recentCritical > 0 ? 'danger' : 'success'}
+          tone={stats.critical > 0 ? 'danger' : 'success'}
         />
-        <StatCard label="Accesos admin" value={stats.adminAccess} sub="logins + API admin (24h)" icon={ShieldCheck} tone="info" />
-        <StatCard label="Actores activos" value={stats.uniqueActors} sub="usuarios distintos (24h)" icon={UserPlus} />
+        <StatCard label="Accesos admin" value={stats.adminAccess} sub="logins + API admin" icon={ShieldCheck} tone="info" />
+        <StatCard label="Actores activos" value={stats.uniqueActors} sub="usuarios distintos" icon={UserPlus} />
       </div>
 
       {/* Logs table */}
@@ -505,7 +526,7 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
             <div>
               <CardTitle>Stream de eventos</CardTitle>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {filtered.length} de {rows.length} eventos
+                {filtered.length} de {rows.length} eventos · período: {period}
               </p>
             </div>
             <div className="relative">
@@ -521,7 +542,7 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
 
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-3 pt-1">
-            {/* Date */}
+            {/* Date — server-side via URL */}
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Período</span>
               <div className="flex gap-1">
@@ -529,10 +550,10 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
                   <button
                     key={f.key}
                     type="button"
-                    onClick={() => setDateFilter(f.key)}
+                    onClick={() => setUrlParam('period', f.key)}
                     className={cn(
                       'h-7 rounded-full border px-2.5 text-xs font-medium transition-colors',
-                      dateFilter === f.key
+                      period === f.key
                         ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300'
                         : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
                     )}
@@ -545,18 +566,19 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
 
             <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
 
-            {/* Severity */}
+            {/* Severity — server-side via URL */}
             <div className="flex flex-wrap gap-1">
               {severityPills.map((f) => {
-                const count = f.key === 'all' ? rows.length : (severityCounts.get(f.key) ?? 0)
+                const count = f.key === '' ? rows.length : (severityCounts.get(f.key) ?? 0)
+                const active = severityParam === f.key
                 return (
                   <button
                     key={f.key}
                     type="button"
-                    onClick={() => setSeverityFilter(f.key)}
+                    onClick={() => setUrlParam('severity', f.key)}
                     className={cn(
                       'flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors',
-                      severityFilter === f.key
+                      active
                         ? 'border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300'
                         : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
                     )}
@@ -564,7 +586,7 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
                     {f.label}
                     <span className={cn(
                       'flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold',
-                      severityFilter === f.key ? 'bg-indigo-200 text-indigo-800 dark:bg-indigo-800 dark:text-indigo-100' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                      active ? 'bg-indigo-200 text-indigo-800 dark:bg-indigo-800 dark:text-indigo-100' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
                     )}>
                       {count}
                     </span>
@@ -598,10 +620,14 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
               })}
             </div>
 
-            {(search || severityFilter !== 'all' || categoryFilter !== 'all' || dateFilter !== '24h') && (
+            {(search || severityParam || categoryFilter !== 'all' || period !== '7d') && (
               <button
                 type="button"
-                onClick={() => { setSearch(''); setSeverityFilter('all'); setCategoryFilter('all'); setDateFilter('24h') }}
+                onClick={() => {
+                  setSearch('')
+                  setCategoryFilter('all')
+                  router.push('?period=7d')
+                }}
                 className="h-7 rounded-full px-3 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               >
                 Reset
@@ -758,6 +784,33 @@ export function AuditLogsDashboard({ rows }: { rows: AuditLogRow[] }) {
             </table>
           </div>
         </CardContent>
+
+        {/* Pagination */}
+        {total > pageSize && (
+          <div className="flex items-center justify-between border-t px-4 py-3">
+            <p className="text-xs text-muted-foreground">
+              {page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)} de {total} eventos
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === 0}
+                onClick={() => setUrlParam('page', String(page - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={(page + 1) * pageSize >= total}
+                onClick={() => setUrlParam('page', String(page + 1))}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Details drawer */}

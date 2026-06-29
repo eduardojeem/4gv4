@@ -14,6 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Info } from 'lucide-react'
 import { useCashRegisterContext } from '../contexts/CashRegisterContext'
 import { CashCountModal } from '../components/CashCountModal'
 import { useAuth } from '@/contexts/auth-context'
@@ -168,6 +171,52 @@ export default function CashRegisterPage() {
   return (
     <div className="flex flex-col h-full p-4 md:p-6 space-y-6">
       <CashRegisterHeader />
+
+      {/* Guía de funcionamiento de caja */}
+      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+        <details className="group">
+          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
+            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Caja?
+            </div>
+            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
+            </div>
+          </summary>
+          <CardContent className="pt-0 pb-5 text-xs">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                  Apertura y Cierre
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Inicia tu turno ingresando el monto físico inicial en caja. Al finalizar, realiza el conteo del efectivo en caja y regístralo para conciliar las transacciones del día.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                  Entradas y Salidas
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Registra movimientos manuales de dinero para gastos menores o retiros de efectivo (salidas), así como aportes adicionales de caja (entradas) justificando su origen.
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                <h4 className="font-semibold text-foreground flex items-center gap-2">
+                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                  Arqueo de Caja
+                </h4>
+                <p className="text-muted-foreground leading-relaxed">
+                  Realiza arqueos rápidos contando los billetes y monedas por denominación. El sistema comparará el monto físico con el saldo teórico y reportará cualquier sobrante o faltante.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </details>
+      </Card>
 
       {isAdmin && (
         <div className="flex justify-end">

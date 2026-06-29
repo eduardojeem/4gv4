@@ -1,6 +1,8 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { AuditLogsDashboard, type AuditLogRow } from '@/components/superadmin/AuditLogsDashboard'
 
+export const revalidate = 60
+
 const ALLOWED_SEVERITY = new Set(['low', 'medium', 'high', 'critical'])
 
 function normalizeSeverity(value: string | null): AuditLogRow['severity'] {
@@ -10,7 +12,6 @@ function normalizeSeverity(value: string | null): AuditLogRow['severity'] {
   return 'low'
 }
 
-/** Extract a targeted organization id from a log's details payload, if present. */
 function detailsOrgId(details: unknown): string | null {
   if (details && typeof details === 'object') {
     const value = (details as Record<string, unknown>).organization_id
@@ -19,22 +20,44 @@ function detailsOrgId(details: unknown): string | null {
   return null
 }
 
-async function getAuditLogsData() {
-  const admin = createAdminSupabase()
+function sinceForPeriod(period: string): string {
+  const now = Date.now()
+  const ms: Record<string, number> = {
+    '1h':  60 * 60 * 1000,
+    '24h': 24 * 60 * 60 * 1000,
+    '7d':  7 * 24 * 60 * 60 * 1000,
+    '30d': 30 * 24 * 60 * 60 * 1000,
+  }
+  return new Date(now - (ms[period] ?? ms['7d'])).toISOString()
+}
 
-  const { data: logsData } = await admin
+const PAGE_SIZE = 20
+
+async function getAuditLogsData(period: string, severity: string, page: number) {
+  const admin = createAdminSupabase()
+  const since = sinceForPeriod(period)
+  const from = page * PAGE_SIZE
+  const to = from + PAGE_SIZE - 1
+
+  let query = admin
     .from('audit_log')
-    .select('id, user_id, action, resource, resource_id, severity, ip_address, user_agent, created_at, details, new_values, old_values')
+    .select('id, user_id, action, resource, resource_id, severity, ip_address, user_agent, created_at, details', { count: 'exact' })
+    .gte('created_at', since)
     .order('created_at', { ascending: false })
-    .limit(1000)
+    .range(from, to)
+
+  if (severity && ALLOWED_SEVERITY.has(severity)) {
+    query = query.eq('severity', severity)
+  }
+
+  const { data: logsData, count: logsCount } = await query
 
   const logs = (logsData ?? []) as Array<{
     id: string; user_id: string | null; action: string; resource: string; resource_id: string | null
     severity: string | null; ip_address: string | null; user_agent: string | null; created_at: string | null
-    details: unknown; new_values: unknown; old_values: unknown
+    details: unknown
   }>
 
-  // Cruzar con profiles
   const userIds = Array.from(new Set(logs.map((l) => l.user_id).filter(Boolean))) as string[]
   let profilesById = new Map<string, { email: string | null; full_name: string | null }>()
   if (userIds.length > 0) {
@@ -45,8 +68,6 @@ async function getAuditLogsData() {
     )
   }
 
-  // Cruzar con organizations: el resource_id (cuando el recurso es 'organizations')
-  // o el details.organization_id (acciones cross-tenant: soporte, suscripciones, etc.)
   const orgIds = new Set<string>()
   logs.forEach((l) => {
     if (l.resource === 'organizations' && l.resource_id) orgIds.add(l.resource_id)
@@ -79,17 +100,32 @@ async function getAuditLogsData() {
       userAgent: l.user_agent,
       createdAt: l.created_at,
       details: l.details,
-      newValues: l.new_values,
-      oldValues: l.old_values,
       resourceName: org?.name ?? null,
       resourceSlug: org?.slug ?? null,
     }
   })
 
-  return rows
+  return { rows, total: logsCount ?? 0 }
 }
 
-export default async function SuperAdminAuditLogsPage() {
-  const rows = await getAuditLogsData()
-  return <AuditLogsDashboard rows={rows} />
+export default async function SuperAdminAuditLogsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
+  const params = await searchParams
+  const period = ['1h', '24h', '7d', '30d'].includes(params.period ?? '') ? (params.period as string) : '7d'
+  const severity = ALLOWED_SEVERITY.has(params.severity ?? '') ? (params.severity as string) : ''
+  const page = Math.max(0, Number(params.page ?? 0))
+  const { rows, total } = await getAuditLogsData(period, severity, page)
+  return (
+    <AuditLogsDashboard
+      rows={rows}
+      period={period}
+      severityParam={severity}
+      page={page}
+      pageSize={PAGE_SIZE}
+      total={total}
+    />
+  )
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBranch } from '@/contexts/branch-context'
+import { useAuth } from '@/contexts/auth-context'
 import { branchHeaders } from '@/lib/branches/client'
 
 export interface TechnicianWithStats {
@@ -57,7 +58,10 @@ function mapToTechnicianWithStats(
 
 export function useTechnicianStats() {
   const { selectedBranchId } = useBranch()
-  const cacheKey = selectedBranchId || 'all'
+  const { user } = useAuth()
+  // La caché es a nivel de módulo (compartida en el navegador): la clavamos por
+  // usuario + sucursal para no filtrar datos entre cuentas u organizaciones.
+  const cacheKey = `${user?.id || 'anon'}:${selectedBranchId || 'all'}`
   const initialCache = cachedDataByBranch.get(cacheKey) || []
   const [technicians, setTechnicians] = useState<TechnicianWithStats[]>(initialCache)
   const [isLoading, setIsLoading] = useState(!cachedDataByBranch.has(cacheKey))
@@ -118,6 +122,18 @@ export function useTechnicianStats() {
       abortRef.current?.abort()
     }
   }, [cacheKey, fetchStats])
+
+  // Al cambiar de organización (cookie en servidor), los datos cacheados quedan
+  // obsoletos: limpiamos la caché y forzamos una recarga.
+  useEffect(() => {
+    const handleOrgChange = () => {
+      cachedDataByBranch.clear()
+      cacheTimestampByBranch.clear()
+      fetchStats(true)
+    }
+    window.addEventListener('organization:changed', handleOrgChange)
+    return () => window.removeEventListener('organization:changed', handleOrgChange)
+  }, [fetchStats])
 
   const refresh = useCallback(async () => {
     await fetchStats(true)

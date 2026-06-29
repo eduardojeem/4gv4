@@ -322,6 +322,10 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
             trackUrl: `${appUrl}/${organization.slug}/track?order=${order.id}`,
             brand: { name: organization.name },
           }),
+          log: {
+            organizationId: organization.id,
+            customerName: order.customer_name || undefined,
+          },
         }).catch((err) => logger.error('Failed to send order confirmation email', { error: err }))
       }
 

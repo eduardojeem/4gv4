@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -16,17 +15,23 @@ import { RefreshCw } from 'lucide-react'
 import { useInventory } from '../../context/InventoryContext'
 
 export function MovementsTab() {
-  const { movements, loading } = useInventory()
+  const { movements, loading, refresh } = useInventory()
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5 pointer-events-none" />
+      <CardHeader className="relative z-10 border-b border-border/30 pb-4">
         <div className="flex justify-between items-center">
           <div>
-            <CardTitle>Movimientos Recientes</CardTitle>
+            <CardTitle className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent flex items-center gap-2">
+              <span className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                <RefreshCw className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              </span>
+              Movimientos Recientes
+            </CardTitle>
             <CardDescription>Historial de entradas y salidas de inventario</CardDescription>
           </div>
-          <Button variant="outline" size="sm" disabled={loading}>
+          <Button variant="outline" size="sm" disabled={loading} onClick={() => refresh()}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>

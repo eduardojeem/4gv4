@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { FULL_REPAIR_SELECT } from '@/app/api/repairs/_lib'
 
 type RepairStage = 'recibido' | 'diagnostico' | 'reparacion' | 'pausado' | 'listo' | 'entregado' | 'cancelado'
 
@@ -52,6 +53,8 @@ function buildStatusUpdate(stage: RepairStage): Record<string, unknown> {
   }
   if (stage === 'entregado') {
     updateData.delivered_at = now
+    updateData.picked_up_at = now
+    updateData.completed_at = now
   }
 
   return updateData
@@ -106,7 +109,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       .eq('id', id)
       .eq('organization_id', organization.id)
       .eq('branch_id', branchScope.branchId)
-      .select('id')
+      .select(FULL_REPAIR_SELECT)
       .maybeSingle()
 
     if (updateError) throw updateError
@@ -118,6 +121,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       ok: true,
       id,
       stage,
+      repair: updatedRepair,
     })
   } catch (e: unknown) {
     console.error('PATCH /api/repairs/[id]/status error:', e)

@@ -1,16 +1,24 @@
-import { describe, it, expect } from 'vitest'
-import { GET } from './route'
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('@/lib/auth/require-auth', () => ({
+  requireStaff: vi.fn(async () => ({
+    authenticated: true,
+    user: { id: 'test-user' },
+    role: 'admin',
+  })),
+  getAuthResponse: vi.fn(() => null),
+}))
+
+vi.mock('@/lib/saas/context', () => ({
+  getCurrentOrganizationContext: vi.fn(async () => null),
+}))
 
 describe('GET /api/repairs', () => {
-  it('returns demo repairs when Supabase is not configured', async () => {
-    process.env.NEXT_PUBLIC_SUPABASE_URL = ''
-    process.env.SUPABASE_SERVICE_ROLE_KEY = ''
-    const res = await GET({} as any)
-    expect(res.status).toBe(200)
+  it('returns a structured error when active organization is missing', async () => {
+    const { GET } = await import('./route')
+    const res = await GET({ headers: new Headers() } as Request)
+    expect(res.status).toBe(403)
     const data = await res.json()
-    expect(Array.isArray(data.repairs)).toBe(true)
-    expect(data.repairs.length).toBeGreaterThan(0)
-    expect(data.repairs[0]).toHaveProperty('id')
-    expect(data.repairs[0]).toHaveProperty('stage')
+    expect(data.code).toBe('ACTIVE_ORGANIZATION_REQUIRED')
   })
 })

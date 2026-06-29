@@ -1,15 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { CommunicationMessage, CommunicationChannel } from '@/types/repairs'
 import { toast } from 'sonner'
-import { getWhatsAppLink, formatWhatsAppPhone } from '@/lib/whatsapp'
+import { formatWhatsAppPhone } from '@/lib/whatsapp'
 
-function getChannelLabel(channel: CommunicationChannel): string {
-  if (channel === 'whatsapp') return 'WhatsApp'
-  if (channel === 'email') return 'Email'
-  if (channel === 'sms') return 'SMS'
-  return channel
-}
+// ---------------------------------------------------------------------------
+// Entrega por apps externas (fallback manual)
+// ---------------------------------------------------------------------------
 
 function openExternalApp(
   channel: CommunicationChannel,
@@ -19,138 +15,123 @@ function openExternalApp(
 ): boolean {
   try {
     if (channel === 'whatsapp' && customerPhone) {
-      const url = getWhatsAppLink({ phone: formatWhatsAppPhone(customerPhone), message: content })
-      const win = window.open(url, '_blank', 'noopener,noreferrer')
-      if (!win) {
-        window.location.href = url
-      }
-      return true
+      const phone = formatWhatsAppPhone(customerPhone)
+      const text = encodeURIComponent(content)
+      // En escritorio abrimos WhatsApp Web directo al chat (evita la página
+      // intermedia api.whatsapp.com); en móvil usamos wa.me para abrir la app.
+      const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+      const url = isMobile
+        ? `https://wa.me/${phone}?text=${text}`
+        : `https://web.whatsapp.com/send?phone=${phone}&text=${text}`
+      // Abrimos sin 'noopener' para obtener la referencia (con noopener window.open
+      // devuelve null aunque la ventana se abra) y anulamos opener por seguridad.
+      // Solo ventana nueva; nunca redirigimos la página actual.
+      const win = window.open(url, '_blank')
+      if (win) win.opener = null
+      return Boolean(win)
     }
-
     if (channel === 'email' && customerEmail) {
       const subject = encodeURIComponent('Actualizacion de reparacion')
       const body = encodeURIComponent(content)
       window.location.href = `mailto:${customerEmail}?subject=${subject}&body=${body}`
       return true
     }
-
     if (channel === 'sms' && customerPhone) {
       const cleanPhone = customerPhone.replace(/\D/g, '')
-      const body = encodeURIComponent(content)
-      window.location.href = `sms:${cleanPhone}?body=${body}`
+      window.location.href = `sms:${cleanPhone}?body=${encodeURIComponent(content)}`
       return true
     }
   } catch (error) {
     console.error('Error opening external app:', error)
   }
-
   return false
 }
 
-interface WhatsAppSendResult {
-  sent: boolean
-  reason?: string
-}
+// ---------------------------------------------------------------------------
+// Validación de canal/contacto
+// ---------------------------------------------------------------------------
 
-async function sendWhatsAppViaCloud(
-  repairId: string,
+function validate(
+  channel: CommunicationChannel,
   content: string,
-  customerPhone?: string
-): Promise<WhatsAppSendResult> {
-  if (!customerPhone) {
-    return { sent: false, reason: 'missing_phone' }
+  phone?: string,
+  email?: string
+): string | null {
+  if (!content.trim()) return 'El contenido del mensaje esta vacio'
+  if (channel === 'whatsapp' || channel === 'sms') {
+    if (!phone) return 'El cliente no tiene telefono registrado'
+    if (phone.replace(/\D/g, '').length < 6) return 'Numero de telefono invalido'
   }
+  if (channel === 'email') {
+    if (!email) return 'El cliente no tiene email registrado'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Formato de email invalido'
+  }
+  return null
+}
 
-  try {
-    const response = await fetch('/api/repairs/communications/whatsapp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        repairId,
-        phone: customerPhone,
-        content,
-      }),
-    })
+// ---------------------------------------------------------------------------
+// Mapeo de filas del servidor
+// ---------------------------------------------------------------------------
 
-    if (!response.ok) {
-      return { sent: false, reason: `http_${response.status}` }
-    }
+type ServerMessage = {
+  id: string
+  repair_id: string | null
+  channel: string | null
+  content: string | null
+  status: string | null
+  sent_at: string | null
+  created_at: string | null
+}
 
-    const data = await response.json()
-    return {
-      sent: data?.sent === true,
-      reason: typeof data?.reason === 'string' ? data.reason : undefined,
-    }
-  } catch (error) {
-    console.error('Error sending WhatsApp via Cloud API:', error)
-    return { sent: false, reason: 'network_error' }
+function mapServerMessage(m: ServerMessage): CommunicationMessage {
+  return {
+    id: m.id,
+    repairId: m.repair_id ?? '',
+    channel: (m.channel || 'whatsapp') as CommunicationChannel,
+    content: m.content || '',
+    sentAt: m.sent_at || m.created_at || new Date().toISOString(),
+    status: (m.status || 'sent') as CommunicationMessage['status'],
   }
 }
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 
 export function useRepairCommunications(repairId: string | undefined) {
   const [messages, setMessages] = useState<CommunicationMessage[]>([])
   const [loading, setLoading] = useState(false)
 
+  // Lectura vía API server-side (org-scoped). Evita la dependencia de la RLS
+  // evaluada en el cliente y es consistente con el resto de la app.
   const fetchMessages = useCallback(async () => {
     if (!repairId) {
       setMessages([])
       return
     }
-
     setLoading(true)
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from('communication_messages')
-      .select('*')
-      .eq('repair_id', repairId)
-      .order('sent_at', { ascending: false })
-
-    if (error) {
+    try {
+      const res = await fetch(
+        `/api/repairs/communications?repairId=${encodeURIComponent(repairId)}`,
+        { cache: 'no-store' }
+      )
+      const payload = await res.json().catch(() => null)
+      if (!res.ok || !payload?.ok) {
+        throw new Error(payload?.error || `http_${res.status}`)
+      }
+      const rows = (payload.messages ?? []) as ServerMessage[]
+      setMessages(rows.map(mapServerMessage))
+    } catch (error) {
       console.error('Error fetching messages:', error)
       toast.error('Error al cargar historial de mensajes')
+    } finally {
       setLoading(false)
-      return
     }
-
-    const mapped: CommunicationMessage[] = (data || []).map((m: any) => ({
-      id: m.id,
-      repairId: m.repair_id,
-      channel: (m.channel || 'whatsapp') as CommunicationChannel,
-      content: m.content || '',
-      sentAt: m.sent_at || m.created_at || new Date().toISOString(),
-      status: (m.status || 'sent') as 'pending' | 'sent' | 'failed',
-    }))
-
-    setMessages(mapped)
-    setLoading(false)
   }, [repairId])
 
   useEffect(() => {
     fetchMessages()
-
-    if (!repairId) return
-
-    const supabase = createClient()
-    const channel = supabase
-      .channel(`comms-${repairId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'communication_messages',
-          filter: `repair_id=eq.${repairId}`,
-        },
-        () => {
-          fetchMessages()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [fetchMessages, repairId])
+  }, [fetchMessages])
 
   const sendMessage = async (
     channel: CommunicationChannel,
@@ -158,121 +139,69 @@ export function useRepairCommunications(repairId: string | undefined) {
     customerPhone?: string,
     customerEmail?: string,
     templateId?: string
-  ) => {
+  ): Promise<boolean> => {
     if (!repairId) return false
 
     const trimmedContent = content.trim()
-    if (!trimmedContent) {
-      toast.error('El contenido del mensaje esta vacio')
+    const validationError = validate(channel, trimmedContent, customerPhone, customerEmail)
+    if (validationError) {
+      toast.error(validationError)
       return false
     }
 
-    if (channel === 'whatsapp' || channel === 'sms') {
-      if (!customerPhone) {
-        toast.error('El cliente no tiene telefono registrado')
-        return false
-      }
-      const cleanPhone = customerPhone.replace(/\D/g, '')
-      if (cleanPhone.length < 6) {
-        toast.error('Numero de telefono invalido')
-        return false
-      }
-    }
-
-    if (channel === 'email') {
-      if (!customerEmail) {
-        toast.error('El cliente no tiene email registrado')
-        return false
-      }
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(customerEmail)) {
-        toast.error('Formato de email invalido')
-        return false
-      }
-    }
-
-    const supabase = createClient()
-
+    // Mensaje optimista
     const tempId = `temp-${Date.now()}`
-    const newMessage: CommunicationMessage = {
-      id: tempId,
-      repairId,
-      channel,
-      content: trimmedContent,
-      sentAt: new Date().toISOString(),
-      status: 'pending',
-    }
-    setMessages((prev) => [newMessage, ...prev])
+    setMessages((prev) => [
+      { id: tempId, repairId, channel, content: trimmedContent, sentAt: new Date().toISOString(), status: 'pending' },
+      ...prev,
+    ])
 
-    let delivered = false
-    let usedCloudApi = false
-    let usedManualFallback = false
-    let failureReason: string | undefined
+    // Entrega: todos los canales abren la app/ventana externa correspondiente.
+    // WhatsApp abre wa.me en una ventana nueva (no se envía silenciosamente).
+    const delivered = openExternalApp(channel, trimmedContent, customerPhone, customerEmail)
 
-    if (channel === 'whatsapp') {
-      const cloudResult = await sendWhatsAppViaCloud(repairId, trimmedContent, customerPhone)
-      if (cloudResult.sent) {
-        delivered = true
-        usedCloudApi = true
-      } else {
-        failureReason = cloudResult.reason
-        delivered = openExternalApp(channel, trimmedContent, customerPhone, customerEmail)
-        usedManualFallback = delivered
-      }
-    } else {
-      delivered = openExternalApp(channel, trimmedContent, customerPhone, customerEmail)
-    }
+    // Los canales son manuales (abren una app externa): el envío real lo hace
+    // el usuario. Quedan 'pending' hasta que confirme en el historial.
+    const finalStatus: CommunicationMessage['status'] = delivered ? 'pending' : 'failed'
 
-    const finalStatus: 'sent' | 'failed' = delivered ? 'sent' : 'failed'
-
+    // Persistencia vía API server-side (setea organization_id desde la reparación).
     try {
-      const { data: inserted, error: insertError } = await supabase
-        .from('communication_messages')
-        .insert({
-          repair_id: repairId,
+      const response = await fetch('/api/repairs/communications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repairId,
           channel,
           content: trimmedContent,
-          template_id: templateId,
+          templateId,
           status: finalStatus,
-          direction: 'outbound',
-          sent_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single()
+          toEmail: customerEmail ?? null,
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || `http_${response.status}`)
+      }
 
-      if (insertError) throw insertError
-
+      const insertedId: string | undefined = payload.message?.id
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...m, id: inserted.id, status: finalStatus } : m))
+        prev.map((m) => (m.id === tempId ? { ...m, id: insertedId ?? m.id, status: finalStatus } : m))
       )
 
-      if (delivered) {
-        if (channel === 'whatsapp' && usedCloudApi) {
-          toast.success('Mensaje enviado por WhatsApp Cloud')
-        } else if (channel === 'whatsapp' && usedManualFallback && failureReason === 'provider_error') {
-          toast.success('Cloud API fallo, se abrio WhatsApp manualmente')
-        } else if (channel === 'whatsapp' && usedManualFallback && failureReason === 'network_error') {
-          toast.success('Sin conexion a Cloud API, se abrio WhatsApp manualmente')
-        } else if (channel === 'whatsapp' && usedManualFallback && failureReason === 'not_configured') {
-          toast.success('WhatsApp Cloud no configurado, se abrio WhatsApp manualmente')
-        } else if (channel === 'whatsapp') {
-          toast.success('WhatsApp abierto y mensaje registrado')
+      if (!delivered) {
+        if (channel === 'whatsapp') {
+          toast.error('No se pudo abrir WhatsApp. Permite las ventanas emergentes para este sitio.')
         } else {
-          toast.success(`${getChannelLabel(channel)} sincronizado y abierto`)
+          toast.error(`No se pudo abrir ${channelLabel(channel)}`)
         }
-        return true
+        return false
       }
-
-      if (channel === 'whatsapp' && failureReason === 'not_configured') {
-        toast.error('WhatsApp Cloud no esta configurado y no se pudo abrir WhatsApp')
-      } else if (channel === 'whatsapp' && failureReason === 'provider_error') {
-        toast.error('WhatsApp Cloud rechazo el envio y no se pudo abrir WhatsApp')
-      } else if (channel === 'whatsapp' && failureReason === 'network_error') {
-        toast.error('Sin conexion con WhatsApp Cloud y no se pudo abrir WhatsApp')
+      if (channel === 'whatsapp') {
+        toast.success('WhatsApp abierto — confirma el envío en el historial')
       } else {
-        toast.error(`No se pudo abrir ${getChannelLabel(channel)}`)
+        toast.success(`${channelLabel(channel)} abierto — confirma el envío en el historial`)
       }
-      return false
+      return true
     } catch (error) {
       console.error('Error saving message:', error)
       toast.error('Error al guardar en historial')
@@ -281,5 +210,32 @@ export function useRepairCommunications(repairId: string | undefined) {
     }
   }
 
-  return { messages, loading, sendMessage, refresh: fetchMessages }
+  // Confirmar/cambiar el estado de un mensaje (enviado / fallido) desde el historial.
+  const updateStatus = async (id: string, status: CommunicationMessage['status']): Promise<void> => {
+    if (id.startsWith('temp-')) return
+    const previous = messages
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, status } : m)))
+    try {
+      const res = await fetch('/api/repairs/communications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok || !payload?.ok) throw new Error(payload?.error || `http_${res.status}`)
+    } catch (error) {
+      console.error('Error updating message status:', error)
+      toast.error('No se pudo actualizar el estado')
+      setMessages(previous)
+    }
+  }
+
+  return { messages, loading, sendMessage, updateStatus, refresh: fetchMessages }
+}
+
+function channelLabel(channel: CommunicationChannel): string {
+  if (channel === 'whatsapp') return 'WhatsApp'
+  if (channel === 'email') return 'Email'
+  if (channel === 'sms') return 'SMS'
+  return channel
 }

@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { usePermissions } from '@/hooks/use-permissions'
 import type { UserRole } from '@/lib/auth/roles-permissions'
+import { canRoleAccessSection } from '@/lib/auth/section-access'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import type { LucideIcon } from 'lucide-react'
@@ -28,6 +29,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Archive,
   Activity,
   CreditCard,
   Tag,
@@ -63,6 +65,7 @@ const NAV_GROUPS: Array<{ label: string; items: NavItem[] }> = [
       { name: 'Promociones', href: '/dashboard/promotions', icon: Percent, permission: 'promotions.read' },
       { name: 'Proveedores', href: '/dashboard/suppliers', icon: Truck, roles: ['admin'] },
       { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, permission: 'repairs.read' },
+      { name: 'Inv. Taller', href: '/dashboard/repairs/inventory', icon: Archive, permission: 'repairs.read' },
       { name: 'Panel Técnico', href: '/dashboard/technician', icon: Activity, roles: ['admin', 'tecnico'], description: 'Operativo para técnicos' },
     ],
   },
@@ -138,19 +141,14 @@ export const Sidebar = memo(function Sidebar() {
     const filterFn = (item: NavItem) => {
       // Hide onboarding link once setup is complete
       if (item.href === '/dashboard/onboarding' && onboardingDone) return false
-      
-      // If the item has a specific permission requirement, check that first
-      if (item.permission) {
-        return hasPermission(item.permission)
-      }
 
-      // Fallback to strict role checking for items without granular permissions
-      if (item.roles) {
-        if (userRole === 'super_admin') return item.roles.includes('admin') || item.roles.includes('super_admin')
-        return item.roles.includes(userRole)
-      }
+      // Fuente única: acceso por sección según el rol (vendedor/tecnico restringidos).
+      if (!canRoleAccessSection(userRole, item.href)) return false
 
-      return false // if no permission and no roles, hide it
+      // Refinamiento opcional por permiso granular (p.ej. esconder una sub-acción).
+      if (item.permission) return hasPermission(item.permission)
+
+      return true
     }
     return NAV_GROUPS.map(group => ({
       label: group.label,

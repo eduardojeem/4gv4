@@ -5,10 +5,11 @@ import {
   AlertTriangle, ArrowLeft, CheckCircle2,
   ChevronLeft, ChevronRight, Download, Loader2,
   Mail, MapPin, MessageSquare, Package, PackageSearch, Phone,
-  Plus, RefreshCw, Search, ShoppingBag, Store, Truck, X,
+  Plus, RefreshCw, Search, ShoppingBag, Store, Truck, X, Info
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -679,6 +680,52 @@ export function OrdersDashboard() {
             </Button>
           </div>
         </div>
+
+        {/* Guía de funcionamiento de pedidos */}
+        <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-white/10 bg-white/5 backdrop-blur-md">
+          <details className="group">
+            <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
+              <div className="text-md font-bold flex items-center gap-2 text-blue-400">
+                <Info className="h-4.5 w-4.5" /> ¿Cómo funciona la Gestión de Pedidos Digitales?
+              </div>
+              <div className="text-xs font-semibold text-blue-400 select-none">
+                <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+                <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
+              </div>
+            </summary>
+            <CardContent className="pt-0 pb-5 text-xs text-slate-300">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5 p-3.5 rounded-xl bg-white/5 border border-white/5 backdrop-blur-sm">
+                  <h4 className="font-semibold text-white flex items-center gap-1.5">
+                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-500/20 text-blue-300">1</Badge>
+                    Flujo de Estados
+                  </h4>
+                  <p className="leading-relaxed">
+                    Gestiona el ciclo de vida de los pedidos que provienen de tus canales digitales. Puedes transicionar estados desde Pendiente a Listo, Entregado o Cancelado conforme avance el empaque.
+                  </p>
+                </div>
+                <div className="space-y-1.5 p-3.5 rounded-xl bg-white/5 border border-white/5 backdrop-blur-sm">
+                  <h4 className="font-semibold text-white flex items-center gap-2">
+                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-500/20 text-blue-300">2</Badge>
+                    Método y Estado de Pago
+                  </h4>
+                  <p className="leading-relaxed">
+                    Monitorea si las órdenes fueron pre-pagadas mediante pasarela de cobros o si están pendientes de cobro contra entrega. Puedes actualizar el estado del pago a Pagado tras confirmarlo.
+                  </p>
+                </div>
+                <div className="space-y-1.5 p-3.5 rounded-xl bg-white/5 border border-white/5 backdrop-blur-sm">
+                  <h4 className="font-semibold text-white flex items-center gap-2">
+                    <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-500/20 text-blue-300">3</Badge>
+                    Despacho e Integración
+                  </h4>
+                  <p className="leading-relaxed">
+                    Identifica si el pedido requiere Delivery/Envío o Retiro en Sucursal (Store Pickup). Al preparar los ítems, el inventario de la sucursal seleccionada se descontará automáticamente.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </details>
+        </Card>
 
         {/* ── Metric cards ── */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
