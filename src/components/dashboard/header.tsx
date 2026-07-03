@@ -222,19 +222,19 @@ export const Header = memo(function Header() {
       className={cn(
         "border-b border-border sticky top-0 z-30 backdrop-blur-sm bg-background/95 supports-backdrop-filter:bg-background/60",
         "transition-[padding,box-shadow,background-color] duration-200",
-        isCompact ? "px-4 sm:px-5 py-2 shadow-sm" : "px-6 py-3"
+        isCompact ? "px-3 py-2 sm:px-5 shadow-sm" : "px-3 py-2.5 sm:px-6 sm:py-3"
       )}
     >
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 lg:flex-nowrap lg:gap-4">
         {/* Mobile hamburger + Breadcrumb */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           {/* Hamburger menu for mobile */}
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={toggleSidebar}
-            className="lg:hidden p-2"
-            aria-label="Toggle menu"
+            className="h-10 w-10 shrink-0 lg:hidden"
+            aria-label="Abrir menu"
           >
             <Menu className="h-5 w-5" />
           </Button>
@@ -251,7 +251,7 @@ export const Header = memo(function Header() {
         </div>
 
         {/* Search */}
-        <div className="flex-1 max-w-md hidden md:block">
+        <div className="order-3 hidden w-full md:order-none md:block md:max-w-sm md:flex-1 xl:max-w-md">
           <Button
             variant="outline"
             className={cn(
@@ -261,7 +261,7 @@ export const Header = memo(function Header() {
             onClick={() => setSearchOpen(true)}
           >
             <Search className="mr-2 h-4 w-4" />
-            <span>Buscar productos, clientes, reparaciones...</span>
+            <span className="truncate">Buscar productos, clientes, reparaciones...</span>
             <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100 shadow-sm">
               <span className="text-xs">⌘</span>K
             </kbd>
@@ -276,21 +276,29 @@ export const Header = memo(function Header() {
         />
 
         {/* Right side */}
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
 
-          <div className="hidden sm:block">
+          <div className="hidden lg:block">
             <SubscriptionChip variant="header" />
           </div>
 
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
             <OrganizationSwitcher compact={isCompact} />
           </div>
           <div className="hidden lg:block">
             <BranchSelector compact={isCompact} />
           </div>
-          <InstallPrompt />
+          <div className="hidden sm:block">
+            <InstallPrompt />
+          </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="md:hidden h-9 w-9" onClick={() => setSearchOpen(true)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 md:hidden"
+              onClick={() => setSearchOpen(true)}
+              aria-label="Abrir busqueda"
+            >
               <Search className="h-5 w-5" />
             </Button>
 
@@ -303,16 +311,9 @@ export const Header = memo(function Header() {
               onClearAll={handleClearAll}
             />
 
-            {/* Theme Toggle */}
-            <ThemeToggle />
-          </div>
-
-          <div className="lg:hidden">
-            <BranchSelector compact />
-          </div>
-
-          <div className="md:hidden">
-            <OrganizationSwitcher compact />
+            <div className="hidden sm:block">
+              <ThemeToggle />
+            </div>
           </div>
 
           {/* Separator */}
@@ -434,6 +435,21 @@ export const Header = memo(function Header() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+
+        <div className="order-4 flex w-full min-w-0 gap-2 overflow-x-auto pb-0.5 lg:hidden">
+          <div className="shrink-0">
+            <SubscriptionChip variant="header" />
+          </div>
+          <div className="shrink-0">
+            <OrganizationSwitcher compact />
+          </div>
+          <div className="shrink-0">
+            <BranchSelector compact />
+          </div>
+          <div className="shrink-0 sm:hidden">
+            <ThemeToggle />
+          </div>
         </div>
       </div>
 
