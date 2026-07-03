@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Check, Eye, MapPin, Package, ShoppingCart, Tag, Zap, XCircle } from 'lucide-react'
+import { Check, CreditCard, Eye, MapPin, Package, ShoppingCart, Tag, Zap, XCircle } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
+import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { InstallmentSelector } from '@/components/public/InstallmentSelector'
 import { useAuth } from '@/contexts/auth-context'
 import { usePathname } from 'next/navigation'
 import { formatPrice, cn } from '@/lib/utils'
@@ -78,6 +80,33 @@ export function ProductCard(props: ProductCardProps) {
   const isInStock = product.in_stock
   const isLowStock = isInStock && product.stock_quantity > 0 && product.stock_quantity <= 4
   const imageSrc = resolveProductImageUrl(product.image)
+
+  // ── Cuotas / financiación (informativo) ───────────────────────────────────
+  const installmentsVisible =
+    product.installments_enabled === true && product.installments_public !== false
+  const installmentOptions =
+    installmentsVisible && Array.isArray(product.installments_plans)
+      ? [...product.installments_plans]
+          .filter((plan) => plan && plan.count >= 1)
+          .sort((a, b) => a.count - b.count)
+          .map((plan) => {
+            const built = buildCreditInstallmentPlan({
+              principalAmount: displayPrice,
+              interestRate: plan.rate ?? 0,
+              installmentCount: plan.count,
+              frequency: 'monthly',
+            })
+            return {
+              count: plan.count,
+              perInstallment: built.installments[0]?.amount ?? 0,
+              financedTotal: built.financedTotal,
+              hasInterest: built.interestAmount > 0,
+            }
+          })
+      : []
+  // Para la tarjeta mostramos la opción con más cuotas (la cuota más baja de mostrar)
+  const maxInstallment =
+    installmentOptions.length > 0 ? installmentOptions[installmentOptions.length - 1] : null
 
   // ── Tenant prefix ────────────────────────────────────────────────────────
   const tenantSlug = getTenantSlugFromPathname(pathname)
@@ -207,6 +236,12 @@ export function ProductCard(props: ProductCardProps) {
             {originalPrice && (
               <p className="text-xs text-muted-foreground line-through">
                 {formatPrice(originalPrice)}
+              </p>
+            )}
+            {maxInstallment && (
+              <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+                <CreditCard className="h-3 w-3 shrink-0" />
+                Hasta {maxInstallment.count} cuotas de {formatPrice(maxInstallment.perInstallment)}
               </p>
             )}
           </div>
@@ -370,6 +405,15 @@ export function ProductCard(props: ProductCardProps) {
                 </p>
               )}
             </div>
+
+            {/* Cuotas / financiación */}
+            {installmentsVisible && (product.installments_plans?.length ?? 0) > 0 && (
+              <InstallmentSelector
+                price={displayPrice}
+                plans={product.installments_plans ?? []}
+                compact
+              />
+            )}
 
             {/* Description */}
             {product.description?.trim() && (

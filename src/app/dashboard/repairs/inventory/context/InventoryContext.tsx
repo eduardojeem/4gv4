@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger'
 import { createContext, useContext, useCallback, useMemo, ReactNode, useState } from 'react'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { toast } from 'sonner'
+import { formatPrice } from '@/lib/utils'
 import type { Product, ProductMovement } from '@/types/product-unified'
 
 interface InventoryFilters {
@@ -21,15 +22,17 @@ interface InventoryContextValue {
   categories: any[]
   suppliers: any[]
   movements: ProductMovement[]
-  
+
   // Estados
   loading: boolean
+  movementsLoading: boolean
   error: string | null
   filters: InventoryFilters
   
   // Acciones
   setFilters: (filters: Partial<InventoryFilters>) => void
   refresh: () => Promise<void>
+  loadMovements: () => Promise<void>
   
   // CRUD con optimistic updates
   createService: (data: any) => Promise<void>
@@ -89,21 +92,13 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
   const { services, inventory } = useMemo(() => {
     if (!products) return { services: [], inventory: [] }
     
+    // Un ítem es "servicio" si está en la categoría Servicios o si su unidad de
+    // medida es 'servicio' (lo setea createService). Evita clasificar por el
+    // nombre, que antes ocultaba productos físicos como "Cambio de vidrio".
     const servicesList = products.filter(p => {
-      const isServiceCategory = serviceCategoryId && p.category_id === serviceCategoryId
-      const name = p.name.toLowerCase()
-      const nameIndicatesService = 
-        name.startsWith('reparación') || 
-        name.startsWith('servicio') || 
-        name.includes('mano de obra') ||
-        name.startsWith('cambio') ||
-        name.startsWith('limpieza') ||
-        name.startsWith('baño') ||
-        name.startsWith('software') ||
-        name.startsWith('backup') ||
-        name.startsWith('instalación')
-      
-      return isServiceCategory || nameIndicatesService
+      const isServiceCategory = Boolean(serviceCategoryId && p.category_id === serviceCategoryId)
+      const isServiceUnit = (p.unit_measure || '').toLowerCase() === 'servicio'
+      return isServiceCategory || isServiceUnit
     })
     
     const serviceIds = new Set(servicesList.map(s => s.id))
@@ -114,11 +109,18 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
 
   // Obtener movimientos (lazy load)
   const [movements, setMovements] = useState<ProductMovement[]>([])
+  const [movementsLoading, setMovementsLoading] = useState(false)
   const loadMovements = useCallback(async () => {
-    const result = await getAllMovements(50)
-    if (result.success) {
-      // @ts-ignore - The hook returns compatible data but types might mismatch slightly
-      setMovements(result.data)
+    setMovementsLoading(true)
+    try {
+      const result = await getAllMovements(50)
+      if (result.success) {
+        setMovements((result.data ?? []) as ProductMovement[])
+      }
+    } catch (error) {
+      logger.error('Error loading movements', { error })
+    } finally {
+      setMovementsLoading(false)
     }
   }, [getAllMovements])
 
@@ -252,10 +254,63 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
   }, [supabaseUpdateStock, refreshData])
 
   // Exportación
-  const exportPDF = useCallback(() => {
-    // Implementación de exportación PDF
-    toast.info("Exportando a PDF...")
-  }, [])
+  const exportPDF = useCallback(async () => {
+    try {
+      const { jsPDF } = await import('jspdf')
+      const autoTable = (await import('jspdf-autotable')).default
+      const doc = new jsPDF()
+
+      doc.setFontSize(16)
+      doc.text('Inventario y Servicios', 14, 16)
+      doc.setFontSize(9)
+      doc.setTextColor(120)
+      doc.text(new Date().toLocaleString('es-PY'), 14, 22)
+      doc.setTextColor(0)
+
+      doc.setFontSize(12)
+      doc.text(`Repuestos (${inventory.length})`, 14, 30)
+      autoTable(doc, {
+        startY: 34,
+        head: [['Repuesto', 'SKU', 'Categoría', 'Stock', 'P. Compra', 'P. Venta']],
+        body: inventory.map((p) => [
+          p.name,
+          p.sku || '-',
+          p.category?.name || '-',
+          String(p.stock_quantity ?? 0),
+          formatPrice(p.purchase_price || 0),
+          formatPrice(p.sale_price || 0),
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [37, 99, 235] },
+      })
+
+      const servicesY = ((doc as any).lastAutoTable?.finalY ?? 34) + 10
+      doc.setFontSize(12)
+      doc.text(`Servicios (${services.length})`, 14, servicesY)
+      autoTable(doc, {
+        startY: servicesY + 4,
+        head: [['Servicio', 'P. Cliente', 'P. Mayorista', 'Visibilidad']],
+        body: services.map((s) => [
+          s.name,
+          formatPrice(s.sale_price || 0),
+          s.wholesale_price ? formatPrice(s.wholesale_price) : '-',
+          (s.visibility || 'public') === 'public'
+            ? 'Público'
+            : s.visibility === 'wholesale'
+              ? 'Mayorista'
+              : 'Oculto',
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [16, 185, 129] },
+      })
+
+      doc.save(`inventario_${new Date().toISOString().split('T')[0]}.pdf`)
+      toast.success('PDF generado')
+    } catch (error) {
+      logger.error('Error exporting inventory PDF', { error })
+      toast.error('No se pudo generar el PDF')
+    }
+  }, [inventory, services])
 
   const exportExcel = useCallback(() => {
     // Implementación de exportación Excel
@@ -273,12 +328,14 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     
     // Estados
     loading,
+    movementsLoading,
     error,
     filters: localFilters,
-    
+
     // Acciones
     setFilters,
     refresh: refreshData,
+    loadMovements,
     createService,
     updateService,
     updateInventoryProduct,
@@ -295,10 +352,12 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
     suppliers,
     movements,
     loading,
+    movementsLoading,
     error,
     localFilters,
     setFilters,
     refreshData,
+    loadMovements,
     createService,
     updateService,
     updateInventoryProduct,

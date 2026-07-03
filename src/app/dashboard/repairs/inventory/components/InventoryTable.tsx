@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { AlertTriangle, MoreHorizontal, Pencil, Trash2, Eye } from 'lucide-react'
 import type { Product } from '@/types/product-unified'
+import { formatPrice } from '@/lib/utils'
 
 interface InventoryTableProps {
   products: Product[]
@@ -88,7 +89,7 @@ const InventoryRow = memo(({
       </TableCell>
       <TableCell>
         <span className="font-semibold text-blue-600 dark:text-blue-400">
-          ${product.sale_price?.toFixed(2)}
+          {formatPrice(product.sale_price || 0)}
         </span>
       </TableCell>
       <TableCell>

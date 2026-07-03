@@ -11,11 +11,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useInventory } from '../../context/InventoryContext'
+import { formatMovementType } from '../../lib/movement-format'
 
 export function MovementsTab() {
-  const { movements, loading, refresh } = useInventory()
+  const { movements, movementsLoading, loadMovements } = useInventory()
+
+  // Cargar movimientos al montar la pestaña.
+  useEffect(() => {
+    loadMovements()
+  }, [loadMovements])
 
   return (
     <Card className="bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm overflow-hidden">
@@ -31,8 +38,8 @@ export function MovementsTab() {
             </CardTitle>
             <CardDescription>Historial de entradas y salidas de inventario</CardDescription>
           </div>
-          <Button variant="outline" size="sm" disabled={loading} onClick={() => refresh()}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          <Button variant="outline" size="sm" disabled={movementsLoading} onClick={() => loadMovements()}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${movementsLoading ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
         </div>
@@ -54,7 +61,7 @@ export function MovementsTab() {
               {movements.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    {loading ? "Cargando movimientos..." : "No hay movimientos registrados recientes."}
+                    {movementsLoading ? "Cargando movimientos..." : "No hay movimientos registrados recientes."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -81,17 +88,10 @@ export function MovementsTab() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge 
-                        className={
-                          mov.movement_type === 'entrada' 
-                            ? 'bg-green-500 hover:bg-green-600 text-white' 
-                            : mov.movement_type === 'salida' 
-                            ? 'bg-red-500 hover:bg-red-600 text-white' 
-                            : 'bg-blue-500 hover:bg-blue-600 text-white'
-                        }
-                      >
-                        {mov.movement_type === 'entrada' ? '↑ Entrada' : mov.movement_type === 'salida' ? '↓ Salida' : mov.movement_type}
-                      </Badge>
+                      {(() => {
+                        const { label, className } = formatMovementType(mov.movement_type)
+                        return <Badge className={className}>{label}</Badge>
+                      })()}
                     </TableCell>
                     <TableCell>
                       <span className={`font-bold ${

@@ -12,6 +12,7 @@ import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 import { generateProductSchema } from '@/lib/seo'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
+import { InstallmentSelector } from '@/components/public/InstallmentSelector'
 import { ProductGallery, ProductActions } from './client-components'
 import { BranchAvailability } from '@/components/public/BranchAvailability'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
@@ -102,6 +103,15 @@ export default async function ProductDetailPage(props: Props) {
   const discountPercent = hasDiscount
     ? Math.round(((product.sale_price - displayPrice) / product.sale_price) * 100)
     : 0
+
+  // Cuotas / financiación — informativo para la tienda pública.
+  // Se muestran solo si están activadas Y marcadas como visibles en la web.
+  const installmentPlans =
+    product.installments_enabled &&
+    product.installments_public !== false &&
+    Array.isArray(product.installments_plans)
+      ? product.installments_plans
+      : []
 
   // Fetch related products and branch stock in parallel
   const [relatedData, branchStock] = await Promise.all([
@@ -232,6 +242,13 @@ export default async function ProductDetailPage(props: Props) {
                   )}
                 </div>
 
+                {installmentPlans.length > 0 && (
+                  <InstallmentSelector
+                    price={displayPrice}
+                    plans={installmentPlans}
+                    className="mt-4"
+                  />
+                )}
               </div>
 
               {/* Description */}

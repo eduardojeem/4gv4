@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Wrench, DollarSign, Eye, EyeOff, Globe, Lock, ShieldCheck } from 'lucide-react'
 import type { Product } from '@/types/product-unified'
+import { formatPrice } from '@/lib/utils'
 
 interface ServiceDetailDialogProps {
   service: Product | null
@@ -67,7 +68,7 @@ export function ServiceDetailDialog({ service, open, onOpenChange, onEdit }: Ser
                 <DollarSign className="h-4 w-4 text-blue-500" /> Precio Cliente
               </p>
               <p className="text-2xl font-black text-blue-600 dark:text-blue-400">
-                ${service.sale_price?.toFixed(2) || '0.00'}
+                {formatPrice(service.sale_price || 0)}
               </p>
             </div>
             <div className="bg-background/50 p-4 rounded-xl border border-border/50">
@@ -75,7 +76,7 @@ export function ServiceDetailDialog({ service, open, onOpenChange, onEdit }: Ser
                 <DollarSign className="h-4 w-4 text-purple-500" /> Precio Mayorista
               </p>
               <p className="text-2xl font-black text-purple-600 dark:text-purple-400">
-                ${service.wholesale_price?.toFixed(2) || '0.00'}
+                {service.wholesale_price ? formatPrice(service.wholesale_price) : '-'}
               </p>
             </div>
           </div>
@@ -86,7 +87,7 @@ export function ServiceDetailDialog({ service, open, onOpenChange, onEdit }: Ser
                 <ShieldCheck className="h-4 w-4 text-green-500" /> Costo Base
               </p>
               <p className="text-lg font-bold text-green-600 dark:text-green-400">
-                ${service.purchase_price?.toFixed(2) || '0.00'}
+                {formatPrice(service.purchase_price || 0)}
               </p>
             </div>
             <div className="bg-background/50 p-4 rounded-xl border border-border/50">
@@ -116,7 +117,7 @@ export function ServiceDetailDialog({ service, open, onOpenChange, onEdit }: Ser
                 'bg-red-500 text-white'
               }`}
             >
-              {marginPercent.toFixed(1)}% (${margin.toFixed(2)})
+              {marginPercent.toFixed(1)}% ({formatPrice(margin)})
             </Badge>
           </div>
         </div>

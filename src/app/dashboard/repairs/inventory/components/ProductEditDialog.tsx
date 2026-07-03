@@ -37,6 +37,7 @@ import {
 import type { Product } from '@/types/product-unified'
 import { useInventory } from '../context/InventoryContext'
 import { toast } from 'sonner'
+import { formatPrice } from '@/lib/utils'
 
 interface ProductEditDialogProps {
   product: Product | null
@@ -437,7 +438,7 @@ export function ProductEditDialog({
                   <div className="text-right">
                     <p className="text-sm text-muted-foreground">Ganancia por Unidad</p>
                     <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      ${margin.toFixed(2)}
+                      {formatPrice(margin)}
                     </p>
                   </div>
                   <Badge className={

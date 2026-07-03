@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Upload, Package, Tag, Warehouse, BarChart3, RefreshCw, Users, Sparkles, Plus, AlertCircle, CheckCircle2, CreditCard, Eye } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
+import { formatPrice } from '@/lib/utils'
+import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import {
   Dialog,
   DialogContent,
@@ -59,7 +61,7 @@ import { useSuppliers } from '@/hooks/useSuppliers'
 import { useBrands } from '@/hooks/useBrands'
 import type { UISupplier } from '@/lib/types/supplier-ui'
 import { removeFile, uploadFile } from '@/lib/supabase-storage'
-import { useForm } from 'react-hook-form'
+import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { getProductSubmitState } from './product-modal-submit-state'
 import { getProductSaveFeedback, type ProductSaveFeedback } from '@/lib/products/product-save-feedback'
@@ -143,6 +145,9 @@ export function ProductModal({
       wholesale_price: 0,
       offer_price: 0,
       has_offer: false,
+      installments_enabled: false,
+      installments_public: true,
+      installments_plans: [],
       ...DEFAULT_POST_SALE_VALUES,
       stock_quantity: 0,
       min_stock: 0,
@@ -168,6 +173,17 @@ export function ProductModal({
   const wholesalePrice = watch('wholesale_price')
   const offerPrice = watch('offer_price')
   const hasOffer = watch('has_offer')
+  const installmentsEnabled = watch('installments_enabled')
+  const installmentsPublic = watch('installments_public')
+  const installmentsPlans = watch('installments_plans')
+  const { fields: installmentFields, append: appendInstallment, remove: removeInstallment } = useFieldArray({
+    control: form.control,
+    name: 'installments_plans',
+  })
+  // Precio efectivo sobre el que se calculan las cuotas (respeta oferta)
+  const installmentBase = hasOffer && Number(offerPrice) > 0 ? Number(offerPrice) : Number(salePrice) || 0
+  // Cantidades de cuota sugeridas como chips rápidos
+  const INSTALLMENT_PRESETS = [3, 4, 5, 6, 9, 12, 18, 24]
   const warrantyMonths = watch('warranty_months')
   const returnWindowDays = watch('return_window_days')
   const exchangeWindowDays = watch('exchange_window_days')
@@ -180,7 +196,7 @@ export function ProductModal({
   // Fix #1: Detectar qué tabs contienen errores de validación
   const tabErrorMap = useMemo(() => {
     const basicFields = ['sku', 'name', 'description', 'category_id', 'brand_id', 'brand', 'supplier_id', 'barcode', 'unit_measure', 'is_active']
-    const pricingFields = ['purchase_price', 'sale_price', 'wholesale_price', 'offer_price', 'has_offer']
+    const pricingFields = ['purchase_price', 'sale_price', 'wholesale_price', 'offer_price', 'has_offer', 'installments_enabled', 'installments_plans']
     const inventoryFields = ['stock_quantity', 'min_stock', 'max_stock']
     const postSaleFields = ['warranty_months', 'warranty_info', 'return_window_days', 'exchange_window_days', 'return_policy', 'exchange_policy']
     const imagesFields = ['images']
@@ -228,6 +244,11 @@ export function ProductModal({
         wholesale_price: product.wholesale_price || 0,
         offer_price: product.offer_price || 0,
         has_offer: product.has_offer || false,
+        installments_enabled: (product as any).installments_enabled || false,
+        installments_public: (product as any).installments_public ?? true,
+        installments_plans: Array.isArray((product as any).installments_plans)
+          ? (product as any).installments_plans
+          : [],
         warranty_months: (product as any).warranty_months ?? DEFAULT_POST_SALE_VALUES.warranty_months,
         warranty_info: (product as any).warranty_info ?? DEFAULT_POST_SALE_VALUES.warranty_info,
         return_window_days: (product as any).return_window_days ?? DEFAULT_POST_SALE_VALUES.return_window_days,
@@ -257,6 +278,9 @@ export function ProductModal({
         wholesale_price: 0,
         offer_price: 0,
         has_offer: false,
+        installments_enabled: false,
+        installments_public: true,
+        installments_plans: [],
         ...DEFAULT_POST_SALE_VALUES,
         stock_quantity: 0,
         min_stock: 0,
@@ -375,6 +399,16 @@ export function ProductModal({
       is_active: data.is_active ?? true,
       visibility: data.visibility || 'public',
       has_offer: data.has_offer ?? false,
+      installments_enabled: data.installments_enabled ?? false,
+      installments_public: data.installments_public ?? true,
+      // Los planes se conservan siempre (aunque se desactive la financiación o
+      // la visibilidad pública) para no perder la configuración cargada.
+      installments_plans: Array.isArray(data.installments_plans)
+        ? data.installments_plans
+            .filter((plan) => Number(plan.count) >= 1)
+            .map((plan) => ({ count: Number(plan.count), rate: Number(plan.rate) || 0 }))
+            .sort((a, b) => a.count - b.count)
+        : [],
     }
   }
 
@@ -1116,6 +1150,178 @@ export function ProductModal({
                         </CardContent>
                       </Card>
                     </div>
+
+                    {/* Cuotas / Financiación (informativo en la web pública) */}
+                    <Card className={`transition-all ${installmentsEnabled
+                      ? 'border-l-4 border-indigo-500 bg-indigo-50/20 dark:bg-indigo-950/10 md:border-2 md:border-indigo-400 md:dark:border-indigo-800 md:bg-gradient-to-br md:from-indigo-50 md:to-white md:dark:from-indigo-900/10 md:dark:to-slate-900 md:shadow-lg md:shadow-indigo-100 md:dark:shadow-none'
+                      : 'border-0 shadow-none bg-transparent md:border md:border-gray-200 md:dark:border-gray-700 md:bg-white md:dark:bg-slate-900'
+                      }`}>
+                      <CardHeader className="pb-3 px-0 md:px-6">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className={`text-sm font-medium flex items-center gap-2 ${installmentsEnabled ? 'text-indigo-700 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                            <CreditCard className="h-4 w-4" />
+                            Activar cuotas / financiación <FieldRequirement conditional={installmentsEnabled ? '• Configurá los planes abajo' : '• Opcional'} />
+                          </CardTitle>
+                          <FormField
+                            control={form.control}
+                            name="installments_enabled"
+                            render={({ field }) => (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-600 dark:text-gray-400">
+                                  {field.value ? 'Activa' : 'Inactiva'}
+                                </span>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={field.onChange}
+                                  className="data-[state=checked]:bg-indigo-500"
+                                  aria-label="Activar cuotas / financiación"
+                                />
+                              </div>
+                            )}
+                          />
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-0 md:p-6 pt-0 md:pt-0 space-y-3">
+                        {!installmentsEnabled ? (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Activá la financiación para configurar los planes de cuotas del producto.
+                            Los planes quedan guardados aunque la desactives.
+                          </p>
+                        ) : (
+                          <>
+                            {/* Toggle independiente: mostrar en la web pública */}
+                            <FormField
+                              control={form.control}
+                              name="installments_public"
+                              render={({ field }) => (
+                                <div className="flex items-center justify-between rounded-lg border border-indigo-200/70 bg-white/60 px-3 py-2 dark:border-indigo-900/40 dark:bg-slate-900/40">
+                                  <div className="flex items-center gap-2">
+                                    <Eye className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                                    <div>
+                                      <p className="text-xs font-medium text-gray-800 dark:text-gray-200">Mostrar en la web pública</p>
+                                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                                        {field.value ? 'Las cuotas se ven en la tienda online' : 'Oculto en la tienda (los planes siguen guardados)'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    className="data-[state=checked]:bg-indigo-500"
+                                    aria-label="Mostrar cuotas en la web pública"
+                                  />
+                                </div>
+                              )}
+                            />
+
+                            {/* Chips rápidos: agregar una opción de cuota */}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-xs text-gray-500 dark:text-gray-400 mr-1">Agregar:</span>
+                              {INSTALLMENT_PRESETS.map((preset) => {
+                                const already = (installmentsPlans ?? []).some((p) => Number(p?.count) === preset)
+                                return (
+                                  <Button
+                                    key={preset}
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={already}
+                                    onClick={() => appendInstallment({ count: preset, rate: 0 })}
+                                    className="h-7 px-2 text-xs"
+                                  >
+                                    {preset} cuotas
+                                  </Button>
+                                )
+                              })}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => appendInstallment({ count: 2, rate: 0 })}
+                                className="h-7 px-2 text-xs"
+                              >
+                                <Plus className="h-3 w-3 mr-1" /> Otra
+                              </Button>
+                            </div>
+
+                            {installmentFields.length === 0 && (
+                              <p className="text-xs text-amber-600 dark:text-amber-400">
+                                Agregá al menos una opción de cuotas.
+                              </p>
+                            )}
+
+                            {/* Filas editables por opción */}
+                            <div className="space-y-2">
+                              {installmentFields.map((row, index) => {
+                                const count = Number(installmentsPlans?.[index]?.count) || 0
+                                const rate = Number(installmentsPlans?.[index]?.rate) || 0
+                                const preview =
+                                  installmentBase > 0 && count >= 1
+                                    ? buildCreditInstallmentPlan({
+                                        principalAmount: installmentBase,
+                                        interestRate: rate,
+                                        installmentCount: count,
+                                        frequency: 'monthly',
+                                      })
+                                    : null
+                                return (
+                                  <div key={row.id} className="flex items-start gap-2 rounded-lg border border-gray-200 dark:border-gray-700 p-2">
+                                    <FormField
+                                      control={form.control}
+                                      name={`installments_plans.${index}.count`}
+                                      render={({ field }) => (
+                                        <FormItem className="w-20 shrink-0">
+                                          <FormLabel className="text-[10px] text-gray-500">Cuotas</FormLabel>
+                                          <FormControl>
+                                            <Input type="number" min={1} max={60} className="h-8 text-sm" {...field} value={field.value ?? ''} />
+                                          </FormControl>
+                                          <FormMessage className="text-[10px]" />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={form.control}
+                                      name={`installments_plans.${index}.rate`}
+                                      render={({ field }) => (
+                                        <FormItem className="w-24 shrink-0">
+                                          <FormLabel className="text-[10px] text-gray-500">Recargo %</FormLabel>
+                                          <FormControl>
+                                            <Input type="number" step="0.01" min={0} placeholder="0" className="h-8 text-sm" {...field} value={field.value ?? ''} />
+                                          </FormControl>
+                                          <FormMessage className="text-[10px]" />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <div className="flex-1 min-w-0 pt-4">
+                                      {preview ? (
+                                        <p className="text-xs text-indigo-700 dark:text-indigo-300 leading-snug">
+                                          {count} × <strong>{formatPrice(preview.installments[0]?.amount ?? 0)}</strong>
+                                          {preview.interestAmount > 0
+                                            ? <span className="text-indigo-600/70"> · Total {formatPrice(preview.financedTotal)}</span>
+                                            : <span className="text-indigo-600/70"> · sin interés</span>}
+                                        </p>
+                                      ) : (
+                                        <p className="text-xs text-gray-400 pt-0.5">Definí precio de venta para ver el cálculo</p>
+                                      )}
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => removeInstallment(index)}
+                                      className="h-8 w-8 p-0 text-gray-400 hover:text-red-500 shrink-0"
+                                      aria-label="Quitar opción de cuotas"
+                                    >
+                                      ×
+                                    </Button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
                   </div>
                 </TabsContent>
 

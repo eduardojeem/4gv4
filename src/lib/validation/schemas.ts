@@ -81,6 +81,19 @@ export const productSchema = z.object({
   has_offer: z.boolean()
     .optional(),
 
+  installments_enabled: z.boolean()
+    .optional(),
+
+  installments_public: z.boolean()
+    .optional(),
+
+  installments_plans: z.array(
+    z.object({
+      count: z.number().int().min(1).max(60),
+      rate: z.number().min(0).max(1000),
+    })
+  ).optional(),
+
   is_active: z.boolean()
     .default(true),
 

@@ -41,7 +41,8 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
     wholesalePrice: '',
     cost: '',
     description: '',
-    visibility: 'public'
+    // Los servicios nuevos quedan ocultos en la web por defecto.
+    visibility: 'hidden'
   })
 
   useEffect(() => {
@@ -61,7 +62,8 @@ export function ServiceDialog({ open, onOpenChange, service }: ServiceDialogProp
         wholesalePrice: '',
         cost: '',
         description: '',
-        visibility: 'public'
+        // Nuevo servicio: oculto en la web por defecto.
+        visibility: 'hidden'
       })
     }
   }, [service, open])

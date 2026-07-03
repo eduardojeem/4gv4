@@ -44,10 +44,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import type { Product } from '@/types/product-unified'
+import { formatPrice } from '@/lib/utils'
 
 export function ServicesTab() {
-  const { services, loading, deleteItem } = useInventory()
+  const { services, loading, deleteItem, updateService } = useInventory()
   const [searchTerm, setSearchTerm] = useState("")
+  const [togglingId, setTogglingId] = useState<string | null>(null)
   
   // Dialog States
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -67,10 +69,10 @@ export function ServicesTab() {
       const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (s.description && s.description.toLowerCase().includes(searchTerm.toLowerCase()))
 
-      // Filter rows by visibility when in retail/wholesale mode
+      // El modo es un lente de precios, no de visibilidad web (eso lo maneja
+      // el toggle 🌐 por fila). Mayorista = servicios con precio mayorista cargado.
       let matchesMode = true
-      if (viewMode === 'retail') matchesMode = (s.visibility || 'public') === 'public'
-      if (viewMode === 'wholesale') matchesMode = s.visibility === 'wholesale'
+      if (viewMode === 'wholesale') matchesMode = Number(s.wholesale_price ?? 0) > 0
 
       return matchesSearch && matchesMode
     })
@@ -93,6 +95,17 @@ export function ServicesTab() {
 
   const handleDelete = (service: Product) => {
     setServiceToDelete(service)
+  }
+
+  // Alterna la visibilidad web del servicio (público ↔ oculto) en 1 clic.
+  const handleToggleWeb = async (service: Product) => {
+    const isVisible = (service.visibility || 'public') === 'public'
+    setTogglingId(service.id)
+    try {
+      await updateService(service.id, { visibility: isVisible ? 'hidden' : 'public' })
+    } finally {
+      setTogglingId(null)
+    }
   }
 
   const confirmDelete = async () => {
@@ -256,7 +269,7 @@ export function ServicesTab() {
                         {(viewMode === 'all' || viewMode === 'retail') && (
                           <TableCell>
                             <span className="font-bold text-blue-600 dark:text-blue-400">
-                              ${service.sale_price?.toFixed(2)}
+                              {formatPrice(service.sale_price || 0)}
                             </span>
                           </TableCell>
                         )}
@@ -265,7 +278,7 @@ export function ServicesTab() {
                         {(viewMode === 'all' || viewMode === 'wholesale') && (
                           <TableCell>
                             <span className="font-bold text-purple-600 dark:text-purple-400">
-                              ${service.wholesale_price?.toFixed(2) || '-'}
+                              {service.wholesale_price ? formatPrice(service.wholesale_price) : '-'}
                             </span>
                           </TableCell>
                         )}
@@ -275,7 +288,7 @@ export function ServicesTab() {
                           <>
                             <TableCell>
                               <span className="text-sm text-muted-foreground">
-                                ${service.purchase_price?.toFixed(2)}
+                                {formatPrice(service.purchase_price || 0)}
                               </span>
                             </TableCell>
                             <TableCell>
@@ -298,9 +311,33 @@ export function ServicesTab() {
                         
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleToggleWeb(service)}
+                              disabled={togglingId === service.id}
+                              className={`h-8 w-8 ${
+                                (service.visibility || 'public') === 'public'
+                                  ? 'hover:bg-green-50 text-green-600 dark:hover:bg-green-950/20'
+                                  : 'hover:bg-gray-100 text-gray-400 dark:hover:bg-gray-800'
+                              }`}
+                              title={
+                                (service.visibility || 'public') === 'public'
+                                  ? 'Visible en la web — clic para ocultar'
+                                  : 'Oculto en la web — clic para mostrar'
+                              }
+                            >
+                              {togglingId === service.id ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : (service.visibility || 'public') === 'public' ? (
+                                <Globe className="h-4 w-4" />
+                              ) : (
+                                <EyeOff className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => handleView(service)}
                               className="hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/20 h-8 w-8"
                               title="Ver detalles"

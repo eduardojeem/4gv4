@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Package, Wrench, AlertTriangle } from 'lucide-react'
 import { useInventory } from '../context/InventoryContext'
+import { formatPrice } from '@/lib/utils'
 
 export function InventoryStats() {
   const { inventory, services } = useInventory()
@@ -41,7 +42,7 @@ export function InventoryStats() {
         </CardHeader>
         <CardContent className="relative z-10">
           <div className="text-2xl font-black tracking-tight text-foreground">
-            ${stats.totalValue.toFixed(2)}
+            {formatPrice(stats.totalValue)}
           </div>
           <p className="text-xs font-medium text-muted-foreground mt-1">
             {stats.productCount} productos físicos

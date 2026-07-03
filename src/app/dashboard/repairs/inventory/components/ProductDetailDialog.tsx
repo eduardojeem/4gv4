@@ -43,28 +43,14 @@ import type { Product, ProductMovement } from '@/types/product-unified'
 import { useInventory } from '../context/InventoryContext'
 import { toast } from 'sonner'
 import { logger } from '@/lib/logger'
+import { formatMovementType } from '../lib/movement-format'
+import { formatPrice } from '@/lib/utils'
 
 interface ProductDetailDialogProps {
   product: Product | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onEdit?: (product: Product) => void
-}
-
-// Traduce movement_type (inglés o español) a etiqueta y color legible
-function formatMovementType(type: string): { label: string; className: string } {
-  const map: Record<string, { label: string; className: string }> = {
-    in:         { label: '↑ Entrada',   className: 'bg-green-500 text-white' },
-    entrada:    { label: '↑ Entrada',   className: 'bg-green-500 text-white' },
-    out:        { label: '↓ Salida',    className: 'bg-red-500 text-white' },
-    salida:     { label: '↓ Salida',    className: 'bg-red-500 text-white' },
-    venta:      { label: '↓ Venta',     className: 'bg-red-500 text-white' },
-    adjustment: { label: '⚖ Ajuste',   className: 'bg-blue-500 text-white' },
-    ajuste:     { label: '⚖ Ajuste',   className: 'bg-blue-500 text-white' },
-    transfer:   { label: '⇄ Traslado', className: 'bg-purple-500 text-white' },
-    reparacion: { label: '🔧 Reparación', className: 'bg-amber-500 text-white' },
-  }
-  return map[type] ?? { label: type, className: 'bg-gray-500 text-white' }
 }
 
 export function ProductDetailDialog({
@@ -213,7 +199,7 @@ export function ProductDetailDialog({
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    ${product.sale_price?.toFixed(2)}
+                    {formatPrice(product.sale_price || 0)}
                   </div>
                 </CardContent>
               </Card>
@@ -246,7 +232,7 @@ export function ProductDetailDialog({
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                    ${stockValue.toFixed(2)}
+                    {formatPrice(stockValue)}
                   </div>
                 </CardContent>
               </Card>
@@ -267,7 +253,7 @@ export function ProductDetailDialog({
                     {marginPercent.toFixed(0)}%
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    ${margin.toFixed(2)} por unidad
+                    {formatPrice(margin)} por unidad
                   </p>
                 </CardContent>
               </Card>
@@ -284,13 +270,13 @@ export function ProductDetailDialog({
                     <div className="flex items-center gap-2 text-sm">
                       <DollarSign className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Precio Compra:</span>
-                      <span className="font-semibold">${product.purchase_price?.toFixed(2)}</span>
+                      <span className="font-semibold">{formatPrice(product.purchase_price || 0)}</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <DollarSign className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Precio Mayorista:</span>
                       <span className="font-semibold">
-                        {product.wholesale_price ? `$${product.wholesale_price.toFixed(2)}` : '-'}
+                        {product.wholesale_price ? formatPrice(product.wholesale_price) : '-'}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">

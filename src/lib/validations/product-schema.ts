@@ -48,6 +48,28 @@ export const productSchema = z
       .nullable(),
     has_offer: z.boolean().default(false),
 
+    // Installments / financiación (informativo en la web pública)
+    // Lista de planes: cada opción tiene su cantidad de cuotas y su % de recargo.
+    installments_enabled: z.boolean().default(false),
+    installments_public: z.boolean().default(true),
+    installments_plans: z
+      .array(
+        z.object({
+          count: z
+            .coerce
+            .number()
+            .int()
+            .min(1, "Mínimo 1 cuota")
+            .max(60, "Máximo 60 cuotas"),
+          rate: z
+            .coerce
+            .number()
+            .min(0, "El recargo no puede ser negativo")
+            .max(1000, "El recargo no puede exceder 1000%"),
+        }),
+      )
+      .default([]),
+
     // Post-sale fields
     warranty_months: z
       .coerce
@@ -174,6 +196,29 @@ export const productSchema = z
           })
         }
       }
+    }
+
+    // installments checks
+    if (data.installments_enabled) {
+      if (!data.installments_plans || data.installments_plans.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Agrega al menos una opción de cuotas cuando la financiación está activa",
+          path: ["installments_plans"],
+        })
+      }
+      // No permitir cantidades de cuota duplicadas
+      const seen = new Set<number>()
+      data.installments_plans?.forEach((plan, index) => {
+        if (seen.has(plan.count)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `La opción de ${plan.count} cuotas está repetida`,
+            path: ["installments_plans", index, "count"],
+          })
+        }
+        seen.add(plan.count)
+      })
     }
 
     // max_stock checks (UI-only)

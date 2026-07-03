@@ -118,6 +118,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     wholesale_price: number | null
     has_offer: boolean | null
     offer_price: number | null
+    installments_enabled: boolean | null
+    installments_public: boolean | null
+    installments_plans: { count: number; rate: number }[] | null
     stock_quantity: number
     is_active: boolean
     featured: boolean
@@ -139,8 +142,8 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   // Build query - only active products, never select wholesale_price for non-wholesale
   // Typed as string to avoid TS2590 (union type too complex with long string literals)
   const selectFields: string = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
-    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let queryBuilder = (supabase as any)
@@ -253,6 +256,9 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
       has_offer: (p.has_offer as boolean) || false,
       offer_price: (p.offer_price as number | null) ?? null,
+      installments_enabled: (p.installments_enabled as boolean) || false,
+      installments_public: (p.installments_public as boolean) ?? true,
+      installments_plans: Array.isArray(p.installments_plans) ? p.installments_plans : [],
       stock_quantity: (p.stock_quantity as number) ?? 0,
       in_stock: ((p.stock_quantity as number) ?? 0) > 0,
       is_active: p.is_active as boolean,
@@ -376,8 +382,8 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
 
   // Typed as string to avoid TS2590 with long string literal unions
   const selectFields: string = isWholesale
-    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
-    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
+    : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let queryBuilder = (supabase as any)
@@ -403,7 +409,7 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
   if (error || !data) return null
 
   // Transform
-  const p = data as unknown as { id: string; name: string; sku: string; description: string; brand: string; sale_price: number; wholesale_price?: number; has_offer?: boolean; offer_price?: number | null; stock_quantity: number; is_active: boolean; featured: boolean; image_url: string | null; images: string[] | null; unit_measure: string | null; barcode: string | null; category: { id: string; name: string } | { id: string; name: string }[] | null; brand_details: { name: string }[] | null }
+  const p = data as unknown as { id: string; name: string; sku: string; description: string; brand: string; sale_price: number; wholesale_price?: number; has_offer?: boolean; offer_price?: number | null; installments_enabled?: boolean; installments_public?: boolean; installments_plans?: { count: number; rate: number }[] | null; stock_quantity: number; is_active: boolean; featured: boolean; image_url: string | null; images: string[] | null; unit_measure: string | null; barcode: string | null; category: { id: string; name: string } | { id: string; name: string }[] | null; brand_details: { name: string }[] | null }
   const category = Array.isArray(p.category) ? p.category[0] : p.category
   const cat = category as { id: string; name: string } | null
 
@@ -418,6 +424,9 @@ export async function getPublicProduct(id: string, isWholesaleOverride?: boolean
     wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
     has_offer: p.has_offer || false,
     offer_price: p.offer_price ?? null,
+    installments_enabled: p.installments_enabled || false,
+    installments_public: p.installments_public ?? true,
+    installments_plans: Array.isArray(p.installments_plans) ? p.installments_plans : [],
     stock_quantity: (p.stock_quantity as number) ?? 0,
     in_stock: ((p.stock_quantity as number) ?? 0) > 0,
     is_active: p.is_active,

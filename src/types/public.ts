@@ -16,6 +16,12 @@ export interface Category {
   subcategories?: Category[]
 }
 
+/** Una opción de financiación en cuotas: cantidad de cuotas y % de recargo. */
+export interface InstallmentPlanOption {
+  count: number
+  rate: number
+}
+
 export interface PublicProduct {
   id: string
   name: string
@@ -35,6 +41,9 @@ export interface PublicProduct {
   has_offer?: boolean
   offer_price?: number | null
   promotion_name?: string | null
+  installments_enabled?: boolean
+  installments_public?: boolean
+  installments_plans?: InstallmentPlanOption[]
   image: string | null
   images: string[] | null
   unit_measure: string
