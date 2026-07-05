@@ -206,6 +206,27 @@ const nextConfig: NextConfig = {
 
     return [
       {
+        // Security headers para todas las rutas.
+        // Nota: no se define Content-Security-Policy acá porque requiere
+        // ajustarla y probarla contra los inline scripts / PWA / Supabase;
+        // dejarla mal configurada rompe la app. Queda como mejora a validar.
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'X-DNS-Prefetch-Control', value: 'on' },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains',
+          },
+        ],
+      },
+      {
         source: '/_next/static/(.*)',
         headers: [
           {

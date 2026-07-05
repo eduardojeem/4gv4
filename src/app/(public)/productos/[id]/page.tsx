@@ -9,7 +9,7 @@ import { Breadcrumbs } from '@/components/public/Breadcrumbs'
 import { ProductCard } from '@/components/public/ProductCard'
 import { getPublicProduct, getPublicProducts, resolveWholesaleStatus, getProductBranchStock } from '@/lib/api/products-server'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
-import { generateProductSchema } from '@/lib/seo'
+import { generateProductSchema, serializeJsonLd } from '@/lib/seo'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
@@ -140,7 +140,7 @@ export default async function ProductDetailPage(props: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(productSchema) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(productSchema) }}
       />
 
       <div className="min-h-screen bg-background">

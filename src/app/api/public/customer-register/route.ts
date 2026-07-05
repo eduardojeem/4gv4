@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { validatePassword } from '@/lib/auth/password-validation'
 import { logger } from '@/lib/logger'
+import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 
 const customerRegisterSchema = z.object({
   // Optional: when omitted the account is a marketplace-wide customer identity
@@ -43,6 +44,17 @@ function getSupabaseErrorMessage(result: unknown) {
 
 export async function POST(request: Request) {
   try {
+    // Rate limit por IP para frenar abuso del registro público de clientes.
+    const clientIp = getClientIp(request)
+    const allowed = await rateLimiter.check(`customer-register:${clientIp}`, 5, 10 * 60 * 1000)
+    if (!allowed) {
+      const retryAfter = rateLimiter.getResetTime(`customer-register:${clientIp}`)
+      return NextResponse.json(
+        { success: false, error: 'Demasiados intentos de registro. Intenta nuevamente en unos minutos.' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      )
+    }
+
     const validation = customerRegisterSchema.safeParse(await request.json())
 
     if (!validation.success) {

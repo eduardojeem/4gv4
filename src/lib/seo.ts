@@ -179,6 +179,21 @@ export function generateProductSchema(product: {
 /**
  * Generate JSON-LD Schema for Breadcrumbs
  */
+/**
+ * Serializa un objeto para inyectarlo de forma segura en un
+ * <script type="application/ld+json">. Escapa los caracteres que permitirían
+ * romper la etiqueta </script> o inyectar HTML/JS (XSS almacenado a través de
+ * campos controlados por el usuario, p. ej. nombre/descripción de producto).
+ */
+export function serializeJsonLd(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+}
+
 export function generateBreadcrumbSchema(items: { name: string; url: string }[]) {
   return {
     '@context': 'https://schema.org',
