@@ -234,9 +234,10 @@ async function calculateStats(
     if (COMPLETED_REPAIR_STATUSES.has(status)) {
       stats.totalCompleted += 1
 
-      // No todas las reparaciones cerradas tienen completed_at poblado;
-      // caemos a delivered_at y luego updated_at para no subcontar.
-      const closedAt = repair.completed_at || repair.delivered_at || repair.updated_at || null
+      // Solo timestamps reales de cierre. NO usamos updated_at: cambia con
+      // cualquier edición y contaría cierres viejos como "de este mes" e
+      // inflaría el tiempo promedio (created -> updated).
+      const closedAt = repair.completed_at || repair.delivered_at || null
 
       if (closedAt && closedAt >= startOfMonth) {
         stats.completedThisMonth += 1

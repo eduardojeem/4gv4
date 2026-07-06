@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -275,7 +275,7 @@ export default function TechnicianHistoryPage() {
   }, [myRepairs, dateFilter, statusFilter, searchTerm, sortBy])
 
   // Reset page when filters change
-  useMemo(() => { setPage(1) }, [dateFilter, statusFilter, searchTerm, sortBy])
+  useEffect(() => { setPage(1) }, [dateFilter, statusFilter, searchTerm, sortBy])
 
   // KPIs (consolidated — no duplication)
   const kpis = useMemo(() => {

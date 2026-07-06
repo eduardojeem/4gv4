@@ -11,9 +11,14 @@ import { TechnicianWorkHistory } from '@/components/dashboard/technicians/detail
 import { useTechnicianStats } from '@/hooks/use-technician-stats'
 import { useRepairs } from '@/contexts/RepairsContext'
 import { useTechnicianAnalytics } from '@/hooks/use-technician-analytics'
-import { Activity, BarChart3, History, User } from 'lucide-react'
+import { useAuth } from '@/contexts/auth-context'
+import { useTechnicianCompensation } from '@/hooks/use-technician-compensation'
+import { TechnicianCompensationCard } from '@/components/dashboard/technicians/detail/TechnicianCompensationCard'
+import { TechnicianPaymentsTab } from '@/components/dashboard/technicians/detail/TechnicianPaymentsTab'
+import { Activity, BarChart3, History, User, Wallet } from 'lucide-react'
 import { isActiveRepair, isCompletedRepair } from '@/lib/constants/repair-status'
 import { type Repair } from '@/types/repairs'
+import { HelpButton } from '@/components/help/HelpButton'
 
 function HeaderSkeleton() {
   return (
@@ -69,8 +74,17 @@ const TechnicianMetricsTab = dynamic(
 export default function OptimizedTechnicianDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
+  const { user } = useAuth()
+  // La compensación es dato sensible: solo admin/super_admin (alineado con el API).
+  const canManageCompensation = user?.role === 'admin' || user?.role === 'super_admin'
   const { technicians, isLoading: isLoadingTechs } = useTechnicianStats()
   const { repairs, isLoading: isLoadingRepairs } = useRepairs()
+  const {
+    compensation,
+    earnings: compEarnings,
+    isLoading: compLoading,
+    refresh: refreshComp,
+  } = useTechnicianCompensation(resolvedParams.id, canManageCompensation)
   const [activeTab, setActiveTab] = useState('active')
 
   const technician = useMemo(() => {
@@ -150,6 +164,11 @@ export default function OptimizedTechnicianDetailPage({ params }: { params: Prom
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6 p-6">
+      {/* Help contextual */}
+      <div className="flex justify-end">
+        <HelpButton guideKey="technicians" showLabel variant="outline" />
+      </div>
+
       <OptimizedTechnicianHeader
         id={technician.id}
         name={technician.name}
@@ -159,36 +178,59 @@ export default function OptimizedTechnicianDetailPage({ params }: { params: Prom
         onAssignRepair={handleAssignRepair}
       />
 
+      {canManageCompensation && (
+        <TechnicianCompensationCard
+          technicianId={technician.id}
+          canManage={canManageCompensation}
+          compensation={compensation}
+          earnings={compEarnings}
+          isLoading={compLoading}
+          onSaved={refreshComp}
+        />
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="rounded-xl border-0 bg-white/80 p-2 shadow-lg backdrop-blur-sm dark:bg-slate-800/80">
-          <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 sm:grid-cols-3">
+        <div className="rounded-xl border bg-card p-1.5 shadow-sm">
+          <TabsList className="flex h-auto w-full gap-1 bg-transparent p-0 overflow-x-auto scrollbar-hide">
             <TabsTrigger
               value="active"
-              className="flex items-center gap-2 rounded-lg p-3 text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-lg"
+              className="flex min-w-max flex-1 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
             >
-              <Activity className="h-4 w-4" />
-              <span className="hidden sm:inline">Trabajos Activos</span>
-              <span className="sm:hidden">Activos</span>
-              <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">{activeRepairs.length}</span>
+              <Activity className="h-4 w-4 shrink-0" />
+              <span>Activos</span>
+              <span className="rounded-full bg-primary-foreground/20 px-2 py-0.5 text-xs font-semibold data-[state=inactive]:bg-muted">
+                {activeRepairs.length}
+              </span>
             </TabsTrigger>
 
             <TabsTrigger
               value="history"
-              className="flex items-center gap-2 rounded-lg p-3 text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-lg"
+              className="flex min-w-max flex-1 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
             >
-              <History className="h-4 w-4" />
+              <History className="h-4 w-4 shrink-0" />
               <span>Historial</span>
-              <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">{completedRepairs.length}</span>
+              <span className="rounded-full bg-primary-foreground/20 px-2 py-0.5 text-xs font-semibold">
+                {completedRepairs.length}
+              </span>
             </TabsTrigger>
 
             <TabsTrigger
               value="metrics"
-              className="flex items-center gap-2 rounded-lg p-3 text-sm font-medium transition-all duration-200 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-600 data-[state=active]:text-white data-[state=active]:shadow-lg"
+              className="flex min-w-max flex-1 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
             >
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">Analytics</span>
-              <span className="sm:hidden">Metricas</span>
+              <BarChart3 className="h-4 w-4 shrink-0" />
+              <span>Analytics</span>
             </TabsTrigger>
+
+            {canManageCompensation && (
+              <TabsTrigger
+                value="payments"
+                className="flex min-w-max flex-1 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+              >
+                <Wallet className="h-4 w-4 shrink-0" />
+                <span>Pagos</span>
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -200,13 +242,22 @@ export default function OptimizedTechnicianDetailPage({ params }: { params: Prom
 
         <TabsContent value="history" className="mt-6">
           <Suspense fallback={<Skeleton className="h-96 rounded-lg" />}>
-            <TechnicianWorkHistory repairs={completedRepairs} />
+            <TechnicianWorkHistory
+              repairs={completedRepairs}
+              compensation={canManageCompensation ? compensation : undefined}
+            />
           </Suspense>
         </TabsContent>
 
         <TabsContent value="metrics" className="mt-6">
           <TechnicianMetricsTab analytics={analytics} />
         </TabsContent>
+
+        {canManageCompensation && (
+          <TabsContent value="payments" className="mt-6">
+            <TechnicianPaymentsTab technicianId={technician.id} canManage={canManageCompensation} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

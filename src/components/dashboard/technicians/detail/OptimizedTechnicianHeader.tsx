@@ -72,56 +72,82 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
       {/* Header Card */}
       <Card className="overflow-hidden">
         <CardContent className="pt-6">
-          <div className="flex flex-col lg:flex-row gap-6">
-            {/* Avatar and Basic Info */}
-            <div className="flex items-center gap-4">
-              <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold text-3xl relative">
-                {avatar ? (
-                  <img src={avatar} alt={name} className="h-24 w-24 rounded-full object-cover" />
-                ) : (
-                  name.charAt(0).toUpperCase()
-                )}
-                <div className={`absolute -bottom-2 -right-2 h-6 w-6 rounded-full border-4 border-white dark:border-gray-900 ${loadIndicatorColor}`} />
+          <div className="flex flex-col gap-6">
+            {/* Top row: avatar + info + actions */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              {/* Avatar and Basic Info */}
+              <div className="flex items-center gap-4">
+                <div className="relative shrink-0">
+                  <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold text-2xl sm:h-20 sm:w-20 sm:text-3xl">
+                    {avatar ? (
+                      <img src={avatar} alt={name} className="h-full w-full rounded-full object-cover" />
+                    ) : (
+                      name.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div className={`absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-4 border-background ${loadIndicatorColor}`} />
+                </div>
+
+                <div className="flex-1">
+                  <h1 className="text-2xl font-bold sm:text-3xl">{name}</h1>
+                  {specialty && (
+                    <p className="text-base text-muted-foreground sm:text-lg">{specialty}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <WorkStatusBadge status={metrics.loadState} />
+                    <Badge variant="outline" className={workloadInfo.color}>
+                      {workloadInfo.label}
+                    </Badge>
+                    {rating !== undefined && (
+                      <Badge variant="outline" className="gap-1">
+                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                        {rating.toFixed(1)}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="flex-1">
-                <h1 className="text-3xl font-bold">{name}</h1>
-                {specialty && (
-                  <p className="text-lg text-muted-foreground">{specialty}</p>
-                )}
-                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <WorkStatusBadge status={metrics.loadState} />
-                  <Badge variant="outline" className={workloadInfo.color}>
-                    {workloadInfo.label}
-                  </Badge>
-                  {rating !== undefined && (
-                    <Badge variant="outline" className="gap-1">
-                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                      {rating.toFixed(1)}
-                    </Badge>
-                  )}
-                </div>
-                
-                {/* Efficiency Progress */}
-                <div className="mt-3 space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Eficiencia General</span>
-                    <span className="font-medium">{Math.round(metrics.efficiency)}%</span>
-                  </div>
-                  <Progress value={metrics.efficiency} className="h-2" />
-                </div>
+              {/* Actions — inline on mobile, column on sm+ */}
+              <div className="flex shrink-0 gap-2 sm:flex-col">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 flex-1 sm:flex-none"
+                  onClick={() => router.push(`/dashboard/repairs/technicians`)}
+                >
+                  <Edit className="h-4 w-4" />
+                  Editar perfil
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={onAssignRepair}
+                  className="gap-2 flex-1 sm:flex-none"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Asignar
+                </Button>
               </div>
             </div>
 
-            {/* Enhanced Stats Grid */}
-            <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {/* Efficiency Progress — shown here on mobile */}
+              <div className="col-span-2 space-y-1 lg:hidden">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Eficiencia General</span>
+                  <span className="font-medium">{Math.round(metrics.efficiency)}%</span>
+                </div>
+                <Progress value={metrics.efficiency} className="h-2" />
+              </div>
+
               {/* Total Jobs */}
               <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/30 dark:to-blue-900/50 border border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="p-1.5 bg-blue-500 rounded-lg">
                     <Wrench className="h-4 w-4 text-white" />
                   </div>
-                  <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Total Trabajos</span>
+                  <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Total</span>
                 </div>
                 <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{metrics.totalJobs}</p>
                 <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
@@ -165,7 +191,7 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
                   <div className="p-1.5 bg-purple-500 rounded-lg">
                     <DollarSign className="h-4 w-4 text-white" />
                   </div>
-                  <span className="text-xs font-medium text-purple-700 dark:text-purple-300">Valor Entregado</span>
+                  <span className="text-xs font-medium text-purple-700 dark:text-purple-300">Valor</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <GSIcon className="h-5 w-5 text-purple-900 dark:text-purple-100" />
@@ -174,28 +200,18 @@ export const OptimizedTechnicianHeader = memo(function OptimizedTechnicianHeader
                   </p>
                 </div>
                 <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                  Promedio entregado: {Math.round(metrics.avgJobValue).toLocaleString()}
+                  Prom: {Math.round(metrics.avgJobValue).toLocaleString()}
                 </p>
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex lg:flex-col gap-2">
-              <Button
-                variant="outline"
-                className="gap-2 flex-1 lg:flex-none"
-                onClick={() => router.push(`/admin/users?editUser=${encodeURIComponent(id)}`)}
-              >
-                <Edit className="h-4 w-4" />
-                Editar
-              </Button>
-              <Button 
-                onClick={onAssignRepair} 
-                className="gap-2 flex-1 lg:flex-none"
-              >
-                <UserPlus className="h-4 w-4" />
-                Asignar Trabajo
-              </Button>
+            {/* Efficiency bar — shown on desktop inside stats area */}
+            <div className="hidden space-y-1 lg:block">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Eficiencia General</span>
+                <span className="font-medium">{Math.round(metrics.efficiency)}%</span>
+              </div>
+              <Progress value={metrics.efficiency} className="h-2" />
             </div>
           </div>
         </CardContent>

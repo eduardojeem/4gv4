@@ -144,7 +144,12 @@ export default function TechnicianStatsPage() {
 
   // Chart data
   const monthlyData = useMemo(() => buildMonthlyData(myRepairs), [myRepairs])
-  const revenueData = useMemo(() => buildMonthlyData(periodRepairs), [periodRepairs])
+  // Ingresos: misma definición que el KPI (solo reparaciones entregadas) para
+  // que el gráfico y la tarjeta cuadren.
+  const revenueData = useMemo(
+    () => buildMonthlyData(periodRepairs.filter(r => r.dbStatus === 'entregado')),
+    [periodRepairs]
+  )
 
   const statusData = useMemo(() => {
     const counts = { recibido: 0, diagnostico: 0, reparacion: 0, listo: 0, entregado: 0 }

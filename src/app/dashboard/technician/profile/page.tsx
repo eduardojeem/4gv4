@@ -178,6 +178,8 @@ export default function TechnicianProfilePage() {
     ? new Date(user.created_at).toLocaleDateString('es', { month: 'long', year: 'numeric' })
     : 'Desconocido'
 
+  const isAdmin = user.role === 'admin' || user.role === 'super_admin'
+
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
       {/* ── Profile Header ── */}
@@ -201,7 +203,7 @@ export default function TechnicianProfilePage() {
                   className="rounded-full border-indigo-200 bg-indigo-50 text-xs text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/30 dark:text-indigo-300"
                 >
                   <Wrench className="mr-1 h-3 w-3" />
-                  {user.role === 'admin' ? 'Administrador' : 'Técnico'}
+                  {isAdmin ? 'Administrador' : 'Técnico'}
                 </Badge>
                 <span className="text-sm text-slate-500 dark:text-slate-400">{user.email}</span>
               </div>
@@ -284,7 +286,7 @@ export default function TechnicianProfilePage() {
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     disabled={!isEditing}
-                    placeholder="+598 99 123 456"
+                    placeholder="+595 981 123 456"
                     className={cn(!isEditing && 'bg-gray-50 dark:bg-slate-800/50')}
                   />
                 </div>
@@ -405,11 +407,11 @@ export default function TechnicianProfilePage() {
                   <div className="flex items-center gap-2">
                     <Shield className="h-4 w-4 text-blue-500" />
                     <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {user.role === 'admin' ? 'Administrador' : 'Técnico'}
+                      {isAdmin ? 'Administrador' : 'Técnico'}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
-                    {user.role === 'admin'
+                    {isAdmin
                       ? 'Acceso completo al sistema, gestión de usuarios y configuración.'
                       : 'Acceso a reparaciones asignadas, agenda personal y perfil.'}
                   </p>

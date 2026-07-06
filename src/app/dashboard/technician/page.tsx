@@ -116,16 +116,18 @@ export default function TechnicianPanel() {
     )
   }, [repairs, searchTerm])
 
+  // Métricas sobre el dataset completo (respeta "solo mis reparaciones" del hook),
+  // no sobre el resultado de la búsqueda de texto — así los totales no cambian al buscar.
   const stats = useMemo(() => {
-    const total = filteredRepairs.length
-    const pending = filteredRepairs.filter((repair) => repair.dbStatus === 'recibido').length
-    const inProgress = filteredRepairs.filter(
+    const total = repairs.length
+    const pending = repairs.filter((repair) => repair.dbStatus === 'recibido').length
+    const inProgress = repairs.filter(
       (repair) => repair.dbStatus === 'reparacion' || repair.dbStatus === 'diagnostico'
     ).length
-    const completed = filteredRepairs.filter(
+    const completed = repairs.filter(
       (repair) => repair.dbStatus === 'listo' || repair.dbStatus === 'entregado'
     ).length
-    const urgent = filteredRepairs.filter(
+    const urgent = repairs.filter(
       (repair) =>
         repair.urgency === 'urgent' &&
         repair.dbStatus !== 'listo' &&
@@ -133,7 +135,7 @@ export default function TechnicianPanel() {
     ).length
 
     return { total, pending, inProgress, completed, urgent }
-  }, [filteredRepairs])
+  }, [repairs])
 
   const technicianOptions = useMemo(() => {
     if (technicians.length > 0) {

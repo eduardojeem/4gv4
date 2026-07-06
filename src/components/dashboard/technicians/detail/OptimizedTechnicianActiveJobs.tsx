@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { type Repair, type RepairStatus } from '@/types/repairs'
-import { Clock, ExternalLink, Search, Filter, AlertTriangle, Zap } from 'lucide-react'
+import { Clock, ExternalLink, Search, Filter, AlertTriangle, Zap, CheckCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -125,12 +125,16 @@ export const OptimizedTechnicianActiveJobs = memo(function OptimizedTechnicianAc
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Zap className="h-8 w-8 text-green-600 dark:text-green-400" />
+          <div className="flex flex-col items-center justify-center gap-3 py-14 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
+              <CheckCircle className="h-7 w-7 text-green-600 dark:text-green-400" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Buen trabajo</h3>
-            <p className="text-muted-foreground">No hay trabajos activos en este momento</p>
+            <div>
+              <p className="font-medium text-foreground">Sin trabajos activos</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Este técnico no tiene reparaciones en curso en este momento.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

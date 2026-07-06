@@ -6,17 +6,21 @@ import { AlertCircle, ArrowLeft, ChevronRight, Home, LayoutGrid, List, RefreshCw
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { HelpButton } from '@/components/help/HelpButton'
 import { TechnicianCard } from '@/components/dashboard/technicians/TechnicianCard'
 import { TechnicianFilters } from '@/components/dashboard/technicians/TechnicianFilters'
 import { TechnicianListItem } from '@/components/dashboard/technicians/TechnicianListItem'
 import { TechnicianStatsGrid } from '@/components/dashboard/technicians/TechnicianStatsGrid'
 import { useBranch } from '@/contexts/branch-context'
+import { useAuth } from '@/contexts/auth-context'
 import { useDebounce } from '@/hooks/use-debounce'
 import { useTechnicianStats } from '@/hooks/use-technician-stats'
 
 export default function TechniciansPage() {
   const router = useRouter()
   const { selectedBranch } = useBranch()
+  const { hasPermission } = useAuth()
+  const canManageUsers = hasPermission('users.manage')
   const { technicians: technicianData, isLoading, error, refresh } = useTechnicianStats()
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -153,10 +157,13 @@ export default function TechniciansPage() {
           >
             <RefreshCw className={`h-4 w-4 text-muted-foreground ${isLoading ? 'animate-spin text-primary' : ''}`} />
           </Button>
-          <Button className="gap-2 rounded-full px-6 h-10 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all hover:-translate-y-0.5" onClick={handleAddTechnician}>
-            <UserPlus className="h-4 w-4" />
-            <span className="font-semibold">Agregar Técnico</span>
-          </Button>
+          <HelpButton guideKey="technicians" variant="outline" className="rounded-full h-10 w-10 border-border/50 bg-background/50 backdrop-blur-md hover:bg-primary/5 hover:border-primary/30 transition-all shadow-sm" />
+          {canManageUsers && (
+            <Button className="gap-2 rounded-full px-6 h-10 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all hover:-translate-y-0.5" onClick={handleAddTechnician}>
+              <UserPlus className="h-4 w-4" />
+              <span className="font-semibold">Agregar Técnico</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -252,7 +259,7 @@ export default function TechniciansPage() {
                     ? `Aún no hay técnicos asignados a la sucursal ${selectedBranch.name}.`
                     : 'Comienza agregando miembros a tu equipo técnico.'}
               </p>
-              {(!searchTerm && statusFilter === 'all') && (
+              {(!searchTerm && statusFilter === 'all' && canManageUsers) && (
                 <Button onClick={handleAddTechnician} className="gap-2 rounded-full px-6 shadow-md hover:shadow-lg transition-all">
                   <UserPlus className="h-4 w-4" />
                   Agregar el primer técnico
