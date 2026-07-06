@@ -697,51 +697,6 @@ function RepairsPageContent() {
         <RepairStats repairs={repairs} />
       </div>
 
-      {/* Guía de funcionamiento del Taller de Reparaciones */}
-      <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-        <details className="group">
-          <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-5 pb-3">
-            <div className="text-md font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Taller de Reparaciones (Soporte Técnico)?
-            </div>
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-              <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-              <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-            </div>
-          </summary>
-          <CardContent className="pt-0 pb-5 text-xs">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                  Recepción y Ticket
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Registra el dispositivo del cliente (marca, modelo, falla declarada y contraseña de acceso). El sistema generará un número de ticket de seguimiento y emitirá un comprobante de recepción firmado.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                  Asignación y Diagnóstico
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Asigna la orden a un técnico especialista. El técnico podrá actualizar el estado del servicio en tiempo real (ej: "En Diagnóstico", "Esperando Repuestos", "Listo para Entregar") e ingresar notas internas.
-                </p>
-              </div>
-              <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                <h4 className="font-semibold text-foreground flex items-center gap-2">
-                  <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                  Cobro y Entrega
-                </h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  Al completar la reparación, registra el cobro de la mano de obra y repuestos utilizados. La entrega final del equipo al cliente queda registrada con su respectivo recibo y garantía aplicada.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </details>
-      </Card>
 
       <div className="flex flex-col gap-4">
         <div className="rounded-[28px] border border-slate-200/80 bg-white/90 p-4 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70">

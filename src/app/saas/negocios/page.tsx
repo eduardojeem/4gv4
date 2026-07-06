@@ -5,8 +5,8 @@ import { SaaSCTASection } from '@/components/saas/landing/saas-cta-section'
 import { getPlatformBranding } from '@/lib/platform/branding'
 
 export const metadata: Metadata = {
-  title: 'Negocios SaaS para tiendas, service y delivery | MiPOS',
-  description: 'Soluciones SaaS por tipo de negocio: POS para tiendas, reparaciones para servicios tecnicos, multi-sucursal, ecommerce, pedidos y delivery.',
+  title: 'Soluciones por tipo de negocio: tiendas, servicios técnicos y delivery',
+  description: 'Plataforma multiempresa para POS, inventario, reparaciones, catálogo público, pedidos y delivery. Adaptada al flujo real de cada negocio.',
 }
 
 export default async function SaaSBusinessPage() {

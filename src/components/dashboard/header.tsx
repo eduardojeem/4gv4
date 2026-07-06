@@ -16,6 +16,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Search, LogOut, User, Settings, Menu, Shield, Crown, LayoutDashboard } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { GlobalHelpButton } from '@/components/help/HelpButton'
 import { NotificationSystem, useNotifications, type Notification } from '@/components/dashboard/notification-system'
 import { useGlobalNotifications } from '@/hooks/use-global-notifications'
 import { InstallPrompt } from '@/components/pwa/install-prompt'
@@ -310,6 +311,9 @@ export const Header = memo(function Header() {
               onDeleteNotification={handleDeleteNotification}
               onClearAll={handleClearAll}
             />
+
+            {/* Help */}
+            <GlobalHelpButton className="hidden sm:flex" />
 
             <div className="hidden sm:block">
               <ThemeToggle />

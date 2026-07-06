@@ -30,10 +30,20 @@ export type SaaSBusinessType = {
   title: string
   description: string
   metrics: string
+  /** Módulos activos sugeridos para este tipo de negocio */
+  modules: string[]
+  /** Frase corta de cuándo encaja bien */
+  fit: string
+  /** Resultado operativo esperado */
+  result: string
+  /** Plan recomendado */
+  plan: string
   icon: LucideIcon
   color: string
   accentBg: string
   iconBg: string
+  /** Tone para badges y bordes coloreados (Tailwind classes) */
+  tone: string
 }
 
 export type SaaSPlan = {
@@ -125,37 +135,57 @@ export const businessTypes: SaaSBusinessType[] = [
     title: 'Tiendas de celulares',
     description: 'Venta de celulares, accesorios, repuestos, control de stock y caja diaria.',
     metrics: 'POS + inventario + catálogo',
+    modules: ['POS', 'Inventario', 'Catálogo', 'Clientes'],
+    fit: 'Ideal para mostrador, inventario y ventas recurrentes.',
+    result: 'Menos quiebres de stock y ventas más ordenadas.',
+    plan: 'BASIC o PRO',
     icon: Store,
     color: 'text-cyan-600 dark:text-cyan-400',
     accentBg: 'bg-cyan-50 dark:bg-cyan-950/20 border-cyan-100 dark:border-cyan-900/30',
     iconBg: 'bg-cyan-100 dark:bg-cyan-950/50',
+    tone: 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-900/60 dark:bg-cyan-950/30 dark:text-cyan-300',
   },
   {
     title: 'Servicios técnicos',
     description: 'Órdenes de reparación, estados, técnicos, historial y seguimiento por ticket.',
     metrics: 'Reparaciones + seguimiento',
+    modules: ['Reparaciones', 'Clientes', 'Historial', 'Seguimiento'],
+    fit: 'Ideal para talleres que necesitan trazabilidad.',
+    result: 'Clientes informados y menos consultas manuales.',
+    plan: 'PRO',
     icon: Wrench,
     color: 'text-amber-600 dark:text-amber-400',
     accentBg: 'bg-amber-50 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30',
     iconBg: 'bg-amber-100 dark:bg-amber-950/50',
+    tone: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300',
   },
   {
     title: 'Cadenas y franquicias',
     description: 'Roles, sucursales, permisos, reportes y operaciones separadas por empresa.',
     metrics: 'Multi-sucursal + analytics',
+    modules: ['Sucursales', 'Roles', 'Analytics', 'Stock'],
+    fit: 'Ideal para equipos con varias cajas o locales.',
+    result: 'Control central sin mezclar operaciones locales.',
+    plan: 'PRO o ENTERPRISE',
     icon: Building2,
     color: 'text-violet-600 dark:text-violet-400',
     accentBg: 'bg-violet-50 dark:bg-violet-950/20 border-violet-100 dark:border-violet-900/30',
     iconBg: 'bg-violet-100 dark:bg-violet-950/50',
+    tone: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300',
   },
   {
     title: 'Negocios con delivery',
     description: 'Productos publicados, pedidos preparados y entregas para comercios locales.',
     metrics: 'Catálogo + delivery',
+    modules: ['Ecommerce', 'Pedidos', 'Delivery', 'Marketplace'],
+    fit: 'Ideal para vender desde una tienda pública propia.',
+    result: 'Pedidos centralizados y rastreo para clientes.',
+    plan: 'PRO',
     icon: Truck,
     color: 'text-emerald-600 dark:text-emerald-400',
     accentBg: 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30',
     iconBg: 'bg-emerald-100 dark:bg-emerald-950/50',
+    tone: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300',
   },
 ]
 

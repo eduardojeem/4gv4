@@ -49,6 +49,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { HelpButton } from '@/components/help/HelpButton'
 import { useAuth } from '@/contexts/auth-context'
 import { useCashRegister } from '@/hooks/useCashRegister'
 
@@ -514,6 +515,7 @@ export default function DashboardPage() {
             <RefreshCw className={cn('h-3.5 w-3.5', (loadingStats || isPending) && 'animate-spin')} />
             Actualizar
           </Button>
+          <HelpButton guideKey="overview" variant="outline" size="sm" className="gap-2" showLabel />
         </div>
       </header>
 

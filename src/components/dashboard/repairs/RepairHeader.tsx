@@ -4,6 +4,7 @@ import { AlertTriangle, PackageCheck, Plus, RefreshCw, Store, Wrench } from 'luc
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { HelpButton } from '@/components/help/HelpButton'
 
 interface RepairHeaderProps {
   onRefresh: () => void
@@ -89,15 +90,22 @@ export function RepairHeader({
                   Ctrl + N
                 </kbd>
               </Button>
-              <Button
-                variant="outline"
-                onClick={onRefresh}
-                disabled={isLoading}
-                className="h-10 gap-2 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
-              >
-                <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
-                Actualizar
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={onRefresh}
+                  disabled={isLoading}
+                  className="h-10 flex-1 gap-2 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                >
+                  <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
+                  Actualizar
+                </Button>
+                <HelpButton
+                  guideKey="repairs"
+                  variant="outline"
+                  className="h-10 w-10 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                />
+              </div>
             </div>
 
             <div className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white/70">
