@@ -22,15 +22,12 @@ const createSchema = z.object({
   notes: z.string().max(500).optional().nullable(),
 })
 
-async function resolveAdminContext(req: NextRequest) {
+async function resolveContext(req: NextRequest) {
   const auth = await requireStaff()
   const authResponse = getAuthResponse(auth)
   if (authResponse) return { response: authResponse as NextResponse }
 
   const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
-  if (staffAuth.role !== 'admin' && staffAuth.role !== 'super_admin') {
-    return { response: NextResponse.json({ error: 'forbidden' }, { status: 403 }) }
-  }
 
   const organization = await getCurrentOrganizationContext(staffAuth.user.id)
   if (!organization) {
@@ -52,10 +49,16 @@ async function resolveAdminContext(req: NextRequest) {
 // GET: pagos del período + resumen { devengado, pagado, saldo }
 export async function GET(req: NextRequest, context: RouteParams) {
   try {
-    const ctx = await resolveAdminContext(req)
+    const ctx = await resolveContext(req)
     if ('response' in ctx) return ctx.response
-    const { organization, branchScope } = ctx
+    const { staffAuth, organization, branchScope } = ctx
     const { id: technicianId } = await context.params
+
+    // Admin ve cualquiera; el técnico solo lo suyo.
+    const isAdmin = staffAuth.role === 'admin' || staffAuth.role === 'super_admin'
+    if (!isAdmin && technicianId !== staffAuth.user.id) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
 
     const supabase = createAdminSupabase()
     const url = new URL(req.url)
@@ -104,10 +107,15 @@ export async function GET(req: NextRequest, context: RouteParams) {
 // POST: registrar un pago (+ egreso de caja best-effort si es efectivo)
 export async function POST(req: NextRequest, context: RouteParams) {
   try {
-    const ctx = await resolveAdminContext(req)
+    const ctx = await resolveContext(req)
     if ('response' in ctx) return ctx.response
     const { staffAuth, organization } = ctx
     const { id: technicianId } = await context.params
+
+    // Registrar un pago: solo admin/super_admin.
+    if (staffAuth.role !== 'admin' && staffAuth.role !== 'super_admin') {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
 
     const parsed = createSchema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) {

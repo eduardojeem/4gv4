@@ -47,7 +47,17 @@ const STATUS_BADGE: Record<Payment['status'], string> = {
   anulado: 'bg-gray-100 text-gray-500 line-through dark:bg-gray-800 dark:text-gray-400',
 }
 
-export function TechnicianPaymentsTab({ technicianId, canManage }: { technicianId: string; canManage: boolean }) {
+export function TechnicianPaymentsTab({
+  technicianId,
+  canManage,
+  canConfirmReceipt = false,
+}: {
+  technicianId: string
+  /** Admin: registrar / confirmar / anular. */
+  canManage: boolean
+  /** El técnico dueño: solo puede acusar recibo de sus pagos. */
+  canConfirmReceipt?: boolean
+}) {
   const { selectedBranchId } = useBranch()
   const [payments, setPayments] = useState<Payment[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -190,21 +200,23 @@ export function TechnicianPaymentsTab({ technicianId, canManage }: { technicianI
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        {canManage && p.status !== 'anulado' && p.status !== 'confirmado' && (
+                        {(canManage || canConfirmReceipt) && p.status !== 'anulado' && p.status !== 'confirmado' && (
                           <div className="flex justify-end gap-1">
-                            {p.status === 'pendiente' && (
+                            {canManage && p.status === 'pendiente' && (
                               <Button variant="ghost" size="sm" className="h-7 gap-1 text-blue-600" onClick={() => runAction(p.id, 'confirmar')}>
                                 <Check className="h-3.5 w-3.5" /> Confirmar
                               </Button>
                             )}
                             {p.status === 'pagado' && (
-                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-green-600" onClick={() => runAction(p.id, 'confirmar_recibo')} title="Acusar recibo del técnico">
+                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-green-600" onClick={() => runAction(p.id, 'confirmar_recibo')} title="Acusar recibo del pago">
                                 <CheckCircle2 className="h-3.5 w-3.5" /> Acuse recibo
                               </Button>
                             )}
-                            <Button variant="ghost" size="sm" className="h-7 gap-1 text-red-500" onClick={() => runAction(p.id, 'anular')}>
-                              <X className="h-3.5 w-3.5" /> Anular
-                            </Button>
+                            {canManage && (
+                              <Button variant="ghost" size="sm" className="h-7 gap-1 text-red-500" onClick={() => runAction(p.id, 'anular')}>
+                                <X className="h-3.5 w-3.5" /> Anular
+                              </Button>
+                            )}
                           </div>
                         )}
                       </TableCell>

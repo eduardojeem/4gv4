@@ -11,7 +11,8 @@ import {
     Wrench,
     ChevronLeft,
     ChevronRight,
-    History
+    History,
+    Wallet
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
@@ -46,6 +47,12 @@ const technicianNavItems = [
         href: '/dashboard/technician/history',
         icon: History,
         description: 'Registro de reparaciones'
+    },
+    {
+        title: 'Mis cobros',
+        href: '/dashboard/technician/pagos',
+        icon: Wallet,
+        description: 'Pagos y comisiones'
     }
 ]
 
