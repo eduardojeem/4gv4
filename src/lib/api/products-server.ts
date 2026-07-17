@@ -1,4 +1,5 @@
 
+import { unstable_cache } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PublicProduct } from '@/types/public'
@@ -89,10 +90,13 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     maxPrice = MAX_PRICE,
     inStock = false,
     sort = 'name',
-    page = 1,
+    page: rawPage = 1,
     perPage = 20,
   } = filters
 
+  // Defensa ante callers que pasen page inválido (p.ej. de la URL): un page
+  // negativo genera un range PostgREST inválido y explota el render.
+  const page = Math.max(1, Math.floor(rawPage) || 1)
   const query = sanitizeSearch(rawQuery)
 
   if (!organization) {
@@ -169,11 +173,38 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
   }
 
   if (categoryId) {
-    queryBuilder = queryBuilder.eq('category_id', categoryId)
+    // Una categoría padre debe incluir los productos de sus subcategorías,
+    // no solo los asignados directamente a ella.
+    const { data: childCategories } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('organization_id', organization.id)
+      .eq('parent_id', categoryId)
+
+    const categoryIds = [categoryId, ...(childCategories ?? []).map((c) => c.id)]
+    queryBuilder = categoryIds.length > 1
+      ? queryBuilder.in('category_id', categoryIds)
+      : queryBuilder.eq('category_id', categoryId)
   }
 
   if (brand) {
-    queryBuilder = queryBuilder.eq('brand', brand)
+    // El listado de marcas se arma con brand_details.name (relación brands) con
+    // fallback al campo de texto `brand`; el filtro debe aceptar ambas fuentes,
+    // si no una marca listada por la relación devolvería 0 resultados.
+    const { data: brandRow } = await supabase
+      .from('brands')
+      .select('id')
+      .eq('organization_id', organization.id)
+      .eq('name', brand)
+      .maybeSingle()
+
+    if (brandRow?.id) {
+      // Valor citado y sin comillas/backslashes para el .or() de PostgREST.
+      const quotedBrand = `"${brand.replace(/[\\"]/g, '')}"`
+      queryBuilder = queryBuilder.or(`brand.eq.${quotedBrand},brand_id.eq.${brandRow.id}`)
+    } else {
+      queryBuilder = queryBuilder.eq('brand', brand)
+    }
   }
 
   if (minPrice > 0 || maxPrice < MAX_PRICE) {

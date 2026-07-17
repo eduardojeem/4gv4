@@ -11,6 +11,7 @@ import { ServicesGrid } from '@/components/public/inicio/ServicesGrid'
 import { ProcessSteps } from '@/components/public/inicio/ProcessSteps'
 import { ContactCTA } from '@/components/public/inicio/ContactCTA'
 import { BranchLocations } from '@/components/public/inicio/BranchLocations'
+import { OrganizationReviews } from '@/components/public/inicio/OrganizationReviews'
 import type { BranchLocationData } from '@/components/public/inicio/BranchLocations'
 import type { WebsiteSettings } from '@/types/website-settings'
 
@@ -107,6 +108,9 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
       )}
 
       <BranchLocations branches={branches} brand={brand} />
+
+      {/* ── Reseñas de clientes ── */}
+      <OrganizationReviews />
 
       <ContactCTA
         companyInfo={company_info}

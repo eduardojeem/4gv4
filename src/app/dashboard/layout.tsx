@@ -7,7 +7,6 @@ import { DemoBanner } from '@/components/demo-banner'
 import { SubscriptionGate } from '@/components/admin/SubscriptionGate'
 import { SubscriptionBanner } from '@/components/admin/SubscriptionBanner'
 import { DashboardLayoutProvider } from '@/contexts/DashboardLayoutContext'
-import { ProductsProvider } from '@/contexts/ProductsContext'
 import { RepairsProvider } from '@/contexts/RepairsContext'
 import { SessionTrackingProvider } from '@/components/providers/session-tracking-provider'
 import { DashboardGuard } from '@/components/dashboard/DashboardGuard'
@@ -22,7 +21,6 @@ export default function DashboardLayout({
       <SessionTrackingProvider>
         <DashboardGuard>
           <DashboardLayoutProvider>
-            <ProductsProvider>
               <RepairsProvider>
                 <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
                   <Sidebar />
@@ -31,7 +29,7 @@ export default function DashboardLayout({
                     <SubscriptionBanner />
                     <main
                       id="dashboard-main"
-                      className="dashboard-scroll flex-1 overflow-x-hidden overflow-y-auto scroll-smooth overscroll-none bg-background text-foreground p-4 sm:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6 relative will-change-scroll"
+                      className="dashboard-scroll flex-1 overflow-x-hidden overflow-y-auto scroll-smooth overscroll-none bg-background text-foreground p-4 sm:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6 relative"
                     >
                       <div className="min-h-full">
                         <DemoBanner />
@@ -44,7 +42,6 @@ export default function DashboardLayout({
                   </div>
                 </div>
               </RepairsProvider>
-            </ProductsProvider>
           </DashboardLayoutProvider>
         </DashboardGuard>
       </SessionTrackingProvider>

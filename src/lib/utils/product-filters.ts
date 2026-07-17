@@ -24,6 +24,7 @@ export function clearAllProductFilters(searchParams: URLSearchParams): URLSearch
   params.delete('query')
   params.delete('category_id')
   params.delete('brand')
+  params.delete('branch_id')
   params.delete('min_price')
   params.delete('max_price')
   params.delete('in_stock')

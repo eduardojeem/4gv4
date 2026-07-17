@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { normalizeRole } from '@/lib/auth/role-utils'
+import { canRoleAccessSection } from '@/lib/auth/section-access'
+import type { UserRole } from '@/lib/auth/roles-permissions'
 import { getTenantSlugFromPath, getTenantSlugFromRequest, isTenantPublicSection } from '@/lib/saas/tenant'
 import { ACTIVE_ORGANIZATION_COOKIE } from '@/lib/saas/active-organization'
 
@@ -163,6 +165,12 @@ export async function middleware(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers)
   const pathname = request.nextUrl.pathname
+
+  // Los headers de tenant los setea SOLO este middleware. Se eliminan los
+  // entrantes para que un cliente no pueda inyectarlos y suplantar contexto
+  // de organización en código server-side que confíe en ellos.
+  requestHeaders.delete('x-tenant-slug')
+  requestHeaders.delete('x-organization-id')
 
   // Only inject tenant slug for public-facing routes, never for dashboard/admin/API
   const isAppRoute = pathname.startsWith('/dashboard') || pathname.startsWith('/admin') ||
@@ -329,7 +337,7 @@ export async function middleware(request: NextRequest) {
               .eq('status', 'active')
               .in('role', ['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'])
               .limit(1)
-          ) as unknown as Promise<{ data: { role: any }[] | null }>,
+          ) as unknown as Promise<{ data: { role: string }[] | null }>,
           PROXY_PROFILE_TIMEOUT_MS,
           { data: null }
         )
@@ -352,6 +360,12 @@ export async function middleware(request: NextRequest) {
     if (isClientOrViewer) {
       // Cliente sin permiso al dashboard → redirigir a su tienda pública
       return redirectWithCookies(request, supabaseResponse, `/${DEFAULT_PUBLIC_ORG_SLUG}/inicio`)
+    }
+
+    // Restricción por sección para roles limitados (vendedor/tecnico).
+    // Misma fuente de verdad que el guard client-side, aplicada server-side.
+    if (!canRoleAccessSection(effectiveRole as UserRole, pathname)) {
+      return redirectWithCookies(request, supabaseResponse, '/dashboard')
     }
   }
 

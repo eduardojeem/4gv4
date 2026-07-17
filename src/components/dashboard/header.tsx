@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Search, LogOut, User, Settings, Menu, Shield, Crown, LayoutDashboard } from 'lucide-react'
+import { Search, LogOut, User, Settings, Menu, Shield } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { GlobalHelpButton } from '@/components/help/HelpButton'
 import { NotificationSystem, useNotifications, type Notification } from '@/components/dashboard/notification-system'
@@ -41,6 +41,8 @@ export const Header = memo(function Header() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [isCompact, setIsCompact] = useState(false)
+  // Se detecta post-montaje para evitar mismatch de hidratación.
+  const [isMacPlatform, setIsMacPlatform] = useState(false)
   const router = useRouter()
   const { toggleSidebar } = useDashboardLayout()
   const { search } = useDashboardSearch()
@@ -105,7 +107,9 @@ export const Header = memo(function Header() {
     clearAll()
   }, [globalItems, dismissGlobal, clearAll])
 
-  // Lean low-stock check — only fetches aggregate data, not all products
+  // Low-stock check: trae solo las columnas de stock de productos activos y
+  // deja el filtrado a generateStockNotifications (compara contra min_stock,
+  // sin umbral hardcodeado que ignore productos con min_stock alto).
   const fetchLowStockNotifications = useCallback(async () => {
     if (!shouldTrackStock || !config.supabase.isConfigured) return
     try {
@@ -114,7 +118,6 @@ export const Header = memo(function Header() {
         .from('products')
         .select('id, name, stock_quantity, min_stock')
         .eq('is_active', true)
-        .lte('stock_quantity', 10) // pre-filter: only potentially low-stock products
       if (data && data.length > 0) {
         generateStockNotifications(data as Parameters<typeof generateStockNotifications>[0])
       }
@@ -129,11 +132,18 @@ export const Header = memo(function Header() {
     return () => clearInterval(interval)
   }, [fetchLowStockNotifications, shouldTrackStock])
 
+  const isAdminUser = user?.role === 'admin' || user?.role === 'super_admin'
+
   // Prefetch critical routes
   useEffect(() => {
     router.prefetch('/dashboard/profile')
-    router.prefetch('/admin/settings')
-  }, [router])
+    // /admin/settings solo es accesible para admins; el middleware rebota al resto.
+    if (isAdminUser) router.prefetch('/admin/settings')
+  }, [router, isAdminUser])
+
+  useEffect(() => {
+    setIsMacPlatform(/Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent))
+  }, [])
 
   // Keyboard shortcut Ctrl+K for search
   useEffect(() => {
@@ -163,8 +173,6 @@ export const Header = memo(function Header() {
   const handleLogout = async () => {
     setLoading(true)
     try {
-      // Small delay for better UX (optional) to show the "Signing out" state
-      await new Promise(resolve => setTimeout(resolve, 500))
       await signOut()
       router.push('/login')
       router.refresh()
@@ -221,7 +229,7 @@ export const Header = memo(function Header() {
   return (
     <header
       className={cn(
-        "border-b border-border sticky top-0 z-30 backdrop-blur-sm bg-background/95 supports-backdrop-filter:bg-background/60",
+        "border-b border-border z-30 bg-background",
         "transition-[padding,box-shadow,background-color] duration-200",
         isCompact ? "px-3 py-2 sm:px-5 shadow-sm" : "px-3 py-2.5 sm:px-6 sm:py-3"
       )}
@@ -242,9 +250,11 @@ export const Header = memo(function Header() {
 
           {/* Breadcrumb + Title */}
           <div className="min-w-0 flex flex-col">
-            <div className={cn("text-xs text-muted-foreground hidden sm:block", isCompact && "opacity-80")}>
-              Dashboard / {breadcrumb}
-            </div>
+            {breadcrumb !== 'Dashboard' && (
+              <div className={cn("text-xs text-muted-foreground hidden sm:block", isCompact && "opacity-80")}>
+                Dashboard / {breadcrumb}
+              </div>
+            )}
             <h2 className={cn("font-semibold truncate leading-tight transition-all duration-200", isCompact ? "text-base" : "text-lg")}>
               {breadcrumb}
             </h2>
@@ -264,7 +274,7 @@ export const Header = memo(function Header() {
             <Search className="mr-2 h-4 w-4" />
             <span className="truncate">Buscar productos, clientes, reparaciones...</span>
             <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100 shadow-sm">
-              <span className="text-xs">⌘</span>K
+              {isMacPlatform ? <><span className="text-xs">⌘</span>K</> : 'Ctrl+K'}
             </kbd>
           </Button>
         </div>
@@ -377,20 +387,22 @@ export const Header = memo(function Header() {
                   </div>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link
-                  href="/admin/settings"
-                  className="cursor-pointer py-2.5 px-3 focus:bg-accent focus:text-accent-foreground rounded-md transition-colors mt-1 flex items-center w-full"
-                >
-                  <div className="flex items-center justify-center h-8 w-8 rounded-md bg-primary/10 text-primary mr-3">
-                    <Settings className="h-4 w-4" />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Configuración</span>
-                    <span className="text-xs text-muted-foreground">Ajustes del sistema</span>
-                  </div>
-                </Link>
-              </DropdownMenuItem>
+              {isAdminUser && (
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/admin/settings"
+                    className="cursor-pointer py-2.5 px-3 focus:bg-accent focus:text-accent-foreground rounded-md transition-colors mt-1 flex items-center w-full"
+                  >
+                    <div className="flex items-center justify-center h-8 w-8 rounded-md bg-primary/10 text-primary mr-3">
+                      <Settings className="h-4 w-4" />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium">Configuración</span>
+                      <span className="text-xs text-muted-foreground">Ajustes del sistema</span>
+                    </div>
+                  </Link>
+                </DropdownMenuItem>
+              )}
               {user?.role === 'super_admin' && (
                 <DropdownMenuItem asChild>
                   <Link
@@ -407,7 +419,7 @@ export const Header = memo(function Header() {
                   </Link>
                 </DropdownMenuItem>
               )}
-              {(user?.role === 'admin' || user?.role === 'super_admin') && (
+              {isAdminUser && (
                 <DropdownMenuItem asChild>
                   <Link
                     href="/admin"

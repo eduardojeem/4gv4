@@ -4,6 +4,7 @@ import { Building2, ChevronRight, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getMarketplaceOrganizations } from '@/lib/public/marketplace'
 import { EmpresasClient } from '@/components/public/EmpresasClient'
+import { TopRatedCarousel } from '@/components/public/TopRatedCarousel'
 
 export const metadata: Metadata = {
   title: 'Empresas | Marketplace MiPOS',
@@ -59,6 +60,7 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
 
       {/* ── Directorio ── */}
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+        <TopRatedCarousel organizations={organizations} />
         <EmpresasClient organizations={organizations} initialQuery={q ?? ''} />
       </section>
     </main>

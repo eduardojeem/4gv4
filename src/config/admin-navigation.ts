@@ -10,6 +10,7 @@ import {
     Monitor,
     Building2,
     CreditCard,
+    Star,
     type LucideIcon
 } from 'lucide-react'
 
@@ -127,6 +128,14 @@ export const adminNavCategories: NavCategory[] = [
                 icon: Globe,
                 href: '/admin/website',
                 description: 'Configuración del sitio web público',
+                permissions: ['settings.read']
+            },
+            {
+                key: 'reviews',
+                label: 'Reseñas',
+                icon: Star,
+                href: '/admin/reviews',
+                description: 'Moderación de reseñas y calificaciones',
                 permissions: ['settings.read']
             },
             {

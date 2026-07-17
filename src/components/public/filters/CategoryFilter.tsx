@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronRight, Layers } from 'lucide-react'
 import {
   AccordionContent,
@@ -29,14 +29,19 @@ export function CategoryFilter({ categories, selectedCategoryId, onSelect }: Cat
     return parent ? new Set([parent.id]) : new Set()
   })
 
-  useEffect(() => {
+  // Auto-expandir el padre cuando la selección cambia a una subcategoría.
+  // Ajuste de estado durante render (patrón recomendado por React) en vez de
+  // un efecto, para evitar el doble render.
+  const [lastSelectedId, setLastSelectedId] = useState(selectedCategoryId)
+  if (lastSelectedId !== selectedCategoryId) {
+    setLastSelectedId(selectedCategoryId)
     const parent = categories.find(cat =>
       cat.subcategories?.some(sub => sub.id === selectedCategoryId)
     )
-    if (parent && selectedCategoryId) {
+    if (parent && selectedCategoryId && !expandedCategories.has(parent.id)) {
       setExpandedCategories(prev => new Set(prev).add(parent.id))
     }
-  }, [selectedCategoryId, categories])
+  }
 
   const toggleExpansion = (id: string) => {
     setExpandedCategories(prev => {

@@ -56,7 +56,15 @@ export function FilterBadges({ categories }: { categories: Category[] }) {
       )}
       {categoryId && (
         <Badge variant="secondary" className="gap-1 text-xs font-normal rounded-full">
-          {categories.find((c) => c.id === categoryId)?.name}
+          {(() => {
+            // El filtro puede apuntar a una subcategoría: buscar en ambos niveles.
+            for (const c of categories) {
+              if (c.id === categoryId) return c.name
+              const sub = c.subcategories?.find((s) => s.id === categoryId)
+              if (sub) return sub.name
+            }
+            return 'Categoría'
+          })()}
           <button
             type="button"
             className="inline-flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

@@ -19,8 +19,10 @@ export function ProductPagination({ currentPage, totalPages }: ProductPagination
     const params = new URLSearchParams(searchParams.toString())
     params.set('page', page.toString())
 
+    // Al cambiar de página sí se vuelve arriba (a diferencia de los filtros,
+    // donde conservar la posición evita saltos molestos).
     startTransition(() => {
-      router.push(`?${params.toString()}`, { scroll: false })
+      router.push(`?${params.toString()}`)
     })
   }
 

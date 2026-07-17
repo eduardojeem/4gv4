@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -20,9 +20,6 @@ import {
   RefreshCw,
   Banknote,
   Wrench,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   Plus,
   ExternalLink,
   Boxes,
@@ -175,7 +172,8 @@ export default function DashboardPage() {
   const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId } = useBranch()
   const [loadingStats, setLoadingStats] = useState(true)
-  const [lastRefresh, setLastRefresh] = useState<number>(-Infinity)
+  const [canRefresh, setCanRefresh] = useState(true)
+  const refreshCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [stats, setStats] = useState<KpiStat[]>([
     { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/dashboard/reports' },
@@ -261,7 +259,7 @@ export default function DashboardPage() {
       const [
         { data: salesToday },
         { count: activeOrdersCount },
-        { count: newCustomersCount },
+        { data: customersWeek },
         { count: totalProductsCount },
         { data: productsStock },
         { count: repairsActiveCount },
@@ -276,9 +274,9 @@ export default function DashboardPage() {
           supabase.from('sales').select('id', { count: 'exact', head: true }).in('status', [...PENDING_SALE_STATUSES]),
           selectedBranchId,
         ),
-        supabase.from('customers').select('id', { count: 'exact', head: true }).gte('created_at', startOfWeek.toISOString()),
-        supabase.from('products').select('id', { count: 'exact', head: true }),
-        supabase.from('products').select('stock_quantity, min_stock').gt('stock_quantity', 0),
+        supabase.from('customers').select('created_at').gte('created_at', startOfWeek.toISOString()),
+        supabase.from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.from('products').select('stock_quantity, min_stock').eq('is_active', true),
         withBranchFilter(
           supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', ['recibido', 'diagnostico', 'reparacion', 'listo']),
           selectedBranchId,
@@ -298,14 +296,16 @@ export default function DashboardPage() {
       const completedToday = salesRows.filter(s => isCompletedSaleStatus(s.status)).length
 
       const activeOrders = activeOrdersCount || 0
-      const newCustomers = newCustomersCount || 0
+      const customerRows = (customersWeek || []) as unknown as Array<{ created_at: string }>
+      const newCustomers = customerRows.length
       const totalProducts = totalProductsCount || 0
       const repairsActive = repairsActiveCount || 0
 
+      // Incluye agotados (stock 0): también requieren reposición.
       const lowStockCount = (productsStock || []).filter(p => {
         const sq = Number(p.stock_quantity ?? 0)
         const ms = Number(p.min_stock ?? 5)
-        return sq > 0 && sq <= ms
+        return sq <= ms
       }).length
 
       type SalesWeekRow = { total_amount: number; created_at: string }
@@ -319,7 +319,14 @@ export default function DashboardPage() {
           })
           .reduce((sum, s) => sum + (Number(s.total_amount) || 0), 0)
       })
-      const customerTrend = last7Days.map(() => Math.floor(Math.random() * (newCustomers + 1)))
+      const customerTrend = last7Days.map(dayStart => {
+        const dayEnd = new Date(dayStart)
+        dayEnd.setDate(dayEnd.getDate() + 1)
+        return customerRows.filter(c => {
+          const t = new Date(c.created_at)
+          return t >= dayStart && t < dayEnd
+        }).length
+      })
 
       setStats([
         {
@@ -363,7 +370,10 @@ export default function DashboardPage() {
           icon: Wrench, tone: 'red', href: '/dashboard/repairs',
         },
       ])
-      setLastRefresh(Date.now())
+      // Cooldown de 30s: el timeout re-habilita el botón sin depender de otro render.
+      setCanRefresh(false)
+      if (refreshCooldownRef.current) clearTimeout(refreshCooldownRef.current)
+      refreshCooldownRef.current = setTimeout(() => setCanRefresh(true), 30_000)
     } catch (error) {
       console.error('Error fetching dashboard stats:', error)
     } finally {
@@ -392,7 +402,7 @@ export default function DashboardPage() {
         .limit(1)
         .maybeSingle()
         .then(({ data }) => {
-          const org = data?.organizations as any
+          const org = data?.organizations as { slug?: string } | { slug?: string }[] | null
           const slug = Array.isArray(org) ? org[0]?.slug : org?.slug
           if (slug) setOrgSlug(slug)
         })
@@ -420,8 +430,9 @@ export default function DashboardPage() {
     weekday: 'long', day: 'numeric', month: 'long',
   })
 
-  const secondsSinceRefresh = Math.max(0, Math.floor((Date.now() - lastRefresh) / 1000))
-  const canRefresh = secondsSinceRefresh >= 30
+  useEffect(() => () => {
+    if (refreshCooldownRef.current) clearTimeout(refreshCooldownRef.current)
+  }, [])
 
   return (
     <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
@@ -663,7 +674,7 @@ export default function DashboardPage() {
               disabled={!isOpeningAmountValid || registerLoading}
               type="button"
               onClick={async () => {
-                const ok = await hookOpenRegister(activeRegisterId, parsedOpeningAmount, user?.id)
+                const ok = await hookOpenRegister(activeRegisterId, parsedOpeningAmount, user?.id, openingNote)
                 if (ok) {
                   setIsOpenRegisterDialogOpen(false)
                   setOpeningAmount('')

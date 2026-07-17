@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -43,20 +43,23 @@ export function ProductFilters({
   const categoryId = searchParams.get('category_id') || ''
   const brand = searchParams.get('brand') || ''
   const branchId = searchParams.get('branch_id') || ''
-  const minPrice = Number(searchParams.get('min_price')) || 0
-  const maxPrice = Number(searchParams.get('max_price')) || PRODUCTS_MAX_PRICE
   const inStock = searchParams.get('in_stock') === 'true'
 
-  const [localPriceRange, setLocalPriceRange] = useState([minPrice, maxPrice])
+  // El slider opera dentro del rango real del catálogo (priceRange), no del
+  // tope teórico PRODUCTS_MAX_PRICE: si el estado local usara el tope teórico,
+  // el filtro quedaría activo para siempre al primer toque del slider.
+  const hasPriceFilter = searchParams.has('min_price') || searchParams.has('max_price')
+  const clampToRange = (value: number) =>
+    Math.min(Math.max(value, priceRange.min), priceRange.max)
+  const minPrice = clampToRange(Number(searchParams.get('min_price')) || priceRange.min)
+  const maxPrice = clampToRange(Number(searchParams.get('max_price')) || priceRange.max)
+
+  // Mientras el usuario arrastra el slider se usa el borrador; al soltar
+  // (commit) o cuando cambia la URL, vuelve a derivarse de los searchParams.
+  const [draftPriceRange, setDraftPriceRange] = useState<number[] | null>(null)
+  const localPriceRange = draftPriceRange ?? [minPrice, maxPrice]
   const [isFiltersCollapsed, setIsFiltersCollapsed] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
-
-  useEffect(() => {
-    setLocalPriceRange([
-      Number(searchParams.get('min_price')) || 0,
-      Number(searchParams.get('max_price')) || PRODUCTS_MAX_PRICE,
-    ])
-  }, [searchParams])
 
   const updateFilters = (updates: Record<string, string | number | boolean | null>) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -78,7 +81,7 @@ export function ProductFilters({
     startTransition(() => {
       router.push(`?${params.toString()}`, { scroll: false })
     })
-    setLocalPriceRange([0, PRODUCTS_MAX_PRICE])
+    setDraftPriceRange(null)
   }
 
   const toggleCollapse = () => setIsFiltersCollapsed((p) => !p)
@@ -93,7 +96,7 @@ export function ProductFilters({
     brand !== '',
     branchId !== '',
     inStock,
-    minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE,
+    hasPriceFilter,
   ].filter(Boolean).length
 
   /* Collapsed sidebar — minimal strip */
@@ -186,7 +189,7 @@ export function ProductFilters({
                 </button>
               </Badge>
             )}
-            {(minPrice > 0 || maxPrice < PRODUCTS_MAX_PRICE) && (
+            {hasPriceFilter && (
               <Badge variant="secondary" className="gap-1.5 text-xs font-normal rounded-full bg-background hover:bg-background shadow-sm">
                 {formatPrice(minPrice)} - {formatPrice(maxPrice)}
                 <button type="button" className="inline-flex items-center justify-center rounded-full hover:bg-destructive/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors" onClick={() => updateFilters({ min_price: null, max_price: null })} aria-label="Quitar filtro de precio">
@@ -201,7 +204,7 @@ export function ProductFilters({
           <CategoryFilter categories={categories} selectedCategoryId={categoryId} onSelect={(id) => updateFilters({ category_id: id })} />
           <BrandFilter brands={brands} selectedBrand={brand} onSelect={(b) => updateFilters({ brand: b })} />
           <StockFilter inStock={inStock} onChange={(checked) => updateFilters({ in_stock: checked })} />
-          <PriceFilter priceRange={priceRange} localRange={localPriceRange} onChange={setLocalPriceRange} onCommit={(values) => updateFilters({ min_price: values[0] > 0 ? values[0] : null, max_price: values[1] < PRODUCTS_MAX_PRICE ? values[1] : null })} />
+          <PriceFilter priceRange={priceRange} localRange={localPriceRange} onChange={setDraftPriceRange} onCommit={(values) => { setDraftPriceRange(null); updateFilters({ min_price: values[0] > priceRange.min ? values[0] : null, max_price: values[1] < priceRange.max ? values[1] : null }) }} />
         </Accordion>
       </div>
     </div>

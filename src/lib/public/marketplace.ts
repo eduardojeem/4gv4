@@ -11,6 +11,8 @@ export type MarketplaceOrganization = {
   created_at: string | null
   products_count: number
   featured_products: PublicProduct[]
+  review_rating_avg?: number | null
+  review_count?: number | null
 }
 
 export type MarketplaceProduct = PublicProduct & {
@@ -39,6 +41,8 @@ type OrganizationRow = {
   plan: string | null
   logo_url: string | null
   created_at: string | null
+  review_rating_avg?: number | null
+  review_count?: number | null
 }
 
 type ProductRow = {
@@ -100,9 +104,8 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
 
   const { data: organizations, error: organizationError } = await supabase
     .from('organizations')
-    .select('id, name, slug, plan, logo_url, created_at')
+    .select('id, name, slug, plan, logo_url, created_at, review_rating_avg, review_count')
     .eq('marketplace_public', true)
-    .order('created_at', { ascending: false })
     .limit(limit)
 
   if (organizationError || !organizations?.length) return []
@@ -135,7 +138,20 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
       ...organization,
       products_count: organizationProducts.length,
       featured_products: organizationProducts.slice(0, 3).map(toPublicProduct),
+      review_rating_avg: organization.review_rating_avg ?? null,
+      review_count: organization.review_count ?? null,
     }
+  }).sort((a, b) => {
+    // Primero por calificación promedio (mayor primero)
+    const ratingA = Number(a.review_rating_avg ?? 0)
+    const ratingB = Number(b.review_rating_avg ?? 0)
+    if (ratingB !== ratingA) return ratingB - ratingA
+    // Luego por cantidad de reseñas (más primero)
+    const countA = Number(a.review_count ?? 0)
+    const countB = Number(b.review_count ?? 0)
+    if (countB !== countA) return countB - countA
+    // Finalmente por fecha de creación (más reciente primero)
+    return (b.created_at ?? '').localeCompare(a.created_at ?? '')
   })
 }
 

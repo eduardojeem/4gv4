@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, ArrowLeft, ChevronRight, Home, LayoutGrid, List, RefreshCw, UserPlus } from 'lucide-react'
+import { AlertCircle, ChevronRight, Home, LayoutGrid, List, RefreshCw, UserPlus } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -109,22 +109,19 @@ export default function TechniciansPage() {
     <div className="flex flex-col gap-8 p-6 md:p-8 w-full max-w-7xl mx-auto animate-in fade-in duration-500">
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground/80 font-medium">
-        <Home className="h-4 w-4 hover:text-primary transition-colors cursor-pointer" />
+        <Home
+          className="h-4 w-4 cursor-pointer hover:text-primary transition-colors"
+          onClick={() => router.push('/dashboard')}
+        />
         <ChevronRight className="h-3 w-3" />
-        <span className="hover:text-foreground transition-colors cursor-pointer" onClick={() => router.push('/dashboard/repairs')}>Reparaciones</span>
+        <span
+          className="cursor-pointer hover:text-foreground transition-colors"
+          onClick={() => router.push('/dashboard/repairs')}
+        >
+          Reparaciones
+        </span>
         <ChevronRight className="h-3 w-3" />
         <span className="text-foreground">Técnicos</span>
-      </div>
-
-      <div className="-mt-4">
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/dashboard/repairs')}
-          className="-ml-4 gap-2 text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver a Reparaciones
-        </Button>
       </div>
 
       {/* Header */}
@@ -174,7 +171,7 @@ export default function TechniciansPage() {
       </div>
 
       {/* Toolbar & Filters */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-1">
+      <div className="flex flex-wrap items-center gap-3">
         <TechnicianFilters
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
@@ -182,30 +179,31 @@ export default function TechniciansPage() {
           setStatusFilter={setStatusFilter}
           sortBy={sortBy}
           setSortBy={setSortBy}
+          resultCount={filteredTechnicians.length}
+          totalCount={technicianData.length}
         />
 
-        <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/50 backdrop-blur-md p-1 shadow-sm">
+        {/* View toggle */}
+        <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-background/50 backdrop-blur-md p-1 shadow-sm ml-auto shrink-0">
           <Button
             variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
             size="sm"
-            aria-label="Cambiar a vista de grilla"
+            aria-label="Vista de grilla"
             aria-pressed={viewMode === 'grid'}
             onClick={() => setViewMode('grid')}
-            title="Vista de grilla"
-            className={`rounded-lg transition-all ${viewMode === 'grid' ? 'bg-background shadow-sm' : 'hover:bg-muted/50'}`}
+            className={`rounded-lg h-7 w-7 p-0 transition-all ${viewMode === 'grid' ? 'bg-background shadow-sm' : 'hover:bg-muted/50'}`}
           >
-            <LayoutGrid className="h-4 w-4" />
+            <LayoutGrid className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant={viewMode === 'list' ? 'secondary' : 'ghost'}
             size="sm"
-            aria-label="Cambiar a vista de lista"
+            aria-label="Vista de lista"
             aria-pressed={viewMode === 'list'}
             onClick={() => setViewMode('list')}
-            title="Vista de lista"
-            className={`rounded-lg transition-all ${viewMode === 'list' ? 'bg-background shadow-sm' : 'hover:bg-muted/50'}`}
+            className={`rounded-lg h-7 w-7 p-0 transition-all ${viewMode === 'list' ? 'bg-background shadow-sm' : 'hover:bg-muted/50'}`}
           >
-            <List className="h-4 w-4" />
+            <List className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
@@ -268,20 +266,20 @@ export default function TechniciansPage() {
             </div>
           </div>
         ) : viewMode === 'grid' ? (
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 animate-in slide-in-from-bottom-4 duration-500 fade-in">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 animate-in slide-in-from-bottom-4 duration-500 fade-in">
             {filteredTechnicians.map((tech) => (
               <TechnicianCard key={tech.id} {...tech} />
             ))}
           </div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-border/50 bg-background/50 backdrop-blur-md shadow-sm animate-in slide-in-from-bottom-4 duration-500 fade-in">
-            <div className="hidden border-b border-border/50 bg-muted/30 px-6 py-4 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_minmax(220px,1.2fr)_auto] md:items-center md:gap-4">
+            <div className="hidden border-b border-border/40 bg-muted/20 px-4 py-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1.8fr)_minmax(180px,1fr)_auto] md:items-center md:gap-4">
               <span>Técnico</span>
               <span>Rendimiento</span>
               <span>Carga operativa</span>
-              <span className="text-right">Acciones</span>
+              <span className="text-right">Detalle</span>
             </div>
-            <div className="divide-y divide-border/30 p-1">
+            <div className="divide-y divide-border/20 p-1">
               {filteredTechnicians.map((tech) => (
                 <TechnicianListItem key={tech.id} {...tech} />
               ))}

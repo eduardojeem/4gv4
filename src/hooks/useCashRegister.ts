@@ -373,7 +373,7 @@ export function useCashRegister() {
     }, [selectedBranchId, supabase, currentSession])
 
     // Open cash register
-    const openRegister = useCallback(async (registerId: string, openingBalance: number, userId?: string) => {
+    const openRegister = useCallback(async (registerId: string, openingBalance: number, userId?: string, note?: string) => {
         try {
             setLoading(true)
             if (!config.supabase.isConfigured || !supabase) {
@@ -426,6 +426,8 @@ export function useCashRegister() {
 
             if (sessionError) throw sessionError
 
+            const openingReason = note?.trim() ? `Apertura de caja — ${note.trim()}` : 'Apertura de caja'
+
             // Create opening movement
             const { error: movementError } = await supabase
                 .from('cash_movements')
@@ -433,7 +435,7 @@ export function useCashRegister() {
                     session_id: session.id,
                     type: 'opening',
                     amount: openingBalance,
-                    reason: 'Apertura de caja',
+                    reason: openingReason,
                     created_by: actorId,
                     created_at: new Date().toISOString(),
                     organization_id: organizationId,
@@ -454,7 +456,7 @@ export function useCashRegister() {
                     id: crypto.randomUUID(),
                     type: 'opening',
                     amount: openingBalance,
-                    reason: 'Apertura de caja',
+                    reason: openingReason,
                     created_at: new Date().toISOString()
                 }]
             }

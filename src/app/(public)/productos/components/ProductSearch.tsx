@@ -11,16 +11,24 @@ export function ProductSearch() {
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
-  const initialQuery = searchParams.get('query') || ''
-  const [value, setValue] = useState(initialQuery)
+  const urlQuery = searchParams.get('query') || ''
+  const [value, setValue] = useState(urlQuery)
+  const [lastPushed, setLastPushed] = useState(urlQuery)
 
-  useEffect(() => {
-    setValue(searchParams.get('query') || '')
-  }, [searchParams])
+  // Sincronizar desde la URL solo cuando el cambio es externo (chip "quitar
+  // búsqueda", back/forward) y no el eco de nuestro propio push — así no se
+  // pisa lo que el usuario sigue tecleando durante la transición.
+  const [lastUrlQuery, setLastUrlQuery] = useState(urlQuery)
+  if (lastUrlQuery !== urlQuery) {
+    setLastUrlQuery(urlQuery)
+    if (urlQuery !== lastPushed) {
+      setValue(urlQuery)
+    }
+  }
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      if (value === initialQuery) return
+      if (value === (searchParams.get('query') || '')) return
 
       const params = new URLSearchParams(searchParams.toString())
       if (value) {
@@ -30,13 +38,14 @@ export function ProductSearch() {
       }
       params.set('page', '1')
 
+      setLastPushed(value)
       startTransition(() => {
         router.push(`?${params.toString()}`, { scroll: false })
       })
     }, 300)
 
     return () => clearTimeout(timeout)
-  }, [value, initialQuery, router, searchParams])
+  }, [value, router, searchParams])
 
   const clearSearch = () => {
     setValue('')

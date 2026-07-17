@@ -55,7 +55,7 @@ function Tablet2(props: React.SVGProps<SVGSVGElement>) {
   return <Smartphone {...(props as React.ComponentProps<typeof Smartphone>)} />
 }
 
-function getCategoryIcon(name: string): React.ElementType {
+export function getCategoryIcon(name: string): React.ElementType {
   const key = name.toLowerCase().trim()
   // exact match
   if (ICON_MAP[key]) return ICON_MAP[key]

@@ -14,6 +14,7 @@ import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { usePermissions } from '@/hooks/use-permissions'
 import type { UserRole } from '@/lib/auth/roles-permissions'
 import { canRoleAccessSection } from '@/lib/auth/section-access'
+import { fetchOnboardingStatus } from '@/lib/onboarding/status-cache'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
 import type { LucideIcon } from 'lucide-react'
@@ -101,8 +102,9 @@ export const Sidebar = memo(function Sidebar() {
         const supabase = createClient()
         const [{ count: repairs }, { data: lowStockData }] = await Promise.all([
           supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', ['recibido', 'diagnostico', 'reparacion', 'listo']),
-          supabase.from('products').select('stock_quantity, min_stock').gt('stock_quantity', 0)
+          supabase.from('products').select('stock_quantity, min_stock').eq('is_active', true)
         ])
+        // Incluye agotados (stock 0): también requieren reposición.
         const lowStock = (lowStockData || []).filter(p => Number(p.stock_quantity ?? 0) <= Number(p.min_stock ?? 5)).length
         setSidebarBadges({ repairs: repairs || 0, lowStock })
       } catch { /* ignore errors */ }
@@ -115,12 +117,9 @@ export const Sidebar = memo(function Sidebar() {
   // Check onboarding completion once on mount to hide the sidebar item when done
   useEffect(() => {
     if (!config.supabase.isConfigured) return
-    fetch('/api/onboarding/status')
-      .then(r => r.json())
-      .catch(() => null)
-      .then((data: { completed?: boolean } | null) => {
-        if (data?.completed) setOnboardingDone(true)
-      })
+    fetchOnboardingStatus().then((data) => {
+      if (data?.completed) setOnboardingDone(true)
+    })
   }, [])
 
   const handleQuickLogout = async () => {

@@ -43,13 +43,15 @@ export default async function ProductsPage(props: {
 }) {
   const searchParams = await props.searchParams
   const tenantPrefix = await getPublicTenantPathPrefix()
-  const page = Number(searchParams.page) || 1
+  // page/precios vienen de la URL: clamp para que valores negativos o basura
+  // no lleguen al query (page=-1 producía un range inválido y un 500).
+  const page = Math.max(1, Math.floor(Number(searchParams.page)) || 1)
   const query = searchParams.query as string || ''
   const categoryId = searchParams.category_id as string || ''
   const brand = searchParams.brand as string || ''
   const branchId = searchParams.branch_id as string || ''
-  const minPrice = Number(searchParams.min_price) || 0
-  const maxPrice = Number(searchParams.max_price) || MAX_PRICE
+  const minPrice = Math.max(0, Number(searchParams.min_price) || 0)
+  const maxPrice = Math.max(0, Number(searchParams.max_price) || MAX_PRICE)
   const inStock = searchParams.in_stock === 'true'
   const sort = searchParams.sort as string || 'name'
 

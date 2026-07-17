@@ -8,10 +8,9 @@ import { CategoryCarouselSection } from '@/components/public/CategoryCarouselSec
 import { MarketplaceSearchBox } from '@/components/public/MarketplaceSearchBox'
 import { MarketplaceOffersSection, type MarketplaceOfferGroup } from '@/components/public/MarketplaceOffersSection'
 import { getMarketplaceOrganizations, getMarketplaceProducts, getMarketplaceBrands } from '@/lib/public/marketplace'
-import { resolveProductImageUrl } from '@/lib/images'
-import { formatPrice } from '@/lib/utils'
 import { MarketplaceBrandsSection } from '@/components/public/MarketplaceBrandsSection'
 import { getPlatformBranding } from '@/lib/platform/branding'
+import { MarketplaceOrgProductGrid } from '@/components/public/MarketplaceOrgProductGrid'
 
 export async function generateMetadata(): Promise<Metadata> {
   const branding = await getPlatformBranding()
@@ -104,12 +103,10 @@ export default async function MarketplacePage() {
       {/* ── Carrusel de categorías ── */}
       {offerGroups.length > 0 && <MarketplaceOffersSection groups={offerGroups} />}
 
-      <section className="border-b border-slate-100 py-10 dark:border-slate-800/60">
+      <section className="border-b border-slate-100 py-4 dark:border-slate-800/60">
         <CategoryCarouselSection
-          title="Explorar por categoría"
-          subtitle="Encontrá lo que buscás directamente"
-          compact
           showViewAll
+          showCount
         />
       </section>
 
@@ -238,67 +235,11 @@ export default async function MarketplacePage() {
       )}
 
       {/* ── Productos por empresa ── */}
-      {organizations.filter((o) => o.featured_products.length > 0).slice(0, 3).map((org) => (
-        <section key={org.id} className="border-t border-slate-100 dark:border-slate-800/60">
-          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-                  {org.logo_url ? (
-                    <Image src={org.logo_url} alt={org.name} width={36} height={36} className="h-full w-full object-cover" />
-                  ) : (
-                    <Building2 className="h-4 w-4 text-slate-400" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900 dark:text-slate-50">{org.name}</h3>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">{org.products_count} productos</p>
-                </div>
-              </div>
-              <Link
-                href={`/${org.slug}/inicio`}
-                className="flex shrink-0 items-center gap-1.5 text-sm font-medium text-cyan-700 hover:underline dark:text-cyan-400"
-              >
-                Ir a la tienda
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {org.featured_products.slice(0, 5).map((product) => {
-                const imageSrc = resolveProductImageUrl(product.image)
-                return (
-                  <Link
-                    key={product.id}
-                    href={`/${org.slug}/productos/${product.id}`}
-                    className="group overflow-hidden rounded-lg border border-slate-200 bg-white transition-all hover:border-cyan-300 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:hover:border-cyan-700"
-                  >
-                    <div className="relative aspect-square overflow-hidden bg-slate-100 dark:bg-slate-900">
-                      {imageSrc ? (
-                        <Image
-                          src={imageSrc}
-                          alt={product.name}
-                          fill
-                          className="object-contain p-3 transition-transform duration-300 group-hover:scale-105"
-                          sizes="200px"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center">
-                          <Package className="h-7 w-7 text-slate-300 dark:text-slate-600" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-3">
-                      <p className="line-clamp-2 text-xs font-medium text-slate-800 dark:text-slate-200">{product.name}</p>
-                      <p className="mt-1.5 text-sm font-bold text-slate-900 dark:text-slate-50">{formatPrice(product.sale_price)}</p>
-                    </div>
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        </section>
-      ))}
+      {organizations.filter((o) => o.featured_products.length > 0).slice(0, 3).length > 0 && (
+        <MarketplaceOrgProductGrid
+          organizations={organizations.filter((o) => o.featured_products.length > 0).slice(0, 3)}
+        />
+      )}
     </main>
   )
 }

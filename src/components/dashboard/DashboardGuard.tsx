@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { Loader2, ShieldAlert, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { canRoleAccessSection } from '@/lib/auth/section-access'
+import { fetchOnboardingStatus, getCachedOnboardingStatus } from '@/lib/onboarding/status-cache'
 
 interface DashboardGuardProps {
   children: React.ReactNode
@@ -22,7 +23,7 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
   const { user, loading } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
-  const [checkingOnboarding, setCheckingOnboarding] = useState(false)
+  const [onboardingResolved, setOnboardingResolved] = useState(false)
 
   const isInactiveUser = user?.status === 'inactive' || user?.status === 'suspended'
   const isAccessDenied = Boolean(user && isInactiveUser)
@@ -48,45 +49,42 @@ export function DashboardGuard({ children }: DashboardGuardProps) {
   }, [user, loading, router])
 
   useEffect(() => {
-    if (loading || !canRequireOnboarding) {
-      setCheckingOnboarding(false)
+    if (loading || !canRequireOnboarding) return
+
+    // Con cache (misma pestaña) se resuelve síncrono: sin loader ni fetch.
+    const cachedStatus = getCachedOnboardingStatus()
+    if (cachedStatus) {
+      if (cachedStatus.needsOnboarding) {
+        router.replace('/dashboard/onboarding')
+      }
       return
     }
 
-    const controller = new AbortController()
+    let cancelled = false
 
-    async function checkOnboardingStatus() {
-      try {
-        setCheckingOnboarding(true)
-        const response = await fetch('/api/onboarding/status', {
-          cache: 'no-store',
-          signal: controller.signal,
-        })
-
-        if (!response.ok) return
-
-        const payload = await response.json() as { needsOnboarding?: boolean }
-
-        if (payload.needsOnboarding) {
+    fetchOnboardingStatus()
+      .then((payload) => {
+        if (cancelled) return
+        if (payload?.needsOnboarding) {
           router.replace('/dashboard/onboarding')
         }
-      } catch (error) {
-        if ((error as Error).name !== 'AbortError') {
-          console.error('Error checking onboarding status:', error)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setOnboardingResolved(true)
         }
-      } finally {
-        if (!controller.signal.aborted) {
-          setCheckingOnboarding(false)
-        }
-      }
-    }
-
-    checkOnboardingStatus()
+      })
 
     return () => {
-      controller.abort()
+      cancelled = true
     }
   }, [canRequireOnboarding, loading, router])
+
+  // Bloquea el render solo mientras hay una verificación de onboarding en vuelo
+  // (sin cache). Con cache disponible el guard es transparente.
+  const checkingOnboarding = Boolean(
+    !loading && canRequireOnboarding && !onboardingResolved && !getCachedOnboardingStatus()
+  )
 
   if (loading || checkingOnboarding) {
     return (
