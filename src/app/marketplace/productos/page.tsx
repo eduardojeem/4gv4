@@ -20,7 +20,7 @@ type PageProps = {
 
 export default async function MarketplaceProductsPage({ searchParams }: PageProps) {
   const { q, categoria } = await searchParams
-  const products = await getMarketplaceProducts(96)
+  const products = await getMarketplaceProducts(120, { q, categoria })
 
   const offerProducts = products.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price)
   const featuredProducts = products.filter((p) => p.featured && !(p.has_offer && p.offer_price))

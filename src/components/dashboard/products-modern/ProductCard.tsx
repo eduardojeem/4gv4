@@ -47,9 +47,14 @@ export const ProductCard = React.memo(function ProductCard({
 }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState(false)
   const [imageError, setImageError] = useState(false)
-  const [localActive, setLocalActive] = useState(product.is_active)
+  const isPubliclyVisible = product.is_active && (product as any).visibility !== 'hidden'
+  const [localActive, setLocalActive] = useState(isPubliclyVisible)
   const [togglingActive, setTogglingActive] = useState(false)
   const canViewCost = useCanViewCost()
+
+  React.useEffect(() => {
+    setLocalActive(isPubliclyVisible)
+  }, [isPubliclyVisible])
 
   const stockStatus = getStockStatus(product)
 
@@ -90,7 +95,7 @@ export const ProductCard = React.memo(function ProductCard({
 
   // Stock fill percentage relative to min_stock threshold
   const minStock = product.min_stock ?? 1
-  const stockFillPct = Math.min(100, Math.round((product.stock_quantity / Math.max(minStock * 4, 1)) * 100))
+  const stockFillPct = Math.min(100, Math.round((Number(product.stock_quantity || 0) / Math.max(minStock * 4, 1)) * 100))
 
   // First letter placeholder
   const firstLetter = product.name.charAt(0).toUpperCase()
@@ -99,6 +104,7 @@ export const ProductCard = React.memo(function ProductCard({
   const imageUrl: string | undefined =
     ((product as any).images as string[] | null | undefined)?.[0] ||
     product.image ||
+    (product as any).image_url ||
     undefined
 
   // Images count for the indicator
@@ -119,17 +125,18 @@ export const ProductCard = React.memo(function ProductCard({
       role="article"
       aria-label={`Producto: ${product.name}, Precio: Gs. ${product.sale_price}, Stock: ${product.stock_quantity}`}
       className={cn(
-        'group relative border border-gray-100 dark:border-gray-700/60',
-        'bg-white dark:bg-gray-800/90 overflow-hidden',
-        'transition-all duration-300 ease-out rounded-2xl',
-        'hover:shadow-2xl hover:shadow-gray-200/60 dark:hover:shadow-gray-900/60',
-        'hover:border-gray-200 dark:hover:border-gray-600',
+        'group relative border border-slate-200/50 dark:border-slate-800/50 cursor-pointer',
+        'bg-white/70 backdrop-blur-md dark:bg-slate-950/65 overflow-hidden',
+        'transition-all duration-300 ease-out rounded-[24px]',
+        'hover:shadow-2xl hover:shadow-slate-200/40 dark:hover:shadow-slate-900/40',
+        'hover:border-slate-300 dark:hover:border-slate-700',
         isSelected && 'ring-2 ring-blue-500 border-blue-200 dark:border-blue-700 shadow-lg shadow-blue-100/50 dark:shadow-blue-900/30',
         isHovered ? 'scale-[1.025] -translate-y-1' : 'shadow-md',
         className
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={() => onViewDetails(product)}
     >
       <CardContent className="p-0">
 
@@ -302,7 +309,7 @@ export const ProductCard = React.memo(function ProductCard({
           <div className="flex items-end justify-between gap-2">
             <div>
               <p className="text-[10px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider mb-0.5">Precio venta</p>
-              <span className="text-xl font-black text-gray-900 dark:text-gray-50 tracking-tight">
+              <span className="text-xl font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 dark:from-white dark:via-slate-200 dark:to-white bg-clip-text text-transparent tracking-tight">
                 {formatCurrency(product.sale_price)}
               </span>
             </div>
@@ -329,7 +336,7 @@ export const ProductCard = React.memo(function ProductCard({
                 stockStatus === 'low_stock' && 'text-amber-600 dark:text-amber-400',
                 stockStatus === 'out_of_stock' && 'text-red-600 dark:text-red-400',
               )}>
-                {product.stock_quantity}
+                {Number(product.stock_quantity || 0)}
                 <span className="font-normal text-gray-400 dark:text-gray-500"> u</span>
               </span>
             </div>
@@ -364,12 +371,16 @@ export const ProductCard = React.memo(function ProductCard({
               className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-700/60"
               onClick={(e) => e.stopPropagation()}
             >
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400">
-                {localActive
-                  ? <Globe className="h-3.5 w-3.5 text-emerald-500" />
-                  : <EyeOff className="h-3.5 w-3.5 text-gray-400" />
-                }
-                {localActive ? 'Visible al público' : 'Oculto al público'}
+              <span className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400">
+                {!product.is_active ? (
+                  <><EyeOff className="h-3.5 w-3.5 text-gray-400" /> Inactivo</>
+                ) : (product as any).visibility === 'hidden' ? (
+                  <><EyeOff className="h-3.5 w-3.5 text-gray-400" /> Oculto</>
+                ) : (product as any).visibility === 'wholesale' ? (
+                  <><Globe className="h-3.5 w-3.5 text-blue-500" /> Mayorista</>
+                ) : (
+                  <><Globe className="h-3.5 w-3.5 text-emerald-500" /> Visible</>
+                )}
               </span>
               <Switch
                 checked={localActive}
@@ -421,6 +432,7 @@ export const ProductCard = React.memo(function ProductCard({
     prevProps.product.image === nextProps.product.image &&
     prevProps.product.is_active === nextProps.product.is_active &&
     prevProps.product.purchase_price === nextProps.product.purchase_price &&
+    (prevProps.product as any).visibility === (nextProps.product as any).visibility &&
     JSON.stringify((prevProps.product as any).images) === JSON.stringify((nextProps.product as any).images)
   )
 })

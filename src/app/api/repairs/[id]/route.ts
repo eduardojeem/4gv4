@@ -117,6 +117,27 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
     if (isNextResponse(ctx)) return ctx
 
     const { id } = await context.params
+
+    // Verificar que la reparación no está en estado terminal
+    const { data: current } = await ctx.supabase
+      .from('repairs')
+      .select('id, status')
+      .eq('id', id)
+      .eq('organization_id', ctx.organizationId)
+      .eq('branch_id', ctx.branchId)
+      .maybeSingle()
+
+    if (!current) {
+      return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
+    }
+
+    if (current.status === 'entregado' || current.status === 'cancelado') {
+      return NextResponse.json(
+        { error: `No se puede editar una reparación en estado "${current.status}".` },
+        { status: 422 }
+      )
+    }
+
     const body = await request.json().catch(() => ({})) as Record<string, unknown>
     const { parts, notes, images, ...repairPayload } = body
     const updateData = buildRepairUpdate(repairPayload)
@@ -207,6 +228,27 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     if (isNextResponse(ctx)) return ctx
 
     const { id } = await context.params
+
+    // Solo permitir eliminar en estados "recibido" o "cancelado"
+    const { data: current } = await ctx.supabase
+      .from('repairs')
+      .select('id, status')
+      .eq('id', id)
+      .eq('organization_id', ctx.organizationId)
+      .eq('branch_id', ctx.branchId)
+      .maybeSingle()
+
+    if (!current) {
+      return NextResponse.json({ error: 'Reparacion no encontrada.' }, { status: 404 })
+    }
+
+    if (current.status !== 'recibido' && current.status !== 'cancelado') {
+      return NextResponse.json(
+        { error: `Solo se pueden eliminar reparaciones en estado "Recibido" o "Cancelado". Estado actual: "${current.status}".` },
+        { status: 422 }
+      )
+    }
+
     const { data, error } = await ctx.supabase
       .from('repairs')
       .delete()

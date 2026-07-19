@@ -46,10 +46,10 @@ function Thumb({
       type="button"
       onClick={onClick}
       className={[
-        'relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500',
+        'relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border-2 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500',
         active
-          ? 'border-cyan-500 shadow-sm'
-          : 'border-transparent opacity-60 hover:border-slate-300 hover:opacity-100',
+          ? 'border-cyan-500 shadow-md shadow-cyan-500/10'
+          : 'border-slate-200/50 dark:border-slate-800/40 opacity-60 hover:border-slate-300 dark:hover:border-slate-700 hover:opacity-100',
       ].join(' ')}
       aria-label={alt}
     >
@@ -143,16 +143,16 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
           3. Footer   →  shrink-0  (siempre visible)
       */}
       <DialogContent
-        className="flex max-h-[92dvh] w-[calc(100%-1.5rem)] max-w-md flex-col gap-0 overflow-hidden rounded-2xl border-0 p-0 shadow-2xl focus:outline-none"
+        className="flex max-h-[92dvh] w-[calc(100%-1.5rem)] max-w-md flex-col gap-0 overflow-hidden rounded-3xl border border-slate-200/50 bg-white/95 backdrop-blur-xl dark:border-slate-800/40 dark:bg-slate-950/95 shadow-2xl focus:outline-none"
         showCloseButton={false}
       >
         <DialogTitle className="sr-only">{product.name}</DialogTitle>
 
         {/* ── 1. GALERÍA (shrink-0) ────────────────────────────────────────── */}
-        <div className="shrink-0">
+        <div className="shrink-0 border-b border-slate-200/30 dark:border-slate-800/30">
 
           {/* Imagen principal */}
-          <div className="relative h-52 overflow-hidden bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 sm:h-60">
+          <div className="relative h-56 overflow-hidden bg-gradient-to-br from-slate-100/50 to-slate-50/50 dark:from-slate-900/40 dark:to-slate-850/30 sm:h-64">
             {currentSrc && !mainError ? (
               <Image
                 key={currentSrc}
@@ -160,7 +160,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
                 alt={`${product.name} — imagen ${activeIdx + 1}`}
                 fill
                 sizes="480px"
-                className="object-contain p-5 transition-opacity duration-200"
+                className="object-contain p-5 transition-opacity duration-300"
                 quality={90}
                 onError={() => setMainError(true)}
                 unoptimized={
@@ -170,40 +170,40 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
               />
             ) : (
               <div className="flex h-full items-center justify-center">
-                <Package className="h-14 w-14 text-slate-300 dark:text-slate-600" />
+                <Package className="h-16 w-16 text-slate-300 dark:text-slate-650" />
               </div>
             )}
 
             {/* Badges — top left */}
-            <div className="absolute left-3 top-3 z-10 flex flex-col gap-1.5">
+            <div className="absolute left-3.5 top-3.5 z-10 flex flex-col gap-1.5">
               {discountPct > 0 && (
-                <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow">
-                  <Tag className="h-2.5 w-2.5" />
+                <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-lg shadow-rose-600/20">
+                  <Tag className="h-3 w-3" />
                   -{discountPct}%
                 </span>
               )}
               {product.featured && !hasOffer && (
-                <span className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow">
-                  <Zap className="h-2.5 w-2.5" />
+                <span className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-bold leading-none text-white shadow-lg shadow-amber-500/20">
+                  <Zap className="h-3 w-3" />
                   Destacado
                 </span>
               )}
             </div>
 
             {/* Contador + botón cerrar — top right */}
-            <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+            <div className="absolute right-3.5 top-3.5 z-10 flex items-center gap-2">
               {hasMultiple && (
-                <span className="rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur-sm">
+                <span className="rounded-full bg-black/50 border border-white/10 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-md">
                   {activeIdx + 1}/{allImages.length}
                 </span>
               )}
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-slate-600 shadow-md backdrop-blur-sm transition-colors hover:bg-white hover:text-slate-900 dark:bg-slate-900/85 dark:text-slate-300 dark:hover:bg-slate-900"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/80 border border-slate-200/50 text-slate-700 shadow-md backdrop-blur-md transition-all hover:bg-white hover:scale-105 active:scale-95 dark:bg-slate-900/80 dark:border-slate-800/50 dark:text-slate-200 dark:hover:bg-slate-900"
                 aria-label="Cerrar"
               >
-                <X className="h-4 w-4" />
+                <X className="h-4.5 w-4.5" />
               </button>
             </div>
 
@@ -215,26 +215,26 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
                   onClick={prev}
                   disabled={activeIdx === 0}
                   aria-label="Imagen anterior"
-                  className="absolute left-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-600 shadow-md backdrop-blur-sm transition-all hover:bg-white disabled:pointer-events-none disabled:opacity-0 dark:bg-slate-900/85 dark:text-slate-300"
+                  className="absolute left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 border border-slate-200/50 text-slate-700 shadow-md backdrop-blur-md transition-all hover:bg-white hover:scale-105 active:scale-95 disabled:pointer-events-none disabled:opacity-0 dark:bg-slate-900/80 dark:border-slate-800/50 dark:text-slate-200"
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-4.5 w-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={next}
                   disabled={activeIdx === allImages.length - 1}
                   aria-label="Imagen siguiente"
-                  className="absolute right-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-600 shadow-md backdrop-blur-sm transition-all hover:bg-white disabled:pointer-events-none disabled:opacity-0 dark:bg-slate-900/85 dark:text-slate-300"
+                  className="absolute right-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 border border-slate-200/50 text-slate-700 shadow-md backdrop-blur-md transition-all hover:bg-white hover:scale-105 active:scale-95 disabled:pointer-events-none disabled:opacity-0 dark:bg-slate-900/80 dark:border-slate-800/50 dark:text-slate-200"
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-4.5 w-4.5" />
                 </button>
               </>
             )}
 
             {/* Sin stock overlay */}
             {!isInStock && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 backdrop-blur-[2px] dark:bg-slate-900/60">
-                <span className="rounded-full bg-slate-700/90 px-4 py-1.5 text-sm font-semibold text-white shadow">
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-[2px] dark:bg-slate-950/40">
+                <span className="rounded-full bg-slate-900/90 px-4 py-1.5 text-xs font-extrabold text-white shadow-lg">
                   Agotado
                 </span>
               </div>
@@ -243,7 +243,7 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
 
           {/* Strip de thumbnails — solo si hay 2+ imágenes */}
           {hasMultiple && (
-            <div className="flex gap-2 overflow-x-auto bg-slate-50 px-4 py-2.5 scrollbar-hide dark:bg-slate-900/50">
+            <div className="flex gap-2 overflow-x-auto bg-slate-50/50 px-4 py-3 border-t border-slate-200/10 scrollbar-hide dark:bg-slate-900/30">
               {allImages.map((src, i) => (
                 <Thumb
                   key={src}
@@ -265,37 +265,37 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
             <Link
               href={storeHref}
               onClick={onClose}
-              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700 transition-colors hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/70"
+              className="inline-flex w-fit items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50/80 px-3 py-1.5 text-xs font-bold text-cyan-700 transition-all hover:bg-cyan-100 dark:border-cyan-800/40 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/60 shadow-sm"
             >
-              <Store className="h-3 w-3 shrink-0" />
+              <Store className="h-3.5 w-3.5 shrink-0 text-cyan-600 dark:text-cyan-400" />
               {product.organization_name}
             </Link>
 
             {/* Nombre + marca + categoría */}
             <div>
               {(product.brand || product.category) && (
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                <span className="mb-2 inline-block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-900/80 px-2 py-0.5 rounded">
                   {[product.brand, product.category?.name].filter(Boolean).join(' · ')}
-                </p>
+                </span>
               )}
-              <h2 className="text-[17px] font-bold leading-snug text-slate-900 dark:text-slate-50">
+              <h2 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-snug">
                 {product.name}
               </h2>
             </div>
 
             {/* Precio */}
-            <div className="flex items-baseline gap-3">
+            <div className="flex items-baseline gap-3 py-0.5">
               <p
-                className={`text-3xl font-extrabold leading-tight tracking-tight ${
+                className={`text-3xl font-black tracking-tight ${
                   hasOffer
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-slate-900 dark:text-slate-50'
+                    ? 'text-rose-600 dark:text-rose-450'
+                    : 'text-slate-900 dark:text-slate-100'
                 }`}
               >
                 {formatPrice(displayPrice)}
               </p>
               {hasOffer && (
-                <p className="text-base text-slate-400 line-through dark:text-slate-500">
+                <p className="text-sm font-semibold text-slate-400 line-through dark:text-slate-500">
                   {formatPrice(product.sale_price)}
                 </p>
               )}
@@ -304,17 +304,17 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
             {/* Indicadores de stock */}
             <div className="flex flex-wrap items-center gap-2">
               {isInStock ? (
-                <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                  <Check className="h-3 w-3" />
+                <span className="flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-250/20 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                  <Check className="h-3.5 w-3.5" />
                   En stock
                 </span>
               ) : (
-                <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                   Agotado
                 </span>
               )}
               {isLowStock && (
-                <span className="flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                <span className="flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-250/20 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 shadow-sm">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
                   Últimas {product.stock_quantity} unidades
                 </span>
@@ -323,8 +323,8 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
 
             {/* Descripción completa */}
             {product.description?.trim() && (
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/60">
-                <p className="whitespace-pre-line text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+              <div className="rounded-2xl border border-slate-200/50 bg-slate-50/50 p-4 dark:border-slate-800/40 dark:bg-slate-900/30">
+                <p className="whitespace-pre-line text-sm leading-relaxed text-slate-650 dark:text-slate-400">
                   {product.description.trim().replace(/\n{3,}/g, '\n\n')}
                 </p>
               </div>
@@ -335,12 +335,12 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
         </div>
 
         {/* ── 3. Footer fijo con CTAs ──────────────────────────────────────── */}
-        <div className="shrink-0 border-t border-slate-100 bg-white/95 px-5 py-4 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/95">
-          <div className="flex flex-col gap-2">
+        <div className="shrink-0 border-t border-slate-200/30 bg-white/95 px-5 py-4 backdrop-blur-md dark:border-slate-800/30 dark:bg-slate-950/95">
+          <div className="flex flex-col gap-2.5">
             <Link
               href={productHref}
               onClick={onClose}
-              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 text-sm font-semibold text-white shadow-sm transition-all hover:bg-cyan-700 active:scale-[0.98]"
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-sm font-bold text-white shadow-lg shadow-cyan-500/10 hover:from-cyan-600 hover:to-blue-700 hover:shadow-cyan-500/20 transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0"
             >
               <ExternalLink className="h-4 w-4" />
               Ver detalle completo
@@ -349,11 +349,11 @@ export function MarketplaceProductModal({ product, open, onClose }: Props) {
             <Link
               href={storeHref}
               onClick={onClose}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white/50 text-sm font-semibold text-slate-700 transition-all hover:border-slate-350 hover:bg-slate-50 active:scale-[0.98] dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-300 dark:hover:border-slate-700"
             >
-              <Building2 className="h-4 w-4 text-slate-400" />
+              <Building2 className="h-4 w-4 text-slate-400 dark:text-slate-500" />
               Ir a la tienda
-              <ArrowRight className="ml-auto h-3.5 w-3.5 text-slate-400" />
+              <ArrowRight className="ml-auto h-4 w-4 text-slate-400 dark:text-slate-500" />
             </Link>
           </div>
         </div>

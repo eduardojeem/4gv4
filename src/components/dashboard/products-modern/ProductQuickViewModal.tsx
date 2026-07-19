@@ -67,7 +67,10 @@ export function ProductQuickViewModal({
       : null
 
   const imageUrl: string | undefined =
-    (product.images as string[] | null | undefined)?.[0] || product.image || undefined
+    (product.images as string[] | null | undefined)?.[0] ||
+    product.image ||
+    (product as any).image_url ||
+    undefined
   const isValidImage =
     !!imageUrl && (imageUrl.startsWith('data:image') || imageUrl.startsWith('/') || imageUrl.startsWith('http'))
 
@@ -112,16 +115,26 @@ export function ProductQuickViewModal({
                 <Badge className={cn('text-white border-0 text-xs', statusConfig.badge)}>
                   {statusConfig.label}
                 </Badge>
-                <Badge
+                 <Badge
                   variant="outline"
                   className={cn(
-                    'text-xs',
-                    product.is_active
-                      ? 'text-emerald-600 border-emerald-200 dark:text-emerald-400'
-                      : 'text-gray-500 border-gray-200',
+                    'text-xs font-bold',
+                    (!product.is_active || (product as any).visibility === 'hidden')
+                      ? 'text-gray-500 border-gray-200 dark:border-gray-800'
+                      : (product as any).visibility === 'wholesale'
+                        ? 'text-blue-600 border-blue-250 dark:text-blue-400 dark:border-blue-900/50'
+                        : 'text-emerald-600 border-emerald-250 dark:text-emerald-400 dark:border-emerald-900/50',
                   )}
                 >
-                  {product.is_active ? <><Globe className="h-3 w-3 mr-1" />Visible</> : <><EyeOff className="h-3 w-3 mr-1" />Oculto</>}
+                  {!product.is_active ? (
+                    <><EyeOff className="h-3 w-3 mr-1" />Inactivo</>
+                  ) : (product as any).visibility === 'hidden' ? (
+                    <><EyeOff className="h-3 w-3 mr-1" />Oculto</>
+                  ) : (product as any).visibility === 'wholesale' ? (
+                    <><Globe className="h-3 w-3 mr-1 text-blue-500" />Mayorista</>
+                  ) : (
+                    <><Globe className="h-3 w-3 mr-1" />Visible</>
+                  )}
                 </Badge>
               </div>
               {product.brand && (

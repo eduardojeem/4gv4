@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import {
   ArrowUpDown,
   ChevronLeft,
@@ -23,7 +24,7 @@ import { MarketplaceProductModal } from './MarketplaceProductModal'
 type SortKey = 'default' | 'price_asc' | 'price_desc' | 'name_asc'
 type ViewMode = 'grid' | 'compact'
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 40
 
 type Props = {
   products: MarketplaceProduct[]
@@ -45,46 +46,88 @@ export function ProductsClient({
   initialQuery = '',
   initialCategory = '',
 }: Props) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
   const [query, setQuery] = useState(initialQuery)
-  const [category, setCategory] = useState(initialCategory)
   const [onlyOffers, setOnlyOffers] = useState(false)
   const [sort, setSort] = useState<SortKey>('default')
   const [view, setView] = useState<ViewMode>('grid')
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<MarketplaceProduct | null>(null)
   const gridTopRef = useRef<HTMLDivElement>(null)
+  const lastFiltersRef = useRef({ query: initialQuery, category: initialCategory })
 
-  // Sincronizar con el filtro de URL (pill bar de categorías navega con Link)
-  useEffect(() => { setCategory(initialCategory); setPage(1) }, [initialCategory])
-  useEffect(() => { setQuery(initialQuery);    setPage(1) }, [initialQuery])
+  // ─── Sincronización del Buscador con URL (Debounce) ─────────────────────────
+  useEffect(() => {
+    const trimmedQuery = query.trim()
+    const urlQuery = searchParams.get('q') ?? ''
 
-  // Resetear página al cambiar cualquier filtro o sort
-  useEffect(() => { setPage(1) }, [query, category, onlyOffers, sort])
+    // Solo disparar si la búsqueda local difiere de la URL
+    if (trimmedQuery === urlQuery) return
 
-  // ─── Derived data ──────────────────────────────────────────────────────────
+    const handler = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      
+      if (trimmedQuery) {
+        params.set('q', trimmedQuery)
+      } else {
+        params.delete('q')
+      }
+      // Resetear paginado al filtrar
+      setPage(1)
+      router.push(`${pathname}?${params.toString()}`, { scroll: false })
+    }, 400)
+
+    return () => clearTimeout(handler)
+  }, [query, router, pathname, searchParams])
+
+  // Resetear página local al cambiar filtros o ordenamientos locales
+  useEffect(() => {
+    setPage(1)
+  }, [onlyOffers, sort])
+
+  // Sincronizar el input local y resetear página si cambian los filtros externos
+  useEffect(() => {
+    const filtersChanged =
+      lastFiltersRef.current.query !== initialQuery ||
+      lastFiltersRef.current.category !== initialCategory
+
+    if (filtersChanged) {
+      setQuery(initialQuery)
+      setPage(1)
+      lastFiltersRef.current = { query: initialQuery, category: initialCategory }
+    }
+  }, [initialQuery, initialCategory])
+
+  // ─── Modificar Parámetro de Categoría en URL ────────────────────────────────
+  const setCategoryParam = (catId: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (catId) {
+      params.set('categoria', catId)
+    } else {
+      params.delete('categoria')
+    }
+    setPage(1)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
+  // ─── Datos Derivados ────────────────────────────────────────────────────────
   const offersCount = useMemo(
     () => products.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price).length,
     [products]
   )
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    let result = products
 
-    let result = products.filter((p) => {
-      if (
-        q &&
-        !p.name.toLowerCase().includes(q) &&
-        !p.organization_name.toLowerCase().includes(q) &&
-        !p.brand?.toLowerCase().includes(q) &&
-        !p.category?.name.toLowerCase().includes(q)
-      )
-        return false
-      if (category && p.category?.id !== category) return false
-      if (onlyOffers && !(p.has_offer && p.offer_price && p.offer_price < p.sale_price)) return false
-      return true
-    })
+    // Filtrar por ofertas localmente
+    if (onlyOffers) {
+      result = result.filter((p) => p.has_offer && p.offer_price && p.offer_price < p.sale_price)
+    }
 
-    // Ordenar
+    // Ordenar localmente
     switch (sort) {
       case 'price_asc':
         result = [...result].sort((a, b) => {
@@ -106,71 +149,75 @@ export function ProductsClient({
     }
 
     return result
-  }, [products, query, category, onlyOffers, sort])
+  }, [products, onlyOffers, sort])
 
-  // ─── Paginación ───────────────────────────────────────────────────────────────────
+  // ─── Paginación ─────────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const safePageime = Math.min(page, totalPages)
-  const pageStart = (safePageime - 1) * PAGE_SIZE
+  const safePage = Math.min(page, totalPages)
+  const pageStart = (safePage - 1) * PAGE_SIZE
   const paginated = filtered.slice(pageStart, pageStart + PAGE_SIZE)
 
   function goToPage(p: number) {
     setPage(p)
-    // Scroll suave al tope del grid
     gridTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  // Generar números de página con elipsis
   function pageNumbers(): (number | '…')[] {
     if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
     const pages: (number | '…')[] = [1]
-    if (safePageime > 3) pages.push('…')
-    for (let i = Math.max(2, safePageime - 1); i <= Math.min(totalPages - 1, safePageime + 1); i++) pages.push(i)
-    if (safePageime < totalPages - 2) pages.push('…')
+    if (safePage > 3) pages.push('…')
+    for (let i = Math.max(2, safePage - 1); i <= Math.min(totalPages - 1, safePage + 1); i++) pages.push(i)
+    if (safePage < totalPages - 2) pages.push('…')
     pages.push(totalPages)
     return pages
   }
 
-  const hasFilter = query.trim() !== '' || category !== '' || onlyOffers
-  const clearAll = () => { setQuery(''); setCategory(''); setOnlyOffers(false); setSort('default') }
+  const hasFilter = query.trim() !== '' || initialCategory !== '' || onlyOffers
+  
+  const clearAll = () => {
+    setQuery('')
+    setOnlyOffers(false)
+    setSort('default')
+    setPage(1)
+    router.push(pathname, { scroll: false })
+  }
 
-  // ─── Grid classes según view mode ─────────────────────────────────────────
   const gridClass =
     view === 'grid'
-      ? 'grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
-      : 'grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
+      ? 'grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+      : 'grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
 
   return (
     <>
-      {/* ── TOOLBAR ──────────────────────────────────────────────────────── */}
-      <div className="mb-6 space-y-3">
-
-        {/* Fila 1: búsqueda + view toggle */}
-        <div className="flex items-center gap-2">
+      {/* ── TOOLBAR PREMIUM GLASSMORPHISM ──────────────────────────────────── */}
+      <div className="mb-8 space-y-4 bg-white/70 dark:bg-slate-900/60 p-4 sm:p-5 rounded-3xl border border-slate-200/50 dark:border-slate-800/40 backdrop-blur-md shadow-sm">
+        
+        {/* Fila 1: Búsqueda + Toggle de Vista */}
+        <div className="flex items-center gap-3">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar producto, empresa, marca..."
-              className="h-10 rounded-xl pl-9 pr-9 text-sm"
+              placeholder="Buscar por producto, marca, código..."
+              className="h-11 rounded-2xl pl-11 pr-10 text-sm border-slate-200/60 bg-white/80 dark:bg-slate-900/80 dark:border-slate-800"
             />
             {query && (
               <button
                 onClick={() => setQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 transition-colors hover:text-slate-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-350"
                 aria-label="Limpiar búsqueda"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
 
-          {/* View toggle */}
-          <div className="flex items-center rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
+          {/* Toggle de Vista */}
+          <div className="flex items-center rounded-2xl border border-slate-200/60 bg-white/80 p-1 dark:border-slate-800 dark:bg-slate-900/80 backdrop-blur-sm">
             <button
               onClick={() => setView('grid')}
-              className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
                 view === 'grid'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
@@ -178,11 +225,11 @@ export function ProductsClient({
               aria-label="Vista cuadrícula"
               aria-pressed={view === 'grid'}
             >
-              <LayoutGrid className="h-4 w-4" />
+              <LayoutGrid className="h-4.5 w-4.5" />
             </button>
             <button
               onClick={() => setView('compact')}
-              className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+              className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
                 view === 'compact'
                   ? 'bg-cyan-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
@@ -190,97 +237,100 @@ export function ProductsClient({
               aria-label="Vista compacta"
               aria-pressed={view === 'compact'}
             >
-              <LayoutList className="h-4 w-4" />
+              <LayoutList className="h-4.5 w-4.5" />
             </button>
           </div>
         </div>
 
-        {/* Fila 2: filtros + contador */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Sort */}
-          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900">
-            <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey)}
-              className="bg-transparent text-xs font-medium text-slate-700 outline-none dark:text-slate-300"
-            >
-              {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
-                <option key={k} value={k}>{SORT_LABELS[k]}</option>
-              ))}
-            </select>
-          </div>
+        {/* Fila 2: Filtros, Ordenamiento y Limpiar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-200/40 dark:border-slate-800/40">
+          
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Selector de Orden */}
+            <div className="flex items-center gap-2 rounded-2xl border border-slate-200/60 bg-white/80 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/80 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm">
+              <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                className="bg-transparent outline-none cursor-pointer pr-1"
+              >
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+                  <option key={k} value={k} className="dark:bg-slate-900">
+                    {SORT_LABELS[k]}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* Solo ofertas */}
-          {offersCount > 0 && (
-            <button
-              onClick={() => setOnlyOffers((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all ${
-                onlyOffers
-                  ? 'border-rose-400 bg-rose-50 text-rose-700 shadow-sm dark:border-rose-700 dark:bg-rose-950/30 dark:text-rose-300'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'
-              }`}
-            >
-              <Tag className="h-3 w-3" />
-              Ofertas
-              <span
-                className={`rounded-full px-1.5 py-px text-[10px] font-bold tabular-nums ${
+            {/* Solo Ofertas */}
+            {offersCount > 0 && (
+              <button
+                onClick={() => setOnlyOffers((v) => !v)}
+                className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-semibold transition-all shadow-sm ${
                   onlyOffers
-                    ? 'bg-rose-200 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300'
-                    : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                    ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800/40 dark:bg-rose-950/30 dark:text-rose-400'
+                    : 'border-slate-200/60 bg-white/80 text-slate-600 hover:bg-white dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400 dark:hover:bg-slate-900'
                 }`}
               >
-                {offersCount}
-              </span>
-            </button>
-          )}
+                <Tag className="h-3.5 w-3.5" />
+                Ofertas
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${
+                    onlyOffers
+                      ? 'bg-rose-200 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                  }`}
+                >
+                  {offersCount}
+                </span>
+              </button>
+            )}
+          </div>
 
-          {/* Separador visual */}
-          <div className="ml-auto flex items-center gap-3">
-            {/* Contador con rango paginado */}
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-4">
+            {/* Resultados y contador */}
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {filtered.length > 0 && (
-                <span className="font-semibold text-slate-900 tabular-nums dark:text-slate-100">
+                <span className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
                   {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filtered.length)}{' '}
                 </span>
               )}
               de{' '}
-              <span className="font-semibold text-slate-900 tabular-nums dark:text-slate-100">
+              <span className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
                 {filtered.length}
-              </span>
-              {hasFilter && filtered.length !== products.length && ` (de ${products.length} total)`}
+              </span>{' '}
+              productos
             </p>
 
-            {/* Limpiar filtros */}
+            {/* Limpiar todos los filtros */}
             {hasFilter && (
               <button
                 onClick={clearAll}
-                className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-all hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400"
+                className="flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-all hover:bg-slate-50 dark:border-slate-850 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-900/60 shadow-sm"
               >
-                <X className="h-3 w-3" />
+                <X className="h-3.5 w-3.5" />
                 Limpiar
               </button>
             )}
           </div>
         </div>
 
-        {/* Chip de filtro activo de categoría */}
-        {category && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Categoría activa:</span>
+        {/* Chip de Categoría Activa */}
+        {initialCategory && (
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-200/40 dark:border-slate-800/40">
+            <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">Categoría seleccionada:</span>
             <button
-              onClick={() => setCategory('')}
-              className="flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700 transition-colors hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300"
+              onClick={() => setCategoryParam('')}
+              className="flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-bold text-cyan-700 transition-colors hover:bg-cyan-100 dark:border-cyan-800/40 dark:bg-cyan-950/40 dark:text-cyan-300"
             >
-              {products.find((p) => p.category?.id === category)?.category?.name ?? 'Filtrada'}
+              {products.find((p) => p.category?.id === initialCategory)?.category?.name ?? 'Categoría'}
               <X className="h-3 w-3" />
             </button>
           </div>
         )}
       </div>
 
-      {/* ── GRID DE PRODUCTOS ─────────────────────────────────────────────── */}
-      {/* Anchor para scroll-to-top de paginación */}
+      {/* ── GRID DE PRODUCTOS PREMIUM ─────────────────────────────────────── */}
       <div ref={gridTopRef} className="-mt-4 pt-4" />
 
       {filtered.length > 0 ? (
@@ -302,17 +352,17 @@ export function ProductsClient({
                 key={`${product.organization_slug}-${product.id}`}
                 type="button"
                 onClick={() => setSelected(product)}
-                aria-label={`Ver ${product.name}`}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-lg hover:shadow-cyan-500/5 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-cyan-800 dark:hover:shadow-cyan-500/5"
+                aria-label={`Ver detalles de ${product.name}`}
+                className="group flex flex-col overflow-hidden rounded-3xl border border-slate-200/50 bg-white/80 dark:border-slate-800/40 dark:bg-slate-950/60 text-left transition-all duration-300 hover:-translate-y-1 hover:border-cyan-300 hover:shadow-xl hover:shadow-cyan-500/5"
               >
                 {/* Imagen */}
-                <div className={`relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 ${isCompact ? 'aspect-square' : 'aspect-[4/3]'}`}>
+                <div className={`relative overflow-hidden bg-gradient-to-br from-slate-50/50 to-slate-100/50 dark:from-slate-900/40 dark:to-slate-800/30 ${isCompact ? 'aspect-square' : 'aspect-[4/3]'}`}>
                   {imageSrc ? (
                     <Image
                       src={imageSrc}
                       alt={product.name}
                       fill
-                      className={`object-contain transition-transform duration-300 group-hover:scale-105 ${isCompact ? 'p-2' : 'p-4'}`}
+                      className={`object-contain transition-transform duration-500 group-hover:scale-105 ${isCompact ? 'p-2' : 'p-4'}`}
                       sizes={
                         isCompact
                           ? '(max-width: 640px) 33vw, (max-width: 1024px) 25vw, 20vw'
@@ -322,30 +372,30 @@ export function ProductsClient({
                   ) : (
                     <div className="flex h-full items-center justify-center">
                       <Package
-                        className={`text-slate-300 dark:text-slate-600 ${isCompact ? 'h-6 w-6' : 'h-10 w-10'}`}
+                        className={`text-slate-350 dark:text-slate-650 ${isCompact ? 'h-6 w-6' : 'h-10 w-10'}`}
                       />
                     </div>
                   )}
 
                   {/* Badges */}
-                  <div className="absolute left-2 top-2 flex flex-col gap-1">
+                  <div className="absolute left-3 top-3 flex flex-col gap-1.5">
                     {hasOffer && discountPct > 0 && (
-                      <span className="flex items-center gap-0.5 rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
-                        <Tag className="h-2 w-2" />
+                      <span className="flex items-center gap-0.5 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-md">
+                        <Tag className="h-2.5 w-2.5" />
                         -{discountPct}%
                       </span>
                     )}
                     {product.featured && !hasOffer && (
-                      <span className="rounded-full bg-cyan-600 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                        ★
+                      <span className="rounded-full bg-cyan-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-md">
+                        ★ Destacado
                       </span>
                     )}
                   </div>
 
                   {/* Sin stock */}
                   {!product.in_stock && (
-                    <div className="absolute inset-0 flex items-end justify-center bg-white/30 pb-2 backdrop-blur-[1px] dark:bg-slate-900/30">
-                      <span className="rounded-full bg-slate-800/80 px-2.5 py-0.5 text-[10px] font-semibold text-white">
+                    <div className="absolute inset-0 flex items-end justify-center bg-white/40 pb-3 backdrop-blur-[1.5px] dark:bg-slate-950/40">
+                      <span className="rounded-full bg-slate-900/90 px-3 py-1 text-[10px] font-bold text-white shadow-sm">
                         Agotado
                       </span>
                     </div>
@@ -353,28 +403,30 @@ export function ProductsClient({
                 </div>
 
                 {/* Info */}
-                <div className={`flex flex-1 flex-col ${isCompact ? 'p-2' : 'p-3'}`}>
-                  <p className={`truncate font-semibold text-cyan-700 dark:text-cyan-400 ${isCompact ? 'text-[10px]' : 'text-[11px]'}`}>
+                <div className={`flex flex-1 flex-col ${isCompact ? 'p-3' : 'p-4'}`}>
+                  <p className={`font-semibold text-cyan-600 dark:text-cyan-400 tracking-wide uppercase ${isCompact ? 'text-[9px]' : 'text-[10px]'}`}>
                     {product.organization_name}
                   </p>
-                  <h3 className={`mt-0.5 line-clamp-2 flex-1 font-semibold text-slate-900 dark:text-slate-50 ${isCompact ? 'text-xs' : 'text-sm'}`}>
+                  <h3 className={`mt-1 line-clamp-2 flex-1 font-bold text-slate-800 dark:text-slate-100 group-hover:text-slate-900 dark:group-hover:text-white transition-colors ${isCompact ? 'text-xs' : 'text-sm'}`}>
                     {product.name}
                   </h3>
-                  <div className={`${isCompact ? 'mt-1.5' : 'mt-2'}`}>
-                    <p
-                      className={`font-bold tabular-nums leading-none ${
-                        hasOffer
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : 'text-slate-900 dark:text-slate-50'
-                      } ${isCompact ? 'text-sm' : 'text-base'}`}
-                    >
-                      {formatPrice(displayPrice)}
-                    </p>
-                    {hasOffer && (
-                      <p className={`text-slate-400 line-through dark:text-slate-500 ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
-                        {formatPrice(product.sale_price)}
+                  <div className={`flex items-baseline justify-between ${isCompact ? 'mt-2' : 'mt-3'}`}>
+                    <div>
+                      <p
+                        className={`font-black tabular-nums leading-none ${
+                          hasOffer
+                            ? 'text-rose-600 dark:text-rose-450'
+                            : 'text-slate-850 dark:text-slate-100'
+                        } ${isCompact ? 'text-sm' : 'text-base'}`}
+                      >
+                        {formatPrice(displayPrice)}
                       </p>
-                    )}
+                      {hasOffer && (
+                        <p className={`mt-0.5 text-slate-400 line-through dark:text-slate-500 leading-none ${isCompact ? 'text-[10px]' : 'text-xs'}`}>
+                          {formatPrice(product.sale_price)}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </button>
@@ -382,43 +434,41 @@ export function ProductsClient({
           })}
         </div>
       ) : (
-        /* ── EMPTY STATE ──────────────────────────────────────────────────── */
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-20 text-center dark:border-slate-800 dark:bg-slate-900/20">
+        /* Empty State */
+        <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50/50 py-24 text-center dark:border-slate-800 dark:bg-slate-900/10">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-sm dark:bg-slate-900">
-            <Package className="h-7 w-7 text-slate-300 dark:text-slate-600" />
+            <Package className="h-8 w-8 text-slate-350 dark:text-slate-650" />
           </div>
-          <p className="text-base font-semibold text-slate-700 dark:text-slate-300">
-            Sin resultados
+          <p className="text-base font-bold text-slate-700 dark:text-slate-300">
+            Sin productos coincidentes
           </p>
-          <p className="mt-1.5 max-w-xs text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-1.5 max-w-xs text-sm text-slate-500 dark:text-slate-400 mx-auto">
             {query
-              ? `No encontramos productos para "${query}"`
-              : 'Ningún producto coincide con los filtros aplicados.'}
+              ? `No encontramos resultados para "${query}" en el Marketplace.`
+              : 'Ningún producto coincide con los filtros aplicados en este momento.'}
           </p>
           <button
             onClick={clearAll}
-            className="mt-5 flex items-center gap-1.5 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-cyan-700 active:scale-[0.98]"
+            className="mt-6 flex items-center gap-1.5 rounded-xl bg-cyan-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-cyan-700 active:scale-[0.98]"
           >
             <X className="h-3.5 w-3.5" />
-            Ver todos los productos
+            Limpiar filtros y ver todos
           </button>
         </div>
       )}
 
       {/* ── CONTROLES DE PAGINACIÓN ──────────────────────────────────────── */}
       {totalPages > 1 && (
-        <div className="mt-8 flex items-center justify-center gap-1">
-          {/* Anterior */}
+        <div className="mt-10 flex items-center justify-center gap-1.5">
           <button
-            onClick={() => goToPage(safePageime - 1)}
-            disabled={safePageime === 1}
+            onClick={() => goToPage(safePage - 1)}
+            disabled={safePage === 1}
             aria-label="Página anterior"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-all hover:border-slate-300 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-all hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 dark:border-slate-850 dark:bg-slate-900 dark:text-slate-450"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4.5 w-4.5" />
           </button>
 
-          {/* Números de página */}
           {pageNumbers().map((n, i) =>
             n === '…' ? (
               <span
@@ -432,11 +482,11 @@ export function ProductsClient({
                 key={n}
                 onClick={() => goToPage(n as number)}
                 aria-label={`Página ${n}`}
-                aria-current={safePageime === n ? 'page' : undefined}
-                className={`flex h-9 w-9 items-center justify-center rounded-xl border text-sm font-semibold transition-all ${
-                  safePageime === n
+                aria-current={safePage === n ? 'page' : undefined}
+                className={`flex h-9 w-9 items-center justify-center rounded-xl border text-xs font-bold transition-all ${
+                  safePage === n
                     ? 'border-cyan-500 bg-cyan-600 text-white shadow-sm'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-850 dark:bg-slate-900 dark:text-slate-350'
                 }`}
               >
                 {n}
@@ -444,22 +494,20 @@ export function ProductsClient({
             )
           )}
 
-          {/* Siguiente */}
           <button
-            onClick={() => goToPage(safePageime + 1)}
-            disabled={safePageime === totalPages}
+            onClick={() => goToPage(safePage + 1)}
+            disabled={safePage === totalPages}
             aria-label="Página siguiente"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-all hover:border-slate-300 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition-all hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-30 dark:border-slate-850 dark:bg-slate-900 dark:text-slate-450"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4.5 w-4.5" />
           </button>
         </div>
       )}
 
-      {/* Info de página debajo de los controles */}
       {totalPages > 1 && (
-        <p className="mt-3 text-center text-xs text-slate-400 dark:text-slate-500">
-          Página {safePageime} de {totalPages} &middot; {PAGE_SIZE} productos por página
+        <p className="mt-3 text-center text-[10px] font-semibold text-slate-450 dark:text-slate-500">
+          Página {safePage} de {totalPages} &middot; {PAGE_SIZE} productos por página
         </p>
       )}
 

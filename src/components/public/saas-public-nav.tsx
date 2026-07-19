@@ -3,11 +3,12 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { ArrowRight, Building2, Menu, Store, X, LogIn, LayoutDashboard } from 'lucide-react'
+import { Building2, Menu, Store, X, User, LayoutDashboard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/auth-context'
 import { usePlatformBranding } from '@/hooks/use-platform-branding'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { AuthModal } from '@/components/public/AuthModal'
 
 const navLinks = [
   { label: 'Caracteristicas', href: '/saas#caracteristicas' },
@@ -21,6 +22,7 @@ interface SaaSPublicNavProps {
 
 export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [authOpen, setAuthOpen] = useState(false)
   const pathname = usePathname()
   const { user } = useAuth()
   const isDark = variant === 'dark'
@@ -32,6 +34,7 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
   }
 
   return (
+    <>
     <header className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
       isDark
         ? 'border-slate-800/80 bg-slate-950/85'
@@ -97,21 +100,17 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
             </Button>
           ) : (
             <>
-              <Button asChild variant="ghost" size="sm" className={`hidden gap-2 md:inline-flex font-medium ${
-                isDark
-                  ? 'text-slate-300 hover:bg-slate-900 hover:text-white'
-                  : 'text-slate-600 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white'
-              }`}>
-                <Link href="/login">
-                  <LogIn className="h-4 w-4" />
-                  Ingresar
-                </Link>
-              </Button>
-              <Button asChild size="sm" className="hidden gap-2 md:inline-flex">
-                <Link href={branding.primaryCtaHref}>
-                  {branding.primaryCtaLabel}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
+              {/* Botón "Mi cuenta" */}
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setAuthOpen(true)}
+                className="group hidden gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 pl-1.5 pr-4 text-white shadow-md shadow-cyan-600/25 transition-all duration-200 hover:from-cyan-500 hover:to-sky-500 hover:shadow-lg hover:shadow-cyan-500/30 focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 active:scale-[0.97] dark:focus-visible:ring-offset-slate-950 md:inline-flex"
+              >
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 transition-transform duration-200 group-hover:scale-110">
+                  <User className="h-3.5 w-3.5" />
+                </span>
+                Mi cuenta
               </Button>
             </>
           )}
@@ -172,19 +171,14 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
               </Button>
             ) : (
               <>
-                <Button asChild variant="outline" size="sm" className={`w-full gap-2 ${
-                  isDark ? 'border-slate-700 bg-slate-900/70 text-slate-200 hover:bg-slate-800 hover:text-white' : ''
-                }`}>
-                  <Link href="/login" onClick={() => setMobileOpen(false)}>
-                    <LogIn className="h-4 w-4" />
-                    Ingresar
-                  </Link>
-                </Button>
-                <Button asChild size="sm" className="w-full gap-2">
-                  <Link href={branding.primaryCtaHref} onClick={() => setMobileOpen(false)}>
-                    {branding.primaryCtaLabel}
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md shadow-cyan-600/20 transition-all hover:from-cyan-500 hover:to-sky-500 active:scale-[0.99]"
+                  onClick={() => { setMobileOpen(false); setAuthOpen(true) }}
+                >
+                  <User className="h-4 w-4" />
+                  Mi cuenta
                 </Button>
               </>
             )}
@@ -192,5 +186,14 @@ export function SaaSPublicNav({ variant = 'default' }: SaaSPublicNavProps) {
         </div>
       )}
     </header>
+
+    {/* Auth modal — mismo modal que el marketplace, con rutas del SaaS */}
+    <AuthModal
+      open={authOpen}
+      onClose={() => setAuthOpen(false)}
+      loginHref="/login"
+      registerHref="/register"
+    />
+    </>
   )
 }

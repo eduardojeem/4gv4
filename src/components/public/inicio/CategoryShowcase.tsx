@@ -59,9 +59,22 @@ export function CategoryShowcase() {
     )
   }
 
-  if (categories.length === 0) return null
+  // Solo categorías con productos publicados: una vitrina que lleva a "no hay
+  // productos" es peor que no mostrar la categoría. Si el backend todavía no
+  // envía productCount (respuesta cacheada vieja), no se filtra nada.
+  const hasCounts = categories.some((c) => typeof c.productCount === 'number')
+  const withProducts = hasCounts
+    ? categories.filter((c) => (c.productCount ?? 0) > 0)
+    : categories
 
-  const items = categories.slice(0, 8)
+  if (withProducts.length === 0) return null
+
+  // Se priorizan las categorías con más productos en vez del orden alfabético,
+  // que dejaba fuera del top 8 al catálogo principal.
+  const items = [...withProducts]
+    .sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0) || a.name.localeCompare(b.name))
+    .slice(0, 8)
+  const hasMore = withProducts.length > items.length
 
   return (
     <section className="bg-muted/30 py-16 md:py-20">
@@ -69,63 +82,79 @@ export function CategoryShowcase() {
         {/* Header */}
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
-            <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+            {/* Se evita `text-primary` para textos sobre fondo neutro: el color
+                de marca lo define cada tienda (esta usa #08080d) y en modo
+                oscuro queda ilegible. `foreground` sigue siempre al tema. */}
+            <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
               <Package className="h-3.5 w-3.5" />
               Categorías
             </span>
             <h2 className="mt-2 text-3xl font-bold tracking-tight text-foreground md:text-4xl">
               Comprá por categoría
             </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Explorá el catálogo por rubro y encontrá lo que buscás más rápido.
+            </p>
           </div>
           <Link
             href={`${tenantPrefix}/productos`}
-            className="hidden shrink-0 items-center gap-1.5 text-sm font-semibold text-primary hover:underline sm:inline-flex"
+            className="hidden shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground sm:inline-flex"
           >
-            Ver todo
+            Ver todo el catálogo
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
 
         {/* Grid */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {items.map((category, index) => {
+          {items.map((category) => {
             const preset = getCategoryPreset(category.name)
             const Icon = preset.icon
+            const count = category.productCount ?? 0
             return (
               <Link
                 key={category.id}
                 href={`${tenantPrefix}/productos?category_id=${encodeURIComponent(category.id)}`}
-                className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-transparent hover:shadow-lg"
+                aria-label={`Ver productos de ${category.name}${count ? ` (${count})` : ''}`}
+                className="group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-border/60 bg-card p-5 transition-all duration-300 hover:-translate-y-1 hover:border-transparent hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none"
               >
                 {/* Gradient bg on hover */}
                 <div className={cn('absolute inset-0 bg-gradient-to-br opacity-0 transition-opacity duration-300 group-hover:opacity-5', preset.gradient)} />
 
                 {/* Icon */}
-                <div className={cn('flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md', preset.gradient)}>
+                <div className={cn('flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md transition-transform duration-300 group-hover:scale-105 motion-reduce:transform-none', preset.gradient)}>
                   <Icon className="h-6 w-6" />
                 </div>
 
-                {/* Name */}
-                <div>
-                  <span className="line-clamp-2 text-sm font-bold text-foreground transition-colors group-hover:text-primary leading-tight">
+                {/* Name + count */}
+                <div className="pr-6">
+                  <span className="line-clamp-2 text-sm font-bold leading-tight text-foreground">
                     {category.name}
                   </span>
+                  {count > 0 && (
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {count} {count === 1 ? 'producto' : 'productos'}
+                    </span>
+                  )}
                 </div>
 
                 {/* Arrow */}
-                <ArrowRight className="absolute bottom-4 right-4 h-4 w-4 text-muted-foreground/40 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-primary" />
+                <ArrowRight className="absolute bottom-4 right-4 h-4 w-4 text-muted-foreground/40 transition-all duration-300 group-hover:translate-x-0.5 group-hover:text-foreground" />
               </Link>
             )
           })}
         </div>
 
-        {/* Mobile see all */}
-        <div className="mt-5 text-center sm:hidden">
+        {/* Ver todo — mobile, y en desktop solo si quedaron categorías fuera */}
+        <div className={cn('mt-6 text-center', !hasMore && 'sm:hidden')}>
           <Link
             href={`${tenantPrefix}/productos`}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-5 py-2.5 text-sm font-semibold text-card-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground"
           >
-            Ver todas las categorías <ArrowRight className="h-4 w-4" />
+            {hasMore
+              ? `Ver las ${withProducts.length} categorías`
+              : 'Ver todo el catálogo'}
+            <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </div>

@@ -117,7 +117,21 @@ export default function LoginPage() {
 
         toast.success('Bienvenido de nuevo')
         await initializeActiveOrganization()
-        const redirectTo = sanitizeRedirectPath(searchParams.get('redirect'))
+        const rawRedirect = searchParams.get('redirect')
+        let redirectTo = '/dashboard'
+
+        if (rawRedirect) {
+          const cleanRedirect = sanitizeRedirectPath(rawRedirect)
+          const redirectTenantSlug = getTenantSlugFromPathname(cleanRedirect)
+          const isCustomerOrOtherSection =
+            cleanRedirect.startsWith('/marketplace') ||
+            redirectTenantSlug !== ''
+
+          if (isCustomerOrOtherSection) {
+            redirectTo = cleanRedirect
+          }
+        }
+
         router.push(redirectTo)
         router.refresh()
       }

@@ -287,6 +287,24 @@
   --admin-neutral-foreground: oklch(0.88 0.005 240);
 }
 
+/* ── Color de marca personalizado por organización ─────────────────────────
+   El layout público expone el color elegido como --brand-primary. En modo
+   claro se usa tal cual; en oscuro se sube la luminosidad (con tope) para que
+   marcas casi negras —muy comunes— no queden ilegibles sobre fondo oscuro.
+   Si el navegador no soporta `oklch(from ...)`, la declaración se descarta y
+   --primary cae al valor del tema, que siempre contrasta. */
+[data-custom-brand] {
+  --primary: var(--brand-primary);
+  --ring: var(--brand-primary);
+  --sidebar-primary: var(--brand-primary);
+}
+
+.dark [data-custom-brand] {
+  --primary: oklch(from var(--brand-primary) clamp(0.62, calc(l + 0.32), 0.86) c h);
+  --ring: var(--primary);
+  --sidebar-primary: var(--primary);
+}
+
 /* Professional Color Schemes */
 [data-color-scheme="corporate"] {
   --primary: oklch(0.45 0.15 220);

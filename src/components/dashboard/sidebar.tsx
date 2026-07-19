@@ -14,6 +14,7 @@ import { useSubscriptionStatus } from '@/contexts/SubscriptionStatusContext'
 import { usePermissions } from '@/hooks/use-permissions'
 import type { UserRole } from '@/lib/auth/roles-permissions'
 import { canRoleAccessSection } from '@/lib/auth/section-access'
+import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import { fetchOnboardingStatus } from '@/lib/onboarding/status-cache'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { LogoutDialog } from '@/components/profile/logout-dialog'
@@ -101,7 +102,7 @@ export const Sidebar = memo(function Sidebar() {
       try {
         const supabase = createClient()
         const [{ count: repairs }, { data: lowStockData }] = await Promise.all([
-          supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', ['recibido', 'diagnostico', 'reparacion', 'listo']),
+          supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', [...ACTIVE_REPAIR_STATUSES]),
           supabase.from('products').select('stock_quantity, min_stock').eq('is_active', true)
         ])
         // Incluye agotados (stock 0): también requieren reposición.

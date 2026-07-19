@@ -44,6 +44,19 @@ export interface CompanyInfo {
   logo?: string
 }
 
+/**
+ * Fallback neutro cuando el llamador no envía los datos de la organización.
+ * NO se usa `config.company`: son variables de entorno de la plataforma
+ * (NEXT_PUBLIC_COMPANY_*), así que imprimían la marca del SaaS en el recibo
+ * de una empresa cliente.
+ */
+const FALLBACK_COMPANY: CompanyInfo = {
+  name: '',
+  phone: '',
+  address: '',
+  email: '',
+}
+
 export interface RepairPrintPayload {
   ticketNumber?: string
   date?: Date
@@ -117,7 +130,7 @@ export const previewPersistentRepairTicketNumber = (): string => {
  * Genera un texto formateado para compartir por WhatsApp o copiar.
  */
 export const generateRepairShareText = (payload: RepairPrintPayload): string => {
-  const company = payload.company || config.company
+  const company = payload.company || FALLBACK_COMPANY
   const ticketNumber = payload.ticketNumber || 'N/A'
   const dateObj = payload.date || new Date()
   const date = dateObj.toLocaleDateString(config.locale || 'es-PY')
@@ -183,7 +196,7 @@ export const printRepairReceipt = (type: RepairReceiptType, payload: RepairPrint
  * Incluye encabezado de empresa, meta de recepción, datos del cliente y equipos.
  */
 const generateRepairReceiptHTML = (type: RepairReceiptType, payload: RepairPrintPayload): string => {
-  const company = payload.company || config.company
+  const company = payload.company || FALLBACK_COMPANY
   const ticketNumber = payload.ticketNumber || generateRepairTicketNumber()
   const dateObj = payload.date || new Date()
   const date = dateObj.toLocaleDateString(config.locale || 'es-PY')

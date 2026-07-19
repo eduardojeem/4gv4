@@ -350,7 +350,11 @@ export default function ProductsPage() {
 
   // Handle visibility toggle
   const handleToggleActive = async (product: Product, newValue: boolean) => {
-    const result = await updateProduct(product.id, { is_active: newValue } as any);
+    const updatePayload: any = { is_active: newValue }
+    if (newValue && (product as any).visibility === 'hidden') {
+      updatePayload.visibility = 'public'
+    }
+    const result = await updateProduct(product.id, updatePayload);
     if (result.success) {
       toast.success(newValue ? `"${product.name}" ahora es visible en el catálogo` : `"${product.name}" ocultado del catálogo`);
     } else {

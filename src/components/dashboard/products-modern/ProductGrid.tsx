@@ -37,12 +37,44 @@ export function ProductGrid({
     return (
       <div className={cn('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6', className)}>
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="animate-pulse">
-            <div className="bg-gray-200 dark:bg-gray-700 aspect-square rounded-t-lg" />
-            <div className="bg-gray-100 dark:bg-gray-800 p-4 space-y-3 rounded-b-lg">
-              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
-              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
-              <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
+          <div
+            key={i}
+            className="rounded-[24px] border border-slate-200/40 bg-white/60 dark:bg-slate-950/50 overflow-hidden shadow-sm flex flex-col"
+          >
+            {/* Image Area Skeleton */}
+            <div className="relative aspect-[4/3] bg-slate-150 dark:bg-slate-850 animate-pulse flex items-center justify-center">
+              <div className="absolute top-2.5 left-2.5 h-5 w-20 rounded-full bg-slate-200 dark:bg-slate-800/80 animate-pulse" />
+              <div className="h-10 w-10 rounded-xl bg-slate-200/80 dark:bg-slate-800/80 animate-pulse" />
+            </div>
+
+            {/* Info Area Skeleton */}
+            <div className="p-4 space-y-4 flex-1">
+              <div className="space-y-1.5">
+                <div className="h-3 w-20 rounded bg-slate-100 dark:bg-slate-900 animate-pulse" />
+                <div className="h-4.5 w-3/4 rounded bg-slate-150 dark:bg-slate-800 animate-pulse" />
+              </div>
+
+              <div className="h-5 w-16 rounded bg-slate-100 dark:bg-slate-900 animate-pulse" />
+              <div className="border-t border-slate-100/50 dark:border-slate-800/50" />
+
+              <div className="flex justify-between items-end">
+                <div className="space-y-1">
+                  <div className="h-2 w-12 rounded bg-slate-100 dark:bg-slate-900 animate-pulse" />
+                  <div className="h-5.5 w-24 rounded bg-slate-150 dark:bg-slate-850 animate-pulse" />
+                </div>
+                <div className="space-y-1">
+                  <div className="h-2 w-8 rounded bg-slate-100 dark:bg-slate-900 animate-pulse ml-auto" />
+                  <div className="h-4 w-16 rounded bg-slate-100 dark:bg-slate-900 animate-pulse ml-auto" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <div className="h-3.5 w-12 rounded bg-slate-100 dark:bg-slate-900 animate-pulse" />
+                  <div className="h-3.5 w-8 rounded bg-slate-150 dark:bg-slate-800 animate-pulse" />
+                </div>
+                <div className="h-1.5 w-full rounded bg-slate-100 dark:bg-slate-900 animate-pulse" />
+              </div>
             </div>
           </div>
         ))}

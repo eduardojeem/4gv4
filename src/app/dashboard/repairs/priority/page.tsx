@@ -1,16 +1,34 @@
 ﻿"use client";
 import { logger } from '@/lib/logger'
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { RepairOrder } from "@/types/repairs";
+import { RepairOrder, type RepairStatus } from "@/types/repairs";
 import { calculatePriorityScore, sortRepairsByPriority } from "@/services/repair-priority";
 import { createClient } from "@/lib/supabase/client";
+import { branchHeaders } from "@/lib/branches/client";
+import { ACTIVE_REPAIR_STATUSES } from "@/lib/constants/repair-status";
+
+/** Fila cruda de `repairs` tal como la devuelve /api/repairs. */
+type RepairRow = {
+  id: string;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  priority?: string | null;
+  device_model?: string | null;
+  device_type?: string | null;
+  issue_description?: string | null;
+  customers?: { name?: string | null; email?: string | null; phone?: string | null } | null;
+};
 
 export default function RepairsPriorityPage() {
   const [repairs, setRepairs] = useState<RepairOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [config, setConfig] = useState(() => {
+  // La configuración se edita en /dashboard/repairs/settings y se lee de
+  // localStorage al montar; acá solo se consume.
+  const [config] = useState(() => {
     try {
       const raw = localStorage.getItem("priorityConfig");
       return raw ? JSON.parse(raw) : undefined;
@@ -24,29 +42,34 @@ export default function RepairsPriorityPage() {
   useEffect(() => {
     const fetchRepairs = async () => {
       setLoading(true);
-      const supabase = createClient();
-      
-      const { data, error } = await supabase
-        .from('repairs')
-        .select(`
-          *,
-          customers (
-            name,
-            email,
-            phone
-          )
-        `)
-        .in('status', ['recibido', 'diagnostico', 'reparacion', 'pausado'])
-        .order('created_at', { ascending: true });
 
-      if (error) {
+      // Vía API en vez de consultar `repairs` directo desde el cliente: el
+      // endpoint acota por organización y sucursal. La consulta directa
+      // dependía solo de RLS y podía traer reparaciones de otras empresas.
+      let data: RepairRow[] | null = null;
+      try {
+        const response = await fetch('/api/repairs', {
+          cache: 'no-store',
+          headers: branchHeaders(),
+        });
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null) as { error?: string } | null;
+          throw new Error(payload?.error || 'No se pudieron cargar las reparaciones');
+        }
+
+        const payload = await response.json() as { repairs?: RepairRow[] };
+        data = (payload.repairs ?? [])
+          .filter((item) => ACTIVE_REPAIR_STATUSES.has(String(item.status ?? '') as RepairStatus))
+          .sort((a, b) => String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')));
+      } catch (error) {
         logger.error('Error fetching repairs', { error })
         setLoading(false);
         return;
       }
 
       if (data) {
-        const mappedRepairs: RepairOrder[] = data.map((item: any) => ({
+        const mappedRepairs: RepairOrder[] = data.map((item) => ({
           id: item.id,
           customerName: item.customers?.name || 'Cliente desconocido',
           customerPhone: item.customers?.phone,
@@ -95,7 +118,7 @@ export default function RepairsPriorityPage() {
           <p className="text-muted-foreground">Priorización inteligente basada en urgencia, tiempo de espera y valor.</p>
         </div>
         <Button asChild>
-          <a href="/dashboard/repairs/settings">Configurar</a>
+          <Link href="/dashboard/repairs/settings">Configurar</Link>
         </Button>
       </div>
       <Card className="p-4">

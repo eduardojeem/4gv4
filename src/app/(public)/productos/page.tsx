@@ -20,7 +20,11 @@ import { Search } from 'lucide-react'
 import { PRODUCTS_MAX_PRICE } from '@/lib/constants/products'
 import { getPublicTenantPathPrefix, prefixPublicTenantPath } from '@/lib/public/tenant-path'
 
-export const revalidate = 60
+// La página es dinámica de facto: getPublicProducts llama headers() para
+// resolver el tenant, así que un revalidate a nivel de ruta no aplicaría.
+// El caché real (facetas de marcas/precio) vive en getProductFacets con
+// unstable_cache. Los resultados dependen de los filtros y no se cachean.
+export const dynamic = 'force-dynamic'
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await fetchWebsiteSettings()

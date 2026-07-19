@@ -176,21 +176,46 @@ export async function GET(request: NextRequest) {
 
   try {
     const branchId = request.headers.get('x-branch-id')
+    const { searchParams } = new URL(request.url)
+    const page = Math.max(1, Number(searchParams.get('page') || 1))
+    const pageSize = Math.min(100, Math.max(10, Number(searchParams.get('pageSize') || 50)))
+    const status = searchParams.get('status') || null
+    const search = (searchParams.get('search') || '').trim()
+    const offset = (page - 1) * pageSize
+
     const supabase = createAdminSupabase()
     let lastError: unknown = null
 
     for (const selectExpr of REPAIR_SELECT_VARIANTS) {
       let query = supabase
         .from('repairs')
-        .select(selectExpr)
+        .select(selectExpr, { count: 'exact' })
         .eq('organization_id', organization.id)
         .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1)
 
       query = withBranchFilter(query, branchId)
-      const { data, error } = await query
+
+      if (status && status !== 'all') {
+        query = query.eq('status', status)
+      }
+
+      if (search) {
+        query = query.or(`device_brand.ilike.%${search}%,device_model.ilike.%${search}%,problem_description.ilike.%${search}%,ticket_number.ilike.%${search}%`)
+      }
+
+      const { data, error, count } = await query
 
       if (!error) {
-        return NextResponse.json({ repairs: data ?? [] })
+        return NextResponse.json({
+          repairs: data ?? [],
+          pagination: {
+            page,
+            pageSize,
+            total: count ?? 0,
+            totalPages: Math.ceil((count ?? 0) / pageSize),
+          },
+        })
       }
 
       lastError = error

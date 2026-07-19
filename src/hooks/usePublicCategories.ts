@@ -5,6 +5,10 @@ import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 interface Category {
   id: string
   name: string
+  parent_id?: string | null
+  subcategories?: Category[]
+  /** Productos publicados en la categoría (incluye subcategorías). */
+  productCount?: number
 }
 
 const fetcher = async (url: string) => {

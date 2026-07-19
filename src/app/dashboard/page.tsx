@@ -35,6 +35,7 @@ import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { formatCurrency } from '@/lib/currency'
 import { COMPLETED_SALE_STATUSES, PENDING_SALE_STATUSES, isCompletedSaleStatus } from '@/lib/sales-status'
+import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import { cn } from '@/lib/utils'
 import {
   Dialog,
@@ -278,7 +279,9 @@ export default function DashboardPage() {
         supabase.from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
         supabase.from('products').select('stock_quantity, min_stock').eq('is_active', true),
         withBranchFilter(
-          supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', ['recibido', 'diagnostico', 'reparacion', 'listo']),
+          // Fuente única de "en proceso": incluye pausado y excluye listo
+          // (listo = reparación terminada, esperando retiro).
+          supabase.from('repairs').select('id', { count: 'exact', head: true }).in('status', [...ACTIVE_REPAIR_STATUSES]),
           selectedBranchId,
         ),
         withBranchFilter(

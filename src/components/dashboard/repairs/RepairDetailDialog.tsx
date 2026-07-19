@@ -28,7 +28,8 @@ import {
   DollarSign, Clock, FileText, Image as ImageIcon,
   Edit, Trash, Printer, Package as PackageIcon, CheckCircle,
   Maximize2, Minimize2, Share2, MessageCircle, Copy, Shield, X, Eye, EyeOff,
-  PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown
+  PackageCheck, PackageX, CheckCircle2, ExternalLink, XCircle, Check, ChevronDown,
+  Loader2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -36,6 +37,7 @@ import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { Repair, RepairDeliveryOutcome, RepairStatus } from '@/types/repairs'
 import { statusConfig, priorityConfig, urgencyConfig, deviceTypeConfig } from '@/config/repair-constants'
+import { getAvailableTransitions } from '@/lib/repairs/state-machine'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { PatternDrawer } from './PatternDrawer'
@@ -59,6 +61,7 @@ interface RepairDetailDialogProps {
   onEdit?: (repair: Repair) => void
   onDeliver?: (repair: Repair) => void
   onQuickPay?: (repair: Repair) => void
+  onStatusChange?: (id: string, status: RepairStatus) => Promise<boolean>
 }
 
 // Flujo lineal de estados para el stepper de progreso.
@@ -78,11 +81,13 @@ export function RepairDetailDialog({
   onClose,
   onEdit,
   onDeliver,
-  onQuickPay
+  onQuickPay,
+  onStatusChange
 }: RepairDetailDialogProps) {
   const [isMaximized, setIsMaximized] = useState(false)
   const [showSensitiveData, setShowSensitiveData] = useState(false)
   const [isSendingStatusWhatsApp, setIsSendingStatusWhatsApp] = useState(false)
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const { settings } = useSharedSettings()
   const [verificationHash, setVerificationHash] = useState<string | undefined>(undefined)
 
@@ -151,6 +156,13 @@ export function RepairDetailDialog({
 
   const getPrintPayload = (): RepairPrintPayload => {
     if (!repair) throw new Error("No repair")
+    // Campos opcionales que el tipo Repair['customer'] no declara.
+    const extraCustomerFields = repair.customer as Partial<{
+      address: string
+      city: string
+      country: string
+      document: string
+    }>
     return {
       ticketNumber: repair.ticketNumber || repair.id.slice(0, 8).toUpperCase(),
       date: new Date(repair.createdAt),
@@ -162,10 +174,10 @@ export function RepairDetailDialog({
         customerCode: repair.customer.customerCode,
         phone: repair.customer.phone,
         email: repair.customer.email,
-        address: (repair.customer as any).address,
-        city: (repair.customer as any).city,
-        country: (repair.customer as any).country,
-        document: (repair.customer as any).document,
+        address: extraCustomerFields.address,
+        city: extraCustomerFields.city,
+        country: extraCustomerFields.country,
+        document: extraCustomerFields.document,
       },
       devices: [{
         typeLabel: deviceTypeConfig[repair.deviceType]?.label || repair.deviceType,
@@ -182,6 +194,7 @@ export function RepairDetailDialog({
         phone: settings.companyPhone,
         address: settings.companyAddress,
         email: settings.companyEmail,
+        logo: settings.companyLogo || undefined,
       },
       verificationHash
     }
@@ -485,6 +498,83 @@ export function RepairDetailDialog({
             </div>
           )}
         </div>
+
+        {/* Quick status transitions container */}
+        {repair && onStatusChange && !isCancelled && (
+          <div className="px-4 sm:px-6 py-2.5 border-b bg-slate-50/50 dark:bg-slate-900/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+              Cambio rápido de estado:
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {getAvailableTransitions(repair.status).map((nextStatus) => {
+                const cfg = statusConfig[nextStatus]
+                if (!cfg) return null
+                const NextIcon = cfg.icon
+
+                return (
+                  <Button
+                    key={nextStatus}
+                    size="sm"
+                    variant="outline"
+                    className={cn(
+                      "h-7 rounded-xl text-xs font-bold gap-1.5 transition-all active:scale-95",
+                      cfg.color,
+                      "hover:bg-slate-100 dark:hover:bg-slate-900 border border-slate-200 dark:border-slate-800"
+                    )}
+                    onClick={async () => {
+                      setIsUpdatingStatus(true)
+                      try {
+                        const success = await onStatusChange(repair.id, nextStatus)
+                        if (success) {
+                          toast.success(`Estado actualizado a ${cfg.label}`)
+                        }
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : 'No se pudo actualizar el estado')
+                      } finally {
+                        setIsUpdatingStatus(false)
+                      }
+                    }}
+                    disabled={isUpdatingStatus}
+                  >
+                    {isUpdatingStatus ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <NextIcon className="h-3.5 w-3.5" />
+                    )}
+                    {cfg.label}
+                  </Button>
+                )
+              })}
+              
+              {/* Optional: Cancel option if not cancelado or entregado */}
+              {repair.status !== 'entregado' && repair.status !== 'cancelado' && !getAvailableTransitions(repair.status).includes('cancelado') && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 rounded-xl text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                  onClick={async () => {
+                    setIsUpdatingStatus(true)
+                    try {
+                      const success = await onStatusChange(repair.id, 'cancelado')
+                      if (success) {
+                        toast.success('Reparación cancelada')
+                      }
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : 'No se pudo cancelar')
+                    } finally {
+                      setIsUpdatingStatus(false)
+                    }
+                  }}
+                  disabled={isUpdatingStatus}
+                >
+                  <XCircle className="h-3.5 w-3.5 mr-1" />
+                  Cancelar
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         <ScrollArea className="flex-1 min-h-0 bg-background w-full">
           <div className="p-4 sm:p-6 space-y-5">

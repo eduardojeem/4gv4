@@ -35,6 +35,7 @@ interface RepairPrintCompanyInfo {
   phone: string
   address: string
   email: string
+  logo?: string
 }
 
 type RepairCustomerDetails = Repair['customer'] & {
@@ -128,6 +129,7 @@ export const RepairRow = memo<RepairRowProps>(
           phone: resolvedCompanyInfo.phone,
           address: resolvedCompanyInfo.address,
           email: resolvedCompanyInfo.email,
+          logo: resolvedCompanyInfo.logo,
         }
       }
     }

@@ -77,6 +77,56 @@ export type ProductsResponse = {
 
 const MAX_PRICE = PRODUCTS_MAX_PRICE
 
+/**
+ * Facetas del sidebar (marcas disponibles + rango de precio) para una
+ * organización. Un solo scan de products en vez de dos, y cacheado con
+ * unstable_cache (5 min) porque cambia poco y no depende de los filtros
+ * activos de la búsqueda. La cache-key incluye organización y tipo de usuario
+ * (retail/mayorista ven distinto set de precios y visibilidad).
+ */
+async function getProductFacetsUncached(
+  organizationId: string,
+  isWholesale: boolean
+): Promise<{ brands: string[]; priceRange: { min: number; max: number } }> {
+  const supabase = createAdminSupabase() as SupabaseClient
+  const priceCol = isWholesale ? 'wholesale_price' : 'sale_price'
+  const visibilityFilter = isWholesale
+    ? 'visibility.in.(public,wholesale)'
+    : 'visibility.eq.public'
+
+  const { data } = await supabase
+    .from('products')
+    .select(`brand, ${priceCol}, brand_details:brands(name)`)
+    .eq('organization_id', organizationId)
+    .eq('is_active', true)
+    .or(visibilityFilter)
+
+  const uniqueBrands = new Set<string>()
+  const prices: number[] = []
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const rel = row.brand_details as { name: string }[] | { name: string } | null
+    const relName = Array.isArray(rel) ? rel[0]?.name : rel?.name
+    const brandName = relName || (row.brand as string | null)
+    if (brandName) uniqueBrands.add(brandName)
+
+    const price = Number(row[priceCol])
+    if (Number.isFinite(price) && price > 0) prices.push(price)
+  }
+
+  const min = prices.length > 0 ? Math.floor(Math.min(...prices) / 5000) * 5000 : 0
+  const max = prices.length > 0 ? Math.ceil(Math.max(...prices) / 5000) * 5000 : MAX_PRICE
+
+  return { brands: Array.from(uniqueBrands).sort(), priceRange: { min, max } }
+}
+
+function getProductFacets(organizationId: string, isWholesale: boolean) {
+  return unstable_cache(
+    () => getProductFacetsUncached(organizationId, isWholesale),
+    ['product-facets', organizationId, isWholesale ? 'wholesale' : 'retail'],
+    { revalidate: 300, tags: [`product-facets:${organizationId}`] }
+  )()
+}
+
 export async function getPublicProducts(filters: ProductFilters): Promise<ProductsResponse> {
   const supabase = createAdminSupabase() as SupabaseClient
   const organization = await resolveServerPublicOrganization(supabase)
@@ -143,35 +193,50 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     isWholesale = result.isWholesale
   }
 
+  // Filtro por sucursal: se resuelve ANTES de armar el select porque, cuando
+  // aplica, se filtra con un join !inner sobre branch_inventory (escalable: no
+  // hay que traer todos los product_id de la sucursal para un .in()).
+  // Se valida que la sucursal pertenezca a esta organización para que un
+  // branch_id falsificado en la URL no consulte inventario de otro tenant.
+  let useBranchJoin = false
+  if (branchId) {
+    const { data: branchRow, error: branchError } = await supabase
+      .from('branches')
+      .select('id')
+      .eq('id', branchId)
+      .eq('organization_id', organization.id)
+      .maybeSingle()
+
+    if (branchError) {
+      // La tabla puede no existir en este deployment: se ignora el filtro en
+      // vez de devolver un catálogo vacío.
+      console.warn('[getPublicProducts] Branch filter skipped:', branchError.message)
+    } else if (!branchRow) {
+      // Sucursal inexistente o de otra organización → sin resultados.
+      return {
+        products: [],
+        total: 0,
+        page,
+        perPage,
+        totalPages: 0,
+        brands: [],
+        priceRange: { min: 0, max: MAX_PRICE },
+        isWholesale,
+      }
+    } else {
+      useBranchJoin = true
+    }
+  }
+
   // Build query - only active products, never select wholesale_price for non-wholesale
   // Typed as string to avoid TS2590 (union type too complex with long string literals)
-  const selectFields: string = isWholesale
+  const baseSelectFields: string = isWholesale
     ? 'id, name, sku, description, brand, sale_price, wholesale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
     : 'id, name, sku, description, brand, sale_price, has_offer, offer_price, installments_enabled, installments_public, installments_plans, stock_quantity, is_active, featured, image_url, images, unit_measure, barcode, category:categories(id, name), brand_details:brands(name)'
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let queryBuilder = (supabase as any)
-    .from('products')
-    .select(selectFields, { count: 'exact' })
-    .eq('organization_id', organization.id)
-    .eq('is_active', true)
-
-  // Filter visibility
-  // If wholesale: show 'public' and 'wholesale'
-  // If retail: show 'public' only
-  if (isWholesale) {
-    queryBuilder = queryBuilder.in('visibility', ['public', 'wholesale'])
-  } else {
-    queryBuilder = queryBuilder.eq('visibility', 'public')
-  }
-
-  // Apply search filter with sanitized input
-  if (query) {
-    queryBuilder = queryBuilder.or(
-      `name.ilike.%${query}%,sku.ilike.%${query}%,description.ilike.%${query}%,brand.ilike.%${query}%`
-    )
-  }
-
+  // Sub-consultas que dependen de la BD se resuelven una sola vez, antes de
+  // armar el query, para que el builder de abajo sea sincrónico y reutilizable.
+  let categoryIds: string[] = []
   if (categoryId) {
     // Una categoría padre debe incluir los productos de sus subcategorías,
     // no solo los asignados directamente a ella.
@@ -181,92 +246,96 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
       .eq('organization_id', organization.id)
       .eq('parent_id', categoryId)
 
-    const categoryIds = [categoryId, ...(childCategories ?? []).map((c) => c.id)]
-    queryBuilder = categoryIds.length > 1
-      ? queryBuilder.in('category_id', categoryIds)
-      : queryBuilder.eq('category_id', categoryId)
+    categoryIds = [categoryId, ...(childCategories ?? []).map((c) => c.id)]
   }
 
+  // El listado de marcas se arma con brand_details.name (relación brands) con
+  // fallback al campo de texto `brand`; el filtro debe aceptar ambas fuentes,
+  // si no una marca listada por la relación devolvería 0 resultados.
+  let brandRowId: string | null = null
   if (brand) {
-    // El listado de marcas se arma con brand_details.name (relación brands) con
-    // fallback al campo de texto `brand`; el filtro debe aceptar ambas fuentes,
-    // si no una marca listada por la relación devolvería 0 resultados.
     const { data: brandRow } = await supabase
       .from('brands')
       .select('id')
       .eq('organization_id', organization.id)
       .eq('name', brand)
       .maybeSingle()
+    brandRowId = brandRow?.id ?? null
+  }
 
-    if (brandRow?.id) {
-      // Valor citado y sin comillas/backslashes para el .or() de PostgREST.
-      const quotedBrand = `"${brand.replace(/[\\"]/g, '')}"`
-      queryBuilder = queryBuilder.or(`brand.eq.${quotedBrand},brand_id.eq.${brandRow.id}`)
-    } else {
-      queryBuilder = queryBuilder.eq('brand', brand)
+  const priceCol = isWholesale ? 'wholesale_price' : 'sale_price'
+
+  /** Arma el query completo. `withBranchJoin` permite reintentar sin el join. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const buildQuery = (withBranchJoin: boolean): any => {
+    const selectFields = withBranchJoin
+      ? `${baseSelectFields}, branch_inventory!inner(branch_id, stock_quantity)`
+      : baseSelectFields
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q = (supabase as any)
+      .from('products')
+      .select(selectFields, { count: 'exact' })
+      .eq('organization_id', organization.id)
+      .eq('is_active', true)
+
+    if (withBranchJoin) {
+      q = q.eq('branch_inventory.branch_id', branchId).gt('branch_inventory.stock_quantity', 0)
     }
-  }
 
-  if (minPrice > 0 || maxPrice < MAX_PRICE) {
-    const priceCol = isWholesale ? 'wholesale_price' : 'sale_price'
-    queryBuilder = queryBuilder.gte(priceCol, minPrice).lte(priceCol, maxPrice)
-  }
+    // Visibilidad: mayorista ve 'public' y 'wholesale'; retail solo 'public'.
+    q = isWholesale ? q.in('visibility', ['public', 'wholesale']) : q.eq('visibility', 'public')
 
-  if (inStock) {
-    queryBuilder = queryBuilder.gt('stock_quantity', 0)
-  }
+    if (query) {
+      q = q.or(
+        `name.ilike.%${query}%,sku.ilike.%${query}%,description.ilike.%${query}%,brand.ilike.%${query}%`
+      )
+    }
 
-  // Branch filter: only show products available at the selected branch
-  if (branchId) {
-    try {
-      const { data: branchProducts } = await supabase
-        .from('branch_inventory')
-        .select('product_id')
-        .eq('branch_id', branchId)
-        .gt('stock_quantity', 0)
+    if (categoryIds.length > 1) q = q.in('category_id', categoryIds)
+    else if (categoryIds.length === 1) q = q.eq('category_id', categoryIds[0])
 
-      if (branchProducts && branchProducts.length > 0) {
-        const productIds = branchProducts.map(bp => bp.product_id)
-        queryBuilder = queryBuilder.in('id', productIds)
+    if (brand) {
+      if (brandRowId) {
+        // Valor citado y sin comillas/backslashes para el .or() de PostgREST.
+        const quotedBrand = `"${brand.replace(/[\\"]/g, '')}"`
+        q = q.or(`brand.eq.${quotedBrand},brand_id.eq.${brandRowId}`)
       } else {
-        // No products in this branch — return empty
-        return {
-          products: [],
-          total: 0,
-          page,
-          perPage,
-          totalPages: 0,
-          brands: [],
-          priceRange: { min: 0, max: MAX_PRICE },
-          isWholesale,
-        }
+        q = q.eq('brand', brand)
       }
-    } catch (err) {
-      // branch_inventory table might not exist — log and ignore filter
-      console.warn('[getPublicProducts] Branch filter skipped:', err instanceof Error ? err.message : err)
     }
-  }
 
-  // Apply sorting
-  switch (sort) {
-    case 'price_asc':
-      queryBuilder = queryBuilder.order(isWholesale ? 'wholesale_price' : 'sale_price', { ascending: true })
-      break
-    case 'price_desc':
-      queryBuilder = queryBuilder.order(isWholesale ? 'wholesale_price' : 'sale_price', { ascending: false })
-      break
-    case 'newest':
-      queryBuilder = queryBuilder.order('created_at', { ascending: false })
-      break
-    default:
-      queryBuilder = queryBuilder.order('name', { ascending: true })
+    if (minPrice > 0 || maxPrice < MAX_PRICE) {
+      q = q.gte(priceCol, minPrice).lte(priceCol, maxPrice)
+    }
+
+    if (inStock) q = q.gt('stock_quantity', 0)
+
+    switch (sort) {
+      case 'price_asc':
+        return q.order(priceCol, { ascending: true })
+      case 'price_desc':
+        return q.order(priceCol, { ascending: false })
+      case 'newest':
+        return q.order('created_at', { ascending: false })
+      default:
+        return q.order('name', { ascending: true })
+    }
   }
 
   // Apply pagination
   const from = (page - 1) * perPage
   const to = from + perPage - 1
 
-  const { data: products, error, count } = await queryBuilder.range(from, to)
+  let { data: products, error, count } = await buildQuery(useBranchJoin).range(from, to)
+
+  // Si el join a branch_inventory falla (p.ej. la tabla no existe en este
+  // deployment), se reintenta sin el filtro de sucursal: mejor mostrar el
+  // catálogo completo que romper la página.
+  if (error && useBranchJoin) {
+    console.warn('[getPublicProducts] Branch join failed, retrying without it:', error.message)
+    ;({ data: products, error, count } = await buildQuery(false).range(from, to))
+  }
 
   if (error) {
     throw new Error(error.message)
@@ -303,38 +372,10 @@ export async function getPublicProducts(filters: ProductFilters): Promise<Produc
     }
   })
 
-  // Fetch brands for filter sidebar
-  // Priority: 1. brands relation, 2. brand text field
-  const { data: productsData } = await supabase
-    .from('products')
-    .select('brand, brand_details:brands(name)')
-    .eq('organization_id', organization.id)
-    .eq('is_active', true)
-    // Also apply visibility filter to brands query to show relevant brands only
-    .or(isWholesale ? 'visibility.in.(public,wholesale)' : 'visibility.eq.public')
-
-  const uniqueBrands = new Set<string>()
-  productsData?.forEach((p) => {
-    const brandName = (p.brand_details as { name: string }[] | null)?.[0]?.name || (p.brand as string)
-    if (brandName) uniqueBrands.add(brandName)
-  })
-
-  const brands = Array.from(uniqueBrands).sort()
-
-  // Fetch price range meta — use the appropriate price column for the user type
-  const priceCol = isWholesale ? 'wholesale_price' : 'sale_price'
-  const { data: priceData } = await supabase
-    .from('products')
-    .select(priceCol)
-    .eq('organization_id', organization.id)
-    .eq('is_active', true)
-    .not(priceCol, 'is', null)
-    // Also apply visibility filter
-    .or(isWholesale ? 'visibility.in.(public,wholesale)' : 'visibility.eq.public')
-
-  const prices = priceData?.map((p) => p[priceCol] as number).filter((p: number) => p > 0) || []
-  const metaMinPrice = prices.length > 0 ? Math.floor(Math.min(...prices) / 5000) * 5000 : 0
-  const metaMaxPrice = prices.length > 0 ? Math.ceil(Math.max(...prices) / 5000) * 5000 : MAX_PRICE
+  // Facetas del sidebar (marcas + rango de precio): un único scan cacheado por
+  // organización/tipo de usuario, en vez de dos scans completos por request.
+  const { brands, priceRange } = await getProductFacets(organization.id, isWholesale)
+  const { min: metaMinPrice, max: metaMaxPrice } = priceRange
 
   return {
     products: publicProducts,

@@ -43,6 +43,8 @@ export interface SystemSettingsRow {
 export interface SharedSettings {
   // Company
   companyName: string
+  /** Logo de la organización (para recibos/impresiones). */
+  companyLogo: string
   companyEmail: string
   companyPhone: string
   companyRuc: string
@@ -85,6 +87,7 @@ const SETTINGS_CACHE_KEY = 'admin.shared-settings.cache'
 
 export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   companyName: 'Mi Empresa',
+  companyLogo: '',
   companyEmail: 'info@empresa.com',
   companyPhone: '',
   companyRuc: '',
@@ -142,6 +145,7 @@ function writeSettingsCache(settings: SharedSettings) {
 function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
   return {
     companyName: data.company_name || DEFAULT_SHARED_SETTINGS.companyName,
+    companyLogo: (data as { company_logo?: string | null }).company_logo || DEFAULT_SHARED_SETTINGS.companyLogo,
     companyEmail: data.company_email || DEFAULT_SHARED_SETTINGS.companyEmail,
     companyPhone: data.company_phone || DEFAULT_SHARED_SETTINGS.companyPhone,
     companyRuc: data.company_ruc || DEFAULT_SHARED_SETTINGS.companyRuc,

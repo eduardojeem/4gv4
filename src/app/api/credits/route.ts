@@ -128,7 +128,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
 
     const sales = salesResult.data ?? []
     const saleIds = sales.map((s) => s.id)
-    let saleItems: any[] = []
+    let saleItems: Array<Record<string, unknown>> = []
 
     if (saleIds.length > 0) {
       const { data: items, error: itemsError } = await supabase
@@ -252,9 +252,13 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
     }
 
     try {
+      // Scopeado por organización: el cliente admin bypasea RLS, y sin este
+      // filtro el movimiento podía engancharse a la caja abierta de OTRA
+      // organización (cualquier sesión "principal" de todo el sistema).
       const { data: openSessions } = await supabase
         .from('cash_closures')
         .select('id, register_id')
+        .eq('organization_id', organization.id)
         .is('date', null)
         .order('created_at', { ascending: false })
 
@@ -273,6 +277,7 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
           payment_method: method,
           created_by: user.id,
           created_at: new Date().toISOString(),
+          organization_id: organization.id,
         })
       }
     } catch (cashError) {

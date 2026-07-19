@@ -17,7 +17,8 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Save, X, User, Phone, Mail, Smartphone, Laptop, Tablet,
-  AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator, FileText
+  AlertCircle, Trash, Plus, Zap, UserPlus, Pencil, Package, MessageSquare, DollarSign, Calculator, FileText,
+  Search, Loader2
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -123,6 +124,54 @@ export function RepairFormDialogV2({
   const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<{ id: string; name: string; phone: string; email: string } | null>(null)
   const [selectedQuickCustomer, setSelectedQuickCustomer] = useState<{ id: string; name: string; phone: string; email: string } | null>(null)
+
+  // Inventory part lookup states
+  const [inventorySearchOpen, setInventorySearchOpen] = useState(false)
+  const [inventorySearchQuery, setInventorySearchQuery] = useState('')
+  const [inventoryProducts, setInventoryProducts] = useState<Array<{
+    id: string
+    name: string
+    sku?: string | null
+    sale_price?: number | null
+    offer_price?: number | null
+    stock_quantity?: number | null
+  }>>([])
+  const [loadingInventory, setLoadingInventory] = useState(false)
+
+  // Fetch inventory products with debounce
+  useEffect(() => {
+    if (!inventorySearchOpen) {
+      setInventoryProducts([])
+      setInventorySearchQuery('')
+      return
+    }
+
+    const controller = new AbortController()
+    setLoadingInventory(true)
+
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/products?per_page=15&query=${encodeURIComponent(inventorySearchQuery)}`,
+          { signal: controller.signal }
+        )
+        const payload = await res.json().catch(() => ({}))
+        const productsList = Array.isArray(payload?.data?.products) ? payload.data.products : []
+        setInventoryProducts(productsList)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setInventoryProducts([])
+        }
+      } finally {
+        setLoadingInventory(false)
+      }
+    }, 250)
+
+    return () => {
+      clearTimeout(t)
+      controller.abort()
+    }
+  }, [inventorySearchOpen, inventorySearchQuery])
 
   // Select schema based on quick mode
   const resolver = zodResolver(quickMode ? RepairFormQuickSchema : RepairFormSchema) as unknown as import('react-hook-form').Resolver<RepairFormData>
@@ -1101,22 +1150,34 @@ export function RepairFormDialogV2({
                       )}
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => appendPart({
-                      name: '',
-                      cost: 0,
-                      quantity: 1,
-                      supplier: '',
-                      partNumber: ''
-                    })}
-                    className="gap-2 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300 dark:hover:bg-orange-950/50 dark:hover:text-orange-400 dark:hover:border-orange-700 transition-colors shadow-sm"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Agregar Repuesto
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setInventorySearchOpen(true)}
+                      className="gap-2 hover:bg-cyan-50 hover:text-cyan-700 hover:border-cyan-300 dark:hover:bg-cyan-950/50 dark:hover:text-cyan-400 dark:hover:border-cyan-700 transition-colors shadow-sm"
+                    >
+                      <Package className="h-4 w-4" />
+                      Agregar del Inventario
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => appendPart({
+                        name: '',
+                        cost: 0,
+                        quantity: 1,
+                        supplier: '',
+                        partNumber: ''
+                      })}
+                      className="gap-2 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-300 dark:hover:bg-orange-950/50 dark:hover:text-orange-400 dark:hover:border-orange-700 transition-colors shadow-sm"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Agregar Repuesto
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3 pt-6">
@@ -1543,6 +1604,101 @@ export function RepairFormDialogV2({
       onCustomerUpdated={handleQuickCustomerUpdated}
       customerToEdit={editingCustomer}
     />
+
+    {/* Inventory Product Selector Modal */}
+    <Dialog open={inventorySearchOpen} onOpenChange={setInventorySearchOpen}>
+      <DialogContent className="sm:max-w-[550px] max-h-[85vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-4 border-b">
+          <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+            <Package className="h-5.5 w-5.5 text-cyan-600 dark:text-cyan-400" />
+            Buscar Repuesto en Inventario
+          </DialogTitle>
+          <DialogDescription>
+            Busca y selecciona repuestos del inventario local para agregarlos directamente a esta reparación.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="p-6 pb-3 border-b bg-slate-50/50 dark:bg-slate-900/10">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={inventorySearchQuery}
+              onChange={(e) => setInventorySearchQuery(e.target.value)}
+              placeholder="Buscar por nombre de producto o SKU..."
+              className="pl-9.5"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 min-h-[300px]">
+          {loadingInventory ? (
+            <div className="flex flex-col items-center justify-center py-20 text-sm text-muted-foreground gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-cyan-600 dark:text-cyan-400" />
+              <span>Buscando repuestos en el inventario...</span>
+            </div>
+          ) : inventoryProducts.length > 0 ? (
+            <div className="grid gap-2.5">
+              {inventoryProducts.map((product) => (
+                <div
+                  key={product.id}
+                  className="flex items-center justify-between p-3.5 border rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-900/40 cursor-pointer transition-all duration-200"
+                  onClick={() => {
+                    appendPart({
+                      name: product.name,
+                      cost: product.offer_price || product.sale_price || 0,
+                      quantity: 1,
+                      supplier: 'Inventario Local',
+                      partNumber: product.sku || ''
+                    })
+                    toast.success(`Repuesto "${product.name}" agregado`)
+                    setInventorySearchOpen(false)
+                  }}
+                >
+                  <div className="min-w-0 flex-1 pr-3">
+                    <p className="font-bold text-sm text-slate-850 dark:text-slate-150 leading-snug truncate">
+                      {product.name}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1.5 text-2xs font-semibold text-muted-foreground">
+                      {product.sku && (
+                        <Badge variant="outline" className="font-mono py-0.5 px-2 text-[9px] font-bold">
+                          SKU: {product.sku}
+                        </Badge>
+                      )}
+                      <span>
+                        Stock: {product.stock_quantity !== null && product.stock_quantity !== undefined
+                          ? `${product.stock_quantity} disp.`
+                          : 'Ilimitado'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <strong className="text-sm font-black text-cyan-600 dark:text-cyan-400">
+                      {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(product.offer_price || product.sale_price || 0)}
+                    </strong>
+                    <Button type="button" size="sm" variant="secondary" className="h-7 px-3 text-xs font-bold rounded-lg">
+                      Seleccionar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-20">
+              <Package className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm font-bold text-slate-700 dark:text-slate-350">
+                {inventorySearchQuery ? 'No se encontraron repuestos' : 'Escribe para buscar repuestos'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                {inventorySearchQuery 
+                  ? 'Intenta con otros términos de búsqueda o agrega un repuesto personalizado manual.'
+                  : 'Busca por nombre, categoría o código SKU para filtrar la lista.'}
+              </p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   )
 }

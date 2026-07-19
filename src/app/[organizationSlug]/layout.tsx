@@ -21,7 +21,11 @@ export default async function OrganizationPublicLayout({
         <div 
           className="flex min-h-screen flex-col" 
           data-color-scheme={brandColor === 'custom' ? undefined : brandColor}
-          style={brandColor === 'custom' && customBrandColor ? { '--primary': customBrandColor } as React.CSSProperties : undefined}
+          // El color de marca se expone como --brand-primary (no como --primary
+          // directo): globals.css lo mapea y, en modo oscuro, lo aclara. Antes
+          // una marca casi negra quedaba ilegible sobre fondo oscuro.
+          data-custom-brand={brandColor === 'custom' && customBrandColor ? '' : undefined}
+          style={brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } as React.CSSProperties : undefined}
         >
           <SkipToContentLink />
           <PublicHeader />

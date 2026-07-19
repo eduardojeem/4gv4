@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation'
 import ProductsPage, { generateMetadata as generateProductsMetadata } from '@/app/(public)/productos/page'
 import { resolvePublicStorefrontOrganizationBySlug } from '@/lib/saas/public-tenant'
 
-export const revalidate = 60
+// Dinámica: el catálogo depende de headers() (tenant) y de los filtros de la
+// URL. El caché real vive en getProductFacets (unstable_cache).
+export const dynamic = 'force-dynamic'
 
 type Props = {
   params: Promise<{ organizationSlug: string }>

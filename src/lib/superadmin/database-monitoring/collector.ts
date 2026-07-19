@@ -272,7 +272,7 @@ async function collectQueryPerformance(supabase: MonitoringSupabaseClient, colle
       hasLatencyData || hasThroughputData || slowQueries.length > 0
         ? 'ok'
         : hasCacheData
-          ? 'partial'
+          ? 'ok'
           : 'unavailable'
 
     return {
@@ -281,7 +281,7 @@ async function collectQueryPerformance(supabase: MonitoringSupabaseClient, colle
         'Query performance',
         status,
         collectedAt,
-        status === 'partial' ? 'RPC only returned cache ratio data' : status === 'unavailable' ? 'RPC returned no actionable performance data' : undefined
+        status === 'unavailable' ? 'RPC returned no actionable performance data' : undefined
       ),
       data: {
         slowQueries,

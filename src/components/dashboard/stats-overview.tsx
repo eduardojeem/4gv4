@@ -6,6 +6,7 @@ import { GSIcon } from '@/components/ui/standardized-components'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { isCompletedSaleStatus, isPendingSaleStatus } from '@/lib/sales-status'
+import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 // Tipos locales para evitar dependencias profundas de generics de Supabase
 type SaleRow = { id: string; total?: number | null; status?: string | null; created_at: string }
 type RepairRow = {
@@ -165,7 +166,7 @@ export function StatsOverview() {
           supabase.from('sales').select('total_amount').gte('created_at', yesterdayIso).lt('created_at', todayIso),
           supabase.from('sales').select('id', { count: 'exact' }).eq('status', 'pendiente'),
           supabase.from('customers').select('id', { count: 'exact' }).gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()),
-          supabase.from('repairs').select('id', { count: 'exact' }).in('status', ['recibido', 'diagnostico', 'reparacion']),
+          supabase.from('repairs').select('id', { count: 'exact' }).in('status', [...ACTIVE_REPAIR_STATUSES]),
           supabase.from('products').select('stock_quantity'),
           supabase.from('products').select('stock_quantity, min_stock').gt('stock_quantity', 0) // for correct low-stock calculation
         ])

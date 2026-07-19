@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { Package, Store, Menu, X, Phone, User, UserPlus, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag } from 'lucide-react'
+import { Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,9 +34,11 @@ import {
 import { LogOut } from 'lucide-react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname, isTenantPublicSection } from '@/lib/saas/tenant'
+import { AuthModal } from '@/components/public/AuthModal'
 
 export function PublicHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [authOpen, setAuthOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -370,29 +372,31 @@ export function PublicHeader() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="hidden md:flex items-center gap-1.5">
-              <Button 
-                asChild 
-                variant="ghost" 
-                size="sm" 
-                className="rounded-lg px-4 font-semibold text-muted-foreground hover:text-foreground transition-all duration-200"
+            <>
+              {/* Botón "Mi cuenta" — desktop (mismo diseño que el marketplace) */}
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setAuthOpen(true)}
+                className="group hidden gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 pl-1.5 pr-4 text-white shadow-md shadow-cyan-600/25 transition-all duration-200 hover:from-cyan-500 hover:to-sky-500 hover:shadow-lg hover:shadow-cyan-500/30 focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 active:scale-[0.97] dark:focus-visible:ring-offset-slate-950 md:inline-flex"
               >
-                <Link href={customerLoginHref} className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Ingresar
-                </Link>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 transition-transform duration-200 group-hover:scale-110">
+                  <User className="h-3.5 w-3.5" />
+                </span>
+                Mi cuenta
               </Button>
-              <Button 
-                asChild 
-                size="sm" 
-                className="rounded-lg px-5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
+              {/* Icono "Mi cuenta" — mobile */}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setAuthOpen(true)}
+                className="h-9 w-9 rounded-full border border-cyan-200 bg-cyan-50 text-cyan-700 transition-colors hover:bg-cyan-100 hover:text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/70 md:hidden"
+                aria-label="Mi cuenta"
               >
-                <Link href={customerRegisterHref} className="flex items-center gap-2">
-                  <UserPlus className="h-4 w-4" />
-                  Registrarme
-                </Link>
+                <User className="h-4 w-4" />
               </Button>
-            </div>
+            </>
           )}
 
           {/* Mobile menu toggle */}
@@ -488,24 +492,15 @@ export function PublicHeader() {
                 </Button>
               </>
             ) : (
-              <>
-                <Button asChild size="sm" variant="outline" className="w-full rounded-lg">
-                  <Link href={customerLoginHref} className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Login cliente
-                  </Link>
-                </Button>
-                <Button 
-                  asChild 
-                  size="sm" 
-                  className="w-full rounded-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md hover:shadow-lg transition-all duration-300 font-semibold"
-                >
-                  <Link href={customerRegisterHref} className="flex items-center gap-2">
-                    <UserPlus className="h-4 w-4" />
-                    Registrarme como cliente
-                  </Link>
-                </Button>
-              </>
+              <Button
+                type="button"
+                size="sm"
+                className="w-full gap-2 rounded-full bg-gradient-to-r from-cyan-600 to-sky-600 text-white shadow-md shadow-cyan-600/20 transition-all hover:from-cyan-500 hover:to-sky-500 active:scale-[0.99]"
+                onClick={() => { setMobileMenuOpen(false); setAuthOpen(true) }}
+              >
+                <User className="h-4 w-4" />
+                Mi cuenta
+              </Button>
             )}
           </div>
 
@@ -539,6 +534,14 @@ export function PublicHeader() {
           )}
         </nav>
       </div>
+
+      {/* Auth modal — login/registro del cliente, scopeado al tenant */}
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        loginHref={customerLoginHref}
+        registerHref={customerRegisterHref}
+      />
 
       {/* Logout Confirmation Dialog */}
       <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>

@@ -109,21 +109,22 @@ export function RepairsProvider({ children }: RepairsProviderProps) {
     const supabase = useMemo(() => createClient(), [])
 
     const fetchRepairsWithCustomerFallback = useCallback(async () => {
-        const response = await fetch('/api/repairs', {
+        const response = await fetch('/api/repairs?pageSize=100', {
             headers: branchHeaders(selectedBranchId),
             cache: 'no-store',
         })
 
-        const payload = await response.json().catch(() => null) as { repairs?: unknown[]; error?: string } | null
+        const payload = await response.json().catch(() => null) as { repairs?: unknown[]; pagination?: { total: number }; error?: string } | null
 
         if (!response.ok) {
             return {
                 data: [],
+                total: 0,
                 error: new Error(payload?.error || 'No se pudieron cargar las reparaciones'),
             }
         }
 
-        return { data: payload?.repairs || [], error: null }
+        return { data: payload?.repairs || [], total: payload?.pagination?.total ?? 0, error: null }
     }, [selectedBranchId])
 
     // Fetch all repairs

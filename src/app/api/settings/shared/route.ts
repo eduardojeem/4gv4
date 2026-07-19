@@ -63,8 +63,11 @@ export async function GET() {
     )
   }
 
-  const [{ data: orgSettings, error: orgError }, { data: branch, error: branchError }] =
-    await Promise.all([
+  const [
+    { data: orgSettings, error: orgError },
+    { data: branch, error: branchError },
+    { data: organization },
+  ] = await Promise.all([
       admin
         .from('organization_settings')
         .select('display_name, currency, timezone, modules')
@@ -75,6 +78,13 @@ export async function GET() {
         .select('phone, email, address, city')
         .eq('organization_id', organizationId)
         .eq('is_default', true)
+        .maybeSingle(),
+      // El logo de la organización: sin esto los recibos caían al logo/nombre
+      // de la plataforma (NEXT_PUBLIC_COMPANY_*), que es marca del SaaS.
+      admin
+        .from('organizations')
+        .select('logo_url')
+        .eq('id', organizationId)
         .maybeSingle(),
     ])
 
@@ -108,6 +118,7 @@ export async function GET() {
     data: {
       ...globalRow,
       ...mapSettingsToDB(effectiveSettings),
+      company_logo: organization?.logo_url ?? null,
     },
   })
 }

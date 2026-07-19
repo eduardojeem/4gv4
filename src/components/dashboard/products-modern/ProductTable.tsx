@@ -101,15 +101,55 @@ export function ProductTable({
 
   if (loading) {
     return (
-      <div className="space-y-2">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-16 bg-gradient-to-r from-gray-100 via-gray-50 to-gray-100 dark:from-gray-800 dark:via-gray-900 dark:to-gray-800 rounded-lg animate-pulse relative overflow-hidden"
-          >
-            <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/60 dark:via-gray-700/60 to-transparent" />
-          </div>
-        ))}
+      <div className="rounded-[24px] border border-slate-200/50 bg-white/70 dark:bg-slate-950/60 backdrop-blur-md overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader className="bg-gradient-to-r from-slate-50/50 via-white/30 to-slate-50/50 dark:from-slate-900/40 dark:via-slate-950/20 dark:to-slate-900/40 border-b border-slate-200/40 dark:border-slate-800/40">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-12"><div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-850 animate-pulse" /></TableHead>
+                <TableHead className="w-20">Imagen</TableHead>
+                <TableHead>Nombre</TableHead>
+                <TableHead>SKU</TableHead>
+                <TableHead>Categoría</TableHead>
+                <TableHead className="text-right">Inventario</TableHead>
+                <TableHead className="text-right">Precio</TableHead>
+                <TableHead>Estado</TableHead>
+                {onToggleActive && <TableHead className="text-center">Público</TableHead>}
+                <TableHead className="text-right w-40">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i} className="border-b border-slate-100 dark:border-slate-800/40">
+                  <TableCell><div className="h-4 w-4 rounded bg-slate-150 dark:bg-slate-800 animate-pulse" /></TableCell>
+                  <TableCell>
+                    <div className="h-10 w-10 rounded-lg bg-slate-150 dark:bg-slate-800 animate-pulse" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-32 rounded bg-slate-150 dark:bg-slate-800 animate-pulse" />
+                      <div className="h-3 w-20 rounded bg-slate-100 dark:bg-slate-850 animate-pulse" />
+                    </div>
+                  </TableCell>
+                  <TableCell><div className="h-6 w-16 rounded-full bg-slate-150 dark:bg-slate-800 animate-pulse" /></TableCell>
+                  <TableCell><div className="h-6 w-20 rounded-full bg-slate-100 dark:bg-slate-850 animate-pulse" /></TableCell>
+                  <TableCell className="text-right"><div className="h-4 w-12 rounded bg-slate-150 dark:bg-slate-800 animate-pulse ml-auto" /></TableCell>
+                  <TableCell className="text-right"><div className="h-4 w-16 rounded bg-slate-150 dark:bg-slate-800 animate-pulse ml-auto" /></TableCell>
+                  <TableCell><div className="h-6 w-20 rounded-full bg-slate-100 dark:bg-slate-850 animate-pulse" /></TableCell>
+                  {onToggleActive && (
+                    <TableCell><div className="h-5 w-9 rounded-full bg-slate-150 dark:bg-slate-800 animate-pulse mx-auto" /></TableCell>
+                  )}
+                  <TableCell>
+                    <div className="flex gap-1.5 justify-end">
+                      <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-850 animate-pulse" />
+                      <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-850 animate-pulse" />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     )
   }
@@ -132,10 +172,10 @@ export function ProductTable({
   }
 
   return (
-    <div className={cn('rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm bg-white dark:bg-gray-800', className)}>
+    <div className={cn('rounded-[24px] border border-slate-200/50 bg-white/70 backdrop-blur-md dark:bg-slate-950/60 overflow-hidden shadow-sm', className)}>
       <div className="overflow-x-auto" role="region" aria-label="Tabla de productos" tabIndex={0}>
         <Table>
-          <TableHeader className="bg-gradient-to-r from-slate-50 via-gray-50 to-slate-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 sticky top-0 z-10 border-b-2 border-gray-100 dark:border-gray-700">
+          <TableHeader className="bg-gradient-to-r from-slate-50/50 via-white/30 to-slate-50/50 dark:from-slate-900/40 dark:via-slate-950/20 dark:to-slate-900/40 sticky top-0 z-10 border-b border-slate-200/40 dark:border-slate-800/40">
             <TableRow className="hover:bg-transparent">
               {/* Select All Checkbox */}
               <TableHead className={cn("w-12", isCompact && "h-8 py-1")}>
@@ -232,6 +272,7 @@ export function ProductTable({
               const imageUrl: string | undefined =
                 ((product as any).images as string[] | null | undefined)?.[0] ||
                 product.image ||
+                (product as any).image_url ||
                 undefined
               const isValidImage = imageUrl && (imageUrl.startsWith('data:image') || imageUrl.startsWith('/') || imageUrl.startsWith('http'))
 
@@ -388,20 +429,25 @@ export function ProductTable({
                     <TableCell className={cn("text-center", isCompact && "py-1")} onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-col items-center gap-1">
                         <Switch
-                          checked={product.is_active}
+                          checked={product.is_active && (product as any).visibility !== 'hidden'}
                           onCheckedChange={(checked) => onToggleActive(product, checked)}
-                          aria-label={product.is_active ? 'Ocultar del catálogo' : 'Publicar en catálogo'}
+                          aria-label={product.is_active && (product as any).visibility !== 'hidden' ? 'Ocultar del catálogo' : 'Publicar en catálogo'}
                           className="data-[state=checked]:bg-emerald-500"
                         />
                         <span className={cn(
-                          "flex items-center gap-0.5",
+                          "flex items-center gap-0.5 font-bold",
                           isCompact ? "text-[9px]" : "text-[10px]",
-                          product.is_active ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"
+                          (product.is_active && (product as any).visibility !== 'hidden') ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"
                         )}>
-                          {product.is_active
-                            ? <><Globe className="h-2.5 w-2.5" /> Visible</>
-                            : <><EyeOff className="h-2.5 w-2.5" /> Oculto</>
-                          }
+                          {!product.is_active ? (
+                            <><EyeOff className="h-2.5 w-2.5" /> Inactivo</>
+                          ) : (product as any).visibility === 'hidden' ? (
+                            <><EyeOff className="h-2.5 w-2.5" /> Oculto</>
+                          ) : (product as any).visibility === 'wholesale' ? (
+                            <><Globe className="h-2.5 w-2.5 text-blue-500" /> Mayorista</>
+                          ) : (
+                            <><Globe className="h-2.5 w-2.5" /> Visible</>
+                          )}
                         </span>
                       </div>
                     </TableCell>

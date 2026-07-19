@@ -404,6 +404,10 @@ function RepairsPageContent() {
           }
 
           const payload: RepairPrintPayload = {
+            // Sin `company` el recibo caía al fallback de plataforma
+            // (config.company = NEXT_PUBLIC_COMPANY_*), imprimiendo la marca
+            // del SaaS en vez de la de la organización.
+            company: repairListCompanyInfo,
             customer: {
               id: validRepairs[0]?.customer?.id || data.existingCustomerId,
               name: data.customerName,
@@ -632,10 +636,12 @@ function RepairsPageContent() {
     name: sharedSettings.companyName,
     phone: sharedSettings.companyPhone,
     address: sharedSettings.companyAddress,
-    email: sharedSettings.companyEmail
+    email: sharedSettings.companyEmail,
+    logo: sharedSettings.companyLogo || undefined
   }), [
     sharedSettings.companyAddress,
     sharedSettings.companyEmail,
+    sharedSettings.companyLogo,
     sharedSettings.companyName,
     sharedSettings.companyPhone
   ])
@@ -647,6 +653,10 @@ function RepairsPageContent() {
     dateRange?.from ||
     dateRange?.to
   )
+
+  const activeDetailRepair = detailRepair
+    ? repairs.find((r) => r.id === detailRepair.id) || detailRepair
+    : null
 
   return (
     <div className="flex flex-col gap-4 bg-slate-50 p-4 sm:p-5 lg:p-6 dark:bg-slate-950">
@@ -913,7 +923,7 @@ function RepairsPageContent() {
 
       <RepairDetailDialog
         open={isDetailOpen}
-        repair={detailRepair}
+        repair={activeDetailRepair}
         onClose={() => setIsDetailOpen(false)}
         onEdit={(repair) => {
             setIsDetailOpen(false)
@@ -921,6 +931,7 @@ function RepairsPageContent() {
         }}
         onDeliver={(repair) => setDeliverTarget(repair)}
         onQuickPay={(repair) => setPayTarget(repair)}
+        onStatusChange={updateStatus}
       />
 
       <RepairDeleteDialog

@@ -155,16 +155,32 @@ export async function getMarketplaceOrganizations(limit = 24): Promise<Marketpla
   })
 }
 
-export async function getMarketplaceProducts(limit = 48): Promise<MarketplaceProduct[]> {
+export async function getMarketplaceProducts(
+  limit = 48,
+  options?: { q?: string; categoria?: string }
+): Promise<MarketplaceProduct[]> {
   const supabase = createAdminSupabase()
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('products')
     .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name), organizations!inner(id, name, slug)')
     .eq('is_active', true)
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
     .gt('stock_quantity', 0)
+
+  if (options?.categoria) {
+    query = query.eq('category_id', options.categoria)
+  }
+
+  if (options?.q) {
+    const qClean = options.q.trim()
+    if (qClean) {
+      query = query.or(`name.ilike.%${qClean}%,brand.ilike.%${qClean}%`)
+    }
+  }
+
+  const { data, error } = await query
     .order('featured', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -223,7 +239,7 @@ export async function getMarketplaceCategories(): Promise<MarketplaceCategory[]>
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
     .gt('stock_quantity', 0)
-    .limit(2000)
+    .limit(20000)
 
   if (error || !data) return []
 
@@ -269,7 +285,7 @@ export async function getMarketplaceBrands(limit = 50): Promise<MarketplaceBrand
     .eq('visibility', 'public')
     .eq('organizations.marketplace_public', true)
     .gt('stock_quantity', 0)
-    .limit(3000)
+    .limit(20000)
 
   if (error || !data) return []
 
@@ -354,4 +370,65 @@ export async function getPublicOrganizationPage(slug: string) {
     heroContent: settingsMap.get('hero_content') as Record<string, unknown> | undefined,
     products: ((products ?? []) as unknown as ProductRow[]).map(toPublicProduct),
   }
+}
+
+export async function getStorefrontOffers(tenantSlug: string | null): Promise<MarketplaceProduct[]> {
+  const supabase = createAdminSupabase()
+  const slug = tenantSlug || 'default'
+
+  const { data: organization } = await supabase
+    .from('organizations')
+    .select('id, name, slug, plan, logo_url, marketplace_public')
+    .eq('slug', slug)
+    .maybeSingle()
+
+  if (!organization || organization.marketplace_public === false) {
+    return []
+  }
+
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, organization_id, name, sku, description, brand, sale_price, stock_quantity, is_active, featured, has_offer, offer_price, image_url, images, unit_measure, barcode, categories(id, name)')
+    .eq('organization_id', organization.id)
+    .eq('is_active', true)
+    .eq('visibility', 'public')
+    .eq('has_offer', true)
+    .order('featured', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error || !data) return []
+
+  const { data: promotionRows } = await supabase
+    .from('promotions')
+    .select('*')
+    .eq('organization_id', organization.id)
+    .eq('public_mode', 'automatic')
+    .eq('is_active', true)
+
+  const automaticPromotions = (promotionRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
+  const rows = data as unknown as ProductRow[]
+
+  return rows
+    .map<MarketplaceProduct>((product) => {
+      const category = Array.isArray(product.categories) ? product.categories[0] : product.categories
+      const cat = category ? { id: category.id, name: category.name } : undefined
+      const publicProduct = toPublicProduct(product)
+      const priced = applyAutomaticPromotionToProduct({
+        ...publicProduct,
+        category_id: cat?.id ?? null,
+      }, automaticPromotions)
+
+      return {
+        ...publicProduct,
+        category: cat,
+        has_offer: priced.has_offer,
+        offer_price: priced.offer_price,
+        promotion_name: priced.promotion_name,
+        organization_id: organization.id,
+        organization_name: organization.name,
+        organization_slug: organization.slug,
+      }
+    })
+    .filter((p) => p.has_offer && p.offer_price != null && p.offer_price < p.sale_price)
 }

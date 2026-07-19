@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { config, isDemoNoDb } from '@/lib/config'
+import { branchHeaders } from '@/lib/branches/client'
+import { useAuth } from '@/contexts/auth-context'
+import { useBranch } from '@/contexts/branch-context'
 import { normalizeSupabaseError } from '@/utils/supabase-error'
 
 export interface Technician {
@@ -12,15 +14,6 @@ export interface Technician {
     specialty?: string
 }
 
-interface DbProfile {
-    id: string
-    full_name: string
-    email: string
-    role: string
-    specialty?: string
-}
-
-const TECHNICIAN_ROLES = new Set(['technician', 'tecnico'])
 const DEMO_TECHNICIANS: Technician[] = [
     {
         id: 'TECH-001',
@@ -40,71 +33,66 @@ const DEMO_TECHNICIANS: Technician[] = [
     }
 ]
 
-function isMissingProfilesTableError(error: unknown) {
-    const msg = (error as { message?: string })?.message?.toLowerCase?.() || ''
-    return msg.includes("could not find the table 'public.profiles'") || msg.includes('relation "profiles" does not exist')
-}
+// La caché vive a nivel de módulo (compartida en el navegador): se clava por
+// usuario + sucursal para no arrastrar técnicos de otra cuenta u organización
+// al cambiar de contexto.
+const techniciansCacheByScope = new Map<string, Technician[]>()
+const techniciansRequestByScope = new Map<string, Promise<Technician[]>>()
 
-function normalizeRole(role: string) {
-    return role
-        .trim()
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-}
-
-function mapTechnicians(data: DbProfile[]): Technician[] {
-    return (data || [])
-        .filter((profile) => TECHNICIAN_ROLES.has(normalizeRole(String(profile.role || ''))))
-        .map((technician) => ({
-            ...technician,
-            name: technician.full_name,
-            specialty: technician.specialty || undefined
-        }))
-}
-
-let techniciansCache: Technician[] | null = null
-let techniciansRequest: Promise<Technician[]> | null = null
-
+/**
+ * Los técnicos se piden al endpoint del servidor, que los acota a los miembros
+ * activos de la organización actual (y a la sucursal seleccionada).
+ *
+ * Antes se consultaba `profiles` directo desde el cliente sin filtrar por
+ * organización: el desplegable de "nueva reparación" listaba técnicos de otras
+ * empresas y además traía todas las columnas del perfil.
+ */
 async function fetchTechniciansFromSource(): Promise<Technician[]> {
     if (!config.supabase.isConfigured || isDemoNoDb()) {
         return DEMO_TECHNICIANS
     }
 
-    const supabase = createClient()
+    const response = await fetch('/api/repairs/technicians-stats', {
+        cache: 'no-store',
+        headers: branchHeaders(),
+    })
 
-    let data: DbProfile[] | null = null
-    let queryError: unknown = null
-
-    const profilesResult = await supabase
-        .from('profiles')
-        .select('*')
-        .order('full_name')
-
-    data = profilesResult.data as DbProfile[] | null
-    queryError = profilesResult.error
-
-    if (queryError) {
-        if (isMissingProfilesTableError(queryError)) {
-            return []
-        }
-
-        throw queryError
+    if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(payload?.error || 'No se pudieron cargar los tecnicos')
     }
 
-    return mapTechnicians(data || [])
+    const payload = await response.json() as {
+        technicians?: Array<{ id: string; name: string | null; specialty?: string | null }>
+    }
+
+    return (payload.technicians ?? []).map((technician) => ({
+        id: technician.id,
+        full_name: technician.name || '',
+        name: technician.name || '',
+        email: '',
+        role: 'technician',
+        specialty: technician.specialty || undefined,
+    }))
 }
 
 export function useTechnicians() {
-    const [technicians, setTechnicians] = useState<Technician[]>(() => techniciansCache || [])
-    const [isLoading, setIsLoading] = useState(techniciansCache === null)
+    const { user } = useAuth()
+    const { selectedBranchId } = useBranch()
+    const scopeKey = `${user?.id || 'anon'}:${selectedBranchId || 'all'}`
+
+    const [technicians, setTechnicians] = useState<Technician[]>(
+        () => techniciansCacheByScope.get(scopeKey) || []
+    )
+    const [isLoading, setIsLoading] = useState(!techniciansCacheByScope.has(scopeKey))
     const [error, setError] = useState<string | null>(null)
 
     const fetchTechnicians = useCallback(async (forceRefresh = false) => {
-        if (!forceRefresh && techniciansCache !== null) {
-            setTechnicians(techniciansCache)
+        const cached = techniciansCacheByScope.get(scopeKey)
+        if (!forceRefresh && cached) {
+            setTechnicians(cached)
             setIsLoading(false)
-            return techniciansCache
+            return cached
         }
 
         setIsLoading(true)
@@ -112,28 +100,30 @@ export function useTechnicians() {
 
         try {
             if (forceRefresh) {
-                techniciansCache = null
-                techniciansRequest = null
+                techniciansCacheByScope.delete(scopeKey)
+                techniciansRequestByScope.delete(scopeKey)
             }
 
-            if (!techniciansRequest) {
-                techniciansRequest = fetchTechniciansFromSource()
+            let request = techniciansRequestByScope.get(scopeKey)
+            if (!request) {
+                request = fetchTechniciansFromSource()
+                techniciansRequestByScope.set(scopeKey, request)
             }
 
-            const nextTechnicians = await techniciansRequest
-            techniciansCache = nextTechnicians
+            const nextTechnicians = await request
+            techniciansCacheByScope.set(scopeKey, nextTechnicians)
             setTechnicians(nextTechnicians)
             return nextTechnicians
         } catch (err: unknown) {
             const error = normalizeSupabaseError(err)
             console.error('Error fetching technicians:', error)
             setError(error.message)
-            return techniciansCache || []
+            return techniciansCacheByScope.get(scopeKey) || []
         } finally {
-            techniciansRequest = null
+            techniciansRequestByScope.delete(scopeKey)
             setIsLoading(false)
         }
-    }, [])
+    }, [scopeKey])
 
     useEffect(() => {
         void fetchTechnicians()

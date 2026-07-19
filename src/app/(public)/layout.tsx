@@ -48,7 +48,10 @@ export default async function PublicLayout({
         <div 
           className="flex min-h-screen flex-col" 
           data-color-scheme={brandColor === 'custom' ? undefined : brandColor}
-          style={brandColor === 'custom' && customBrandColor ? { '--primary': customBrandColor } as React.CSSProperties : undefined}
+          // Ver nota en [organizationSlug]/layout.tsx: --brand-primary lo
+          // resuelve globals.css con ajuste automático para modo oscuro.
+          data-custom-brand={brandColor === 'custom' && customBrandColor ? '' : undefined}
+          style={brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } as React.CSSProperties : undefined}
         >
           <SkipToContentLink />
           <PublicHeader />
