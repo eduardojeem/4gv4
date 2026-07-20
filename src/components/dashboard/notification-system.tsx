@@ -83,11 +83,25 @@ const notificationIcons = {
   info: Info,
 }
 
-const notificationColors = {
-  success: 'text-green-600 bg-green-50 border-green-200 dark:text-green-300 dark:bg-green-950/40 dark:border-green-900/60',
-  warning: 'text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-300 dark:bg-orange-950/40 dark:border-orange-900/60',
-  error: 'text-red-600 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-950/40 dark:border-red-900/60',
-  info: 'text-blue-600 bg-blue-50 border-blue-200 dark:text-blue-300 dark:bg-blue-950/40 dark:border-blue-900/60',
+// Acento por tipo: se aplica al chip del ícono y a la barra lateral de "no
+// leído", en vez de teñir toda la tarjeta (más limpio y legible en ambos temas).
+const typeAccent: Record<NotificationType, { chip: string; bar: string }> = {
+  success: {
+    chip: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400',
+    bar: 'bg-emerald-500',
+  },
+  warning: {
+    chip: 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400',
+    bar: 'bg-amber-500',
+  },
+  error: {
+    chip: 'bg-red-100 text-red-600 dark:bg-red-950/50 dark:text-red-400',
+    bar: 'bg-red-500',
+  },
+  info: {
+    chip: 'bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400',
+    bar: 'bg-blue-500',
+  },
 }
 
 const categoryIcons = {
@@ -105,15 +119,17 @@ function NotificationItem({
   compact = false 
 }: NotificationItemProps) {
   const Icon = notificationIcons[notification.type]
-  const CategoryIcon = categoryIcons[notification.category]
-  
+  const accent = typeAccent[notification.type]
+  const unread = !notification.read
+
   const handleMarkAsRead = () => {
     if (!notification.read) {
       onMarkAsRead(notification.id)
     }
   }
 
-  const handleAction = () => {
+  const handleAction = (e: React.MouseEvent) => {
+    e.stopPropagation()
     if (notification.action) {
       notification.action.onClick()
       handleMarkAsRead()
@@ -123,7 +139,7 @@ function NotificationItem({
   const timeAgo = (date: Date) => {
     const now = new Date()
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
-    
+
     if (diffInMinutes < 1) return 'Ahora'
     if (diffInMinutes < 60) return `${diffInMinutes}m`
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`
@@ -132,98 +148,67 @@ function NotificationItem({
 
   return (
     <div
+      onClick={handleMarkAsRead}
       className={cn(
-        "border rounded-lg p-3 transition-all duration-200 hover:shadow-sm",
-        notificationColors[notification.type],
-        !notification.read && "ring-2 ring-blue-200 dark:ring-blue-900/60",
-        compact && "p-2"
+        "group relative flex gap-3 overflow-hidden rounded-xl border border-border/60 bg-card transition-colors",
+        unread ? "bg-accent/40 hover:bg-accent/60 cursor-pointer" : "hover:bg-accent/30",
+        compact ? "p-2.5 pl-3.5" : "p-3 pl-4"
       )}
     >
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0">
-          <Icon className={cn("h-5 w-5", compact && "h-4 w-4")} />
-        </div>
-        
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <CategoryIcon className="h-3 w-3 opacity-60" />
-                <h4 className={cn(
-                  "font-medium text-sm",
-                  compact && "text-xs"
-                )}>
-                  {notification.title}
-                </h4>
-                {!notification.read && (
-                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                )}
-              </div>
-              
-              <p className={cn(
-                "text-sm opacity-80 leading-relaxed",
-                compact && "text-xs"
-              )}>
-                {notification.message}
-              </p>
-              
-              <div className="flex items-center justify-between mt-2">
-                <span className={cn(
-                  "text-xs opacity-60 flex items-center gap-1",
-                  compact && "text-xs"
-                )}>
-                  <Clock className="h-3 w-3" />
-                  {timeAgo(notification.timestamp)}
-                </span>
-                
-                {notification.actionable && notification.action && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAction}
-                    className={cn(
-                      "text-xs h-6 px-2",
-                      compact && "h-5 px-1 text-xs"
-                    )}
-                  >
-                    {notification.action.label}
-                  </Button>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-1">
-              {!notification.read && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleMarkAsRead}
-                  className={cn(
-                    "h-6 w-6 opacity-60 hover:opacity-100",
-                    compact && "h-5 w-5"
-                  )}
-                  title="Marcar como leído"
-                >
-                  <Eye className="h-3 w-3" />
-                </Button>
-              )}
-              
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onDelete(notification.id)}
-                className={cn(
-                  "h-6 w-6 opacity-60 hover:opacity-100 hover:text-red-600",
-                  compact && "h-5 w-5"
-                )}
-                title="Eliminar notificación"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        </div>
+      {/* Barra de acento para no leídas */}
+      {unread && (
+        <span className={cn("absolute inset-y-2 left-0 w-1 rounded-full", accent.bar)} />
+      )}
+
+      {/* Chip del ícono */}
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-center rounded-lg",
+          accent.chip,
+          compact ? "h-8 w-8" : "h-9 w-9"
+        )}
+      >
+        <Icon className={cn(compact ? "h-4 w-4" : "h-[18px] w-[18px]")} />
       </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <h4 className={cn("min-w-0 font-semibold leading-tight text-foreground", compact ? "text-xs" : "text-sm")}>
+            {notification.title}
+          </h4>
+          <span className="flex shrink-0 items-center gap-1 pt-0.5 text-[11px] text-muted-foreground tabular-nums">
+            {timeAgo(notification.timestamp)}
+            {unread && <span className={cn("h-1.5 w-1.5 rounded-full", accent.bar)} />}
+          </span>
+        </div>
+
+        <p className={cn("mt-0.5 line-clamp-2 text-muted-foreground", compact ? "text-xs" : "text-[13px] leading-relaxed")}>
+          {notification.message}
+        </p>
+
+        {notification.actionable && notification.action && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAction}
+            className="mt-2 h-7 rounded-full px-3 text-xs"
+          >
+            {notification.action.label}
+          </Button>
+        )}
+      </div>
+
+      {/* Descartar: aparece al hover en desktop, siempre visible en touch */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={(e) => { e.stopPropagation(); onDelete(notification.id) }}
+        className="h-6 w-6 shrink-0 self-start rounded-md text-muted-foreground/60 opacity-100 transition hover:bg-destructive/10 hover:text-destructive md:opacity-0 md:group-hover:opacity-100"
+        title="Descartar"
+        aria-label="Descartar notificación"
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
     </div>
   )
 }
@@ -272,63 +257,74 @@ export function NotificationSystem({
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
             {unreadCount > 0 && (
-              <Badge 
-                variant="destructive" 
-                className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+              <span
+                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-background"
+                aria-label={`${unreadCount} sin leer`}
               >
                 {unreadCount > 99 ? '99+' : unreadCount}
-              </Badge>
+              </span>
             )}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-80">
-          <DropdownMenuLabel className="flex items-center justify-between">
-            <span>Notificaciones</span>
+        <DropdownMenuContent align="end" className="w-[22rem] p-0" sideOffset={8}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold">Notificaciones</span>
+              {unreadCount > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">
+                  {unreadCount}
+                </span>
+              )}
+            </div>
             {unreadCount > 0 && (
-              <Badge variant="secondary">{unreadCount} nuevas</Badge>
+              <button
+                onClick={handleMarkAllAsRead}
+                className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+              >
+                Marcar leídas
+              </button>
             )}
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          
+          </div>
+          <DropdownMenuSeparator className="my-0" />
+
           {recentNotifications.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground">
-              <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No hay notificaciones</p>
+            <div className="flex flex-col items-center px-4 py-10 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                <Bell className="h-6 w-6 text-muted-foreground/60" />
+              </div>
+              <p className="text-sm font-medium text-foreground">Todo al día</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">No tenés notificaciones nuevas</p>
             </div>
           ) : (
-            <div className="max-h-96 overflow-y-auto">
-              <div className="space-y-2 p-2">
-                {recentNotifications.map(notification => (
-                  <NotificationItem
-                    key={notification.id}
-                    notification={notification}
-                    onMarkAsRead={onMarkAsRead}
-                    onDelete={onDeleteNotification}
-                    compact
-                  />
-                ))}
-              </div>
+            <div className="max-h-[22rem] space-y-1.5 overflow-y-auto p-2">
+              {recentNotifications.map(notification => (
+                <NotificationItem
+                  key={notification.id}
+                  notification={notification}
+                  onMarkAsRead={onMarkAsRead}
+                  onDelete={onDeleteNotification}
+                  compact
+                />
+              ))}
             </div>
           )}
-          
-          <DropdownMenuSeparator />
-          <div className="p-2 space-y-1">
-            <DropdownMenuItem onClick={() => setIsOpen(true)}>
-              <Eye className="mr-2 h-4 w-4" />
+
+          <DropdownMenuSeparator className="my-0" />
+          <div className="flex items-center justify-between gap-2 p-2">
+            <DropdownMenuItem
+              onClick={() => setIsOpen(true)}
+              className="flex-1 justify-center rounded-md text-xs font-medium"
+            >
               Ver todas
             </DropdownMenuItem>
-
-            {unreadCount > 0 && (
-              <DropdownMenuItem onClick={handleMarkAllAsRead}>
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Marcar todas como leídas
-              </DropdownMenuItem>
-            )}
-            
             {notifications.length > 0 && (
-              <DropdownMenuItem onClick={handleClearAll} className="text-red-600">
-                <Trash2 className="mr-2 h-4 w-4" />
-                Limpiar todas
+              <DropdownMenuItem
+                onClick={handleClearAll}
+                className="justify-center rounded-md text-xs font-medium text-red-600 focus:text-red-600"
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Limpiar
               </DropdownMenuItem>
             )}
           </div>
