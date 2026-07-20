@@ -36,7 +36,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
@@ -58,7 +57,7 @@ export interface Notification {
     label: string
     onClick: () => void
   }
-  data?: any
+  data?: unknown
 }
 
 interface NotificationSystemProps {
@@ -85,10 +84,10 @@ const notificationIcons = {
 }
 
 const notificationColors = {
-  success: 'text-green-600 bg-green-50 border-green-200',
-  warning: 'text-orange-600 bg-orange-50 border-orange-200',
-  error: 'text-red-600 bg-red-50 border-red-200',
-  info: 'text-blue-600 bg-blue-50 border-blue-200',
+  success: 'text-green-600 bg-green-50 border-green-200 dark:text-green-300 dark:bg-green-950/40 dark:border-green-900/60',
+  warning: 'text-orange-600 bg-orange-50 border-orange-200 dark:text-orange-300 dark:bg-orange-950/40 dark:border-orange-900/60',
+  error: 'text-red-600 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-950/40 dark:border-red-900/60',
+  info: 'text-blue-600 bg-blue-50 border-blue-200 dark:text-blue-300 dark:bg-blue-950/40 dark:border-blue-900/60',
 }
 
 const categoryIcons = {
@@ -136,7 +135,7 @@ function NotificationItem({
       className={cn(
         "border rounded-lg p-3 transition-all duration-200 hover:shadow-sm",
         notificationColors[notification.type],
-        !notification.read && "ring-2 ring-blue-200",
+        !notification.read && "ring-2 ring-blue-200 dark:ring-blue-900/60",
         compact && "p-2"
       )}
     >
@@ -240,7 +239,8 @@ export function NotificationSystem({
   const [isOpen, setIsOpen] = useState(false)
   
   const unreadCount = notifications.filter(n => !n.read).length
-  const recentNotifications = notifications
+  // Copia antes de ordenar: `.sort()` muta en sitio y esto es el array de props.
+  const recentNotifications = [...notifications]
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
     .slice(0, 5)
 
@@ -313,15 +313,11 @@ export function NotificationSystem({
           
           <DropdownMenuSeparator />
           <div className="p-2 space-y-1">
-            <Sheet open={isOpen} onOpenChange={setIsOpen}>
-              <SheetTrigger asChild>
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                  <Eye className="mr-2 h-4 w-4" />
-                  Ver todas
-                </DropdownMenuItem>
-              </SheetTrigger>
-            </Sheet>
-            
+            <DropdownMenuItem onClick={() => setIsOpen(true)}>
+              <Eye className="mr-2 h-4 w-4" />
+              Ver todas
+            </DropdownMenuItem>
+
             {unreadCount > 0 && (
               <DropdownMenuItem onClick={handleMarkAllAsRead}>
                 <CheckCircle className="mr-2 h-4 w-4" />
@@ -450,7 +446,9 @@ export function useNotifications() {
   const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     const newNotification: Notification = {
       ...notification,
-      id: Math.random().toString(36).substr(2, 9),
+      id: typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `n-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
       timestamp: new Date(),
       read: false
     }
@@ -490,7 +488,7 @@ export function useNotifications() {
   }, [])
 
   // Auto-generate notifications based on product data
-  const generateStockNotifications = useCallback((products: any[]) => {
+  const generateStockNotifications = useCallback((products: Array<{ stock_quantity: number; min_stock: number }>) => {
     const lowStockProducts = products.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0)
     const outOfStockProducts = products.filter(p => p.stock_quantity === 0)
 

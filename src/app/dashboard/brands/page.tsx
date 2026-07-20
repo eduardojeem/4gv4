@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { useBrands, type Brand } from '@/hooks/useBrands'
 import { BrandModal } from '@/components/dashboard/brands/BrandModal'
+import { BrandDetailModal } from '@/components/dashboard/brands/BrandDetailModal'
 import { RouteGuard } from '@/components/auth/permission-guard'
 import {
   AlertDialog,
@@ -45,6 +46,7 @@ export default function BrandsPage() {
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingBrand, setEditingBrand] = useState<Brand | undefined>(undefined)
+  const [selectedDetailBrand, setSelectedDetailBrand] = useState<Brand | undefined>(undefined)
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean; id: string | null }>({ isOpen: false, id: null })
   
   // Local state for search input to allow debouncing
@@ -229,7 +231,11 @@ export default function BrandsPage() {
           <>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {brands.map((brand) => (
-                <Card key={brand.id} className="overflow-hidden transition-all hover:shadow-md">
+                <Card 
+                  key={brand.id} 
+                  className="overflow-hidden transition-all hover:shadow-md cursor-pointer hover:border-slate-350 dark:hover:border-slate-700 bg-white/70 backdrop-blur-md dark:bg-slate-950/65 rounded-[24px] border border-slate-200/50 dark:border-slate-800/50"
+                  onClick={() => setSelectedDetailBrand(brand)}
+                >
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
@@ -246,7 +252,7 @@ export default function BrandsPage() {
                         </div>
                       </div>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="icon" className="-mr-2 -mt-2">
                             <MoreVertical className="h-4 w-4" />
                           </Button>
@@ -279,7 +285,7 @@ export default function BrandsPage() {
                     <div className="text-sm text-muted-foreground line-clamp-2 min-h-10">
                       {brand.description || 'Sin descripción'}
                     </div>
-                    <div className="mt-4 flex items-center justify-between">
+                    <div className="mt-4 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
                       <Badge variant={brand.is_active ? 'default' : 'secondary'}>
                         {brand.is_active ? 'Activo' : 'Inactivo'}
                       </Badge>
@@ -331,6 +337,13 @@ export default function BrandsPage() {
           onClose={() => setIsModalOpen(false)}
           brand={editingBrand}
           onSave={handleModalSave}
+        />
+
+        <BrandDetailModal
+          isOpen={selectedDetailBrand !== undefined}
+          onClose={() => setSelectedDetailBrand(undefined)}
+          brand={selectedDetailBrand}
+          onEdit={handleEdit}
         />
 
         <AlertDialog open={deleteDialog.isOpen} onOpenChange={(open) => !open && setDeleteDialog(prev => ({ ...prev, isOpen: false }))}>

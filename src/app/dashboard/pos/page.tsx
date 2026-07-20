@@ -861,11 +861,18 @@ function POSPageContent() {
           // Vincular venta a reparaciónes
           if (selectedRepairIds && selectedRepairIds.length > 0) {
             try {
-              const { data: repairRows, error: repairGetError } = await supabase
+              // Scoping por sucursal (defensa en profundidad, además de RLS):
+              // evita tocar reparaciones fuera de la sucursal activa.
+              const scopeBranch = Boolean(selectedBranchId && selectedBranchId !== 'all')
+
+              let repairSelect = supabase
                 .from('repairs')
                 .select('id, problem_description, status, final_cost')
                 .in('id', selectedRepairIds)
-              
+              if (scopeBranch) repairSelect = repairSelect.eq('branch_id', selectedBranchId)
+
+              const { data: repairRows, error: repairGetError } = await repairSelect
+
               if (repairGetError) throw new Error(repairGetError.message)
 
               const saleSummary = items.map(i => `${i.name} x${i.quantity}`).join(', ')
@@ -874,28 +881,37 @@ function POSPageContent() {
               for (const r of (repairRows || [])) {
                 const newNotes = `${(r.problem_description || '').trim()}${linkLine}`
                 const updatePayload: any = { problem_description: newNotes, updated_at: new Date().toISOString() }
-                
+
                 if (markRepairDelivered) {
                   updatePayload.status = 'entregado'
                   updatePayload.picked_up_at = new Date().toISOString()
                   updatePayload.delivery_outcome = deliveryOutcome
                   updatePayload.completed_at = new Date().toISOString()
                 }
-                
+
                 if (finalCostFromSale) {
                   // Si hay múltiples reparaciónes, dividimos el costo total equitativamente
                   // Si es solo una, asignamos el total
-                  updatePayload.final_cost = selectedRepairIds.length > 1 
-                    ? (totalValue / selectedRepairIds.length) 
+                  const repairShare = selectedRepairIds.length > 1
+                    ? (totalValue / selectedRepairIds.length)
                     : totalValue
+                  updatePayload.final_cost = repairShare
+
+                  // La venta cobra (o financia, si es a crédito) la reparación:
+                  // se marca pagada y se registra el monto para que no quede como
+                  // "pendiente" en la lista/filtros. La deuda del crédito vive en
+                  // el módulo de créditos, atada al sale_id.
+                  updatePayload.payment_status = 'pagado'
+                  updatePayload.paid_amount = repairShare
                 }
 
-                const { error: repairUpdError } = await (supabase
+                let repairUpdate = supabase
                   .from('repairs')
                   .update(updatePayload)
                   .eq('id', r.id)
-                  .select()
-                  .maybeSingle())
+                if (scopeBranch) repairUpdate = repairUpdate.eq('branch_id', selectedBranchId)
+
+                const { error: repairUpdError } = await repairUpdate.select().maybeSingle()
                 if (repairUpdError) throw new Error(repairUpdError.message)
               }
             } catch (e: any) {
@@ -922,7 +938,7 @@ function POSPageContent() {
         throw err
       }
     },
-    [selectedCustomer, selectedRepairIds, finalCostFromSale, markRepairDelivered, deliveryOutcome, creditTerms]
+    [selectedCustomer, selectedRepairIds, finalCostFromSale, markRepairDelivered, deliveryOutcome, creditTerms, selectedBranchId]
   )
 
   // Estados para búsqueda avanzada

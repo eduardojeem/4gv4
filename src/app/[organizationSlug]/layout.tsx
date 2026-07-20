@@ -4,6 +4,7 @@ import { MaintenanceGuard } from '@/components/public/MaintenanceGuard'
 import { SkipToContentLink } from '@/components/ui/skip-link'
 import { WhatsAppFloatButton } from '@/components/whatsapp-float-button'
 import { CartProviderWithDrawer } from '@/components/public/cart/CartProviderWithDrawer'
+import { CustomerLinkBanner } from '@/components/public/CustomerLinkBanner'
 import { fetchWebsiteSettings } from '@/lib/website/fetch-settings'
 
 export default async function OrganizationPublicLayout({
@@ -29,6 +30,7 @@ export default async function OrganizationPublicLayout({
         >
           <SkipToContentLink />
           <PublicHeader />
+          <CustomerLinkBanner />
           <main id="main-content" className="flex-1">{children}</main>
           <PublicFooter />
           <WhatsAppFloatButton />

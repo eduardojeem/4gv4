@@ -33,12 +33,34 @@ export const POST = withTenantAuth({}, async (request, { user, organization }) =
       return NextResponse.json({ error: 'Sin notificaciones para actualizar.' }, { status: 400 })
     }
 
+    const isDismiss = body.dismiss === true
+
+    // Al solo marcar como leídas (sin descartar) hay que EXCLUIR las que el
+    // usuario ya descartó: el upsert reescribe la fila completa y, con
+    // `dismissed: false`, resucitaría notificaciones ocultas ("marcar todas
+    // como leídas" las hacía reaparecer).
+    if (!isDismiss) {
+      const { data: dismissedRows } = await admin
+        .from('global_notification_reads')
+        .select('notification_id')
+        .eq('user_id', user.id)
+        .eq('dismissed', true)
+        .in('notification_id', ids)
+
+      const dismissedIds = new Set((dismissedRows ?? []).map(r => r.notification_id as string))
+      ids = ids.filter(id => !dismissedIds.has(id))
+
+      if (ids.length === 0) {
+        return NextResponse.json({ ok: true, updated: 0 })
+      }
+    }
+
     const now = new Date().toISOString()
     const rows = ids.map(notification_id => ({
       notification_id,
       user_id: user.id,
       read_at: now,
-      dismissed: body.dismiss === true,
+      dismissed: isDismiss,
     }))
 
     const { error } = await admin

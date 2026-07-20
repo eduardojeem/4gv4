@@ -26,10 +26,12 @@ import {
   Wrench,
   Loader2,
   DollarSign,
+  CalendarClock,
 } from 'lucide-react'
 import { Repair, RepairDeliveryOutcome } from '@/types/repairs'
 
-export type QuickPayMethod = 'cash' | 'card' | 'transfer'
+export type QuickPayMethod = 'cash' | 'card' | 'transfer' | 'credit'
+export type CreditFrequency = 'weekly' | 'biweekly' | 'monthly'
 
 export interface RepairPaymentResult {
   method: QuickPayMethod
@@ -38,6 +40,9 @@ export interface RepairPaymentResult {
   markDelivered: boolean
   outcome?: RepairDeliveryOutcome
   note?: string
+  /** Solo para method === 'credit'. */
+  interestRate?: number
+  installments?: { count: number; frequency: CreditFrequency }
 }
 
 interface RepairPaymentDialogProps {
@@ -51,6 +56,13 @@ const METHODS: { id: QuickPayMethod; label: string; icon: React.ElementType; req
   { id: 'cash',     label: 'Efectivo',       icon: Banknote,    requiresRef: false },
   { id: 'card',     label: 'Tarjeta',        icon: CreditCard,  requiresRef: true  },
   { id: 'transfer', label: 'Transferencia',  icon: Smartphone,  requiresRef: true  },
+  { id: 'credit',   label: 'Crédito',        icon: CalendarClock, requiresRef: false },
+]
+
+const FREQUENCIES: { id: CreditFrequency; label: string }[] = [
+  { id: 'weekly',   label: 'Semanal'   },
+  { id: 'biweekly', label: 'Quincenal' },
+  { id: 'monthly',  label: 'Mensual'   },
 ]
 
 const OUTCOMES: { value: RepairDeliveryOutcome; label: string; icon: React.ElementType; cls: string }[] = [
@@ -74,6 +86,12 @@ export function RepairPaymentDialog({
   const [outcome, setOutcome] = useState<RepairDeliveryOutcome>('repaired')
   const [note, setNote] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // Términos de crédito (solo aplican con method === 'credit')
+  const [installmentCount, setInstallmentCount] = useState('3')
+  const [frequency, setFrequency] = useState<CreditFrequency>('monthly')
+  const [interestRate, setInterestRate] = useState('0')
+
+  const isCredit = method === 'credit'
 
   const handleClose = () => {
     if (isSubmitting) return
@@ -83,6 +101,9 @@ export function RepairPaymentDialog({
     setMarkDelivered(true)
     setOutcome('repaired')
     setNote('')
+    setInstallmentCount('3')
+    setFrequency('monthly')
+    setInterestRate('0')
     onOpenChange(false)
   }
 
@@ -94,6 +115,10 @@ export function RepairPaymentDialog({
     const selectedMethod = METHODS.find(m => m.id === method)
     if (selectedMethod?.requiresRef && !reference.trim()) return
 
+    const count = Math.max(1, Math.floor(Number(installmentCount) || 0))
+    const rate = Math.max(0, Number(interestRate) || 0)
+    if (isCredit && count < 1) return
+
     setIsSubmitting(true)
     try {
       await onConfirm(repair.id, {
@@ -103,6 +128,7 @@ export function RepairPaymentDialog({
         markDelivered,
         outcome: markDelivered ? outcome : undefined,
         note: note.trim() || undefined,
+        ...(isCredit ? { interestRate: rate, installments: { count, frequency } } : {}),
       })
       handleClose()
     } finally {
@@ -112,8 +138,15 @@ export function RepairPaymentDialog({
 
   if (!repair) return null
 
+  // Vista previa del crédito: total financiado y valor por cuota.
+  const creditPrincipal = parseFloat(amount) || 0
+  const creditCount = Math.max(1, Math.floor(Number(installmentCount) || 0))
+  const creditFinanced = creditPrincipal * (1 + (Math.max(0, Number(interestRate) || 0) / 100))
+  const creditPerInstallment = creditCount > 0 ? creditFinanced / creditCount : 0
+
   const canConfirm = !!parseFloat(amount) && parseFloat(amount) > 0 &&
-    (!METHODS.find(m => m.id === method)?.requiresRef || reference.trim().length > 0)
+    (!METHODS.find(m => m.id === method)?.requiresRef || reference.trim().length > 0) &&
+    (!isCredit || creditCount >= 1)
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -152,7 +185,7 @@ export function RepairPaymentDialog({
           {/* Método de pago */}
           <div className="space-y-2">
             <Label>Método de pago</Label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {METHODS.map(m => {
                 const Icon = m.icon
                 const selected = method === m.id
@@ -178,7 +211,7 @@ export function RepairPaymentDialog({
 
           {/* Monto */}
           <div className="space-y-1.5">
-            <Label htmlFor="pay-amount">Monto recibido</Label>
+            <Label htmlFor="pay-amount">{isCredit ? 'Monto a financiar' : 'Monto recibido'}</Label>
             <Input
               id="pay-amount"
               type="number"
@@ -197,6 +230,70 @@ export function RepairPaymentDialog({
               Usar total exacto ({formatCurrency(total)})
             </button>
           </div>
+
+          {/* Términos de crédito */}
+          {isCredit && (
+            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cred-count" className="text-xs">N° de cuotas</Label>
+                  <Input
+                    id="cred-count"
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={installmentCount}
+                    onChange={e => setInstallmentCount(e.target.value)}
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cred-rate" className="text-xs">Interés (%)</Label>
+                  <Input
+                    id="cred-rate"
+                    type="number"
+                    min={0}
+                    value={interestRate}
+                    onChange={e => setInterestRate(e.target.value)}
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Frecuencia</Label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {FREQUENCIES.map(f => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setFrequency(f.id)}
+                      className={cn(
+                        'rounded border-2 py-1.5 text-xs font-medium transition-all',
+                        frequency === f.id
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground hover:bg-muted/30'
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {creditPrincipal > 0 && (
+                <div className="flex items-center justify-between rounded-md bg-background/60 px-3 py-2 text-xs">
+                  <span className="text-muted-foreground">
+                    {creditCount} {creditCount === 1 ? 'cuota' : 'cuotas'} de
+                  </span>
+                  <span className="font-bold text-foreground">
+                    {formatCurrency(creditPerInstallment)}
+                  </span>
+                </div>
+              )}
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                Se registrará una deuda a crédito del cliente. La reparación queda saldada; el saldo se cobra por el módulo de créditos.
+              </p>
+            </div>
+          )}
 
           {/* Referencia (tarjeta / transferencia) */}
           {METHODS.find(m => m.id === method)?.requiresRef && (
@@ -277,10 +374,12 @@ export function RepairPaymentDialog({
           >
             {isSubmitting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isCredit ? (
+              <CalendarClock className="h-4 w-4" />
             ) : (
               <DollarSign className="h-4 w-4" />
             )}
-            Confirmar Cobro
+            {isCredit ? 'Registrar Crédito' : 'Confirmar Cobro'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -16,6 +16,7 @@ export const FULL_REPAIR_SELECT = `
 export type RepairRouteContext = {
   supabase: ReturnType<typeof createAdminSupabase>
   userId: string
+  role: string
   organizationId: string
   branchId: string
 }
@@ -61,6 +62,7 @@ export async function resolveRepairRouteContext(request: Request): Promise<Repai
   return {
     supabase: createAdminSupabase(),
     userId: staffAuth.user.id,
+    role: staffAuth.role,
     organizationId: organization.id,
     branchId: branchScope.branchId,
   }

@@ -21,6 +21,7 @@ import {
   LineChart
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
+import { formatCurrency } from '@/lib/currency'
 
 interface CustomerInsightsProps {
   customer: {
@@ -88,7 +89,7 @@ export function CustomerInsights({ customer }: CustomerInsightsProps) {
                 <div>
                   <p className="text-sm font-medium text-green-600 dark:text-green-400">Valor de Vida</p>
                   <p className="text-2xl font-bold text-green-700 dark:text-green-300">
-                    ${customer.lifetime_value.toLocaleString()}
+                    {formatCurrency(customer.lifetime_value)}
                   </p>
                   <div className={`flex items-center gap-1 mt-1 px-2 py-1 rounded-full text-xs ${getGrowthColor("up")}`}>
                     {getGrowthIcon("up")}
@@ -116,7 +117,7 @@ export function CustomerInsights({ customer }: CustomerInsightsProps) {
                 <div>
                   <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Valor Promedio</p>
                   <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                      ${customer.avg_order_value.toLocaleString()}
+                      {formatCurrency(customer.avg_order_value)}
                     </p>
                   <p className="text-xs text-blue-600/70 dark:text-blue-400/70 mt-1">
                     {customer.total_purchases} compras
@@ -270,19 +271,19 @@ export function CustomerInsights({ customer }: CustomerInsightsProps) {
                   <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg">
                     <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Este Mes</p>
                     <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
-                      ${customer.avg_order_value.toLocaleString()}
+                      {formatCurrency(customer.avg_order_value)}
                     </p>
                   </div>
                   <div className="p-3 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-lg">
                     <p className="text-xs text-green-600 dark:text-green-400 font-medium">Promedio</p>
                     <p className="text-lg font-bold text-green-700 dark:text-green-300">
-                      ${customer.avg_order_value.toLocaleString()}
+                      {formatCurrency(customer.avg_order_value)}
                     </p>
                   </div>
                   <div className="p-3 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-lg">
                     <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Máximo</p>
                     <p className="text-lg font-bold text-purple-700 dark:text-purple-300">
-                      ${(customer.avg_order_value * 1.5).toLocaleString()}
+                      {formatCurrency(customer.avg_order_value * 1.5)}
                     </p>
                   </div>
                 </div>
@@ -304,8 +305,8 @@ export function CustomerInsights({ customer }: CustomerInsightsProps) {
                           className="flex-1 bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-sm relative group"
                           style={{ height: `${height}%` }}
                         >
-                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                            ${Math.round(amount).toLocaleString()}
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                            {formatCurrency(Math.round(amount))}
                           </div>
                         </div>
                       )

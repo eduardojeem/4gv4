@@ -48,6 +48,25 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning data-color-scheme={DEFAULT_SYSTEM_COLOR_SCHEME}>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  const theme = localStorage.getItem('theme');
+                  const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  if (theme === 'dark' || (!theme && systemPrefersDark)) {
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.add('light');
+                  }
+                } catch (e) {}
+              })()
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased theme-transition`}
       >

@@ -20,6 +20,7 @@ import autoTable from 'jspdf-autotable'
 import { format } from 'date-fns'
 
 import { Customer } from "@/hooks/use-customer-state"
+import { formatCurrency } from "@/lib/currency"
 
 interface CustomerDetailHeaderProps {
     customer: Customer
@@ -82,9 +83,9 @@ export function CustomerDetailHeader({
                 ['Dirección', customer.address || customer.city || '-'],
                 ['Estado', customer.status === 'active' ? 'Activo' : customer.status || 'Activo'],
                 ['Segmento', customer.segment === 'vip' ? 'VIP' : customer.segment === 'wholesale' ? 'Mayorista' : customer.segment === 'business' ? 'Empresa' : 'Regular'],
-                ['Total Gastado', `$${(customer.lifetime_value || 0).toLocaleString()}`],
+                ['Total Gastado', formatCurrency(customer.lifetime_value || 0)],
                 ['Compras', `${customer.total_purchases || 0}`],
-                ['Crédito', `$${(customer.credit_limit || 0).toLocaleString()}`],
+                ['Crédito', formatCurrency(customer.credit_limit || 0)],
             ], 
             theme:'grid', 
             headStyles:{fillColor:[37,99,235],textColor:255,fontStyle:'bold'},
@@ -166,6 +167,16 @@ export function CustomerDetailHeader({
                                                 customer.segment === 'wholesale' ? 'Mayorista' :
                                                     customer.segment === 'business' ? 'Empresa' : 'Regular'}
                                         </Badge>
+                                        {(customer as any).profile_id ? (
+                                            <Badge variant="outline" className="gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                                <Shield className="h-3 w-3" />
+                                                Cuenta vinculada
+                                            </Badge>
+                                        ) : (
+                                            <Badge variant="outline" className="gap-1 border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+                                                Sin cuenta
+                                            </Badge>
+                                        )}
                                     </div>
                                 </div>
 

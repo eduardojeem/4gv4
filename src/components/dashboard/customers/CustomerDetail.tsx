@@ -41,15 +41,19 @@ import {
   CheckCircle,
   Building,
   Star,
-  Edit
+  Edit,
+  Wrench
 } from 'lucide-react'
 import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerData, useCustomerPurchases, prefetchCustomerPurchases } from '@/hooks/useCustomerData'
+import { useCustomerRepairs } from '@/hooks/useCustomerRepairs'
 import { useAuthorizedPersons, prefetchAuthorizedPersons } from '@/hooks/useAuthorizedPersons'
 import { createClient } from '@/lib/supabase/client'
 import { CustomerDetailHeader } from './CustomerDetailHeader'
 import { CustomerDetailMetrics } from './CustomerDetailMetrics'
+import { CustomerLinkAccount } from './CustomerLinkAccount'
 import { WholesaleToggle } from './WholesaleToggle'
+import { formatCurrency } from '@/lib/currency'
 
 interface CustomerDetailProps {
   customer: Customer
@@ -68,7 +72,56 @@ function SalesHistoryList({
   limit?: number
   onShowAll?: () => void
 }) {
-  const { data: sales, isLoading } = useCustomerPurchases(customerId)
+  const { data: sales, isLoading: salesLoading } = useCustomerPurchases(customerId)
+  const { repairs, loading: repairsLoading, fetchRepairs } = useCustomerRepairs()
+
+  React.useEffect(() => {
+    fetchRepairs(customerId)
+  }, [customerId, fetchRepairs])
+
+  const isLoading = salesLoading || repairsLoading
+
+  const combinedActivities = React.useMemo(() => {
+    const items: Array<{
+      id: string
+      type: 'sale' | 'repair'
+      date: string
+      title: string
+      description: string
+      amount: number
+      status: string
+    }> = []
+
+    if (Array.isArray(sales)) {
+      sales.forEach((sale: any) => {
+        items.push({
+          id: `sale-${sale.id}`,
+          type: 'sale',
+          date: sale.created_at || sale.date || new Date().toISOString(),
+          title: `Venta #${sale.id.toString().slice(-6)}`,
+          description: `${sale.items?.length || 0} producto(s) - ${sale.paymentMethod || 'Pago'}`,
+          amount: sale.total || 0,
+          status: sale.payment_status === 'completed' || sale.payment_status === 'paid' ? 'paid' : 'pending'
+        })
+      })
+    }
+
+    if (Array.isArray(repairs)) {
+      repairs.forEach((repair: any) => {
+        items.push({
+          id: `repair-${repair.id}`,
+          type: 'repair',
+          date: repair.created_at || new Date().toISOString(),
+          title: `Reparación: ${repair.device_brand} ${repair.device_model}`,
+          description: repair.problem_description || 'Sin descripción',
+          amount: (repair.final_cost ?? repair.estimated_cost) || 0,
+          status: repair.status || 'pending'
+        })
+      })
+    }
+
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [sales, repairs])
 
   if (isLoading) {
     return (
@@ -81,80 +134,127 @@ function SalesHistoryList({
     )
   }
 
-  if (!sales || sales.length === 0) {
+  if (combinedActivities.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="mx-auto w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
           <History className="h-12 w-12 text-gray-400" />
         </div>
-        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Sin historial de ventas</h3>
-        <p className="text-gray-500">Este cliente aún no tiene transacciones registradas.</p>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Sin historial de actividad</h3>
+        <p className="text-gray-500">Este cliente aún no tiene transacciones ni reparaciones registradas.</p>
       </div>
     )
   }
 
-  const visibleSales = typeof limit === 'number' ? sales.slice(0, limit) : sales
-  const hiddenCount = sales.length - visibleSales.length
+  const visibleActivities = typeof limit === 'number' ? combinedActivities.slice(0, limit) : combinedActivities
+  const hiddenCount = combinedActivities.length - visibleActivities.length
+
+  const getRepairStatusLabel = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'entregado': return 'Entregado'
+      case 'listo': return 'Listo'
+      case 'cancelado': return 'Cancelado'
+      case 'reparacion': return 'En Reparación'
+      case 'diagnostico': return 'En Diagnóstico'
+      case 'pending': return 'Pendiente'
+      default: return status.charAt(0).toUpperCase() + status.slice(1)
+    }
+  }
+
+  const getRepairStatusBadgeStyles = (status: string) => {
+    const s = status.toLowerCase()
+    if (s === 'entregado' || s === 'listo' || s === 'completed') {
+      return 'bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300'
+    } else if (s === 'cancelado' || s === 'cancelled') {
+      return 'bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-300'
+    } else if (s === 'reparacion' || s === 'diagnostico' || s === 'in_progress') {
+      return 'bg-blue-100 text-blue-800 dark:bg-blue-950/30 dark:text-blue-300'
+    } else {
+      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300'
+    }
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h4 className="font-medium text-gray-900 dark:text-white">
-          {typeof limit === 'number' ? 'Últimas Transacciones' : 'Todas las Transacciones'}
+          {typeof limit === 'number' ? 'Actividades Recientes' : 'Todas las Actividades'}
         </h4>
-        <Badge variant="secondary">{sales.length} total</Badge>
+        <Badge variant="secondary">{combinedActivities.length} total</Badge>
       </div>
 
       <div className="space-y-3">
-        {visibleSales.map((sale: { id: string | number; created_at?: string; date?: string; total?: number; payment_status?: string }, index: number) => (
+        {visibleActivities.map((activity, index: number) => (
           <motion.div 
-            key={sale.id}
+            key={activity.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-lg hover:shadow-md transition-all duration-200 border border-gray-200 dark:border-gray-700"
+            transition={{ delay: index * 0.05 }}
+            className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800/40 dark:to-gray-900/40 rounded-xl hover:shadow-sm transition-all duration-200 border border-gray-200/50 dark:border-gray-800/50 gap-4"
           >
-            <div className="flex items-center gap-4">
-              <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full text-white shadow-lg">
-                <CreditCard className="h-4 w-4" />
+            <div className="flex items-start gap-4 min-w-0">
+              <div className={`p-2.5 rounded-xl text-white shadow-sm flex-shrink-0 bg-gradient-to-br ${
+                activity.type === 'sale' 
+                  ? 'from-blue-500 to-indigo-600' 
+                  : 'from-orange-500 to-amber-600'
+              }`}>
+                {activity.type === 'sale' ? (
+                  <CreditCard className="h-4.5 w-4.5" />
+                ) : (
+                  <Wrench className="h-4.5 w-4.5" />
+                )}
               </div>
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-white">
-                  Venta #{sale.id.toString().slice(-6)}
+              <div className="min-w-0">
+                <p className="font-semibold text-gray-900 dark:text-white truncate">
+                  {activity.title}
                 </p>
-                <div className="flex items-center gap-2 mt-1">
-                  <Calendar className="h-3 w-3 text-gray-400" />
-                  <p className="text-sm text-gray-500">
-                    {new Date(sale.created_at || sale.date || new Date()).toLocaleDateString('es-ES', {
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                  {activity.description}
+                </p>
+                <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-400">
+                  <Calendar className="h-3 w-3" />
+                  <span>
+                    {new Date(activity.date).toLocaleDateString('es-ES', {
                       day: 'numeric',
                       month: 'short',
-                      year: 'numeric'
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
                     })}
-                  </p>
+                  </span>
                 </div>
               </div>
             </div>
-            <div className="text-right">
-              <p className="font-bold tabular-nums text-lg text-foreground">
-                ${sale.total?.toLocaleString() || '0'}
+            <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0">
+              <p className="font-bold tabular-nums text-base text-foreground">
+                {formatCurrency(activity.amount)}
               </p>
-              <Badge 
-                variant={sale.payment_status === 'completed' || sale.payment_status === 'paid' ? 'default' : 'secondary'}
-                className={sale.payment_status === 'completed' || sale.payment_status === 'paid' 
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' 
-                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-                }
-              >
-                <CheckCircle className="h-3 w-3 mr-1" />
-                {sale.payment_status === 'completed' || sale.payment_status === 'paid' ? 'Completado' : 'Pendiente'}
-              </Badge>
+              {activity.type === 'sale' ? (
+                <Badge 
+                  variant={activity.status === 'paid' ? 'default' : 'secondary'}
+                  className={activity.status === 'paid' 
+                    ? 'bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300 border-0 text-[10px] px-2 py-0.5' 
+                    : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300 border-0 text-[10px] px-2 py-0.5'
+                  }
+                >
+                  <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                  {activity.status === 'paid' ? 'Venta Pagada' : 'Pendiente'}
+                </Badge>
+              ) : (
+                <Badge 
+                  className={`${getRepairStatusBadgeStyles(activity.status)} border-0 text-[10px] px-2 py-0.5`}
+                >
+                  <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                  {getRepairStatusLabel(activity.status)}
+                </Badge>
+              )}
             </div>
           </motion.div>
         ))}
       </div>
 
       {hiddenCount > 0 && onShowAll && (
-        <div className="text-center pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="text-center pt-4 border-t border-gray-200/50 dark:border-gray-800/50">
           <Button variant="outline" size="sm" onClick={onShowAll}>
             <History className="h-4 w-4 mr-2" />
             Ver historial completo ({hiddenCount} más)
@@ -237,6 +337,15 @@ export function CustomerDetail({ customer, onBack, onEdit, onViewHistory, compac
       >
         <CustomerDetailMetrics customer={currentCustomer} />
       </motion.div>
+
+      {/* 2.5. Account Link Section */}
+      <CustomerLinkAccount
+        customerId={currentCustomer.id}
+        customerName={currentCustomer.name}
+        customerEmail={resolvedEmail}
+        profileId={resolvedProfileId}
+        onLinked={() => window.location.reload()}
+      />
 
       {/* 3. Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">

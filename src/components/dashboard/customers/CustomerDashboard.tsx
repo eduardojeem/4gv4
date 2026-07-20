@@ -41,6 +41,7 @@ const CustomerEditFormV2 = dynamic(() => import("./CustomerEditFormV2").then(m =
 const CustomerHistory = dynamic(() => import("./CustomerHistory").then(m => m.CustomerHistory), { ssr: false })
 const CustomerFilters = dynamic(() => import("./CustomerFilters").then(m => m.CustomerFilters), { ssr: false })
 import { CustomerModal } from './CustomerModal'
+import { CustomerQuickView } from './CustomerQuickView'
 // Componente consolidado de analíticas
 const AnalyticsDashboard = lazy(() => import("./AnalyticsDashboard").then(m => ({ default: m.AnalyticsDashboard })))
 const CustomerAlerts = dynamic(() => import("./CustomerAlerts").then(m => m.CustomerAlerts), { ssr: false })
@@ -138,6 +139,8 @@ export function CustomerDashboard() {
   
   // Estados para búsqueda inteligente
   const [searchTime, setSearchTime] = useState(0)
+  // Quick view modal
+  const [quickViewCustomer, setQuickViewCustomer] = useState<Customer | null>(null)
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
 
   // Calculate stats including credit metrics
@@ -394,6 +397,11 @@ export function CustomerDashboard() {
   }
 
   const handleViewDetail = (customer: Customer) => {
+    setQuickViewCustomer(customer)
+  }
+
+  const handleGoToFullDetail = (customer: Customer) => {
+    setQuickViewCustomer(null)
     setSelectedCustomer(customer)
     setCurrentView('detail')
   }
@@ -1003,6 +1011,15 @@ export function CustomerDashboard() {
           onClose={() => setShowCreateModal(false)}
         />
       )}
+
+      {/* Quick View Modal */}
+      <CustomerQuickView
+        customer={quickViewCustomer}
+        open={!!quickViewCustomer}
+        onClose={() => setQuickViewCustomer(null)}
+        onViewDetail={handleGoToFullDetail}
+        onEdit={(c) => { setQuickViewCustomer(null); handleEditCustomer(c) }}
+      />
 
       {/* Keyboard Shortcuts Indicator */}
       <KeyboardShortcutsIndicator

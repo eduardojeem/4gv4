@@ -298,7 +298,8 @@ function RepairsPageContent() {
       }
 
       await refreshRepairs()
-      toast.success(result.markDelivered ? 'Pago registrado y equipo entregado' : 'Pago registrado exitosamente')
+      const baseMsg = result.method === 'credit' ? 'Crédito registrado' : 'Pago registrado'
+      toast.success(result.markDelivered ? `${baseMsg} y equipo entregado` : `${baseMsg} exitosamente`)
     } catch (err) {
       logger.error('Error registering payment', { error: err })
       toast.error('Error al registrar el pago')

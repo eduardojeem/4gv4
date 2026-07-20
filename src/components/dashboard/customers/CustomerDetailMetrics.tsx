@@ -10,6 +10,7 @@ import {
     Sparkles
 } from "lucide-react"
 import { Customer } from "@/hooks/use-customer-state"
+import { formatCurrency } from "@/lib/currency"
 
 type CreditSummary = {
     credit_id: string
@@ -29,20 +30,20 @@ export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) 
     const metrics = [
         {
             label: "Total Gastado",
-            value: `$${(customer.lifetime_value || 0).toLocaleString()}`,
+            value: formatCurrency(customer.lifetime_value || 0),
             change: "+12.5%",
             trend: "up",
             icon: ShoppingBag,
             color: "text-blue-600",
-            bg: "bg-blue-50 dark:bg-blue-900/20"
+            bg: "bg-blue-50 dark:bg-blue-950/30"
         },
         {
             label: "Crédito Disponible",
-            value: `$${((customer.credit_limit || 0) - (customer.current_balance || 0)).toLocaleString()}`,
-            subtext: `de $${(customer.credit_limit || 0).toLocaleString()}`,
+            value: formatCurrency((customer.credit_limit || 0) - (customer.current_balance || 0)),
+            subtext: `de ${formatCurrency(customer.credit_limit || 0)}`,
             icon: CreditCard,
             color: "text-purple-600",
-            bg: "bg-purple-50 dark:bg-purple-900/20"
+            bg: "bg-purple-50 dark:bg-purple-950/30"
         },
         {
             label: "Pedidos Totales",
@@ -90,19 +91,19 @@ export function CustomerDetailMetrics({ customer }: CustomerDetailMetricsProps) 
             metrics.push(
                 {
                     label: "Saldo Pendiente",
-                    value: `$${(creditSummary.saldo_pendiente || 0).toLocaleString()}`,
-                    subtext: `Principal $${(creditSummary.total_principal || 0).toLocaleString()}`,
+                    value: formatCurrency(creditSummary.saldo_pendiente || 0),
+                    subtext: `Principal ${formatCurrency(creditSummary.total_principal || 0)}`,
                     icon: CreditCard,
                     color: "text-red-600",
-                    bg: "bg-red-50 dark:bg-red-900/20"
+                    bg: "bg-red-50 dark:bg-red-950/30"
                 },
                 {
                 label: "Progreso Crédito",
                 value: `${creditSummary.progreso ?? 0}%`,
-                subtext: `Pagado $${(creditSummary.total_pagado || 0).toLocaleString()} de $${(creditSummary.total_installments || 0).toLocaleString()}`,
+                subtext: `Pagado ${formatCurrency(creditSummary.total_pagado || 0)} de ${formatCurrency(creditSummary.total_installments || 0)}`,
                 icon: TrendingUp,
                 color: "text-indigo-600",
-                bg: "bg-indigo-50 dark:bg-indigo-900/20"
+                bg: "bg-indigo-50 dark:bg-indigo-950/30"
             }
         )
     }

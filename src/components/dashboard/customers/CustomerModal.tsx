@@ -36,6 +36,7 @@ import { Customer } from '@/hooks/use-customer-state'
 import { useCustomerActions } from '@/hooks/use-customer-actions'
 import { CustomerFormSimple, SimpleCustomerFormData } from '../customer-form-simple'
 import { toast } from 'sonner'
+import { formatCurrency } from '@/lib/currency'
 
 interface CustomerModalProps {
   customer: Customer | null
@@ -261,7 +262,7 @@ export const CustomerModal: React.FC<CustomerModalProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <span className="text-sm text-muted-foreground">Total gastado</span>
-                      <p className="text-lg font-semibold">${customer.lifetime_value?.toLocaleString() || '0'}</p>
+                      <p className="text-lg font-semibold">{formatCurrency(customer.lifetime_value || 0)}</p>
                     </div>
                     <div>
                       <span className="text-sm text-muted-foreground">Fecha de registro</span>

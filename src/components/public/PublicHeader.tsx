@@ -327,11 +327,6 @@ export function PublicHeader() {
                         <p className="text-sm font-semibold leading-none truncate">
                           {user?.profile?.name || 'Usuario'}
                         </p>
-                        {isWholesaleUser && (
-                          <Badge className="h-4 px-1 text-[9px] bg-primary/10 text-primary border-primary/20 font-semibold shrink-0">
-                            Mayorista
-                          </Badge>
-                        )}
                       </div>
                       <p className="text-xs leading-none text-muted-foreground break-all truncate">
                         {user?.email || 'usuario@email.com'}
