@@ -31,6 +31,8 @@ import type { PublicProduct } from '@/types/public'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
+import { formatCurrency } from '@/lib/currency'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OfferProduct {
   id: string
@@ -55,11 +57,7 @@ interface OffersPageClientProps {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatPrice(price: number): string {
-  return new Intl.NumberFormat('es-PY', {
-    style: 'currency',
-    currency: 'PYG',
-    maximumFractionDigits: 0,
-  }).format(price)
+  return formatCurrency(price)
 }
 
 function calcDiscount(sale: number, offer: number): number {

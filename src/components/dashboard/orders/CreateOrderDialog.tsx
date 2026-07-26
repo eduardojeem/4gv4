@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import {
   Check,
   Loader2,
@@ -32,6 +33,8 @@ type ProductOption = {
   sale_price?: number | null
   offer_price?: number | null
   stock_quantity?: number | null
+  image_url?: string | null
+  images?: string[] | null
 }
 
 type CustomerOption = {
@@ -49,6 +52,7 @@ type DraftItem = {
   quantity: number
   unitPrice: number
   stock: number | null
+  imageUrl?: string | null
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -135,6 +139,7 @@ export function CreateOrderDialog({
   function addProduct(product: ProductOption) {
     const price = Number(product.offer_price || product.sale_price || 0)
     const stock = product.stock_quantity != null ? Number(product.stock_quantity) : null
+    const imageUrl = product.image_url || (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null)
     setItems((cur) => {
       const existing = cur.find((i) => i.productId === product.id)
       if (existing) {
@@ -144,7 +149,7 @@ export function CreateOrderDialog({
             : i
         )
       }
-      return [...cur, { productId: product.id, name: product.name, sku: product.sku, quantity: 1, unitPrice: price, stock }]
+      return [...cur, { productId: product.id, name: product.name, sku: product.sku, quantity: 1, unitPrice: price, stock, imageUrl }]
     })
     setProductSearch('')
   }
@@ -399,17 +404,32 @@ export function CreateOrderDialog({
                               : 'border-border bg-card hover:border-border/80 hover:bg-muted/30'
                           }`}
                         >
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-medium">{product.name}</span>
-                            <span className="block text-xs text-muted-foreground">
-                              {product.sku || 'Sin SKU'}
-                              {stock !== null && (
-                                <span className={`ml-1.5 ${stock <= 3 ? 'text-amber-600' : 'opacity-60'}`}>
-                                  · {stock} en stock
-                                </span>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-md border bg-muted flex items-center justify-center">
+                              {product.image_url || (Array.isArray(product.images) && product.images.length > 0) ? (
+                                <Image
+                                  src={product.image_url || product.images![0]}
+                                  alt={product.name}
+                                  fill
+                                  sizes="36px"
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <Package className="h-4 w-4 text-muted-foreground" />
                               )}
-                            </span>
-                          </span>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="block truncate text-sm font-medium">{product.name}</span>
+                              <span className="block text-xs text-muted-foreground">
+                                {product.sku || 'Sin SKU'}
+                                {stock !== null && (
+                                  <span className={`ml-1.5 ${stock <= 3 ? 'text-amber-600' : 'opacity-60'}`}>
+                                    · {stock} en stock
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
                           <span className="ml-3 shrink-0 text-right">
                             <span className="block text-sm font-bold tabular-nums">{formatMoney(price)}</span>
                             {inCart && (
@@ -441,6 +461,19 @@ export function CreateOrderDialog({
                   <div className="space-y-2">
                     {items.map((item) => (
                       <div key={item.productId} className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5">
+                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-md border bg-muted flex items-center justify-center">
+                          {item.imageUrl ? (
+                            <Image
+                              src={item.imageUrl}
+                              alt={item.name}
+                              fill
+                              sizes="40px"
+                              className="object-cover"
+                            />
+                          ) : (
+                            <Package className="h-4.5 w-4.5 text-muted-foreground" />
+                          )}
+                        </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{item.name}</p>
                           <p className="text-xs text-muted-foreground">

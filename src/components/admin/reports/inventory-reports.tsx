@@ -453,27 +453,30 @@ const InventoryReports: React.FC = () => {
 
       ;((salesData || []) as ReportSaleRow[]).forEach((sale) => {
         totalRevenue += Number(sale.total_amount || 0)
-        sale.sale_items.forEach((item) => {
-          const pid = item.product_id
-          const current = productSalesMap.get(pid) || { 
-            name: item.products?.name || 'Desconocido', 
-            category: item.products?.category?.name || 'N/A', 
-            units: 0, 
-            revenue: 0, 
-            cost: 0 
-          }
-          
-          // Estimación de costo basada en el producto actual (limitación: no histórico)
-          const unitCost = item.products?.purchase_price || 0
-          
-          productSalesMap.set(pid, {
-            name: current.name,
-            category: current.category,
-            units: current.units + Number(item.quantity || 0),
-            revenue: current.revenue + Number(item.subtotal || 0),
-            cost: current.cost + (Number(item.quantity || 0) * Number(unitCost || 0))
+        const items = sale.sale_items || []
+        if (Array.isArray(items)) {
+          items.forEach((item) => {
+            const pid = item.product_id
+            const current = productSalesMap.get(pid) || { 
+              name: item.products?.name || 'Desconocido', 
+              category: item.products?.category?.name || 'N/A', 
+              units: 0, 
+              revenue: 0, 
+              cost: 0 
+            }
+            
+            // Estimación de costo basada en el producto actual (limitación: no histórico)
+            const unitCost = item.products?.purchase_price || 0
+            
+            productSalesMap.set(pid, {
+              name: current.name,
+              category: current.category,
+              units: current.units + Number(item.quantity || 0),
+              revenue: current.revenue + Number(item.subtotal || 0),
+              cost: current.cost + (Number(item.quantity || 0) * Number(unitCost || 0))
+            })
           })
-        })
+        }
       })
 
       const topSellingProducts: ProductSales[] = Array.from(productSalesMap.entries())
@@ -553,11 +556,18 @@ const InventoryReports: React.FC = () => {
       })
 
     } catch (error) {
-      console.error('Error generating report:', error)
+      const msg = error instanceof Error
+        ? error.stack || error.message
+        : error && typeof error === 'object' && 'message' in error
+          ? String((error as any).message)
+          : JSON.stringify(error)
+      console.error('Error generating report:', msg)
       setLoadError(
         error instanceof Error
           ? error.message
-          : 'No se pudo generar el reporte de inventario.'
+          : error && typeof error === 'object' && 'message' in error
+            ? String((error as any).message)
+            : 'No se pudo generar el reporte de inventario.'
       )
     } finally {
       setIsGenerating(false)
