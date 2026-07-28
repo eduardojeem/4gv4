@@ -11,6 +11,17 @@ import {
 
 const TENANT_SETTINGS_KEY = 'admin_settings'
 
+// Columnas de `system_settings` que son política de plataforma (super_admin) y
+// no deben viajar a los tenants en el endpoint compartido.
+const PLATFORM_ONLY_DB_COLUMNS = [
+  'maintenance_mode',
+  'allow_registration',
+  'require_email_verification',
+  'max_login_attempts',
+  'password_min_length',
+  'require_two_factor',
+] as const
+
 function toFrontendSettings(row: Record<string, unknown>): SystemSettingsPartial {
   return mapDBToSettings(row as Parameters<typeof mapDBToSettings>[0])
 }
@@ -113,12 +124,20 @@ export async function GET() {
   if (branch?.address) effectiveSettings.companyAddress = branch.address
   if (branch?.city) effectiveSettings.city = branch.city
 
+  // No exponer la política de seguridad de la PLATAFORMA a los tenants: estos
+  // campos son globales (los administra el super_admin) y no tienen por qué
+  // filtrarse a cada organización vía el endpoint compartido.
+  const responseRow: Record<string, unknown> = {
+    ...globalRow,
+    ...mapSettingsToDB(effectiveSettings),
+    company_logo: organization?.logo_url ?? null,
+  }
+  for (const col of PLATFORM_ONLY_DB_COLUMNS) {
+    delete responseRow[col]
+  }
+
   return NextResponse.json({
     success: true,
-    data: {
-      ...globalRow,
-      ...mapSettingsToDB(effectiveSettings),
-      company_logo: organization?.logo_url ?? null,
-    },
+    data: responseRow,
   })
 }

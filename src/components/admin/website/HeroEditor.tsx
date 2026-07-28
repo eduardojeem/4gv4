@@ -15,6 +15,7 @@ import { Loader2, Save, Sparkles, TrendingUp, Check, Eye } from 'lucide-react'
 import { HeroContent, HeroStats } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 import { getBrandTheme } from '@/lib/constants/brand-theme'
+import { isValidBrandHexColor } from '@/lib/website/brand-color'
 
 export function HeroEditor() {
   const { settings, isLoading, error, isSaving, updateSetting } = useAdminWebsiteSettings()
@@ -28,9 +29,12 @@ export function HeroEditor() {
   const hasChanges = heroContentDraft !== null || heroStatsDraft !== null
 
   const brand = getBrandTheme(settings?.company_info?.brandColor)
+  const customBrandColor = settings?.company_info?.customBrandColor
+  const hasValidCustomBrand =
+    settings?.company_info?.brandColor === 'custom' && isValidBrandHexColor(customBrandColor)
   const customBrandStyle =
-    settings?.company_info?.brandColor === 'custom' && settings.company_info.customBrandColor
-      ? { '--primary': settings.company_info.customBrandColor } as React.CSSProperties
+    hasValidCustomBrand
+      ? { '--brand-primary': customBrandColor } as React.CSSProperties
       : undefined
 
   // Report unsaved changes so the tabs page can warn before switching away.
@@ -40,7 +44,7 @@ export function HeroEditor() {
     return () => dirtyCtx?.setDirty(false)
   }, [hasChanges, dirtyCtx])
 
-  const updateContent = (field: keyof HeroContent, value: string) => {
+  const updateContent = <K extends keyof HeroContent>(field: K, value: HeroContent[K]) => {
     if (errors[field]) {
       setErrors((prev) => {
         const next = { ...prev }
@@ -51,7 +55,7 @@ export function HeroEditor() {
     setHeroContentDraft((c) => ({ ...(c ?? heroContent), [field]: value }))
   }
 
-  const updateStat = (field: keyof HeroStats, value: string) => {
+  const updateStat = <K extends keyof HeroStats>(field: K, value: HeroStats[K]) => {
     setHeroStatsDraft((s) => ({ ...(s ?? heroStats), [field]: value }))
   }
 
@@ -117,6 +121,7 @@ export function HeroEditor() {
         </div>
         <div
           className={`relative overflow-hidden bg-gradient-to-br ${brand.hero} px-6 py-10 text-white`}
+          data-custom-brand={hasValidCustomBrand ? '' : undefined}
           style={customBrandStyle}
         >
           <div className="mx-auto max-w-5xl">
@@ -288,7 +293,7 @@ export function HeroEditor() {
                       onChange={(e) => {
                         const newBadges = [...badges]
                         newBadges[idx] = e.target.value
-                        updateContent('trustBadges', newBadges as any)
+                        updateContent('trustBadges', newBadges)
                       }}
                       placeholder={`Insignia ${idx + 1}`}
                       maxLength={30}
@@ -310,7 +315,7 @@ export function HeroEditor() {
           </div>
           <Switch
             checked={heroStats.enabled !== false}
-            onCheckedChange={(checked) => updateStat('enabled', checked as any)}
+            onCheckedChange={(checked) => updateStat('enabled', checked)}
           />
         </div>
         {heroStats.enabled !== false && (

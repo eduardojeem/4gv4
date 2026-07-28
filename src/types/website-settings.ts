@@ -83,11 +83,27 @@ export interface ProcessStep {
   description: string
 }
 
+export interface ProcessFlow {
+  id: string
+  title: string
+  description?: string
+  active?: boolean
+  steps: ProcessStep[]
+}
+
 export interface MaintenanceMode {
   enabled: boolean
   title: string
   message: string
   estimatedEnd?: string
+}
+
+export interface BankTransferOption {
+  id: string
+  bankName: string
+  alias?: string
+  accountNumber?: string
+  accountHolder?: string
 }
 
 export interface PaymentMethodConfig {
@@ -98,9 +114,16 @@ export interface PaymentMethodConfig {
   bankAlias?: string
   bankCbu?: string
   bankName?: string
+  transferOptions?: BankTransferOption[]
   // Digital wallet-specific
   walletAlias?: string
   qrImageUrl?: string
+}
+
+export interface DeliveryZoneOption {
+  id: string
+  name: string
+  cost: number
 }
 
 export interface DeliveryConfig {
@@ -108,6 +131,7 @@ export interface DeliveryConfig {
   defaultCost: number           // Gs. shown in cart by default
   freeThreshold: number         // 0 = always paid; >0 = free above this amount
   estimatedTime: string         // e.g. "30–60 min"
+  zoneOptions?: DeliveryZoneOption[]
   zones?: string                // free-text description of zones covered
   instructions?: string         // extra info shown to customer
 }
@@ -118,7 +142,10 @@ export interface PickupConfig {
   instructions?: string
 }
 
+export type PublicCommerceMode = 'cart' | 'whatsapp' | 'catalog'
+
 export interface CheckoutSettings {
+  commerceMode: PublicCommerceMode
   payment: {
     cash: PaymentMethodConfig
     card: PaymentMethodConfig
@@ -139,6 +166,7 @@ export interface WebsiteSettings {
   services: Service[]
   testimonials: Testimonial[]
   process_steps: ProcessStep[]
+  process_flows: ProcessFlow[]
   maintenance_mode: MaintenanceMode
   checkout: CheckoutSettings
 }

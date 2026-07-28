@@ -4,6 +4,18 @@ import { OffersSectionSchema } from '@/lib/validation/website-settings'
 import type { WebsiteSettings } from '@/types/website-settings'
 
 describe('applyWebsiteSettingsDefaults', () => {
+  it('keeps the public cart enabled by default for existing organizations', () => {
+    const result = applyWebsiteSettingsDefaults({} as Partial<WebsiteSettings>)
+
+    expect(result.checkout.commerceMode).toBe('cart')
+  })
+
+  it('keeps the process section hidden until an organization configures it', () => {
+    const result = applyWebsiteSettingsDefaults({} as Partial<WebsiteSettings>)
+
+    expect(result.company_info.processSectionEnabled).toBe(false)
+  })
+
   it('accepts the expanded offers accent palette', () => {
     const base = applyWebsiteSettingsDefaults({} as Partial<WebsiteSettings>).offers_section
     const colors = ['brand', 'rose', 'amber', 'orange', 'emerald', 'blue', 'sky', 'violet', 'fuchsia', 'red', 'teal']

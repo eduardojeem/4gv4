@@ -1,95 +1,138 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { BrandTheme } from '@/lib/constants/brand-theme'
-import type { ProcessStep } from '@/types/website-settings'
+import type { ProcessFlow, ProcessStep } from '@/types/website-settings'
 
 interface ProcessStepsProps {
   brand: BrandTheme
-  steps: ProcessStep[]
+  flows: ProcessFlow[]
 }
 
-function StepCard({ step, index, isLast, brand }: { step: ProcessStep; index: number; isLast: boolean; brand: BrandTheme }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el || typeof IntersectionObserver === 'undefined') return
-    const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect() } },
-      { threshold: 0.3 }
-    )
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
-
+function StepCard({
+  step,
+  index,
+  isLast,
+  brand,
+}: {
+  step: ProcessStep
+  index: number
+  isLast: boolean
+  brand: BrandTheme
+}) {
   return (
-    <div
-      ref={ref}
-      style={{ transitionDelay: `${index * 100}ms` }}
-      className={cn('text-center transition-all duration-700', visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6')}
-    >
-      {/* Number bubble */}
-      <div className="relative mx-auto flex h-16 w-16 items-center justify-center">
-        <div className={cn(
-          'h-16 w-16 rounded-full flex items-center justify-center text-xl font-black shadow-lg ring-4 ring-background',
+    <article className="relative z-10 w-full max-w-[260px] text-center sm:w-[calc(50%-0.75rem)] lg:w-[calc(25%-0.75rem)]">
+      <div
+        className={cn(
+          'mx-auto flex h-14 w-14 items-center justify-center rounded-full border-4 border-background text-lg font-bold shadow-sm',
           isLast
-            ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white'
-            : `bg-gradient-to-br ${brand.hero} text-white`
-        )}>
-          {step.number}
-        </div>
+            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+            : brand.stepBg,
+          !isLast && brand.stepText
+        )}
+        aria-label={`Paso ${index + 1}`}
+      >
+        {index + 1}
       </div>
-
-      {/* Content */}
-      <div className="mt-5">
-        <h3 className="text-base font-bold text-foreground">{step.title}</h3>
-        <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-[180px] mx-auto">
-          {step.description}
-        </p>
-      </div>
-    </div>
+      <h3 className="mt-4 break-words text-base font-semibold text-foreground">
+        {step.title}
+      </h3>
+      <p className="mx-auto mt-2 max-w-[220px] text-sm leading-relaxed text-muted-foreground">
+        {step.description}
+      </p>
+    </article>
   )
 }
 
-export function ProcessSteps({ brand, steps }: ProcessStepsProps) {
-  if (steps.length === 0) return null
+export function ProcessSteps({ brand, flows }: ProcessStepsProps) {
+  const [selectedFlowId, setSelectedFlowId] = useState(flows[0]?.id ?? '')
+  if (flows.length === 0) return null
+
+  const selectedFlow =
+    flows.find((flow) => flow.id === selectedFlowId) ?? flows[0]
+  const steps = selectedFlow.steps
+  const showConnector = steps.length > 1 && steps.length <= 4
 
   return (
-    <section className="py-16 md:py-24">
+    <section className="py-14 md:py-20" aria-labelledby="public-process-title">
       <div className="container">
-        {/* Header */}
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          <h2
+            id="public-process-title"
+            className="text-2xl font-bold sm:text-3xl"
+          >
             Cómo funciona
           </h2>
-          <p className="mt-3 text-muted-foreground">
-            Proceso simple y transparente en {steps.length} pasos
+          <p className="mt-3 text-sm text-muted-foreground sm:text-base">
+            {flows.length > 1
+              ? 'Elegí el tipo de atención y conoce cada etapa.'
+              : 'Un recorrido claro para que sepas qué esperar.'}
           </p>
         </div>
 
-        {/* Steps with connector lines */}
-        <div className="relative mx-auto mt-14 max-w-4xl">
-          {/* Horizontal connector line (desktop only) */}
-          {steps.length > 1 && (
-            <div className="absolute left-0 right-0 top-8 hidden h-px bg-gradient-to-r from-transparent via-border to-transparent md:block" />
-          )}
-
+        {flows.length > 1 && (
           <div
-            className="grid gap-8 md:gap-4"
-            style={{ gridTemplateColumns: `repeat(${Math.min(steps.length, 4)}, minmax(0, 1fr))` }}
+            className="mx-auto mt-7 flex max-w-3xl gap-2 overflow-x-auto pb-1"
+            role="tablist"
+            aria-label="Tipos de proceso"
           >
-            {steps.map((step, i) => (
-              <StepCard
-                key={step.id}
-                step={step}
-                index={i}
-                isLast={i === steps.length - 1}
-                brand={brand}
+            {flows.map((flow) => {
+              const selected = flow.id === selectedFlow.id
+              return (
+                <button
+                  key={flow.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`public-process-panel-${flow.id}`}
+                  onClick={() => setSelectedFlowId(flow.id)}
+                  className={cn(
+                    'min-w-fit rounded-md border px-4 py-2 text-sm font-medium transition-colors',
+                    selected
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                  )}
+                >
+                  {flow.title}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <div
+          id={`public-process-panel-${selectedFlow.id}`}
+          role="tabpanel"
+          className="mt-9"
+        >
+          <div className="mx-auto max-w-2xl text-center">
+            <h3 className="text-lg font-semibold">{selectedFlow.title}</h3>
+            {selectedFlow.description && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {selectedFlow.description}
+              </p>
+            )}
+          </div>
+
+          <div className="relative mx-auto mt-9 max-w-5xl">
+            {showConnector && (
+              <div
+                className="absolute left-[12.5%] right-[12.5%] top-7 hidden h-px bg-border lg:block"
+                aria-hidden="true"
               />
-            ))}
+            )}
+            <div className="flex flex-wrap justify-center gap-x-3 gap-y-10">
+              {steps.map((step, index) => (
+                <StepCard
+                  key={step.id}
+                  step={step}
+                  index={index}
+                  isLast={index === steps.length - 1}
+                  brand={brand}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>

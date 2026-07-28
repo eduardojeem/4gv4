@@ -87,14 +87,15 @@ function limitText(limit: number | null) {
   return limit === null ? 'Ilimitado' : String(limit)
 }
 
-function getRedemptionDetailText(benefit: any) {
+function getRedemptionDetailText(benefit: Record<string, unknown> | null | undefined) {
   if (!benefit) return ''
-  const type = benefit.benefit_type
+  const type = String(benefit.benefit_type || '')
   const unit = benefit.duration_unit === 'months' ? 'meses' : 'días'
-  const durationText = benefit.duration_days ? `${benefit.duration_days} ${unit}` : ''
+  const durationDays = Number(benefit.duration_days || 0)
+  const durationText = durationDays > 0 ? `${durationDays} ${unit}` : ''
 
   if (type === 'activate_plan') {
-    return `Activación de plan ${benefit.target_plan || ''} por ${durationText}`
+    return `Activación de plan ${String(benefit.target_plan || '')} por ${durationText}`
   }
   if (type === 'extend_trial') {
     return `Extensión de prueba por ${durationText}`
@@ -103,10 +104,10 @@ function getRedemptionDetailText(benefit: any) {
     return `Extensión de período por ${durationText}`
   }
   if (type === 'discount_percent') {
-    return `Descuento de ${benefit.discount_percent}%`
+    return `Descuento de ${Number(benefit.discount_percent || 0)}%`
   }
   if (type === 'discount_fixed') {
-    return `Descuento de ${money(benefit.discount_amount, 'PYG')}`
+    return `Descuento de ${money(Number(benefit.discount_amount || 0), 'PYG')}`
   }
   return 'Beneficio promocional aplicado'
 }
@@ -126,7 +127,8 @@ function feature(plan: PlanRecord, key: string) {
 
   // 2. Check if features is a JSON array of objects
   if (Array.isArray(plan.features)) {
-    const found = plan.features.find((f: any) => {
+    const found = plan.features.find((item) => {
+      const f = item && typeof item === 'object' ? item as Record<string, unknown> : {}
       const label = String(f?.label || '').toLowerCase()
       if (key === 'marketplace') {
         return label.includes('marketplace') || label.includes('ecommerce')
@@ -175,6 +177,10 @@ function progressColor(percent: number) {
   return '#059669'
 }
 
+function currentTimestamp() {
+  return Date.now()
+}
+
 function buildAlerts(state: Awaited<ReturnType<typeof getCurrentOrganizationSubscription>>) {
   const alerts: string[] = []
   const status = state.subscription?.status
@@ -208,9 +214,14 @@ export default async function AdminSubscriptionsPage() {
   const nextDate = subscription?.current_period_ends_at || subscription?.trial_ends_at
   const subscriptionStatus = subscription?.status || 'sin_estado'
   const paymentStatus = subscription?.payment_status || 'manual'
-  const paymentProvider = subscription?.provider === 'mercado_pago' ? 'Mercado Pago' : 'Pago manual'
+  const paymentProvider = subscription?.provider === 'pagopar'
+    ? 'Pagopar'
+    : subscription?.provider === 'mercado_pago'
+      ? 'Mercado Pago'
+      : 'Pago manual'
+  const canChangePlan = organization.role === 'owner'
   const periodEnd = nextDate ? new Date(nextDate) : null
-  const daysLeft = periodEnd ? Math.ceil((periodEnd.getTime() - Date.now()) / 86400000) : null
+  const daysLeft = periodEnd ? Math.ceil((periodEnd.getTime() - currentTimestamp()) / 86400000) : null
   const usedLimits = resources
     .map((resource) => {
       const limit = getPlanLimit(state.currentPlan, resource.key)
@@ -261,12 +272,14 @@ export default async function AdminSubscriptionsPage() {
               planName={state.currentPlan.name}
               planAmount={money(state.currentPlan.price_monthly, state.currentPlan.currency)}
             />
-            <Button asChild variant="outline" className="gap-2">
-              <Link href="/admin/subscriptions/change-plan">
-                <CreditCard className="h-4 w-4" />
-                Cambiar plan
-              </Link>
-            </Button>
+            {canChangePlan && (
+              <Button asChild variant="outline" className="gap-2">
+                <Link href="/admin/subscriptions/change-plan">
+                  <CreditCard className="h-4 w-4" />
+                  Cambiar plan
+                </Link>
+              </Button>
+            )}
             <SubscriptionCancellation
               isFreePlan={state.currentPlan.price_monthly <= 0}
               cancelAtPeriodEnd={subscription?.cancel_at_period_end === true}
@@ -335,7 +348,7 @@ export default async function AdminSubscriptionsPage() {
                   Pagos y Facturación
                 </h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Los cobros son mensuales. Completa los datos en la sección de "Facturación" para habilitar la pasarela de pago seguro (Pagopar) y descargar tus comprobantes de pago.
+                  Cada pago confirmado habilita un período mensual. Pagopar procesa el cobro, pero no realiza débitos automáticos: deberás iniciar el siguiente pago desde esta sección.
                 </p>
               </div>
               <div className="space-y-1.5 p-4 rounded-lg bg-background/60 border border-border/40 backdrop-blur-sm">
@@ -424,6 +437,7 @@ export default async function AdminSubscriptionsPage() {
       </div>
 
       <PlansComparison
+        canChangePlan={canChangePlan}
         currentPlanCode={state.currentPlan.code}
         plans={state.plans.map((plan): PlanRow => ({
           code: plan.code,
@@ -441,7 +455,7 @@ export default async function AdminSubscriptionsPage() {
         }))}
       />
 
-      <Card>
+      <Card id="payment-history">
         <CardHeader>
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Historial de pagos</CardTitle>
@@ -453,7 +467,7 @@ export default async function AdminSubscriptionsPage() {
             <div className="rounded-lg border border-dashed p-6 text-center">
               <Receipt className="mx-auto h-8 w-8 text-muted-foreground" />
               <p className="mt-3 text-sm font-medium">Sin pagos registrados</p>
-              <p className="mt-1 text-sm text-muted-foreground">Cuando se carguen pagos manuales o de Mercado Pago apareceran aca.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Los pagos manuales, de Pagopar o por código de activación aparecerán aquí.</p>
             </div>
           ) : (
             <Table>
@@ -465,7 +479,7 @@ export default async function AdminSubscriptionsPage() {
                   <TableHead>Estado</TableHead>
                   <TableHead>Metodo</TableHead>
                   <TableHead>Referencia</TableHead>
-                  <TableHead>Comprobante</TableHead>
+                  <TableHead>Enlace Pagopar</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

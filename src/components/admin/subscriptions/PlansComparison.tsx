@@ -37,6 +37,7 @@ export type PlanRow = {
 type Props = {
   plans: PlanRow[]
   currentPlanCode: string
+  canChangePlan: boolean
 }
 
 const resources: Array<{ key: keyof PlanRow; label: string; icon: typeof Users }> = [
@@ -52,7 +53,7 @@ function FeatureValue({ value }: { value: string }) {
   return <span className="text-xs font-medium">{value}</span>
 }
 
-function PlanCard({ plan, isCurrent }: { plan: PlanRow; isCurrent: boolean }) {
+function PlanCard({ plan, isCurrent, canChangePlan }: { plan: PlanRow; isCurrent: boolean; canChangePlan: boolean }) {
   return (
     <div className={cn(
       'relative flex flex-col rounded-xl border bg-card transition-shadow hover:shadow-md',
@@ -119,12 +120,16 @@ function PlanCard({ plan, isCurrent }: { plan: PlanRow; isCurrent: boolean }) {
             <CheckCircle2 className="mr-2 h-4 w-4" />
             Plan actual
           </Button>
-        ) : (
+        ) : canChangePlan ? (
           <Button asChild className="w-full" variant="outline">
             <Link href="/admin/subscriptions/change-plan">
               <CreditCard className="mr-2 h-4 w-4" />
               Cambiar a {plan.name}
             </Link>
+          </Button>
+        ) : (
+          <Button className="w-full" variant="outline" disabled>
+            Solo el propietario puede cambiar
           </Button>
         )}
       </div>
@@ -132,7 +137,7 @@ function PlanCard({ plan, isCurrent }: { plan: PlanRow; isCurrent: boolean }) {
   )
 }
 
-export function PlansComparison({ plans, currentPlanCode }: Props) {
+export function PlansComparison({ plans, currentPlanCode, canChangePlan }: Props) {
   const [view, setView] = useState<'table' | 'cards'>('cards')
 
   return (
@@ -174,6 +179,7 @@ export function PlansComparison({ plans, currentPlanCode }: Props) {
                 key={plan.code}
                 plan={plan}
                 isCurrent={plan.code === currentPlanCode}
+                canChangePlan={canChangePlan}
               />
             ))}
           </div>
@@ -213,7 +219,7 @@ export function PlansComparison({ plans, currentPlanCode }: Props) {
                     <TableCell>{plan.analytics}</TableCell>
                     <TableCell>{plan.credits}</TableCell>
                     <TableCell className="text-right">
-                      {!isCurrent && (
+                      {!isCurrent && canChangePlan && (
                         <Button asChild size="sm" variant="outline">
                           <Link href="/admin/subscriptions/change-plan">Cambiar</Link>
                         </Button>

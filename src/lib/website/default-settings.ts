@@ -14,7 +14,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       headerColor: '',
       showTopBar: true,
       servicesPageEnabled: true,
-      processSectionEnabled: true,
+      processSectionEnabled: false,
       marketplacePublic: true
     },
     hero_content: {
@@ -47,6 +47,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       { id: 'step-3', number: 3, title: 'Reparación', description: 'Nuestros técnicos reparan tu celular' },
       { id: 'step-4', number: 4, title: 'Entrega', description: 'Recoge tu dispositivo como nuevo' },
     ],
+    process_flows: [],
     maintenance_mode: {
       enabled: false,
       title: 'Sitio en Mantenimiento',
@@ -54,6 +55,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
       estimatedEnd: ''
     },
     checkout: {
+      commerceMode: 'cart',
       payment: {
         cash:           { enabled: true,  label: 'Efectivo',          instructions: 'Pagás al retirar en el local o al recibir el delivery.' },
         card:           { enabled: true,  label: 'Tarjeta',           instructions: 'Posnet inalámbrico disponible en el local o a domicilio.' },
@@ -65,6 +67,7 @@ export function getWebsiteSettingsDefaults(): WebsiteSettings {
         defaultCost: 0,
         freeThreshold: 0,
         estimatedTime: '30–60 min',
+        zoneOptions: [],
         zones: '',
         instructions: '',
       },
@@ -115,6 +118,9 @@ export function applyWebsiteSettingsDefaults(
     process_steps: Array.isArray(settings.process_steps) && settings.process_steps.length > 0
       ? settings.process_steps
       : defaults.process_steps,
+    process_flows: Array.isArray(settings.process_flows)
+      ? settings.process_flows
+      : defaults.process_flows,
     maintenance_mode: {
       ...defaults.maintenance_mode,
       ...maintenanceMode

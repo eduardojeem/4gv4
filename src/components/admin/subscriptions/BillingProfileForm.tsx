@@ -39,6 +39,7 @@ export function BillingProfileForm({ profile }: { profile: BillingProfile | null
   })
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [errors, setErrors] = useState<ProfileErrors>({})
+  const [message, setMessage] = useState('')
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -47,26 +48,44 @@ export function BillingProfileForm({ profile }: { profile: BillingProfile | null
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
       setStatus('error')
+      setMessage('Revisa los datos marcados antes de guardar.')
       return
     }
 
     setErrors({})
     setStatus('saving')
+    setMessage('')
 
-    const response = await fetch('/api/admin/subscriptions/billing', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values),
-    })
+    try {
+      const response = await fetch('/api/admin/subscriptions/billing', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(values),
+      })
+      const payload = await response.json().catch(() => null) as { error?: string } | null
 
-    setStatus(response.ok ? 'saved' : 'error')
-    if (response.ok) router.refresh()
+      if (!response.ok) {
+        setStatus('error')
+        setMessage(payload?.error || 'No se pudieron guardar los datos de facturación.')
+        return
+      }
+
+      setStatus('saved')
+      setMessage('Datos guardados.')
+      router.refresh()
+    } catch {
+      setStatus('error')
+      setMessage('No se pudo conectar con el servidor. Intenta nuevamente.')
+    }
   }
 
   function update(key: keyof EditableProfile, value: string) {
     setValues((current) => ({ ...current, [key]: value }))
     setErrors((current) => ({ ...current, [key]: undefined }))
-    if (status === 'error') setStatus('idle')
+    if (status === 'error') {
+      setStatus('idle')
+      setMessage('')
+    }
   }
 
   return (
@@ -151,8 +170,8 @@ export function BillingProfileForm({ profile }: { profile: BillingProfile | null
           <Save className="h-4 w-4" />
           {status === 'saving' ? 'Guardando...' : 'Guardar facturacion'}
         </Button>
-        {status === 'saved' && <span className="text-sm text-emerald-600">Datos guardados.</span>}
-        {status === 'error' && <span className="text-sm text-destructive">Revisa los datos marcados antes de guardar.</span>}
+        {status === 'saved' && <span className="text-sm text-emerald-600">{message}</span>}
+        {status === 'error' && <span role="alert" className="text-sm text-destructive">{message}</span>}
       </div>
     </form>
   )

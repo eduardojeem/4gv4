@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Zap,
   ShoppingCart,
+  MessageCircle,
   Search,
   Sparkles,
   TrendingDown,
@@ -25,13 +26,14 @@ import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
 import { getTenantSlugFromPathname, withOrgQuery } from '@/lib/saas/tenant'
 import { cn } from '@/lib/utils'
-import type { OffersSectionSettings, WebsiteSettings } from '@/types/website-settings'
+import type { OffersSectionSettings, PublicCommerceMode, WebsiteSettings } from '@/types/website-settings'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import type { PublicProduct } from '@/types/public'
 import { toast } from 'sonner'
 import useSWR from 'swr'
 
 import { formatCurrency } from '@/lib/currency'
+import { getWhatsAppLink } from '@/lib/whatsapp'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface OfferProduct {
@@ -124,19 +126,30 @@ function OfferCard({
   tenantPrefix,
   accent,
   priority,
+  commerceMode,
+  contactPhone,
 }: {
   offer: OfferProduct
   tenantPrefix: string
   accent: (typeof OFFER_ACCENTS)[OffersSectionSettings['accentColor']]
   priority?: boolean
+  commerceMode: PublicCommerceMode
+  contactPhone: string
 }) {
   const { addProduct } = usePublicCart()
   const [addedToCart, setAddedToCart] = useState(false)
   const discount = calcDiscount(offer.sale_price, offer.offer_price)
   const href = `${tenantPrefix}/productos/${offer.id}`
+  const whatsappHref = contactPhone
+    ? getWhatsAppLink({
+        phone: contactPhone,
+        message: `Hola, quiero consultar por ${offer.name} (${formatPrice(offer.offer_price)}).`,
+      })
+    : null
 
   const handleCart = (e: React.MouseEvent) => {
     e.preventDefault()
+    if (commerceMode !== 'cart') return
     const product: PublicProduct = {
       ...offer,
       sku: '',
@@ -242,20 +255,34 @@ function OfferCard({
           >
             <Link href={href}>Ver detalle</Link>
           </Button>
-          <Button
-            size="sm"
-            onClick={handleCart}
-            disabled={!offer.in_stock}
-            aria-label={`Agregar ${offer.name} al carrito`}
-            className={cn(
-              "rounded-xl transition-all shadow-sm focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-95",
-              addedToCart
-                ? "bg-emerald-600 hover:bg-emerald-600 text-white shadow-emerald-600/10 focus-visible:ring-emerald-500"
-                : accent.solid
-            )}
-          >
-            {addedToCart ? <CheckCircle className="h-4.5 w-4.5" /> : <ShoppingCart className="h-4.5 w-4.5" />}
-          </Button>
+          {commerceMode === 'cart' && (
+            <Button
+              size="sm"
+              onClick={handleCart}
+              disabled={!offer.in_stock}
+              aria-label={`Agregar ${offer.name} al carrito`}
+              className={cn(
+                "rounded-xl transition-all shadow-sm focus-visible:ring-2 focus-visible:ring-offset-2 active:scale-95",
+                addedToCart
+                  ? "bg-emerald-600 hover:bg-emerald-600 text-white shadow-emerald-600/10 focus-visible:ring-emerald-500"
+                  : accent.solid
+              )}
+            >
+              {addedToCart ? <CheckCircle className="h-4.5 w-4.5" /> : <ShoppingCart className="h-4.5 w-4.5" />}
+            </Button>
+          )}
+          {commerceMode === 'whatsapp' && whatsappHref && (
+            <Button asChild size="sm" className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Consultar por ${offer.name} en WhatsApp`}
+              >
+                <MessageCircle className="h-4 w-4" />
+              </a>
+            </Button>
+          )}
         </div>
       </div>
     </article>
@@ -263,26 +290,6 @@ function OfferCard({
 }
 
 // ─── Skeleton ────────────────────────────────────────────────────────────────
-function OfferSkeleton() {
-  return (
-    <div className="overflow-hidden rounded-3xl border border-slate-200/50 bg-white/70 dark:border-slate-800/40 dark:bg-slate-950/60 animate-pulse">
-      <div className="aspect-[4/3] bg-slate-100 dark:bg-slate-900/50" />
-      <div className="space-y-3.5 p-4">
-        <div className="h-3.5 w-1/3 rounded-full bg-slate-100 dark:bg-slate-900/50" />
-        <div className="space-y-1.5">
-          <div className="h-4 rounded-full bg-slate-100 dark:bg-slate-900/50" />
-          <div className="h-4 w-3/4 rounded-full bg-slate-100 dark:bg-slate-900/50" />
-        </div>
-        <div className="h-6 w-2/5 rounded-full bg-slate-100 dark:bg-slate-900/50" />
-        <div className="flex gap-2">
-          <div className="h-9 flex-1 rounded-xl bg-slate-100 dark:bg-slate-900/50" />
-          <div className="h-9 w-9 rounded-xl bg-slate-100 dark:bg-slate-900/50" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function OffersPageClient({ initialSettings, initialOffers }: OffersPageClientProps) {
   const { settings: liveSettings } = useWebsiteSettings()
@@ -291,10 +298,15 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const settings = liveSettings ?? initialSettings
   const offersSettings = settings.offers_section
+  const commerceMode = settings.checkout.commerceMode ?? 'cart'
+  const contactPhone =
+    settings.company_info.whatsapp?.trim() ||
+    settings.company_info.phone?.trim() ||
+    ''
   const accent = OFFER_ACCENTS[offersSettings.accentColor] ?? OFFER_ACCENTS.rose
 
   // Fetch offers
-  const { data: allOffers = initialOffers, isLoading } = useSWR<OfferProduct[]>(
+  const { data: allOffers = initialOffers } = useSWR<OfferProduct[]>(
     withOrgQuery('/api/public/products?per_page=50&sort=newest&has_offer=true', tenantSlug),
     fetchOffers,
     { fallbackData: initialOffers, revalidateOnFocus: false, dedupingInterval: 60_000 }
@@ -586,6 +598,8 @@ export function OffersPageClient({ initialSettings, initialOffers }: OffersPageC
                 tenantPrefix={tenantPrefix}
                 accent={accent}
                 priority={i < 4}
+                commerceMode={commerceMode}
+                contactPhone={contactPhone}
               />
             ))}
           </div>

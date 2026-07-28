@@ -5,11 +5,9 @@ import Image from 'next/image'
 import { Package, Store, Menu, X, Phone, User, Shield, Clock, LayoutDashboard, Truck, Briefcase, Tag } from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { WHOLESALE_PRICE_PERMISSION } from '@/lib/auth/roles-permissions'
 import { PublicRepairReadyNotifications } from '@/components/public/PublicRepairReadyNotifications'
 import { PublicCartButton } from '@/components/public/cart/PublicCartButton'
 import {
@@ -35,6 +33,7 @@ import { LogOut } from 'lucide-react'
 import { useRouter, usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname, isTenantPublicSection } from '@/lib/saas/tenant'
 import { AuthModal } from '@/components/public/AuthModal'
+import { isPublicServicesPageAvailable } from '@/lib/website/services'
 
 export function PublicHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -43,7 +42,7 @@ export function PublicHeader() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const { user, signOut, hasPermission } = useAuth()
+  const { user, signOut } = useAuth()
   const { settings } = useWebsiteSettings()
   const router = useRouter()
   const pathname = usePathname()
@@ -61,7 +60,6 @@ export function PublicHeader() {
   const weekdayHours = companyInfo?.hours?.weekdays?.trim() || ''
   const showTopBar = companyInfo?.showTopBar !== false
   const canAccessDashboard = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'tecnico' || user?.role === 'vendedor'
-  const isWholesaleUser = hasPermission(WHOLESALE_PRICE_PERMISSION)
   const pathTenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = pathTenantSlug ? `/${pathTenantSlug}` : ''
   const withTenantPrefix = (href: string) => {
@@ -144,8 +142,10 @@ export function PublicHeader() {
     }
   }
 
-  const servicesEnabled = settings?.company_info?.servicesPageEnabled !== false && 
-    (Array.isArray(settings?.services) && settings.services.length > 0)
+  const servicesEnabled = isPublicServicesPageAvailable(
+    settings?.company_info?.servicesPageEnabled,
+    settings?.services
+  )
   const offersEnabled = settings?.offers_section?.enabled !== false
 
   const navLinks = [

@@ -46,6 +46,7 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
   const offers = settings.offers_section
   const services = settings.services || []
   const processSteps = settings.process_steps || []
+  const processFlows = settings.process_flows || []
   const checkout = settings.checkout
 
   // Completion logic
@@ -87,8 +88,14 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
       label: 'Proceso de Trabajo',
       icon: Footprints,
       description: 'Cómo trabajas paso a paso',
-      isCompleted: processSteps.length > 0,
-      tip: 'Define los pasos de tu flujo de trabajo (por ejemplo: Diagnóstico, Aprobación, Reparación, Entrega) para dar transparencia.'
+      isCompleted:
+        company?.processSectionEnabled === false ||
+        (
+          processFlows.length > 0
+            ? processFlows.some(flow => flow.active !== false && flow.steps.length > 0)
+            : processSteps.length > 0
+        ),
+      tip: 'Esta sección es opcional. Puedes ocultarla o elegir una plantilla y personalizar sus pasos.'
     },
     {
       id: 'checkout',
@@ -97,13 +104,18 @@ export function SetupGuide({ activeTab, onTabChange }: SetupGuideProps) {
       description: 'Habilitar checkout, delivery o retiro',
       isCompleted: !!(
         checkout &&
-        (checkout.payment.cash.enabled ||
-          checkout.payment.card.enabled ||
-          checkout.payment.transfer.enabled ||
-          checkout.payment.digital_wallet.enabled) &&
-        (checkout.delivery.enabled || checkout.pickup.enabled)
+        (
+          checkout.commerceMode !== 'cart' ||
+          (
+            (checkout.payment.cash.enabled ||
+              checkout.payment.card.enabled ||
+              checkout.payment.transfer.enabled ||
+              checkout.payment.digital_wallet.enabled) &&
+            (checkout.delivery.enabled || checkout.pickup.enabled)
+          )
+        )
       ),
-      tip: 'Activa al menos un método de pago y un modo de entrega (retiro o delivery) para que los clientes completen sus compras.'
+      tip: 'Elegí si la tienda venderá con carrito, recibirá consultas por WhatsApp o funcionará como catálogo.'
     }
   ]
 

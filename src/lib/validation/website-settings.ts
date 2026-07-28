@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isValidBrandHexColor } from '@/lib/website/brand-color'
 
 /**
  * Esquemas de validación para configuración del sitio web
@@ -35,7 +36,10 @@ export const CompanyInfoSchema = z.object({
     .or(z.literal('')),
   brandColor: z.enum(['blue','green','purple','orange','red','indigo','teal','rose','amber','emerald','cyan','sky','custom'])
     .optional(),
-  customBrandColor: z.string().optional().or(z.literal('')),
+  customBrandColor: z.string()
+    .max(7, 'El color personalizado debe usar formato #RGB o #RRGGBB')
+    .refine((value) => value === '' || isValidBrandHexColor(value), 'Ingresá un color HEX válido (#RGB o #RRGGBB)')
+    .optional(),
   headerStyle: z.enum(['glass', 'solid', 'accent', 'dark']).optional(),
   headerColor: z.string().max(50).optional().or(z.literal('')),
   showTopBar: z.boolean().optional(),
@@ -47,9 +51,17 @@ export const CompanyInfoSchema = z.object({
   tiktok: z.string().max(100).optional().or(z.literal('')),
   marketplacePublic: z.boolean().optional(),
   servicesPageEnabled: z.boolean().optional(),
-  processSectionEnabled: z.boolean().optional().default(true),
+  processSectionEnabled: z.boolean().optional().default(false),
   slug: z.string().optional(),
-}).passthrough()
+}).passthrough().superRefine((value, ctx) => {
+  if (value.brandColor === 'custom' && !isValidBrandHexColor(value.customBrandColor)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['customBrandColor'],
+      message: 'Seleccioná un color personalizado válido',
+    })
+  }
+})
 
 // Esquema para contenido del hero
 export const HeroContentSchema = z.object({
@@ -149,12 +161,13 @@ export const ServiceSchema = z.object({
     'emerald',
     'sky'
   ] as const, { error: 'Color inválido' }),
-  benefits: z.array(
-    z.string()
-      .min(1, 'Beneficio no puede estar vacío')
-      .max(200, 'Beneficio no puede exceder 200 caracteres')
-  )
-    .max(10, 'Máximo 10 beneficios por servicio')
+    benefits: z.array(
+      z.string()
+        .min(1, 'Beneficio no puede estar vacío')
+        .max(200, 'Beneficio no puede exceder 200 caracteres')
+    )
+      .min(1, 'Debe haber al menos 1 beneficio')
+      .max(10, 'Máximo 10 beneficios por servicio')
     .refine(
       (benefits) => benefits.every(b => b.trim().length > 0),
       'Los beneficios no pueden estar vacíos'
@@ -226,7 +239,36 @@ export const ProcessStepsSchema = z.array(ProcessStepSchema)
   .min(1, 'Debe haber al menos 1 paso')
   .max(8, 'Máximo 8 pasos permitidos')
 
+export const ProcessFlowSchema = z.object({
+  id: z.string().min(1).max(100),
+  title: z.string()
+    .min(2, 'Título debe tener al menos 2 caracteres')
+    .max(80, 'Título no puede exceder 80 caracteres'),
+  description: z.string().max(200, 'Descripción no puede exceder 200 caracteres').optional().or(z.literal('')),
+  active: z.boolean().optional().default(true),
+  steps: ProcessStepsSchema,
+})
+
+export const ProcessFlowsSchema = z.array(ProcessFlowSchema)
+  .max(6, 'Máximo 6 procesos permitidos')
+
 // Esquema para configuración de un método de pago
+const BankTransferOptionSchema = z.object({
+  id: z.string().min(1).max(100),
+  bankName: z.string().min(2, 'Indicá el nombre del banco').max(100),
+  alias: z.string().max(100).optional().or(z.literal('')),
+  accountNumber: z.string().max(50).optional().or(z.literal('')),
+  accountHolder: z.string().max(100).optional().or(z.literal('')),
+}).superRefine((value, ctx) => {
+  if (!value.alias?.trim() && !value.accountNumber?.trim()) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['alias'],
+      message: 'Ingresá un alias o número de cuenta',
+    })
+  }
+})
+
 const PaymentMethodConfigSchema = z.object({
   enabled: z.boolean(),
   label: z.string().max(60).optional(),
@@ -234,15 +276,23 @@ const PaymentMethodConfigSchema = z.object({
   bankAlias: z.string().max(100).optional(),
   bankCbu: z.string().max(50).optional(),
   bankName: z.string().max(100).optional(),
+  transferOptions: z.array(BankTransferOptionSchema).max(8, 'Máximo 8 cuentas bancarias').optional(),
   walletAlias: z.string().max(100).optional(),
   qrImageUrl: z.string().max(500).optional().or(z.literal('')),
 }).passthrough()
+
+const DeliveryZoneOptionSchema = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().trim().min(2, 'Indicá el nombre de la zona').max(100),
+  cost: z.number().min(0).max(9_999_999),
+})
 
 const DeliveryConfigSchema = z.object({
   enabled: z.boolean(),
   defaultCost: z.number().min(0).max(9_999_999),
   freeThreshold: z.number().min(0).max(999_999_999),
   estimatedTime: z.string().max(60),
+  zoneOptions: z.array(DeliveryZoneOptionSchema).max(20, 'Máximo 20 zonas de cobertura').optional(),
   zones: z.string().max(300).optional(),
   instructions: z.string().max(500).optional(),
 }).passthrough()
@@ -254,6 +304,7 @@ const PickupConfigSchema = z.object({
 }).passthrough()
 
 export const CheckoutSettingsSchema = z.object({
+  commerceMode: z.enum(['cart', 'whatsapp', 'catalog']).default('cart'),
   payment: z.object({
     cash:           PaymentMethodConfigSchema,
     card:           PaymentMethodConfigSchema,
@@ -264,7 +315,30 @@ export const CheckoutSettingsSchema = z.object({
   pickup:   PickupConfigSchema,
   minOrderAmount:       z.number().min(0).max(999_999_999),
   confirmationMessage:  z.string().max(500).optional(),
-}).passthrough()
+}).passthrough().superRefine((value, ctx) => {
+  if (value.commerceMode !== 'cart') return
+
+  const hasPaymentMethod =
+    value.payment.cash.enabled ||
+    value.payment.card.enabled ||
+    value.payment.transfer.enabled ||
+    value.payment.digital_wallet.enabled
+  if (!hasPaymentMethod) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['payment'],
+      message: 'Habilitá al menos un método de pago',
+    })
+  }
+
+  if (!value.delivery.enabled && !value.pickup.enabled) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['delivery'],
+      message: 'Habilitá delivery o retiro en local',
+    })
+  }
+})
 
 // Esquema completo de configuración del sitio web
 export const WebsiteSettingsSchema = z.object({
@@ -275,6 +349,7 @@ export const WebsiteSettingsSchema = z.object({
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
   process_steps: ProcessStepsSchema,
+  process_flows: ProcessFlowsSchema,
   maintenance_mode: MaintenanceModeSchema,
 })
 
@@ -290,6 +365,7 @@ export const SETTING_SCHEMAS = {
   services: ServicesSchema,
   testimonials: TestimonialsSchema,
   process_steps: ProcessStepsSchema,
+  process_flows: ProcessFlowsSchema,
   maintenance_mode: MaintenanceModeSchema,
   checkout: CheckoutSettingsSchema,
 } as const

@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { ArrowRight, Minus, Package, Plus, ShoppingBag, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -15,11 +16,14 @@ import { useCartDrawer } from '@/contexts/cart-drawer-context'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { resolveProductImageUrl } from '@/lib/images'
 import { formatPrice } from '@/lib/utils'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 
 export function CartDrawer() {
   const router = useRouter()
   const { isOpen, close } = useCartDrawer()
   const { tenantSlug, items, count, subtotal, setQuantity, removeItem, clear } = usePublicCart()
+  const { settings } = useWebsiteSettings()
+  const commerceMode = settings?.checkout.commerceMode ?? 'cart'
 
   const productsHref = tenantSlug ? `/${tenantSlug}/productos` : '/productos'
   const cartHref = tenantSlug ? `/${tenantSlug}/carrito` : '/carrito'
@@ -27,6 +31,16 @@ export function CartDrawer() {
   function handleCheckout() {
     close()
     router.push(cartHref)
+  }
+
+  useEffect(() => {
+    if (commerceMode === 'cart') return
+    if (items.length > 0) clear()
+    if (isOpen) close()
+  }, [clear, close, commerceMode, isOpen, items.length])
+
+  if (commerceMode !== 'cart') {
+    return null
   }
 
   return (

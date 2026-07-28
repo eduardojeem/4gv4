@@ -47,6 +47,12 @@ export default function AdminSettingsPage() {
 
   const [activeTab, setActiveTab] = useState('company')
 
+  // Validación inline de los campos obligatorios (espeja el esquema Zod del
+  // servidor) para dar feedback antes de intentar guardar.
+  const nameValid = settings.companyName.trim().length > 0
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings.companyEmail.trim())
+  const canSave = nameValid && emailValid
+
   const changedFields = useMemo(() => {
     return Object.keys(settings).reduce((count, key) => {
       const typedKey = key as keyof typeof settings
@@ -65,14 +71,46 @@ export default function AdminSettingsPage() {
     initialSyncDone.current = true
   }, [isLoading, settings.theme, settings.primaryColor, setTheme, setColorScheme])
 
+  // El tema/color se aplican en vivo (preview) pero el theme-context los persiste
+  // en localStorage. Si el admin cambia el tema y sale SIN guardar, revertimos al
+  // baseline guardado para no dejar el tema desincronizado con la BD.
+  const themeDirtyRef = useRef(false)
+  const savedThemeRef = useRef({ theme: originalSettings.theme, color: originalSettings.primaryColor })
+  useEffect(() => {
+    if (!themeDirtyRef.current) {
+      savedThemeRef.current = { theme: originalSettings.theme, color: originalSettings.primaryColor }
+    }
+  }, [originalSettings.theme, originalSettings.primaryColor])
+  useEffect(() => {
+    return () => {
+      if (!themeDirtyRef.current) return
+      const { theme, color } = savedThemeRef.current
+      setTheme(theme as 'light' | 'dark' | 'system')
+      setColorScheme(isSystemColorScheme(color) ? color : DEFAULT_SYSTEM_COLOR_SCHEME)
+    }
+  }, [setTheme, setColorScheme])
+
+  // Aviso del navegador al cerrar/recargar con cambios sin guardar.
+  useEffect(() => {
+    if (!hasChanges) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [hasChanges])
+
   const handleThemeChange = (value: string) => {
     updateSetting('theme', value)
     setTheme(value as 'light' | 'dark' | 'system')
+    themeDirtyRef.current = true
   }
 
   const handleColorChange = (value: SystemColorScheme) => {
     updateSetting('primaryColor', value)
     setColorScheme(value)
+    themeDirtyRef.current = true
   }
 
   if (authLoading || isLoading) {
@@ -112,6 +150,9 @@ export default function AdminSettingsPage() {
   const handleSave = async () => {
     const result = await saveSettings()
     if (result.success) {
+      // El tema quedó persistido en la BD: el baseline pasa a ser el actual.
+      themeDirtyRef.current = false
+      savedThemeRef.current = { theme: settings.theme, color: settings.primaryColor }
       toast.success(t.saved)
     } else {
       toast.error(result.error || t.saveError)
@@ -122,6 +163,7 @@ export default function AdminSettingsPage() {
     resetSettings()
     setTheme(originalSettings.theme as 'light' | 'dark' | 'system')
     setColorScheme(isSystemColorScheme(originalSettings.primaryColor) ? originalSettings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME)
+    themeDirtyRef.current = false
     toast.info(t.discarded)
   }
 
@@ -159,18 +201,18 @@ export default function AdminSettingsPage() {
         </Alert>
       )}
 
-      {/* Save bar */}
+      {/* Save bar — sticky para seguir accesible al scrollear el formulario */}
       {hasChanges && (
-        <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-primary/5">
-          <span className="text-sm font-medium text-primary">
+        <div className="sticky top-2 z-20 flex items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-primary/10">
+          <span className="min-w-0 truncate text-sm font-medium text-primary">
             {t.unsavedBar}
           </span>
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-2">
             <Button variant="ghost" size="sm" onClick={handleReset} disabled={isSaving}>
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
               {t.discard}
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={isSaving}>
+            <Button size="sm" onClick={handleSave} disabled={isSaving || !canSave}>
               {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
               {isSaving ? t.saving : t.save}
             </Button>
@@ -209,7 +251,13 @@ export default function AdminSettingsPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="companyName">{t.company.name} <span className="text-destructive">*</span></Label>
-                  <Input id="companyName" value={settings.companyName} onChange={(e) => updateSetting('companyName', e.target.value)} />
+                  <Input
+                    id="companyName"
+                    value={settings.companyName}
+                    onChange={(e) => updateSetting('companyName', e.target.value)}
+                    aria-invalid={!nameValid}
+                    className={!nameValid ? 'border-destructive focus-visible:ring-destructive' : undefined}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="companyRuc">{t.company.ruc}</Label>
@@ -217,7 +265,14 @@ export default function AdminSettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="companyEmail">{t.company.email} <span className="text-destructive">*</span></Label>
-                  <Input id="companyEmail" type="email" value={settings.companyEmail} onChange={(e) => updateSetting('companyEmail', e.target.value)} />
+                  <Input
+                    id="companyEmail"
+                    type="email"
+                    value={settings.companyEmail}
+                    onChange={(e) => updateSetting('companyEmail', e.target.value)}
+                    aria-invalid={!emailValid}
+                    className={!emailValid ? 'border-destructive focus-visible:ring-destructive' : undefined}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="companyPhone">{t.company.phone}</Label>
@@ -235,6 +290,7 @@ export default function AdminSettingsPage() {
                       <SelectItem value="PYG">PYG - Guaraní</SelectItem>
                       <SelectItem value="USD">USD - Dólar</SelectItem>
                       <SelectItem value="EUR">EUR - Euro</SelectItem>
+                      <SelectItem value="MXN">MXN - Peso mexicano</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -248,11 +304,11 @@ export default function AdminSettingsPage() {
                       </Tooltip>
                     </TooltipProvider>
                   </Label>
-                  <Input id="taxRate" type="number" min="0" max="100" value={settings.taxRate} onChange={(e) => updateSetting('taxRate', parseFloat(e.target.value) || 0)} />
+                  <Input id="taxRate" type="number" min="0" max="100" value={settings.taxRate} onChange={(e) => updateSetting('taxRate', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="sessionTimeout">{t.company.session}</Label>
-                  <Input id="sessionTimeout" type="number" min="5" max="480" value={settings.sessionTimeout} onChange={(e) => updateSetting('sessionTimeout', parseInt(e.target.value) || 60)} />
+                  <Input id="sessionTimeout" type="number" min="5" max="480" value={settings.sessionTimeout} onChange={(e) => updateSetting('sessionTimeout', e.target.value === '' ? 0 : parseInt(e.target.value) || 0)} />
                 </div>
               </div>
               <div className="space-y-2 pt-2">
@@ -273,9 +329,9 @@ export default function AdminSettingsPage() {
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
-                  <Label>{t.regional.language}</Label>
+                  <Label htmlFor="setting-language">{t.regional.language}</Label>
                   <Select value={settings.language} onValueChange={(v) => updateSetting('language', v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="setting-language"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="es">{t.regional.spanish}</SelectItem>
                       <SelectItem value="en">{t.regional.english}</SelectItem>
@@ -284,9 +340,9 @@ export default function AdminSettingsPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>{t.regional.timeZone}</Label>
+                  <Label htmlFor="setting-timezone">{t.regional.timeZone}</Label>
                   <Select value={settings.timeZone} onValueChange={(v) => updateSetting('timeZone', v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="setting-timezone"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {timeZoneOptions.map(([value, label]) => (
                         <SelectItem key={value} value={value}>{label}</SelectItem>
@@ -299,9 +355,9 @@ export default function AdminSettingsPage() {
                   <p className="text-xs text-muted-foreground">{t.regional.timeZoneHelp}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>{t.regional.dateFormat}</Label>
+                  <Label htmlFor="setting-dateformat">{t.regional.dateFormat}</Label>
                   <Select value={settings.dateFormat} onValueChange={(v) => updateSetting('dateFormat', v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="setting-dateformat"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
                       <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
@@ -327,9 +383,9 @@ export default function AdminSettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>{t.appearance.theme}</Label>
+                  <Label htmlFor="setting-theme">{t.appearance.theme}</Label>
                   <Select value={settings.theme} onValueChange={handleThemeChange}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="setting-theme"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="light">{t.appearance.light}</SelectItem>
                       <SelectItem value="dark">{t.appearance.dark}</SelectItem>
@@ -338,9 +394,9 @@ export default function AdminSettingsPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>{t.appearance.quickColor}</Label>
+                  <Label htmlFor="setting-quickcolor">{t.appearance.quickColor}</Label>
                   <Select value={quickColorValue} onValueChange={(v) => { if (v !== '__catalog__') handleColorChange(v as SystemColorScheme) }}>
-                    <SelectTrigger><SelectValue placeholder={t.appearance.chooseColor} /></SelectTrigger>
+                    <SelectTrigger id="setting-quickcolor"><SelectValue placeholder={t.appearance.chooseColor} /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__catalog__">{t.appearance.catalog}</SelectItem>
                       <SelectItem value="blue">{t.appearance.blue}</SelectItem>
@@ -374,9 +430,9 @@ export default function AdminSettingsPage() {
               </div>
 
               <div className="space-y-2 pt-2">
-                <Label>{t.appearance.perPage}</Label>
+                <Label htmlFor="setting-perpage">{t.appearance.perPage}</Label>
                 <Select value={String(settings.itemsPerPage)} onValueChange={(v) => updateSetting('itemsPerPage', parseInt(v))}>
-                  <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="setting-perpage" className="w-[120px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="10">10</SelectItem>
                     <SelectItem value="20">20</SelectItem>
@@ -400,8 +456,8 @@ export default function AdminSettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>{t.inventory.lowStock}</Label>
-                <Input type="number" min="1" value={settings.lowStockThreshold} onChange={(e) => updateSetting('lowStockThreshold', parseInt(e.target.value) || 10)} />
+                <Label htmlFor="setting-lowstock">{t.inventory.lowStock}</Label>
+                <Input id="setting-lowstock" type="number" min="1" value={settings.lowStockThreshold} onChange={(e) => updateSetting('lowStockThreshold', e.target.value === '' ? 0 : parseInt(e.target.value) || 0)} />
                 <p className="text-xs text-muted-foreground">{t.inventory.lowStockHelp}</p>
               </div>
             </CardContent>

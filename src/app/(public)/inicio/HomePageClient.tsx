@@ -9,6 +9,7 @@ import { FeaturedProducts } from '@/components/public/inicio/FeaturedProducts'
 import { OffersCarousel } from '@/components/public/inicio/OffersCarousel'
 import { ServicesGrid } from '@/components/public/inicio/ServicesGrid'
 import { ProcessSteps } from '@/components/public/inicio/ProcessSteps'
+import { getPublicProcessFlows } from '@/lib/website/process-steps'
 import { ContactCTA } from '@/components/public/inicio/ContactCTA'
 import { BranchLocations } from '@/components/public/inicio/BranchLocations'
 import { OrganizationReviews } from '@/components/public/inicio/OrganizationReviews'
@@ -55,6 +56,10 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
   const processSteps = useMemo(
     () => Array.isArray(settings.process_steps) ? settings.process_steps : [],
     [settings.process_steps]
+  )
+  const processFlows = useMemo(
+    () => getPublicProcessFlows(settings.process_flows, processSteps),
+    [settings.process_flows, processSteps]
   )
 
   const phone = company_info.phone
@@ -104,7 +109,7 @@ export default function HomePageClient({ initialSettings, branches = [] }: HomeP
 
       {/* ── Trust / secondary ── */}
       {company_info.processSectionEnabled !== false && (
-        <ProcessSteps brand={brand} steps={processSteps} />
+        <ProcessSteps brand={brand} flows={processFlows} />
       )}
 
       <BranchLocations branches={branches} brand={brand} />

@@ -50,4 +50,20 @@ describe('website services validation', () => {
 
     expect(result.success).toBe(false)
   })
+
+  it('requires at least one customer benefit per service', () => {
+    const result = validateSetting('services', [
+      {
+        id: 'service-empty-benefits',
+        title: 'Cambio de pantalla',
+        description: 'Reemplazo profesional de pantalla para celulares.',
+        icon: 'smartphone',
+        color: 'blue',
+        benefits: [],
+        active: true,
+      },
+    ])
+
+    expect(result.success).toBe(false)
+  })
 })

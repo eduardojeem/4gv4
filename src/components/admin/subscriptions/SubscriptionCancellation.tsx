@@ -80,7 +80,7 @@ export function SubscriptionCancellation({ isFreePlan, cancelAtPeriodEnd, period
         toast.error(payload?.error || 'No se pudo reactivar la suscripción.')
         return
       }
-      toast.success('Suscripción reactivada. Se renovará normalmente.')
+      toast.success('Cancelación retirada. Podrás iniciar el próximo pago desde Suscripción.')
       router.refresh()
     } finally {
       setLoading(false)

@@ -1,32 +1,22 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { 
-  Bell, 
-  AlertTriangle, 
-  CheckCircle, 
-  Info, 
-  X, 
-  Package, 
-  TrendingDown, 
-  TrendingUp,
-  Clock,
-  Star,
-  Users,
+import { useState, useCallback, useRef } from 'react'
+import {
+  Bell,
+  AlertTriangle,
+  CheckCircle,
+  Info,
+  X,
+  Package,
   Settings,
   Trash2,
-  Eye,
-  EyeOff
 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -333,101 +323,101 @@ export function NotificationSystem({
 
       {/* Full Notifications Panel */}
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetContent className="w-full sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle className="flex items-center justify-between">
-              <span>Centro de Notificaciones</span>
+        <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-lg">
+          <SheetHeader className="space-y-1 border-b px-5 py-4 text-left">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              Centro de notificaciones
               {unreadCount > 0 && (
-                <Badge variant="secondary">{unreadCount} sin leer</Badge>
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold text-primary">
+                  {unreadCount}
+                </span>
               )}
             </SheetTitle>
-            <SheetDescription>
-              Mantente al día con los cambios importantes en tu inventario
+            <SheetDescription className="text-xs">
+              Alertas de inventario, ventas y avisos del sistema
             </SheetDescription>
           </SheetHeader>
-          
-          <div className="mt-6 space-y-4">
-            {/* Quick Actions */}
-            <div className="flex gap-2">
+
+          {/* Acciones rápidas */}
+          {notifications.length > 0 && (
+            <div className="flex items-center gap-2 border-b px-5 py-2.5">
               {unreadCount > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleMarkAllAsRead}
-                  className="flex-1"
+                  className="h-8 flex-1 rounded-full text-xs"
                 >
-                  <CheckCircle className="mr-2 h-4 w-4" />
+                  <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
                   Marcar todas como leídas
                 </Button>
               )}
-              
-              {notifications.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearAll}
-                  className="flex-1 text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Limpiar todas
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClearAll}
+                className="h-8 rounded-full px-3 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40"
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Limpiar
+              </Button>
             </div>
+          )}
 
-            {/* Notifications by Category */}
-            <ScrollArea className="h-[calc(100vh-200px)]">
-              {notifications.length === 0 ? (
-                <div className="text-center py-12">
-                  <Bell className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <h3 className="text-lg font-medium mb-2">No hay notificaciones</h3>
-                  <p className="text-muted-foreground">
-                    Te notificaremos cuando haya cambios importantes
-                  </p>
+          <ScrollArea className="flex-1">
+            {notifications.length === 0 ? (
+              <div className="flex flex-col items-center px-6 py-20 text-center">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                  <Bell className="h-8 w-8 text-muted-foreground/60" />
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  {Object.entries(groupedNotifications).map(([category, categoryNotifications]) => {
-                    const CategoryIcon = categoryIcons[category as NotificationCategory]
-                    const categoryLabels = {
-                      stock: 'Inventario',
-                      sales: 'Ventas',
-                      system: 'Sistema',
-                      product: 'Productos',
-                      general: 'General'
-                    }
-                    
-                    return (
-                      <div key={category}>
-                        <div className="flex items-center gap-2 mb-3">
-                          <CategoryIcon className="h-4 w-4 text-muted-foreground" />
-                          <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                            {categoryLabels[category as NotificationCategory]}
-                          </h3>
-                          <div className="flex-1 h-px bg-border" />
-                          <Badge variant="secondary" className="text-xs">
-                            {categoryNotifications.length}
-                          </Badge>
-                        </div>
-                        
-                        <div className="space-y-3">
-                          {categoryNotifications
-                            .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-                            .map(notification => (
-                              <NotificationItem
-                                key={notification.id}
-                                notification={notification}
-                                onMarkAsRead={onMarkAsRead}
-                                onDelete={onDeleteNotification}
-                              />
-                            ))}
-                        </div>
+                <h3 className="text-base font-semibold">Todo al día</h3>
+                <p className="mt-1 max-w-[16rem] text-sm text-muted-foreground">
+                  Te avisamos apenas haya un cambio importante
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-5 px-5 py-4">
+                {Object.entries(groupedNotifications).map(([category, categoryNotifications]) => {
+                  const CategoryIcon = categoryIcons[category as NotificationCategory]
+                  const categoryLabels = {
+                    stock: 'Inventario',
+                    sales: 'Ventas',
+                    system: 'Sistema',
+                    product: 'Productos',
+                    general: 'General'
+                  }
+
+                  return (
+                    <div key={category}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <CategoryIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                          {categoryLabels[category as NotificationCategory]}
+                        </h3>
+                        <span className="text-[11px] font-medium text-muted-foreground/70">
+                          {categoryNotifications.length}
+                        </span>
+                        <div className="h-px flex-1 bg-border/60" />
                       </div>
-                    )
-                  })}
-                </div>
-              )}
-            </ScrollArea>
-          </div>
+
+                      <div className="space-y-2">
+                        {[...categoryNotifications]
+                          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+                          .map(notification => (
+                            <NotificationItem
+                              key={notification.id}
+                              notification={notification}
+                              onMarkAsRead={onMarkAsRead}
+                              onDelete={onDeleteNotification}
+                            />
+                          ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </ScrollArea>
         </SheetContent>
       </Sheet>
     </div>

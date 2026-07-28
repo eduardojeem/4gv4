@@ -47,11 +47,13 @@ function PlanCard({
   isCurrent,
   onSelect,
   isChanging,
+  isBusy,
 }: {
   plan: CommercialPlan
   isCurrent: boolean
   onSelect: (code: string) => void
   isChanging: boolean
+  isBusy: boolean
 }) {
   return (
     <div
@@ -132,14 +134,14 @@ function PlanCard({
           <Button
             className="w-full"
             onClick={() => onSelect(plan.code)}
-            disabled={isChanging}
+            disabled={isBusy}
           >
             {isChanging ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <CreditCard className="mr-2 h-4 w-4" />
             )}
-            {plan.price_monthly === 0 ? 'Cambiar a gratuito' : `Cambiar a ${plan.name}`}
+            {plan.price_monthly === 0 ? 'Cambiar a gratuito' : `Pagar y cambiar a ${plan.name}`}
           </Button>
         )}
       </div>
@@ -151,7 +153,7 @@ export default function ChangePlanPage() {
   const router = useRouter()
   const [data, setData] = useState<PageData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isChanging, setIsChanging] = useState(false)
+  const [changingPlanCode, setChangingPlanCode] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<ConflictResource[]>([])
   const [success, setSuccess] = useState(false)
@@ -168,26 +170,36 @@ export default function ChangePlanPage() {
   }, [])
 
   async function handleSelect(planCode: string) {
-    setIsChanging(true)
+    setChangingPlanCode(planCode)
     setError(null)
     setConflicts([])
 
-    const response = await fetch('/api/admin/subscriptions/change-plan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan: planCode }),
-    })
-    const payload = await response.json().catch(() => ({}))
+    try {
+      const response = await fetch('/api/admin/subscriptions/change-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planCode }),
+      })
+      const payload = await response.json().catch(() => ({}))
 
-    if (!response.ok) {
-      setError(payload?.error || 'No se pudo cambiar el plan.')
-      if (payload?.conflictingResources) setConflicts(payload.conflictingResources)
-      setIsChanging(false)
-      return
+      if (!response.ok) {
+        setError(payload?.error || 'No se pudo cambiar el plan.')
+        if (payload?.conflictingResources) setConflicts(payload.conflictingResources)
+        return
+      }
+
+      if (payload?.checkoutUrl) {
+        window.location.assign(payload.checkoutUrl)
+        return
+      }
+
+      setSuccess(true)
+      setTimeout(() => router.push('/admin/subscriptions'), 1800)
+    } catch {
+      setError('No se pudo conectar para cambiar el plan.')
+    } finally {
+      setChangingPlanCode(null)
     }
-
-    setSuccess(true)
-    setTimeout(() => router.push('/admin/subscriptions'), 1800)
   }
 
   if (isLoading) {
@@ -233,6 +245,13 @@ export default function ChangePlanPage() {
         </Alert>
       )}
 
+      <Alert>
+        <CreditCard className="h-4 w-4" />
+        <AlertDescription>
+          Los planes pagos se activan únicamente después de que Pagopar confirme el cobro.
+        </AlertDescription>
+      </Alert>
+
       {error && (
         <div className="space-y-3">
           <Alert variant="destructive">
@@ -263,7 +282,8 @@ export default function ChangePlanPage() {
             plan={plan}
             isCurrent={plan.code === data.currentPlan.code}
             onSelect={handleSelect}
-            isChanging={isChanging}
+            isChanging={changingPlanCode === plan.code}
+            isBusy={changingPlanCode !== null}
           />
         ))}
       </div>

@@ -6,10 +6,12 @@ import { Button } from '@/components/ui/button'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { useCartDrawer } from '@/contexts/cart-drawer-context'
 import { cn } from '@/lib/utils'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 
 export function PublicCartButton() {
   const { count } = usePublicCart()
   const { open }  = useCartDrawer()
+  const { settings, isLoading } = useWebsiteSettings()
 
   // Bump animation whenever a new item is added
   const prevCount = useRef(count)
@@ -17,12 +19,18 @@ export function PublicCartButton() {
 
   useEffect(() => {
     if (count > prevCount.current) {
+      // Cart updates come from external storage events; local state only drives the brief bump.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBump(true)
       const t = setTimeout(() => setBump(false), 500)
       return () => clearTimeout(t)
     }
     prevCount.current = count
   }, [count])
+
+  if (isLoading || (settings && settings.checkout.commerceMode !== 'cart')) {
+    return null
+  }
 
   return (
     <Button

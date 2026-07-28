@@ -80,7 +80,13 @@ export interface OrganizationSubscriptionState {
   usage: OrganizationUsage
   billingProfile: BillingProfile | null
   payments: SubscriptionPayment[]
-  promoRedemptions?: any[]
+  promoRedemptions?: Array<{
+    id: string
+    promo_code_id?: string | null
+    redeemed_at?: string | null
+    benefit_snapshot?: Record<string, unknown> | null
+    redeemed_by?: string | null
+  }>
 }
 
 // Fallback de seguridad. La fuente de verdad es la tabla `plans` (sincronizada desde
@@ -142,17 +148,36 @@ export function normalizePlanCode(value: unknown): PlanCode {
   return 'FREE'
 }
 
-export function getPlanLimit(plan: PlanRecord, resourceType: ResourceType): number | null {
+const SUPPORTED_PLAN_CODES = new Set([
+  'free',
+  'basic',
+  'starter',
+  'pro',
+  'professional',
+  'profesional',
+  'enterprise',
+])
+
+export function isSupportedPlanCode(value: unknown) {
+  if (typeof value !== 'string') return false
+  return SUPPORTED_PLAN_CODES.has(value.toLowerCase().trim())
+}
+
+export function getPlanLimit(plan: Pick<PlanRecord, 'limits'>, resourceType: ResourceType): number | null {
   const value = plan.limits?.[resourceType]
   if (value === null || typeof value === 'undefined') return null
   const numeric = toNumber(value, Number.NaN)
   return Number.isFinite(numeric) ? numeric : null
 }
 
+export function planRequiresPayment(plan: Pick<PlanRecord, 'price_monthly'>) {
+  return Number(plan.price_monthly) > 0
+}
+
 export async function getPlanLimits(planCode: string): Promise<PlanRecord> {
   const supabase = createAdminSupabase()
   const code = planCode.toUpperCase()
-  const [{ data }, { data: commercialData }] = await Promise.all([
+  const [technicalResult, commercialResult] = await Promise.all([
     supabase
       .from('plans')
       .select('code, name, limits, modules, is_active')
@@ -164,10 +189,16 @@ export async function getPlanLimits(planCode: string): Promise<PlanRecord> {
       .eq('tier', code.toLowerCase())
       .maybeSingle(),
   ])
+  if (technicalResult.error) {
+    throw new Error(`No se pudo cargar el plan técnico: ${technicalResult.error.message}`)
+  }
+  if (commercialResult.error) {
+    throw new Error(`No se pudo cargar el plan comercial: ${commercialResult.error.message}`)
+  }
 
   const [merged] = mergeCommercialPlans(
-    data ? [data as Record<string, unknown>] : [{ ...DEFAULT_PLAN, code }],
-    commercialData ? [commercialData as Record<string, unknown>] : []
+    technicalResult.data ? [technicalResult.data as Record<string, unknown>] : [{ ...DEFAULT_PLAN, code }],
+    commercialResult.data ? [commercialResult.data as Record<string, unknown>] : []
   )
 
   return normalizePlan(merged)
@@ -230,7 +261,9 @@ async function countRows(table: string, organizationId: string) {
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
 
-  if (error) return 0
+  if (error) {
+    throw new Error(`No se pudo contar ${table}: ${error.message}`)
+  }
   return count || 0
 }
 
@@ -241,7 +274,9 @@ async function countCashRegisters(organizationId: string) {
     .select('id')
     .eq('organization_id', organizationId)
 
-  if (branchesError) return 0
+  if (branchesError) {
+    throw new Error(`No se pudieron cargar las sucursales: ${branchesError.message}`)
+  }
 
   const branchIds = (branches ?? [])
     .map((branch) => String(branch.id))
@@ -254,7 +289,9 @@ async function countCashRegisters(organizationId: string) {
     .select('id', { count: 'exact', head: true })
     .in('branch_id', branchIds)
 
-  if (error) return 0
+  if (error) {
+    throw new Error(`No se pudieron contar las cajas: ${error.message}`)
+  }
   return count || 0
 }
 
@@ -270,7 +307,9 @@ async function countStaffMembers(organizationId: string) {
     .neq('role', 'customer')
     .eq('status', 'active')
 
-  if (error) return 0
+  if (error) {
+    throw new Error(`No se pudieron contar los usuarios: ${error.message}`)
+  }
   return count || 0
 }
 
@@ -299,18 +338,49 @@ export async function getCommercialPlanPrices(): Promise<Record<string, number>>
   )
 }
 
+async function applyScheduledDowngradeIfDue(organizationId: string) {
+  const supabase = createAdminSupabase()
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select('plan, cancel_at_period_end, current_period_ends_at')
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+
+  if (error) throw new Error(`No se pudo validar el vencimiento de la suscripción: ${error.message}`)
+
+  const periodEnded = data?.current_period_ends_at
+    ? new Date(data.current_period_ends_at).getTime() <= Date.now()
+    : false
+
+  if (!data?.cancel_at_period_end || !periodEnded || normalizePlanCode(data.plan) === 'FREE') {
+    return false
+  }
+
+  const { data: applied, error: applyError } = await supabase.rpc('apply_free_subscription_plan', {
+    p_organization_id: organizationId,
+    p_plan: 'FREE',
+  })
+
+  if (applyError || applied !== true) {
+    throw new Error(applyError?.message || 'No se pudo aplicar la cancelación programada.')
+  }
+
+  return true
+}
+
 export async function getCurrentOrganizationSubscription(organizationId: string): Promise<OrganizationSubscriptionState> {
+  await applyScheduledDowngradeIfDue(organizationId)
   const supabase = createAdminSupabase()
 
   const [
-    { data: subscriptionData },
-    { data: organizationData },
-    { data: plansData },
-    { data: commercialPlansData },
+    subscriptionResult,
+    organizationResult,
+    plansResult,
+    commercialPlansResult,
     usage,
-    { data: billingData },
-    { data: paymentsData },
-    { data: redemptionsData }
+    billingResult,
+    paymentsResult,
+    redemptionsResult,
   ] = await Promise.all([
     supabase
       .from('subscriptions')
@@ -351,16 +421,29 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
       .order('redeemed_at', { ascending: false })
   ])
 
-  const planRows = plansData ?? []
-  const commercialRows = commercialPlansData ?? []
+  const queryError = [
+    subscriptionResult.error,
+    organizationResult.error,
+    plansResult.error,
+    commercialPlansResult.error,
+    billingResult.error,
+    paymentsResult.error,
+    redemptionsResult.error,
+  ].find(Boolean)
+  if (queryError) {
+    throw new Error(`No se pudo cargar la suscripción: ${queryError.message}`)
+  }
+
+  const planRows = plansResult.data ?? []
+  const commercialRows = commercialPlansResult.data ?? []
   const plans = mergeCommercialPlans(
     planRows as Array<Record<string, unknown>>,
     commercialRows as Array<Record<string, unknown>>
   )
     .map(normalizePlan)
     .sort((a, b) => a.price_monthly - b.price_monthly)
-  const subscription = subscriptionData as SubscriptionRecord | null
-  const organizationPlan = typeof organizationData?.plan === 'string' ? organizationData.plan : null
+  const subscription = subscriptionResult.data as SubscriptionRecord | null
+  const organizationPlan = typeof organizationResult.data?.plan === 'string' ? organizationResult.data.plan : null
   const currentPlanCode = subscription?.plan || organizationPlan || plans[0]?.code || DEFAULT_PLAN.code
   const currentPlan = plans.find((plan) => plan.code === currentPlanCode) || normalizePlan({ ...DEFAULT_PLAN, code: currentPlanCode })
 
@@ -369,9 +452,9 @@ export async function getCurrentOrganizationSubscription(organizationId: string)
     currentPlan,
     plans,
     usage,
-    billingProfile: billingData as BillingProfile | null,
-    payments: (paymentsData ?? []) as SubscriptionPayment[],
-    promoRedemptions: redemptionsData ?? [],
+    billingProfile: billingResult.data as BillingProfile | null,
+    payments: (paymentsResult.data ?? []) as SubscriptionPayment[],
+    promoRedemptions: redemptionsResult.data ?? [],
   }
 }
 
@@ -386,6 +469,7 @@ export async function getOrganizationPlanInfo(
   moduleTrials: ModuleTrial[]
   trialedModules: string[]
 }> {
+  await applyScheduledDowngradeIfDue(organizationId)
   const supabase = createAdminSupabase()
   const [{ data: sub }, { data: org }, { data: trials }] = await Promise.all([
     supabase.from('subscriptions').select('plan, payment_status, cancel_at_period_end, current_period_ends_at').eq('organization_id', organizationId).maybeSingle(),
@@ -396,23 +480,8 @@ export async function getOrganizationPlanInfo(
       .eq('organization_id', organizationId),
   ])
 
-  let code = normalizePlanCode(sub?.plan || org?.plan)
+  const code = normalizePlanCode(sub?.plan || org?.plan)
 
-  // Cancelación programada (cancel_at_period_end): cuando vence el período pagado,
-  // la suscripción baja a Gratuito. Se aplica de forma perezosa (sin cron) y se
-  // persiste una sola vez para que sea permanente.
-  const periodEnded = sub?.current_period_ends_at
-    ? new Date(sub.current_period_ends_at).getTime() < Date.now()
-    : false
-  if (sub?.cancel_at_period_end && periodEnded && code !== 'FREE') {
-    code = normalizePlanCode('free')
-    // Limpiamos el período: Free no tiene fecha de cobro y, de quedar una fecha
-    // vencida, isExpired seguiría en true y caparía los límites tras un re-upgrade.
-    await supabase
-      .from('subscriptions')
-      .update({ plan: code, status: 'active', cancel_at_period_end: false, current_period_ends_at: null, updated_at: new Date().toISOString() })
-      .eq('organization_id', organizationId)
-  }
   const { data: plan } = await supabase
     .from('plans')
     .select('name, modules')
@@ -460,11 +529,15 @@ export async function getSubscriptionStatus(organizationId: string): Promise<{
   periodDaysLeft: number | null
 }> {
   const supabase = createAdminSupabase()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('subscriptions')
     .select('status, payment_status, trial_ends_at, current_period_ends_at')
     .eq('organization_id', organizationId)
     .maybeSingle()
+
+  if (error) {
+    throw new Error(`No se pudo validar el estado de la suscripción: ${error.message}`)
+  }
 
   const status = data?.status ?? null
   const paymentStatus = typeof data?.payment_status === 'string' ? data.payment_status : null
@@ -556,11 +629,15 @@ export async function canCreateRepair(
   const supabase = createAdminSupabase()
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('repairs')
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
     .gte('created_at', monthStart)
+
+  if (error) {
+    throw new Error(`No se pudieron contar las reparaciones del período: ${error.message}`)
+  }
 
   const current = count || 0
   return { allowed: current < limit, current, limit, plan: effectivePlan, expired: subscriptionStatus.isExpired }
@@ -586,7 +663,7 @@ export async function getChangePlanData(organizationId: string): Promise<{
 }> {
   const supabase = createAdminSupabase()
 
-  const [{ data: subscriptionData }, { data: orgData }, { data: commercialData }, { data: technicalData }, usage] = await Promise.all([
+  const [subscriptionResult, organizationResult, commercialResult, technicalResult, usage] = await Promise.all([
     supabase.from('subscriptions').select('plan, status').eq('organization_id', organizationId).maybeSingle(),
     supabase.from('organizations').select('plan').eq('id', organizationId).maybeSingle(),
     supabase
@@ -598,17 +675,27 @@ export async function getChangePlanData(organizationId: string): Promise<{
     getOrganizationUsage(organizationId),
   ])
 
-  const currentCode = (subscriptionData?.plan || orgData?.plan || 'FREE') as string
+  const queryError = [
+    subscriptionResult.error,
+    organizationResult.error,
+    commercialResult.error,
+    technicalResult.error,
+  ].find(Boolean)
+  if (queryError) {
+    throw new Error(`No se pudieron evaluar los planes: ${queryError.message}`)
+  }
+
+  const currentCode = (subscriptionResult.data?.plan || organizationResult.data?.plan || 'FREE') as string
 
   // Límites técnicos desde la DB (fuente única); DEFAULT_LIMITS solo como fallback.
   const technicalLimitsByCode = new Map(
-    ((technicalData ?? []) as Array<Record<string, unknown>>).map((row) => [
+    ((technicalResult.data ?? []) as Array<Record<string, unknown>>).map((row) => [
       normalizePlanCode(row.code),
       (typeof row.limits === 'object' && row.limits ? row.limits : {}) as Record<string, unknown>,
     ])
   )
 
-  const plans = ((commercialData ?? []) as Array<Record<string, unknown>>).map((row): CommercialPlan => {
+  const plans = ((commercialResult.data ?? []) as Array<Record<string, unknown>>).map((row): CommercialPlan => {
     const code = normalizePlanCode(row.tier) as PlanCode
     const limits: Record<string, unknown> = {
       ...(DEFAULT_LIMITS[code] || DEFAULT_LIMITS.FREE),
@@ -638,58 +725,105 @@ export async function getChangePlanData(organizationId: string): Promise<{
   return { currentPlan, usage, plans }
 }
 
+export type PlanChangeConflict = { resource: string; current: number; limit: number }
+
+export type PlanChangeAssessment =
+  | {
+      success: true
+      currentPlan: CommercialPlan
+      targetPlan: CommercialPlan
+      usage: OrganizationUsage
+      conflictingResources: []
+    }
+  | {
+      success: false
+      error: string
+      conflictingResources?: PlanChangeConflict[]
+    }
+
+export async function assessPlanChange(
+  organizationId: string,
+  newPlanCode: string,
+): Promise<PlanChangeAssessment> {
+  if (!isSupportedPlanCode(newPlanCode)) {
+    return { success: false, error: 'El código del plan solicitado no es válido.' }
+  }
+
+  const data = await getChangePlanData(organizationId)
+  const code = normalizePlanCode(newPlanCode)
+  const targetPlan = data.plans.find((plan) => plan.code === code)
+
+  if (!targetPlan) {
+    return { success: false, error: 'El plan solicitado no existe o no está disponible.' }
+  }
+
+  const resourceLabels: Record<ResourceType, string> = {
+    users: 'Usuarios',
+    branches: 'Sucursales',
+    cashRegisters: 'Cajas',
+    products: 'Productos',
+    categories: 'Categorías',
+  }
+  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'products', 'categories']
+  const conflictingResources: PlanChangeConflict[] = []
+
+  for (const key of countResources) {
+    const limit = getPlanLimit(targetPlan, key)
+    if (limit === null) continue
+    const current = data.usage[key]
+    if (current > limit) {
+      conflictingResources.push({ resource: resourceLabels[key], current, limit })
+    }
+  }
+
+  if (conflictingResources.length > 0) {
+    return {
+      success: false,
+      error: 'El uso actual supera los límites del plan destino.',
+      conflictingResources,
+    }
+  }
+
+  return {
+    success: true,
+    currentPlan: data.currentPlan,
+    targetPlan,
+    usage: data.usage,
+    conflictingResources: [],
+  }
+}
+
 export async function changePlan(
   organizationId: string,
   newPlanCode: string,
 ): Promise<{ success: true } | { success: false; error: string; conflictingResources?: Array<{ resource: string; current: number; limit: number }> }> {
   const supabase = createAdminSupabase()
-  const code = normalizePlanCode(newPlanCode) as PlanCode
+  const assessment = await assessPlanChange(organizationId, newPlanCode)
 
-  // Fuente única: límites del plan destino desde la DB (con fallback a DEFAULT_LIMITS).
-  const targetPlan = await getPlanLimits(code)
-
-  const usage = await getOrganizationUsage(organizationId)
-  const resourceLabels: Record<string, string> = {
-    users: 'Usuarios', branches: 'Sucursales', cashRegisters: 'Cajas', products: 'Productos',
+  if (assessment.success === false) {
+    return assessment
   }
 
-  // Solo validamos recursos que se cuentan por total (no los límites mensuales como repairs).
-  const countResources: ResourceType[] = ['users', 'branches', 'cashRegisters', 'products', 'categories']
-  const conflictingResources: Array<{ resource: string; current: number; limit: number }> = []
-
-  for (const key of countResources) {
-    const limit = getPlanLimit(targetPlan, key)
-    if (limit === null) continue
-    const current = usage[key] ?? 0
-    if (current > limit) {
-      conflictingResources.push({ resource: resourceLabels[key] || key, current, limit })
+  if (planRequiresPayment(assessment.targetPlan)) {
+    return {
+      success: false,
+      error: 'Los planes pagos deben activarse mediante un pago confirmado.',
     }
   }
 
-  if (conflictingResources.length > 0) {
-    return { success: false, error: 'El uso actual supera los límites del plan destino.', conflictingResources }
+  const { data, error } = await supabase.rpc('apply_free_subscription_plan', {
+    p_organization_id: organizationId,
+    p_plan: assessment.targetPlan.code,
+  })
+
+  if (error || data !== true) {
+    return { success: false, error: error?.message || 'No se pudo aplicar el plan gratuito.' }
   }
-
-  const now = new Date().toISOString()
-  const { error } = await supabase
-    .from('subscriptions')
-    .upsert({
-      organization_id: organizationId,
-      plan: code,
-      status: 'active',
-      // Un cambio de plan anula una cancelación programada y limpia un período
-      // vencido para que isExpired no quede pegado y cape los límites.
-      cancel_at_period_end: false,
-      current_period_ends_at: null,
-      updated_at: now,
-    }, { onConflict: 'organization_id' })
-
-  if (error) return { success: false, error: error.message }
 
   await supabase.from('audit_log').insert({
     action: 'update',
     resource: 'subscriptions',
-    new_values: { plan: code, organization_id: organizationId },
+    new_values: { plan: assessment.targetPlan.code, organization_id: organizationId },
   })
 
   return { success: true }
@@ -758,12 +892,13 @@ export async function cancelSubscriptionAtPeriodEnd(
   }
 
   // Sin período futuro definido → bajar a Gratuito de inmediato (estado limpio).
-  const freeCode = normalizePlanCode('free')
-  const { error } = await supabase
-    .from('subscriptions')
-    .update({ plan: freeCode, status: 'active', cancel_at_period_end: false, current_period_ends_at: null, updated_at: now })
-    .eq('organization_id', organizationId)
-  if (error) return { success: false, error: error.message }
+  const { data: applied, error } = await supabase.rpc('apply_free_subscription_plan', {
+    p_organization_id: organizationId,
+    p_plan: 'FREE',
+  })
+  if (error || applied !== true) {
+    return { success: false, error: error?.message || 'No se pudo aplicar el plan Gratuito.' }
+  }
   return { success: true, effectiveUntil: null }
 }
 

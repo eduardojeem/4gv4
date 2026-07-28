@@ -73,6 +73,27 @@ export function getPagoparAmountInPyg(amount: number, currency: string) {
   throw new Error(`Pagopar amount conversion is not configured for ${currency}`)
 }
 
+export function parsePagoparNotificationAmount(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 ? value : null
+  }
+  if (typeof value !== 'string' || !value.trim()) return null
+
+  const raw = value.trim().replace(/\s/g, '')
+  let normalized = raw
+
+  if (raw.includes('.') && raw.includes(',')) {
+    normalized = raw.replace(/\./g, '').replace(',', '.')
+  } else if (raw.includes(',')) {
+    normalized = raw.replace(',', '.')
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(raw)) {
+    normalized = raw.replace(/\./g, '')
+  }
+
+  const amount = Number(normalized)
+  return Number.isFinite(amount) && amount >= 0 ? amount : null
+}
+
 function normalizePagoparError(message: string) {
   if (message.includes('servicios o productos virtuales')) {
     return 'Pagopar rechazo el pago porque el comercio no esta habilitado para cobrar servicios o productos virtuales. Solicita a Pagopar que habilite productos virtuales para esta cuenta.'

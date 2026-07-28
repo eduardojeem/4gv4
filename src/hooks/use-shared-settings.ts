@@ -284,6 +284,10 @@ export function useSharedSettings() {
       if (settings.companyPhone) withOrgData.companyPhone = settings.companyPhone
       if (settings.companyAddress) withOrgData.companyAddress = settings.companyAddress
       if (settings.city) withOrgData.city = settings.city
+      // El logo no lo administra esta pantalla ni el esquema de guardado, así que
+      // la respuesta no lo trae: se preserva el valor actual para que el recibo
+      // no pierda el logo hasta la próxima recarga.
+      withOrgData.companyLogo = settings.companyLogo
 
       setSettings(withOrgData)
       setOriginalSettings(withOrgData)

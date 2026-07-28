@@ -16,6 +16,7 @@ const VALID_KEYS: WebsiteSettingKey[] = [
   'testimonials',
   'maintenance_mode',
   'process_steps',
+  'process_flows',
   'checkout',
 ]
 

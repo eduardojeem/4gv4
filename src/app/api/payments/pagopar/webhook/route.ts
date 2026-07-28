@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { validatePagoparNotificationToken } from '@/lib/payments/pagopar'
+import {
+  parsePagoparNotificationAmount,
+  validatePagoparNotificationToken,
+} from '@/lib/payments/pagopar'
 
 type PagoparNotificationItem = {
   pagado?: boolean
@@ -9,14 +12,18 @@ type PagoparNotificationItem = {
   forma_pago?: string | null
   hash_pedido?: string | null
   monto?: string | number | null
-  numero_comprobante_interno?: string | null
   numero_pedido?: string | number | null
   token?: string | null
 }
 
 type PagoparNotification = {
-  respuesta?: boolean
   resultado?: PagoparNotificationItem[]
+}
+
+function parsePaidAt(value: string | null | undefined) {
+  if (!value) return new Date().toISOString()
+  const parsed = new Date(value)
+  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : new Date().toISOString()
 }
 
 export async function POST(request: Request) {
@@ -31,49 +38,59 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 403 })
   }
 
-  const admin = createAdminSupabase()
-  const paid = item.pagado === true
-  const status = paid ? 'paid' : item.cancelado ? 'failed' : 'pending'
-  const paidDate = paid && item.fecha_pago ? new Date(item.fecha_pago) : null
-  const now = new Date()
-  const periodEnd = new Date(now)
-  periodEnd.setMonth(periodEnd.getMonth() + 1)
-  const paidAt = paidDate && Number.isFinite(paidDate.getTime()) ? paidDate.toISOString() : paid ? now.toISOString() : null
+  const amount = item.monto == null ? null : parsePagoparNotificationAmount(item.monto)
+  if ((item.monto != null && amount === null) || (item.pagado === true && amount === null)) {
+    return NextResponse.json({ error: 'Invalid amount' }, { status: 400 })
+  }
 
-  const { data: payment } = await admin
+  const admin = createAdminSupabase()
+  const providerPaymentId = item.numero_pedido ? String(item.numero_pedido) : ''
+  const paymentMethod = item.forma_pago || 'Pagopar'
+
+  if (item.pagado === true) {
+    const { data, error } = await admin.rpc('apply_paid_subscription_payment', {
+      p_external_reference: item.hash_pedido,
+      p_provider_payment_id: providerPaymentId,
+      p_payment_method: paymentMethod,
+      p_paid_at: parsePaidAt(item.fecha_pago),
+      p_amount: amount,
+    })
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    const result = Array.isArray(data) ? data[0] : data
+    if (!result) {
+      return NextResponse.json({ error: 'Payment was not applied' }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      applied: result.applied === true,
+      plan: result.plan_id,
+    })
+  }
+
+  const status = item.cancelado === true ? 'failed' : 'pending'
+  const { data: payment, error } = await admin
     .from('subscription_payments')
     .update({
       status,
-      payment_method: item.forma_pago || 'Pagopar',
-      provider_payment_id: item.numero_pedido ? String(item.numero_pedido) : null,
-      paid_at: paidAt,
+      payment_method: paymentMethod,
+      provider_payment_id: providerPaymentId || null,
     })
+    .eq('provider', 'pagopar')
     .eq('external_reference', item.hash_pedido)
-    .select('organization_id, subscription_id')
+    .select('id')
     .maybeSingle()
 
-  if (payment?.organization_id) {
-    const subscriptionUpdate = {
-      status: paid ? 'active' : 'past_due',
-      payment_status: status,
-      last_payment_method: item.forma_pago || 'Pagopar',
-      external_reference: item.hash_pedido,
-      provider_subscription_id: item.hash_pedido,
-      updated_at: now.toISOString(),
-      ...(paid
-        ? {
-            current_period_starts_at: now.toISOString(),
-            current_period_ends_at: periodEnd.toISOString(),
-            started_at: now.toISOString(),
-          }
-        : {}),
-    }
-
-    await admin
-      .from('subscriptions')
-      .update(subscriptionUpdate)
-      .eq('organization_id', payment.organization_id)
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  if (!payment) {
+    return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
   }
 
-  return NextResponse.json(payload?.resultado || [])
+  return NextResponse.json({ success: true, applied: false, status })
 }

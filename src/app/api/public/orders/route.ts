@@ -8,6 +8,9 @@ import { releaseReservedStock, reserveOrderStock, type OrderStockItem } from '@/
 import { resolvePublicOrganization } from '@/lib/saas/public-tenant'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { applyAutomaticPromotionToProduct, evaluatePublicCoupon, mapPublicPromotion, type PublicPromotion } from '@/lib/public-promotions'
+import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
+import type { CheckoutSettings } from '@/types/website-settings'
 
 const ORDER_RATE_LIMIT = 5
 const ORDER_RATE_WINDOW_MS = 10 * 60 * 1000
@@ -26,6 +29,7 @@ const publicOrderSchema = z.object({
   fulfillmentType: z.enum(['PICKUP', 'DELIVERY']).default('PICKUP'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']).default('CASH'),
   shippingCost: z.number().min(0).max(9_999_999).default(0),
+  deliveryZoneId: z.string().max(100).optional().nullable(),
   notes: z.string().trim().max(1000).optional().nullable(),
   promotionCode: z.string().trim().max(80).optional().nullable(),
 })
@@ -60,6 +64,28 @@ export async function POST(request: NextRequest) {
 
     if (!organization) {
       return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 404 })
+    }
+
+    const { data: checkoutSetting, error: checkoutSettingError } = await supabase
+      .from('website_settings')
+      .select('value')
+      .eq('organization_id', organization.id)
+      .eq('key', 'checkout')
+      .maybeSingle()
+
+    if (checkoutSettingError) throw checkoutSettingError
+
+    const checkout = applyWebsiteSettingsDefaults(
+      checkoutSetting?.value
+        ? { checkout: checkoutSetting.value as CheckoutSettings }
+        : {}
+    ).checkout
+
+    if (checkout.commerceMode !== 'cart') {
+      return NextResponse.json(
+        { success: false, error: 'La tienda no tiene habilitados los pedidos por carrito.' },
+        { status: 403 }
+      )
     }
 
     const productIds = input.items.map((item) => item.productId)
@@ -112,6 +138,28 @@ export async function POST(request: NextRequest) {
         subtotal: unitPrice * quantity,
         category_id: product.category_id ? String(product.category_id) : null,
       }
+    })
+    const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0)
+
+    if (input.fulfillmentType === 'DELIVERY' && !checkout.delivery.enabled) {
+      return NextResponse.json({ success: false, error: 'El delivery no está disponible.' }, { status: 422 })
+    }
+    if (input.fulfillmentType === 'PICKUP' && !checkout.pickup.enabled) {
+      return NextResponse.json({ success: false, error: 'El retiro en local no está disponible.' }, { status: 422 })
+    }
+
+    const deliveryZones = checkout.delivery.zoneOptions ?? []
+    const selectedDeliveryZone = deliveryZones.find((zone) => zone.id === input.deliveryZoneId)
+    if (input.fulfillmentType === 'DELIVERY' && deliveryZones.length > 0 && !selectedDeliveryZone) {
+      return NextResponse.json({ success: false, error: 'Seleccioná una zona de delivery válida.' }, { status: 422 })
+    }
+
+    const shippingCost = getDeliveryCost({
+      fulfillmentType: input.fulfillmentType,
+      subtotal,
+      defaultCost: checkout.delivery.defaultCost,
+      selectedZoneCost: selectedDeliveryZone?.cost,
+      freeThreshold: checkout.delivery.freeThreshold,
     })
 
     let appliedPromotion: PublicPromotion | null = null
@@ -167,8 +215,6 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString()
-    const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0)
-    const shippingCost = input.fulfillmentType === 'PICKUP' ? 0 : Math.max(0, input.shippingCost)
     const normalizedEmail = input.customer.email?.trim().toLowerCase() || null
     const normalizedPhone = input.customer.phone?.trim() || ''
     let customerId: string | null = null

@@ -19,6 +19,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     const categoryId = searchParams.get('category_id')
     const brand = searchParams.get('brand')
     const inStock = searchParams.get('in_stock') === 'true'
+    const strictBranchStock = searchParams.get('strict_branch_stock') === 'true'
     const page = parseInt(searchParams.get('page') || '1')
     const perPage = parseInt(searchParams.get('per_page') || '50')
     const requestedBranchId = getRequestedBranchId(request)
@@ -41,7 +42,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     // Apply filters
     if (query) {
       queryBuilder = queryBuilder.or(
-        `name.ilike.%${query}%,sku.ilike.%${query}%,description.ilike.%${query}%`
+        `name.ilike.%${query}%,sku.ilike.%${query}%,description.ilike.%${query}%,brand.ilike.%${query}%`
       )
     }
     
@@ -77,7 +78,16 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       branchScope.branchId,
       baseProducts.map((product) => product.id)
     )
-    const branchAwareProducts = applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped)
+    const branchAwareProducts = strictBranchStock && branchScope.branchId
+      ? baseProducts.map((product) => {
+          const branchStock = Number(stockMap.get(product.id) || 0)
+          return {
+            ...product,
+            stock_quantity: branchStock,
+            branch_stock_quantity: branchStock,
+          }
+        })
+      : applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped)
     const filteredProducts = inStock
       ? branchAwareProducts.filter((product) => Number(product.stock_quantity || 0) > 0)
       : branchAwareProducts

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Check, CreditCard, Eye, MapPin, Package, ShoppingCart, Tag, Zap, XCircle } from 'lucide-react'
+import { Check, CreditCard, Eye, MapPin, MessageCircle, Package, ShoppingCart, Tag, Zap, XCircle } from 'lucide-react'
 import { PublicProduct } from '@/types/public'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 import { InstallmentSelector } from '@/components/public/InstallmentSelector'
@@ -17,6 +17,8 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
+import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
+import { getWhatsAppLink } from '@/lib/whatsapp'
 
 interface ProductCardProps {
   product: PublicProduct
@@ -46,6 +48,7 @@ export function ProductCard(props: ProductCardProps) {
       : undefined
   const { hasPermission } = useAuth()
   const { addProduct } = usePublicCart()
+  const { settings: websiteSettings, isLoading: isLoadingWebsiteSettings } = useWebsiteSettings()
   const pathname = usePathname()
   const [imageError, setImageError] = useState(false)
   const [quickViewOpen, setQuickViewOpen] = useState(false)
@@ -113,9 +116,22 @@ export function ProductCard(props: ProductCardProps) {
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 
   const productHref = `${tenantPrefix}/productos/${product.id}`
+  const commerceMode = websiteSettings?.checkout.commerceMode ??
+    (isLoadingWebsiteSettings ? 'catalog' : 'cart')
+  const contactPhone =
+    websiteSettings?.company_info.whatsapp?.trim() ||
+    websiteSettings?.company_info.phone?.trim() ||
+    ''
+  const whatsappHref = contactPhone
+    ? getWhatsAppLink({
+        phone: contactPhone,
+        message: `Hola, quiero consultar por ${product.name} (${formatPrice(displayPrice)}).`,
+      })
+    : null
 
   // ── Handlers ────────────────────────────────────────────────────────────
   function addToCart(closeModal = false) {
+    if (commerceMode !== 'cart') return
     if (!isInStock) {
       toast.error('Producto sin stock')
       return
@@ -261,20 +277,34 @@ export function ProductCard(props: ProductCardProps) {
               Ver detalle
             </Link>
 
-            <button
-              type="button"
-              onClick={() => addToCart(false)}
-              disabled={!isInStock}
-              className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-sm transition-all duration-150 hover:bg-primary/90 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label={`Agregar ${product.name} al carrito`}
-            >
-              {justAdded ? (
-                <Check className="h-3.5 w-3.5 shrink-0" />
-              ) : (
-                <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
-              )}
-              {justAdded ? '¡Listo!' : 'Agregar'}
-            </button>
+            {commerceMode === 'cart' && (
+              <button
+                type="button"
+                onClick={() => addToCart(false)}
+                disabled={!isInStock}
+                className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-xs font-semibold text-primary-foreground shadow-sm transition-all duration-150 hover:bg-primary/90 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label={`Agregar ${product.name} al carrito`}
+              >
+                {justAdded ? (
+                  <Check className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
+                )}
+                {justAdded ? '¡Listo!' : 'Agregar'}
+              </button>
+            )}
+            {commerceMode === 'whatsapp' && whatsappHref && (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative z-20 flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 text-xs font-semibold text-white shadow-sm transition-all duration-150 hover:bg-emerald-700 active:scale-95"
+                aria-label={`Consultar por ${product.name} en WhatsApp`}
+              >
+                <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                Consultar
+              </a>
+            )}
           </div>
         </div>
       </article>
@@ -424,18 +454,32 @@ export function ProductCard(props: ProductCardProps) {
 
             {/* CTA buttons */}
             <div className="flex flex-col gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => addToCart(true)}
-                disabled={!isInStock}
-                className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {justAdded ? (
-                  <><Check className="h-4 w-4" /> ¡Agregado!</>
-                ) : (
-                  <><ShoppingCart className="h-4 w-4" /> Agregar al carrito</>
-                )}
-              </button>
+              {commerceMode === 'cart' && (
+                <button
+                  type="button"
+                  onClick={() => addToCart(true)}
+                  disabled={!isInStock}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {justAdded ? (
+                    <><Check className="h-4 w-4" /> ¡Agregado!</>
+                  ) : (
+                    <><ShoppingCart className="h-4 w-4" /> Agregar al carrito</>
+                  )}
+                </button>
+              )}
+              {commerceMode === 'whatsapp' && whatsappHref && (
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setQuickViewOpen(false)}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-[0.98]"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Consultar por WhatsApp
+                </a>
+              )}
 
               <Link
                 href={productHref}

@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { CompanyInfo } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { getBrandTheme } from '@/lib/constants/brand-theme'
+import { isValidBrandHexColor } from '@/lib/website/brand-color'
 
 // ── Brand-color catalog — single source of truth for swatches and live preview ──
 const BRAND_COLORS: Array<{ key: string; name: string; swatch: string }> = [
@@ -96,6 +98,14 @@ const HEADER_PREVIEW_STYLES: Record<string, {
   },
 }
 
+function toColorPickerValue(value?: string): string {
+  if (!value || !isValidBrandHexColor(value)) return '#2563EB'
+  if (value.length === 7) return value
+
+  const [red, green, blue] = value.slice(1).split('')
+  return `#${red}${red}${green}${green}${blue}${blue}`
+}
+
 export function CompanyInfoForm() {
   const { settings, isLoading, error, isSaving, refetch } = useAdminWebsiteSettings()
   const [draft, setDraft] = useState<CompanyInfo | null>(null)
@@ -108,6 +118,11 @@ export function CompanyInfoForm() {
 
   const preview = BRAND_PREVIEW[formData.brandColor || 'blue'] ?? BRAND_PREVIEW.blue
   const headerPreview = HEADER_PREVIEW_STYLES[formData.headerStyle || 'glass'] ?? HEADER_PREVIEW_STYLES.glass
+  const brandTheme = getBrandTheme(formData.brandColor)
+  const hasValidCustomBrand = formData.brandColor === 'custom' && isValidBrandHexColor(formData.customBrandColor)
+  const customBrandStyle = hasValidCustomBrand
+    ? { '--brand-primary': formData.customBrandColor } as React.CSSProperties
+    : undefined
 
   // Report unsaved changes to the tabs page so switching tabs can warn first.
   const dirtyCtx = useWebsiteEditorDirty()
@@ -181,6 +196,10 @@ export function CompanyInfoForm() {
           nextErrors.logoUrl = 'Debe ser una ruta interna (/...) o una URL http(s).'
         }
       }
+    }
+
+    if (formData.brandColor === 'custom' && !isValidBrandHexColor(formData.customBrandColor)) {
+      nextErrors.customBrandColor = 'Ingresá un color válido en formato #RGB o #RRGGBB.'
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -406,23 +425,27 @@ export function CompanyInfoForm() {
       </SectionCard>
 
       {/* Personalización visual */}
-      <SectionCard icon={Sparkles} title="Personalización visual" description="Color de marca, estilo del header y barra superior">
+      <SectionCard icon={Sparkles} title="Personalización visual" description="Define la identidad del sitio y comprobá el resultado antes de guardar">
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
           {/* Config */}
           <div className="space-y-6 lg:col-span-7">
-            <div className="flex items-start gap-2.5 rounded-xl border border-blue-100 bg-blue-50/20 p-4 text-xs text-muted-foreground dark:border-blue-900/30 dark:bg-blue-950/10">
-              <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 border-l-2 border-primary/40 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <div className="space-y-1">
-                <span className="font-semibold text-foreground">Sugerencia de Diseño</span>
+                <span className="font-semibold text-foreground">Qué cambia en tu sitio</span>
                 <p className="leading-relaxed">
-                  Si tu logo tiene fondo blanco o claro, los estilos de header <strong>Cristal</strong> o <strong>Sólido blanco</strong> lucirán mejor. Para logos transparentes o blancos, el estilo de header <strong>Color de marca</strong> o <strong>Negro elegante</strong> creará un contraste premium.
+                  El color define los botones y el fondo del inicio. El estilo modifica el encabezado, y la barra superior muestra tus datos de contacto.
                 </p>
               </div>
             </div>
 
             <div className="space-y-3">
-              <Label className="text-sm font-semibold">Color de marca principal</Label>
-              <p className="-mt-1 text-xs text-muted-foreground">Se aplica a botones, enlaces y estados destacados del portal.</p>
+              <div>
+                <Label className="text-sm font-semibold">Color de marca principal</Label>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Se aplica a botones, enlaces activos, encabezados destacados y al fondo del inicio.
+                </p>
+              </div>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
                 {BRAND_COLORS.map((c) => {
                   const isSelected = (formData.brandColor || 'blue') === c.key
@@ -431,69 +454,102 @@ export function CompanyInfoForm() {
                       key={c.key}
                       type="button"
                       onClick={() => handleChange('brandColor', c.key)}
-                      className={`group relative flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all hover:scale-105 active:scale-95 ${
+                      aria-label={`Usar color ${c.name}`}
+                      aria-pressed={isSelected}
+                      className={`relative flex h-16 flex-col items-center justify-center rounded-md border p-2 transition-colors ${
                         isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-foreground/30'
                       }`}
                     >
-                      <span className={`h-6 w-6 rounded-full shadow-inner ${c.swatch} transition-transform group-hover:scale-110`} />
+                      <span aria-hidden="true" className={`h-6 w-6 rounded-full shadow-inner ${c.swatch}`} />
                       <span className={`mt-1.5 text-[10px] font-medium ${isSelected ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
                         {c.name}
                       </span>
                       {isSelected && (
-                        <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
-                          ✓
+                        <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                          <Check aria-hidden="true" className="h-2.5 w-2.5" />
                         </span>
                       )}
                     </button>
                   )
                 })}
-                {/* Custom Color */}
-                {(() => {
-                  const isSelected = formData.brandColor === 'custom'
-                  return (
-                    <div className="relative group">
-                      <button
-                        type="button"
-                        onClick={() => handleChange('brandColor', 'custom')}
-                        className={`w-full h-full relative flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all hover:scale-105 active:scale-95 ${
-                          isSelected ? 'border-primary bg-primary/5 ring-2 ring-primary/20' : 'border-border hover:border-foreground/30'
-                        }`}
-                      >
-                        <span 
-                          className="h-6 w-6 rounded-full shadow-inner transition-transform group-hover:scale-110 border" 
-                          style={{ backgroundColor: formData.customBrandColor || '#000000' }} 
-                        />
-                        <span className={`mt-1.5 text-[10px] font-medium ${isSelected ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
-                          Hex / Libre
-                        </span>
-                        {isSelected && (
-                          <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
-                            ✓
-                          </span>
-                        )}
-                      </button>
-                      
-                      {isSelected && (
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 z-50 mt-2 w-[140px] rounded-lg border bg-popover p-3 shadow-xl animate-in fade-in zoom-in-95">
-                          <input
-                            type="color"
-                            value={formData.customBrandColor || '#000000'}
-                            onChange={(e) => handleChange('customBrandColor', e.target.value)}
-                            className="h-8 w-full cursor-pointer rounded border border-input p-0.5"
-                          />
-                          <input
-                            type="text"
-                            value={formData.customBrandColor || '#000000'}
-                            onChange={(e) => handleChange('customBrandColor', e.target.value)}
-                            className="mt-2 flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            placeholder="#FF5733"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })()}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft((current) => ({
+                      ...(current ?? formData),
+                      brandColor: 'custom',
+                      customBrandColor: formData.customBrandColor || '#2563EB',
+                    }))
+                    setErrors((current) => {
+                      const next = { ...current }
+                      delete next.customBrandColor
+                      return next
+                    })
+                  }}
+                  aria-label="Usar un color personalizado"
+                  aria-pressed={formData.brandColor === 'custom'}
+                  className={`relative flex h-16 flex-col items-center justify-center rounded-md border p-2 transition-colors ${
+                    formData.brandColor === 'custom'
+                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                      : 'border-border hover:border-foreground/30'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-6 w-6 rounded-full border shadow-inner"
+                    style={{ backgroundColor: toColorPickerValue(formData.customBrandColor) }}
+                  />
+                  <span className={`mt-1.5 text-[10px] font-medium ${formData.brandColor === 'custom' ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
+                    Personalizado
+                  </span>
+                  {formData.brandColor === 'custom' && (
+                    <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <Check aria-hidden="true" className="h-2.5 w-2.5" />
+                    </span>
+                  )}
+                </button>
               </div>
+
+              {formData.brandColor === 'custom' && (
+                <div className="grid gap-3 border-l-2 border-primary/40 pl-4 sm:grid-cols-[72px_minmax(0,1fr)] sm:items-end">
+                  <div className="space-y-2">
+                    <Label htmlFor="customBrandColorPicker" className="text-xs">Selector</Label>
+                    <input
+                      id="customBrandColorPicker"
+                      type="color"
+                      value={toColorPickerValue(formData.customBrandColor)}
+                      onChange={(event) => handleChange('customBrandColor', event.target.value.toUpperCase())}
+                      aria-describedby="customBrandColorHelp"
+                      className="h-11 w-full cursor-pointer rounded-md border border-input bg-background p-1"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="customBrandColor">Código HEX</Label>
+                    <Input
+                      id="customBrandColor"
+                      value={formData.customBrandColor || ''}
+                      onChange={(event) => handleChange('customBrandColor', event.target.value)}
+                      onBlur={(event) => handleChange('customBrandColor', event.target.value.trim().toUpperCase())}
+                      placeholder="#2563EB"
+                      maxLength={7}
+                      spellCheck={false}
+                      aria-invalid={!!errors.customBrandColor}
+                      aria-describedby={errors.customBrandColor ? 'customBrandColorHelp customBrandColorError' : 'customBrandColorHelp'}
+                      className="h-11 font-mono uppercase"
+                    />
+                  </div>
+                  <div className="sm:col-start-2">
+                    <p id="customBrandColorHelp" className="text-xs text-muted-foreground">
+                      Usá 3 o 6 caracteres, por ejemplo #0F8 o #00FF88.
+                    </p>
+                    {errors.customBrandColor && (
+                      <p id="customBrandColorError" role="alert" className="mt-1 text-xs text-destructive">
+                        {errors.customBrandColor}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid gap-4 pt-2 sm:grid-cols-2">
@@ -515,7 +571,7 @@ export function CompanyInfoForm() {
                 </p>
               </div>
 
-              <div className="flex flex-col justify-between rounded-xl border bg-muted/30 p-3.5">
+              <div className="flex flex-col justify-between rounded-lg border bg-muted/30 p-3.5">
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <Label htmlFor="showTopBar" className="text-sm font-semibold">Barra superior</Label>
@@ -541,47 +597,48 @@ export function CompanyInfoForm() {
           </div>
 
           {/* Live preview */}
-          <div className="flex flex-col justify-between rounded-2xl border bg-muted/20 p-4 lg:col-span-5">
+          <div className="flex flex-col justify-between rounded-lg border bg-muted/20 p-4 lg:col-span-5">
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b pb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Previsualización en vivo</span>
-                <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                <div>
+                  <span className="block text-xs font-semibold text-foreground">Vista previa del sitio</span>
+                  <span className="block text-[10px] text-muted-foreground">Encabezado e inicio</span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+                  <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-500" />
+                  En vivo
+                </span>
               </div>
 
               <div
-                className="relative h-44 overflow-hidden rounded-xl border bg-background shadow-lg"
+                className="overflow-hidden rounded-lg border bg-background shadow-sm"
                 data-color-scheme={formData.brandColor === 'custom' ? undefined : (formData.brandColor || 'blue')}
-                style={formData.brandColor === 'custom' && formData.customBrandColor ? { '--primary': formData.customBrandColor } as React.CSSProperties : undefined}
+                data-custom-brand={hasValidCustomBrand ? '' : undefined}
+                style={customBrandStyle}
               >
-                <div
-                  className="pointer-events-none absolute inset-0 select-none bg-cover bg-center opacity-30"
-                  style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80")' }}
-                />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/30 via-background/10 to-background/80" />
-
                 {formData.showTopBar !== false && (
-                  <div className={`relative z-10 flex select-none items-center justify-between border-b px-3 py-1 text-[9px] font-medium transition-colors ${headerPreview.topBar}`}>
+                  <div className={`flex select-none items-center justify-between gap-2 border-b px-3 py-1 text-[9px] font-medium transition-colors ${headerPreview.topBar}`}>
                     <div className="flex items-center gap-2">
                       <span>Tel: {formData.phone || '+595...'}</span>
                       <span className="hidden sm:inline">| Email: {formData.email || 'info@...'}</span>
                     </div>
-                    <span>Horario: {formData.hours?.weekdays || '8:00 - 18:00'}</span>
+                    <span className="truncate">Horario: {formData.hours?.weekdays || '8:00 - 18:00'}</span>
                   </div>
                 )}
 
                 <div
-                  className={`relative z-10 flex select-none items-center justify-between border-b px-3 py-2 transition-all ${headerPreview.header}`}
+                  className={`flex select-none items-center justify-between border-b px-3 py-2 transition-all ${headerPreview.header}`}
                 >
                   <div className="flex items-center gap-2">
                     {formData.logoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={formData.logoUrl} alt="Logo" className="h-6 w-6 rounded object-contain" />
                     ) : (
-                      <span className={`flex h-6 w-6 items-center justify-center rounded-lg text-[8px] font-extrabold ${headerPreview.icon}`}>4G</span>
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-md text-[8px] font-extrabold ${headerPreview.icon}`}>4G</span>
                     )}
                     <div className="leading-tight">
                       <span className="block text-[10px] font-extrabold tracking-tight">{formData.name || 'Empresa'}</span>
-                      <span className={`block text-[8px] font-medium ${headerPreview.subtitle}`}>Reparacion y Service</span>
+                      <span className={`block text-[8px] font-medium ${headerPreview.subtitle}`}>Reparación y service</span>
                     </div>
                   </div>
 
@@ -601,20 +658,29 @@ export function CompanyInfoForm() {
                   </button>
                 </div>
 
-                <div className="absolute bottom-2 left-3 right-3 z-10 select-none rounded-lg border border-border/50 bg-background/90 p-3 backdrop-blur-sm">
-                  <h4 className="text-[9px] font-extrabold uppercase tracking-wide text-foreground">Contenido destacado</h4>
-                  <p className="mt-0.5 text-[8px] leading-relaxed text-muted-foreground">
-                    El color de marca se aplica a botones, enlaces, tarjetas de servicios y estados de tus reparaciones.
+                <div className={`bg-gradient-to-br ${brandTheme.hero} px-4 py-5 text-white`}>
+                  <span className="inline-flex rounded-full bg-white/15 px-2 py-0.5 text-[8px] font-semibold ring-1 ring-white/20">
+                    Servicio técnico confiable
+                  </span>
+                  <h4 className="mt-2 max-w-[260px] text-base font-bold leading-tight">
+                    Tecnología lista para acompañarte
+                  </h4>
+                  <p className={`mt-1 max-w-[290px] text-[9px] leading-relaxed ${brandTheme.text200}`}>
+                    Venta, reparación y soporte para tus dispositivos.
                   </p>
-                  <div className="mt-2 flex gap-1.5">
-                    <span className={`h-1.5 w-1.5 rounded-full ${preview.dot}`} />
-                    <span className={`h-1.5 w-8 rounded-full ${preview.dot}`} />
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className={`rounded-md bg-white px-3 py-1.5 text-[9px] font-bold ${brandTheme.ctaBtn}`}>
+                      Ver productos
+                    </span>
+                    <span className="rounded-md border border-white/30 bg-white/10 px-3 py-1.5 text-[9px] font-semibold text-white">
+                      Contactar
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
             <p className="mt-3 text-center text-[10px] italic text-muted-foreground">
-              * Representa el estilo del header responsivo del sitio público.
+              La vista usa los mismos colores de marca que el sitio público.
             </p>
           </div>
         </div>

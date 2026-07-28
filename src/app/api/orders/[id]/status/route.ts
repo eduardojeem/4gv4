@@ -7,7 +7,6 @@ import { createClient } from '@/lib/supabase/server'
 import { canTransitionOrderStatus, normalizeOrderStatus } from '@/lib/orders/flow'
 import { normalizeOrder } from '@/lib/orders/helpers'
 import { releaseReservedStock } from '@/lib/orders/stock'
-import type { OrderStatus } from '@/lib/orders/types'
 
 const statusSchema = z.object({
   status: z.enum(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED', 'CANCELLED']),
@@ -57,7 +56,7 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
     if (status === 'CANCELLED' && currentStatus !== 'CANCELLED') {
       const { data: stockData, error: stockError } = await supabase
         .from('customer_orders')
-        .select('stock_reserved, order_items:customer_order_items(product_id, product_name, quantity)')
+        .select('stock_reserved, branch_id, order_items:customer_order_items(product_id, product_name, quantity)')
         .eq('id', id)
         .eq('organization_id', organization.id)
         .maybeSingle()
@@ -65,7 +64,12 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
       if (stockError) {
         logger.warn('Order stock reservation lookup failed during cancellation', { error: stockError, orderId: id })
       } else if (stockData?.stock_reserved) {
-        await releaseReservedStock(createAdminSupabase(), organization.id, stockData.order_items ?? [])
+        await releaseReservedStock(
+          createAdminSupabase(),
+          organization.id,
+          stockData.order_items ?? [],
+          stockData.branch_id
+        )
         shouldReleaseStock = true
       }
     }

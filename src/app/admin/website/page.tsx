@@ -20,7 +20,7 @@ const TABS = [
   { value: 'offers',   label: 'Ofertas',   icon: Tag         },
   { value: 'services', label: 'Servicios', icon: Briefcase   },
   { value: 'process',  label: 'Proceso',   icon: Footprints  },
-  { value: 'checkout', label: 'Checkout',  icon: ShoppingCart },
+  { value: 'checkout', label: 'Pagos y entregas', icon: ShoppingCart },
 ]
 
 export default function WebsiteAdminPage() {

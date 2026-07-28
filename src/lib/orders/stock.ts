@@ -46,23 +46,28 @@ function aggregateStockItems(items: OrderStockItem[]): ReservedStockItem[] {
 export async function reserveOrderStock(
   supabase: SupabaseLike,
   organizationId: string,
-  items: OrderStockItem[]
+  items: OrderStockItem[],
+  branchId?: string | null
 ) {
   const reserved: ReservedStockItem[] = []
 
   for (const item of aggregateStockItems(items)) {
-    const { data, error } = await supabase.rpc('decrement_product_stock', {
-      p_product_id: item.productId,
-      p_organization_id: organizationId,
-      p_quantity: item.quantity,
-    })
+    const { data, error } = await supabase.rpc(
+      branchId ? 'decrement_branch_order_stock' : 'decrement_product_stock',
+      {
+        p_product_id: item.productId,
+        p_organization_id: organizationId,
+        ...(branchId ? { p_branch_id: branchId } : {}),
+        p_quantity: item.quantity,
+      }
+    )
 
     if (error || data !== true) {
       await releaseReservedStock(supabase, organizationId, reserved.map((item) => ({
         product_id: item.productId,
         product_name: item.productName,
         quantity: item.quantity,
-      })))
+      })), branchId)
       return {
         success: false as const,
         error: error
@@ -80,14 +85,19 @@ export async function reserveOrderStock(
 export async function releaseReservedStock(
   supabase: SupabaseLike,
   organizationId: string,
-  items: OrderStockItem[]
+  items: OrderStockItem[],
+  branchId?: string | null
 ) {
   for (const item of aggregateStockItems(items)) {
-    const { error } = await supabase.rpc('increment_product_stock', {
-      p_product_id: item.productId,
-      p_organization_id: organizationId,
-      p_quantity: item.quantity,
-    })
+    const { error } = await supabase.rpc(
+      branchId ? 'increment_branch_order_stock' : 'increment_product_stock',
+      {
+        p_product_id: item.productId,
+        p_organization_id: organizationId,
+        ...(branchId ? { p_branch_id: branchId } : {}),
+        p_quantity: item.quantity,
+      }
+    )
 
     if (error) {
       throw new Error(getErrorMessage(error))

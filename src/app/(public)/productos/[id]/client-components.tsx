@@ -13,6 +13,8 @@ import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePathname } from 'next/navigation'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
+import { cn } from '@/lib/utils'
+import { getWhatsAppLink } from '@/lib/whatsapp'
 
 interface ProductGalleryProps {
   product: PublicProduct
@@ -150,7 +152,7 @@ interface ProductActionsProps {
 }
 
 export function ProductActions({ product, isInStock }: ProductActionsProps) {
-  const { settings } = useWebsiteSettings()
+  const { settings, isLoading: isLoadingWebsiteSettings } = useWebsiteSettings()
   const pathname = usePathname()
   const { addProduct } = usePublicCart()
   const tenantSlug = getTenantSlugFromPathname(pathname)
@@ -165,12 +167,14 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
   const envSupportEmail = (
     process.env.NEXT_PUBLIC_COMPANY_EMAIL || ''
   ).toString()
-  const phoneDisplay = companyInfo?.phone || envSupportPhone
+  const commerceMode = settings?.checkout.commerceMode ?? 'cart'
+  const phoneDisplay = companyInfo?.whatsapp || companyInfo?.phone || envSupportPhone
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
   const emailDisplay = companyInfo?.email || envSupportEmail
   const displayPrice = Number(product.offer_price || product.sale_price || 0)
 
   const handleAddToCart = () => {
+    if (commerceMode !== 'cart') return
     if (!isInStock) {
       toast.error('Producto sin stock')
       return
@@ -187,7 +191,7 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
       case 'whatsapp':
         if (phoneClean) {
           window.open(
-            `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`,
+            getWhatsAppLink({ phone: phoneDisplay, message }),
             '_blank',
             'noopener,noreferrer'
           )
@@ -218,6 +222,10 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
     }
   }
 
+  if (isLoadingWebsiteSettings || commerceMode === 'catalog') {
+    return null
+  }
+
   return (
     <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
       <h3 className="font-semibold text-foreground">
@@ -229,25 +237,30 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
           : 'Contactanos para consultar reposicion o alternativas disponibles.'}
       </p>
       <div className="mt-4 flex flex-col gap-2">
+        {commerceMode === 'cart' && (
+          <Button
+            size="lg"
+            className="w-full gap-2 rounded-xl"
+            onClick={handleAddToCart}
+            disabled={!isInStock}
+          >
+            <ShoppingCart className="h-4 w-4" />
+            Agregar al carrito
+          </Button>
+        )}
         <Button
           size="lg"
-          className="w-full gap-2 rounded-xl"
-          onClick={handleAddToCart}
-          disabled={!isInStock}
-        >
-          <ShoppingCart className="h-4 w-4" />
-          Agregar al carrito
-        </Button>
-        <Button
-          size="lg"
-          variant="outline"
-          className="w-full gap-2 rounded-xl"
+          variant={commerceMode === 'whatsapp' ? 'default' : 'outline'}
+          className={cn(
+            'w-full gap-2 rounded-xl',
+            commerceMode === 'whatsapp' && 'bg-emerald-600 text-white hover:bg-emerald-700'
+          )}
           onClick={() => handleContact('whatsapp')}
         >
           <MessageCircle className="h-4 w-4" />
           {isInStock ? 'Consultar por WhatsApp' : 'Consultar reposicion por WhatsApp'}
         </Button>
-        <div className="grid grid-cols-2 gap-2">
+        {commerceMode === 'cart' && <div className="grid grid-cols-2 gap-2">
           <Button
             variant="outline"
             className="gap-2 rounded-xl"
@@ -266,7 +279,7 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
             <Phone className="h-4 w-4" />
             Llamar
           </Button>
-        </div>
+        </div>}
         {!isInStock && (
           <Button asChild variant="secondary" className="w-full rounded-xl">
             <Link href={product.category ? `${tenantPrefix}/productos?category_id=${product.category.id}` : `${tenantPrefix}/productos`}>

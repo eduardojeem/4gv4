@@ -13,6 +13,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { usePublicCart } from '@/hooks/use-public-cart'
@@ -21,6 +24,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { formatMoney } from '@/components/dashboard/orders/format'
 import { resolveProductImageUrl } from '@/lib/images'
 import { cn } from '@/lib/utils'
+import { getDeliveryCost } from '@/lib/checkout/delivery-cost'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +42,69 @@ const PM_KEY_MAP: Record<PaymentMethod, 'cash' | 'card' | 'transfer' | 'digital_
   CASH: 'cash', CARD: 'card', TRANSFER: 'transfer', DIGITAL_WALLET: 'digital_wallet',
 }
 
+const checkoutSteps = [
+  {
+    icon: ShoppingCart,
+    title: 'Revisa tu carrito',
+    description: 'Ajusta cantidades o elimina productos antes de confirmar.',
+  },
+  {
+    icon: User,
+    title: 'Completa tus datos',
+    description: 'Deja nombre y WhatsApp para que el negocio pueda contactarte.',
+  },
+  {
+    icon: Truck,
+    title: 'Elige la entrega',
+    description: 'Selecciona retiro en local o delivery si esta disponible.',
+  },
+  {
+    icon: CreditCard,
+    title: 'Confirma el pedido',
+    description: 'El negocio recibe tu solicitud y coordina el pago o la entrega.',
+  },
+]
+
+function CheckoutHowItWorks() {
+  return (
+    <section
+      aria-labelledby="checkout-how-it-works-title"
+      className="rounded-3xl border bg-muted/20 p-4 sm:p-5"
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <CheckCircle2 className="h-4 w-4" />
+        </div>
+        <div>
+          <h2 id="checkout-how-it-works-title" className="text-sm font-bold text-foreground">
+            Como funciona este pedido
+          </h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            El carrito no cobra automaticamente: primero envia tu pedido al negocio para confirmar stock, entrega y pago.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {checkoutSteps.map(({ icon: Icon, title, description }, index) => (
+          <div key={title} className="flex gap-3 rounded-2xl border bg-background px-3 py-3">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-bold text-muted-foreground">
+              {index + 1}
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+                <p className="text-xs font-bold text-foreground">{title}</p>
+              </div>
+              <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{description}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export function CartPageClient({
   organizationSlug,
@@ -53,6 +120,8 @@ export function CartPageClient({
   const { items, subtotal, setQuantity, removeItem, clear } = usePublicCart()
   const { settings: siteSettings } = useWebsiteSettings()
   const checkout = siteSettings?.checkout ?? getWebsiteSettingsDefaults().checkout
+  const transferOptions = checkout.payment.transfer.transferOptions ?? []
+  const deliveryZones = checkout.delivery.zoneOptions ?? []
 
   // ── Checkout mode ─────────────────────────────────────────────────────────
   const [orderMode, setOrderMode] = useState<OrderMode>('personal')
@@ -74,6 +143,7 @@ export function CartPageClient({
   const [paymentMethod,   setPaymentMethod]   = useState<PaymentMethod>('CASH')
   const [notes,           setNotes]           = useState('')
   const [shippingCost,    setShippingCost]    = useState(0)
+  const [selectedDeliveryZoneId, setSelectedDeliveryZoneId] = useState('')
   const [promotionCode, setPromotionCode] = useState('')
   const [validatingPromotion, setValidatingPromotion] = useState(false)
   const [appliedPromotion, setAppliedPromotion] = useState<{ code: string; name: string; discountAmount: number } | null>(null)
@@ -105,16 +175,25 @@ export function CartPageClient({
 
   // ── Shipping cost: pre-load from settings when DELIVERY selected ─────────
   const isFreeDelivery = checkout.delivery.freeThreshold > 0 && subtotal >= checkout.delivery.freeThreshold
+  const selectedDeliveryZone = deliveryZones.find((zone) => zone.id === selectedDeliveryZoneId)
+  const hasFreeDelivery = isFreeDelivery || selectedDeliveryZone?.cost === 0
 
   useEffect(() => {
-    if (fulfillmentType === 'PICKUP') {
-      setShippingCost(0)
-    } else {
-      const configured = checkout.delivery.defaultCost ?? 0
-      setShippingCost(isFreeDelivery ? 0 : configured)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fulfillmentType, checkout.delivery.defaultCost, isFreeDelivery])
+    setShippingCost(getDeliveryCost({
+      fulfillmentType,
+      subtotal,
+      defaultCost: deliveryZones.length > 0 ? 0 : checkout.delivery.defaultCost ?? 0,
+      selectedZoneCost: selectedDeliveryZone?.cost,
+      freeThreshold: checkout.delivery.freeThreshold,
+    }))
+  }, [
+    checkout.delivery.defaultCost,
+    checkout.delivery.freeThreshold,
+    deliveryZones.length,
+    fulfillmentType,
+    selectedDeliveryZone?.cost,
+    subtotal,
+  ])
 
   // ── Derived totals ────────────────────────────────────────────────────────
   const total = Math.max(0, subtotal + shippingCost - (appliedPromotion?.discountAmount ?? 0))
@@ -156,6 +235,9 @@ export function CartPageClient({
   const emailFmtError  = touched && emailInvalid ? 'Formato de email inválido' : null
   const addressError   = touched && fulfillmentType === 'DELIVERY' && !customerAddress.trim() ? 'Requerido' : null
   const cityError      = touched && fulfillmentType === 'DELIVERY' && !customerCity.trim() ? 'Requerido' : null
+  const zoneError      = touched && fulfillmentType === 'DELIVERY' && deliveryZones.length > 0 && !selectedDeliveryZone
+    ? 'Seleccioná una zona de entrega'
+    : null
   const referenceError = touched && fulfillmentType === 'DELIVERY' && !customerReference.trim() ? 'Requerido' : null
   const companyError   = touched && orderMode === 'empresarial' && !companyName.trim() ? 'Requerido' : null
 
@@ -163,10 +245,18 @@ export function CartPageClient({
     if (!customerName.trim()) return false
     if (!customerPhone.trim()) return false
     if (emailInvalid) return false
-    if (fulfillmentType === 'DELIVERY' && (!customerAddress.trim() || !customerCity.trim() || !customerReference.trim())) return false
+    if (
+      fulfillmentType === 'DELIVERY' &&
+      (
+        !customerAddress.trim() ||
+        !customerCity.trim() ||
+        !customerReference.trim() ||
+        (deliveryZones.length > 0 && !selectedDeliveryZone)
+      )
+    ) return false
     if (orderMode === 'empresarial' && !companyName.trim()) return false
     return items.length > 0
-  }, [customerName, customerPhone, customerEmail, emailInvalid, fulfillmentType, customerAddress, customerCity, customerReference, orderMode, companyName, items.length])
+  }, [customerName, customerPhone, emailInvalid, fulfillmentType, customerAddress, customerCity, customerReference, deliveryZones.length, selectedDeliveryZone, orderMode, companyName, items.length])
 
   // ── Submit ─────────────────────────────────────────────────────────────────
   async function submitOrder() {
@@ -206,6 +296,7 @@ export function CartPageClient({
           fulfillmentType,
           paymentMethod,
           shippingCost: fulfillmentType === 'DELIVERY' ? shippingCost : 0,
+          deliveryZoneId: fulfillmentType === 'DELIVERY' ? selectedDeliveryZone?.id ?? null : null,
           notes: notesParts.join(' · ') || null,
           promotionCode: appliedPromotion?.code ?? null,
         }),
@@ -279,6 +370,25 @@ export function CartPageClient({
     )
   }
 
+  if (siteSettings && checkout.commerceMode !== 'cart') {
+    return (
+      <div className="container mx-auto max-w-lg px-4 py-16">
+        <Card className="rounded-lg border shadow-sm">
+          <CardContent className="flex flex-col items-center px-6 py-10 text-center">
+            <ShoppingCart className="h-8 w-8 text-muted-foreground" />
+            <h1 className="mt-4 text-xl font-bold">Carrito no disponible</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Esta tienda no recibe pedidos mediante carrito.
+            </p>
+            <Button asChild className="mt-6 rounded-lg">
+              <Link href={productsHref}>Volver a productos</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   // ── Main layout ────────────────────────────────────────────────────────────
   return (
     <div className="container py-8 px-4 max-w-6xl mx-auto md:py-12">
@@ -294,6 +404,8 @@ export function CartPageClient({
             <h1 className="text-3xl font-black tracking-tight">Mi Pedido</h1>
             <p className="mt-1 text-sm text-muted-foreground">Revisá los productos y completá tus datos para confirmar.</p>
           </div>
+
+          {items.length > 0 && <CheckoutHowItWorks />}
 
           {/* Session banner */}
           {!loadingAuth && (
@@ -500,11 +612,45 @@ export function CartPageClient({
                   <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5">
-                        <Label className="text-xs">Ciudad / Barrio <span className="text-destructive">*</span></Label>
-                        <Input value={customerCity} onChange={(e) => setCustomerCity(e.target.value)}
-                          placeholder="Ej. Asunción, Carmelitas"
-                          className={cn('h-9 rounded-xl', cityError && 'border-destructive')} />
-                        {cityError && <p className="text-[11px] text-destructive">{cityError}</p>}
+                        <Label className="text-xs">
+                          {deliveryZones.length > 0 ? 'Zona de delivery' : 'Ciudad / Barrio'}
+                          {' '}<span className="text-destructive">*</span>
+                        </Label>
+                        {deliveryZones.length > 0 ? (
+                          <>
+                            <Select
+                              value={selectedDeliveryZoneId || undefined}
+                              onValueChange={(zoneId) => {
+                                const zone = deliveryZones.find((item) => item.id === zoneId)
+                                setSelectedDeliveryZoneId(zoneId)
+                                setCustomerCity(zone?.name ?? '')
+                              }}
+                            >
+                              <SelectTrigger
+                                className="h-9 w-full rounded-xl"
+                                aria-invalid={Boolean(zoneError)}
+                                aria-label="Zona de delivery"
+                              >
+                                <SelectValue placeholder="Seleccioná tu zona" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {deliveryZones.map((zone) => (
+                                  <SelectItem key={zone.id} value={zone.id}>
+                                    {zone.name} · {zone.cost === 0 ? 'Gratis' : formatMoney(zone.cost)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {zoneError && <p className="text-[11px] text-destructive">{zoneError}</p>}
+                          </>
+                        ) : (
+                          <>
+                            <Input value={customerCity} onChange={(e) => setCustomerCity(e.target.value)}
+                              placeholder="Ej. Asunción, Carmelitas"
+                              className={cn('h-9 rounded-xl', cityError && 'border-destructive')} />
+                            {cityError && <p className="text-[11px] text-destructive">{cityError}</p>}
+                          </>
+                        )}
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs">Calle y número <span className="text-destructive">*</span></Label>
@@ -541,13 +687,30 @@ export function CartPageClient({
                       <p className="text-[11px] text-muted-foreground italic">{checkout.delivery.instructions}</p>
                     )}
 
-                    {!isFreeDelivery && checkout.delivery.defaultCost > 0 && (
-                      <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-4 py-3">
-                        <span className="text-sm font-semibold text-muted-foreground">Costo de envío</span>
-                        <span className="text-sm font-bold">{formatMoney(checkout.delivery.defaultCost)}</span>
+                    {deliveryZones.length > 0 && !selectedDeliveryZone && (
+                      <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-3">
+                        <p className="text-xs font-semibold">Seleccioná tu zona para ver el costo de envío</p>
                       </div>
                     )}
-                    {!isFreeDelivery && (!checkout.delivery.defaultCost || checkout.delivery.defaultCost === 0) && (
+                    {selectedDeliveryZone && (isFreeDelivery || selectedDeliveryZone.cost === 0) && (
+                      <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                        <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Delivery a {selectedDeliveryZone.name}</span>
+                        <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">Gratis</span>
+                      </div>
+                    )}
+                    {selectedDeliveryZone && !isFreeDelivery && selectedDeliveryZone.cost > 0 && (
+                      <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-4 py-3">
+                        <span className="text-sm font-semibold text-muted-foreground">Delivery a {selectedDeliveryZone.name}</span>
+                        <span className="text-sm font-bold">{formatMoney(shippingCost)}</span>
+                      </div>
+                    )}
+                    {deliveryZones.length === 0 && !isFreeDelivery && checkout.delivery.defaultCost > 0 && (
+                      <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-4 py-3">
+                        <span className="text-sm font-semibold text-muted-foreground">Costo de envío</span>
+                        <span className="text-sm font-bold">{formatMoney(shippingCost)}</span>
+                      </div>
+                    )}
+                    {deliveryZones.length === 0 && !isFreeDelivery && (!checkout.delivery.defaultCost || checkout.delivery.defaultCost === 0) && (
                       <div className="rounded-xl border border-amber-200/60 bg-amber-50 px-4 py-3 dark:border-amber-900/50 dark:bg-amber-950/20">
                         <p className="text-xs font-bold text-amber-800 dark:text-amber-300">Costo de envío a coordinar</p>
                         <p className="mt-0.5 text-[11px] text-amber-700/80 dark:text-amber-400/80">
@@ -637,11 +800,29 @@ export function CartPageClient({
                 })()}
 
                 {/* Contextual instructions from settings */}
-                {checkout.payment[PM_KEY_MAP[paymentMethod]]?.instructions && (
+                {(checkout.payment[PM_KEY_MAP[paymentMethod]]?.instructions ||
+                  (paymentMethod === 'TRANSFER' && (
+                    transferOptions.length > 0 ||
+                    checkout.payment.transfer.bankAlias ||
+                    checkout.payment.transfer.bankCbu
+                  )) ||
+                  (paymentMethod === 'DIGITAL_WALLET' && checkout.payment.digital_wallet.walletAlias)) && (
                   <div className="rounded-xl border bg-muted/40 px-4 py-3 text-xs text-muted-foreground leading-relaxed">
                     {checkout.payment[PM_KEY_MAP[paymentMethod]]?.instructions}
                     {/* Bank details for transfer */}
-                    {paymentMethod === 'TRANSFER' && (checkout.payment.transfer.bankAlias || checkout.payment.transfer.bankCbu) && (
+                    {paymentMethod === 'TRANSFER' && transferOptions.length > 0 && (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        {transferOptions.map((option) => (
+                          <div key={option.id} className="rounded-lg border bg-background p-3 text-foreground">
+                            <p className="font-bold">{option.bankName}</p>
+                            {option.accountHolder && <p className="mt-1 text-[11px] text-muted-foreground">Titular: {option.accountHolder}</p>}
+                            {option.alias && <p className="mt-1">Alias: <strong>{option.alias}</strong></p>}
+                            {option.accountNumber && <p>Cuenta: <strong>{option.accountNumber}</strong></p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {paymentMethod === 'TRANSFER' && transferOptions.length === 0 && (checkout.payment.transfer.bankAlias || checkout.payment.transfer.bankCbu) && (
                       <div className="mt-2 space-y-0.5 font-medium text-foreground">
                         {checkout.payment.transfer.bankAlias && <p>Alias: <strong>{checkout.payment.transfer.bankAlias}</strong></p>}
                         {checkout.payment.transfer.bankCbu   && <p>CBU: <strong>{checkout.payment.transfer.bankCbu}</strong></p>}
@@ -725,10 +906,12 @@ export function CartPageClient({
                   <span className="flex items-center gap-1">
                     <Truck className="h-3 w-3" /> Envío
                   </span>
-                  <span className={cn('tabular-nums', (fulfillmentType === 'PICKUP' || (fulfillmentType === 'DELIVERY' && isFreeDelivery)) && 'text-emerald-600 dark:text-emerald-400 font-semibold')}>
+                  <span className={cn('tabular-nums', (fulfillmentType === 'PICKUP' || (fulfillmentType === 'DELIVERY' && hasFreeDelivery)) && 'text-emerald-600 dark:text-emerald-400 font-semibold')}>
                     {fulfillmentType === 'PICKUP'
                       ? 'Gratis'
-                      : isFreeDelivery
+                      : deliveryZones.length > 0 && !selectedDeliveryZone
+                      ? <span className="italic text-muted-foreground/60 text-xs">Elegí una zona</span>
+                      : hasFreeDelivery
                       ? 'Gratis'
                       : shippingCost > 0
                       ? formatMoney(shippingCost)
@@ -761,7 +944,13 @@ export function CartPageClient({
                 </div>
                 <div className="flex items-center gap-2">
                   {fulfillmentType === 'PICKUP' ? <Store className="h-3.5 w-3.5" /> : <Truck className="h-3.5 w-3.5" />}
-                  <span>{fulfillmentType === 'PICKUP' ? 'Retiro en local' : 'Delivery'}</span>
+                  <span>
+                    {fulfillmentType === 'PICKUP'
+                      ? 'Retiro en local'
+                      : selectedDeliveryZone
+                      ? `Delivery · ${selectedDeliveryZone.name}`
+                      : 'Delivery'}
+                  </span>
                 </div>
               </div>
 

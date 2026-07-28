@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle, ArrowLeft, CheckCircle2,
-  ChevronLeft, ChevronRight, Download, Loader2,
+  ChevronLeft, ChevronRight, Coins, Copy, Download, Loader2,
   Mail, MapPin, MessageSquare, Package, PackageSearch, Phone,
   Plus, RefreshCw, Search, ShoppingBag, Store, Truck, X, Info
 } from 'lucide-react'
@@ -34,6 +34,7 @@ type OrdersPayload = {
   orders: CustomerOrder[]
   pagination: { page: number; limit: number; total: number; totalPages: number }
   stats: Record<string, number> | null
+  meta: { todayCount: number; todayRevenue: number } | null
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -43,6 +44,21 @@ function getDateFrom(preset: DatePreset): string | null {
   if (preset === 'today') return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
   if (preset === 'week') return new Date(now.getTime() - 7 * 86400000).toISOString()
   return new Date(now.getTime() - 30 * 86400000).toISOString()
+}
+
+// Escape a CSV cell: double internal quotes and neutralize spreadsheet formula
+// injection (values starting with = + - @ or a control char are treated as
+// formulas by Excel/Sheets) by prefixing a single quote.
+function csvCell(value: unknown): string {
+  let s = String(value ?? '')
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
+  return `"${s.replace(/"/g, '""')}"`
+}
+
+// Map the sort field + direction to the API's `sort` param value.
+function buildSortParam(field: 'created_at' | 'total', dir: SortDir): string {
+  if (field === 'total') return dir === 'desc' ? 'amount_desc' : 'amount_asc'
+  return dir === 'desc' ? 'newest' : 'oldest'
 }
 
 function exportOrdersCSV(orders: CustomerOrder[]) {
@@ -55,7 +71,7 @@ function exportOrdersCSV(orders: CustomerOrder[]) {
     o.fulfillment_type === 'PICKUP' ? 'Retiro' : 'Delivery',
     String(o.order_items.length), String(o.total),
   ])
-  const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+  const csv = [headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\n')
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -64,24 +80,73 @@ function exportOrdersCSV(orders: CustomerOrder[]) {
 }
 
 // ─── Status tab config ────────────────────────────────────────────────────────
-type StatusTab = { value: string; label: string; sublabel: string; icon: React.ElementType }
+type TabAccent = 'amber' | 'blue' | 'cyan' | 'emerald' | 'violet' | 'slate'
+type StatusTab = { value: string; label: string; sublabel: string; icon: React.ElementType; accent: TabAccent }
 
 const STATUS_TABS: StatusTab[] = [
-  { value: 'PENDING',   label: 'Por confirmar', sublabel: 'Pedidos nuevos',        icon: ORDER_STATUS_META.PENDING.icon },
-  { value: 'CONFIRMED', label: 'Confirmados',   sublabel: 'Listos para preparar',  icon: ORDER_STATUS_META.CONFIRMED.icon },
-  { value: 'PREPARING', label: 'Preparando',    sublabel: 'En armado',             icon: ORDER_STATUS_META.PREPARING.icon },
-  { value: 'READY',     label: 'Listos',        sublabel: 'Para enviar o retirar', icon: ORDER_STATUS_META.READY.icon },
-  { value: 'SHIPPED',   label: 'En camino',     sublabel: 'Despachados',           icon: ORDER_STATUS_META.SHIPPED.icon },
-  { value: 'ALL',       label: 'Todos',         sublabel: 'Historial completo',    icon: ShoppingBag },
+  { value: 'PENDING',   label: 'Por confirmar', sublabel: 'Pedidos nuevos',        icon: ORDER_STATUS_META.PENDING.icon,   accent: 'amber' },
+  { value: 'CONFIRMED', label: 'Confirmados',   sublabel: 'Listos para preparar',  icon: ORDER_STATUS_META.CONFIRMED.icon, accent: 'blue' },
+  { value: 'PREPARING', label: 'Preparando',    sublabel: 'En armado',             icon: ORDER_STATUS_META.PREPARING.icon, accent: 'cyan' },
+  { value: 'READY',     label: 'Listos',        sublabel: 'Para enviar o retirar', icon: ORDER_STATUS_META.READY.icon,     accent: 'emerald' },
+  { value: 'SHIPPED',   label: 'En camino',     sublabel: 'Despachados',           icon: ORDER_STATUS_META.SHIPPED.icon,   accent: 'violet' },
+  { value: 'ALL',       label: 'Todos',         sublabel: 'Historial completo',    icon: ShoppingBag,                      accent: 'slate' },
 ]
 
+const TAB_ACCENTS: Record<TabAccent, {
+  activeBorder: string; activeBg: string; activeGlow: string
+  activeIcon: string; activeBadge: string; idleIcon: string
+}> = {
+  amber:   { activeBorder: 'border-amber-500/50',   activeBg: 'bg-amber-500/12',   activeGlow: 'shadow-amber-500/10',   activeIcon: 'text-amber-300',   activeBadge: 'bg-amber-500 text-amber-950',     idleIcon: 'text-amber-400/60' },
+  blue:    { activeBorder: 'border-blue-500/50',    activeBg: 'bg-blue-500/12',    activeGlow: 'shadow-blue-500/10',    activeIcon: 'text-blue-300',    activeBadge: 'bg-blue-500 text-white',          idleIcon: 'text-blue-400/60' },
+  cyan:    { activeBorder: 'border-cyan-500/50',    activeBg: 'bg-cyan-500/12',    activeGlow: 'shadow-cyan-500/10',    activeIcon: 'text-cyan-300',    activeBadge: 'bg-cyan-500 text-cyan-950',       idleIcon: 'text-cyan-400/60' },
+  emerald: { activeBorder: 'border-emerald-500/50', activeBg: 'bg-emerald-500/12', activeGlow: 'shadow-emerald-500/10', activeIcon: 'text-emerald-300', activeBadge: 'bg-emerald-500 text-emerald-950', idleIcon: 'text-emerald-400/60' },
+  violet:  { activeBorder: 'border-violet-500/50',  activeBg: 'bg-violet-500/12',  activeGlow: 'shadow-violet-500/10',  activeIcon: 'text-violet-300',  activeBadge: 'bg-violet-500 text-white',        idleIcon: 'text-violet-400/60' },
+  slate:   { activeBorder: 'border-slate-400/40',   activeBg: 'bg-white/8',        activeGlow: 'shadow-black/20',       activeIcon: 'text-slate-200',   activeBadge: 'bg-slate-400 text-slate-950',     idleIcon: 'text-slate-500' },
+}
+
 // ─── Metric card ──────────────────────────────────────────────────────────────
-function MetricCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+type MetricAccent = 'slate' | 'blue' | 'amber' | 'emerald'
+
+const METRIC_ACCENTS: Record<MetricAccent, { ring: string; chip: string; glow: string }> = {
+  slate:   { ring: 'border-white/10',        chip: 'bg-white/10 text-slate-300',           glow: 'from-slate-400/10' },
+  blue:    { ring: 'border-blue-500/20',     chip: 'bg-blue-500/15 text-blue-300',         glow: 'from-blue-500/15' },
+  amber:   { ring: 'border-amber-500/25',    chip: 'bg-amber-500/15 text-amber-300',       glow: 'from-amber-500/15' },
+  emerald: { ring: 'border-emerald-500/20',  chip: 'bg-emerald-500/15 text-emerald-300',   glow: 'from-emerald-500/15' },
+}
+
+function MetricCard({ label, value, sub, icon: Icon, accent = 'slate', alert = false }: {
+  label: string
+  value: string | number
+  sub?: string
+  icon?: React.ElementType
+  accent?: MetricAccent
+  alert?: boolean
+}) {
+  const a = METRIC_ACCENTS[accent]
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-      <p className="text-xs font-medium text-slate-400">{label}</p>
-      <p className="mt-1.5 text-2xl font-bold tabular-nums text-white">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
+    <div className={cn(
+      'group relative overflow-hidden rounded-2xl border bg-white/[0.03] p-4 transition-colors duration-200 hover:bg-white/[0.05]',
+      a.ring
+    )}>
+      <div className={cn('pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br to-transparent blur-2xl opacity-70', a.glow)} />
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-slate-400">{label}</p>
+          <p className="mt-2 text-[26px] font-bold leading-none tabular-nums text-white">{value}</p>
+          {sub && <p className="mt-1.5 text-xs text-slate-500">{sub}</p>}
+        </div>
+        {Icon && (
+          <div className={cn('relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', a.chip)}>
+            <Icon className="h-4.5 w-4.5" />
+            {alert && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -91,29 +156,36 @@ function StatusTab({ tab, count, active, onClick }: {
   tab: StatusTab; count: number; active: boolean; onClick: () => void
 }) {
   const Icon = tab.icon
+  const a = TAB_ACCENTS[tab.accent]
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        'flex flex-col gap-1 rounded-xl border px-4 py-3 text-left transition-all duration-150 min-w-[130px]',
+        'group flex flex-col gap-1 rounded-xl border px-4 py-3 text-left transition-all duration-150 min-w-[132px]',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50',
         active
-          ? 'border-blue-500/50 bg-blue-600/20 text-white shadow-lg shadow-blue-500/10'
-          : 'border-white/8 bg-white/4 text-slate-400 hover:border-white/15 hover:bg-white/8 hover:text-slate-200'
+          ? cn('text-white shadow-lg', a.activeBorder, a.activeBg, a.activeGlow)
+          : 'border-white/8 bg-white/[0.03] text-slate-400 hover:border-white/15 hover:bg-white/[0.06] hover:text-slate-200'
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <Icon className={cn('h-3.5 w-3.5', active ? 'text-blue-400' : 'text-slate-500')} />
+        <div className="flex items-center gap-2">
+          <span className={cn(
+            'flex h-5 w-5 items-center justify-center rounded-md transition-colors',
+            active ? cn('bg-white/10', a.activeIcon) : cn('bg-white/5', a.idleIcon, 'group-hover:bg-white/10')
+          )}>
+            <Icon className="h-3 w-3" />
+          </span>
           <span className="text-sm font-semibold">{tab.label}</span>
         </div>
         <span className={cn(
-          'flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums',
-          active ? 'bg-blue-500 text-white' : 'bg-white/10 text-slate-300'
+          'flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums transition-colors',
+          active ? a.activeBadge : 'bg-white/10 text-slate-300'
         )}>{count}</span>
       </div>
-      <p className={cn('text-[11px]', active ? 'text-blue-300/80' : 'text-slate-600')}>{tab.sublabel}</p>
+      <p className={cn('pl-7 text-[11px]', active ? 'text-slate-300/70' : 'text-slate-600')}>{tab.sublabel}</p>
     </button>
   )
 }
@@ -374,6 +446,13 @@ function OrderRow({
           <PackageSearch className="h-3 w-3" /> Detalle producto
         </Button>
 
+        {/* Copy order summary */}
+        <Button size="sm" variant="ghost"
+          onClick={handleCopy}
+          className="w-full h-7 gap-1 rounded-lg text-[11px] text-slate-400 hover:bg-white/8 hover:text-slate-200 justify-center">
+          <Copy className="h-3 w-3" /> Copiar pedido
+        </Button>
+
         {/* Payment action */}
         {canConfirmPayment ? (
           <Button size="sm" disabled={updating}
@@ -426,17 +505,40 @@ function OrderRow({
 function OrderSkeleton() {
   return (
     <div className="space-y-2">
-      {Array.from({ length: 4 }, (_, i) => (
-        <div key={i} className="rounded-xl border border-white/8 bg-white/3 p-4">
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-4 w-4 rounded bg-white/10" />
-            <Skeleton className="h-4 w-36 rounded bg-white/10" />
-            <Skeleton className="h-5 w-20 rounded-full bg-white/10" />
-            <Skeleton className="h-5 w-16 rounded bg-white/10" />
-            <div className="ml-auto flex gap-2">
-              <Skeleton className="h-8 w-28 rounded-lg bg-white/10" />
-              <Skeleton className="h-7 w-20 rounded-lg bg-white/10" />
+      {Array.from({ length: 3 }, (_, i) => (
+        <div key={i} className="flex overflow-hidden rounded-xl border border-white/8 bg-white/[0.02]">
+          {/* Left: main content */}
+          <div className="flex-1 min-w-0 space-y-3 px-4 py-3.5">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-4 w-4 rounded bg-white/10" />
+              <Skeleton className="h-4 w-28 rounded bg-white/10" />
+              <Skeleton className="h-5 w-20 rounded-full bg-white/10" />
+              <Skeleton className="h-5 w-16 rounded bg-white/10" />
+              <div className="ml-auto text-right">
+                <Skeleton className="h-5 w-24 rounded bg-white/10" />
+              </div>
             </div>
+            <Skeleton className="h-3 w-40 rounded bg-white/[0.07]" />
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              {Array.from({ length: 3 }, (_, j) => (
+                <div key={j} className="space-y-2 rounded-lg border border-white/8 bg-white/[0.02] p-3">
+                  <Skeleton className="h-2.5 w-14 rounded bg-white/[0.07]" />
+                  <Skeleton className="h-4 w-3/4 rounded bg-white/10" />
+                  <Skeleton className="h-3 w-1/2 rounded bg-white/[0.07]" />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-1.5">
+              <Skeleton className="h-6 w-24 rounded-lg bg-white/[0.07]" />
+              <Skeleton className="h-6 w-20 rounded-lg bg-white/[0.07]" />
+            </div>
+          </div>
+          {/* Right: action column */}
+          <div className="flex shrink-0 flex-col gap-2 border-l border-white/8 p-3 min-w-[160px]">
+            <Skeleton className="h-8 w-full rounded-lg bg-white/10" />
+            <Skeleton className="h-7 w-full rounded-lg bg-white/[0.07]" />
+            <Skeleton className="h-9 w-full rounded-lg bg-white/10" />
+            <Skeleton className="h-8 w-full rounded-lg bg-white/[0.07]" />
           </div>
         </div>
       ))}
@@ -536,12 +638,16 @@ export function OrdersDashboard() {
   const [statusTab, setStatusTab] = useState('PENDING')
   const [paymentFilter, setPaymentFilter] = useState('ALL')
   const [datePreset, setDatePreset] = useState<DatePreset>('all')
+  const [sortField, setSortField] = useState<'created_at' | 'total'>('created_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [stats, setStats] = useState<Record<string, number>>({})
+  const [todayCount, setTodayCount] = useState(0)
+  const [todayRevenue, setTodayRevenue] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [updatingId, setUpdatingId] = useState<string | null>(null)
@@ -551,10 +657,7 @@ export function OrdersDashboard() {
   const toastRef = useRef(toast)
   toastRef.current = toast
 
-  // Derived metrics
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayOrders = orders.filter((o) => o.created_at.startsWith(todayStr))
-  const todayPaidRevenue = todayOrders.filter((o) => o.payment_status === 'PAID').reduce((s, o) => s + o.total, 0)
+  // Derived metrics (org-wide values come from the API `stats`/`meta`, not the page)
   const needsAction = (stats['PENDING'] ?? 0) + (stats['READY'] ?? 0)
 
   const loadOrders = useCallback(async (opts?: { forceStats?: boolean }) => {
@@ -569,7 +672,7 @@ export function OrdersDashboard() {
         limit: '20',
         status: statusTab,
         search,
-        sort: sortDir === 'desc' ? 'newest' : 'oldest',
+        sort: buildSortParam(sortField, sortDir),
       })
       if (paymentFilter !== 'ALL') params.set('payment_status', paymentFilter)
       if (needStats) params.set('include_stats', 'true')
@@ -584,13 +687,14 @@ export function OrdersDashboard() {
       setTotalPages(data.pagination.totalPages)
       setTotal(data.pagination.total)
       if (data.stats) { setStats(data.stats); statsLoadedRef.current = true }
+      if (data.meta) { setTodayCount(data.meta.todayCount); setTodayRevenue(data.meta.todayRevenue) }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return
       toastRef.current({ title: 'Error al cargar pedidos', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })
     } finally {
       if (abortRef.current === controller) setLoading(false)
     }
-  }, [page, search, statusTab, paymentFilter, datePreset, sortDir])
+  }, [page, search, statusTab, paymentFilter, datePreset, sortField, sortDir])
 
   useEffect(() => {
     const t = window.setTimeout(() => void loadOrders(), 250)
@@ -644,7 +748,19 @@ export function OrdersDashboard() {
   function toggleSelect(id: string, checked: boolean) {
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      checked ? next.add(id) : next.delete(id)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  const allPageSelected = orders.length > 0 && orders.every((o) => selectedIds.has(o.id))
+
+  function toggleSelectPage() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allPageSelected) orders.forEach((o) => next.delete(o.id))
+      else orders.forEach((o) => next.add(o.id))
       return next
     })
   }
@@ -655,24 +771,73 @@ export function OrdersDashboard() {
     setSearch(''); setPaymentFilter('ALL'); setDatePreset('all'); setPage(1)
   }
 
+  // Export the full filtered dataset (paging through the API), not just the
+  // current page. Hard-capped at 50 pages (5 000 rows) to avoid runaway loops.
+  async function handleExportCSV() {
+    setExporting(true)
+    try {
+      const collected: CustomerOrder[] = []
+      let current = 1
+      let pages = 1
+      do {
+        const params = new URLSearchParams({
+          page: String(current),
+          limit: '100',
+          status: statusTab,
+          search,
+          sort: buildSortParam(sortField, sortDir),
+        })
+        if (paymentFilter !== 'ALL') params.set('payment_status', paymentFilter)
+        const dateFrom = getDateFrom(datePreset)
+        if (dateFrom) params.set('date_from', dateFrom)
+
+        const response = await fetch(`/api/orders?${params}`, { cache: 'no-store' })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || payload?.success === false) {
+          throw new Error(payload?.error ?? 'No se pudieron exportar los pedidos.')
+        }
+        const data = payload.data as OrdersPayload
+        collected.push(...data.orders)
+        pages = data.pagination.totalPages
+        current++
+      } while (current <= pages && current <= 50)
+
+      if (collected.length === 0) {
+        toast({ title: 'Nada para exportar', description: 'No hay pedidos que coincidan con los filtros.' })
+        return
+      }
+      exportOrdersCSV(collected)
+      toast({ title: 'CSV exportado', description: `${collected.length} pedido${collected.length !== 1 ? 's' : ''}.` })
+    } catch (error) {
+      toast({ title: 'No se pudo exportar', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#0d1117] text-slate-100">
       <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6">
 
         {/* ── Header ── */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Pedidos del canal digital</h1>
-            <p className="mt-1 text-sm text-slate-500">Gestiona cumplimiento, cambios de estado y altas manuales desde una sola vista.</p>
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-blue-500/25 bg-gradient-to-br from-blue-500/20 to-blue-600/[0.03] text-blue-300 shadow-lg shadow-blue-950/20">
+              <ShoppingBag className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-white">Pedidos del canal digital</h1>
+              <p className="mt-1 text-sm text-slate-500">Gestiona cumplimiento, cambios de estado y altas manuales desde una sola vista.</p>
+            </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => void loadOrders({ forceStats: true })} disabled={loading}
               className="gap-1.5 rounded-lg border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white">
               <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} /> Actualizar
             </Button>
-            <Button variant="outline" size="sm" onClick={() => exportOrdersCSV(orders)} disabled={orders.length === 0}
+            <Button variant="outline" size="sm" onClick={() => void handleExportCSV()} disabled={exporting || (total === 0 && orders.length === 0)}
               className="gap-1.5 rounded-lg border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white">
-              <Download className="h-3.5 w-3.5" /> Exportar CSV
+              {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Exportar CSV
             </Button>
             <Button size="sm" onClick={() => setCreateOpen(true)}
               className="gap-1.5 rounded-lg bg-blue-600 font-semibold text-white hover:bg-blue-500">
@@ -729,10 +894,18 @@ export function OrdersDashboard() {
 
         {/* ── Metric cards ── */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <MetricCard label="Pedidos totales" value={Object.values(stats).reduce((s, v) => s + v, 0) || total} />
-          <MetricCard label="Requieren acción" value={needsAction} />
-          <MetricCard label="Pedidos hoy" value={todayOrders.length} />
-          <MetricCard label="Cobrado hoy" value={`Gs. ${todayPaidRevenue.toLocaleString('es-PY')}`} />
+          <MetricCard
+            label="Pedidos totales" icon={ShoppingBag} accent="blue"
+            value={Object.values(stats).reduce((s, v) => s + v, 0) || total} />
+          <MetricCard
+            label="Requieren acción" icon={AlertTriangle} accent="amber" alert={needsAction > 0}
+            value={needsAction} sub={needsAction > 0 ? 'Pendientes y listos' : 'Todo al día'} />
+          <MetricCard
+            label="Pedidos hoy" icon={Package} accent="slate"
+            value={todayCount} />
+          <MetricCard
+            label="Cobrado hoy" icon={Coins} accent="emerald"
+            value={`Gs. ${todayRevenue.toLocaleString('es-PY')}`} />
         </div>
 
         {/* ── Status tabs ── */}
@@ -791,7 +964,7 @@ export function OrdersDashboard() {
               </SelectContent>
             </Select>
 
-            <Select value="created_at" onValueChange={() => {}}>
+            <Select value={sortField} onValueChange={(v) => { setSortField(v as 'created_at' | 'total'); setPage(1) }}>
               <SelectTrigger className="h-9 w-[110px] rounded-lg border-white/10 bg-white/5 text-xs text-slate-300">
                 <SelectValue placeholder="Fecha" />
               </SelectTrigger>
@@ -835,7 +1008,7 @@ export function OrdersDashboard() {
         {cancelConfirmId && (
           <CancelConfirmBanner
             onConfirm={() => {
-              const order = orders.find((o) => o.id === cancelConfirmId || cancelConfirmId.includes(o.id))
+              const order = orders.find((o) => o.id === cancelConfirmId)
               if (order) void updateStatus(order, 'CANCELLED')
               else setCancelConfirmId(null)
             }}
@@ -860,24 +1033,36 @@ export function OrdersDashboard() {
                 </span>
               )}
             </div>
-            {totalPages > 1 && (
-              <button type="button" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
-                Seleccionar página
+            {orders.length > 0 && (
+              <button type="button" onClick={toggleSelectPage}
+                className="text-xs font-medium text-slate-500 hover:text-slate-300 transition-colors">
+                {allPageSelected ? 'Quitar selección' : 'Seleccionar página'}
               </button>
             )}
           </div>
 
           {loading ? <OrderSkeleton /> : orders.length === 0 ? (
-            <div className="flex h-56 flex-col items-center justify-center rounded-xl border border-white/8 bg-white/3 text-center">
-              <PackageSearch className="h-10 w-10 text-slate-700" />
-              <p className="mt-3 font-semibold text-slate-400">Sin pedidos</p>
-              <p className="mt-1 text-sm text-slate-600">
-                {hasActiveFilters ? 'Ningún pedido coincide con los filtros.' : 'Crea el primer pedido para comenzar.'}
+            <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-white/12 bg-white/[0.02] px-6 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.03]">
+                <PackageSearch className="h-8 w-8 text-slate-600" />
+              </div>
+              <p className="mt-4 text-base font-semibold text-slate-300">
+                {hasActiveFilters ? 'Sin coincidencias' : 'Aún no hay pedidos'}
               </p>
-              {hasActiveFilters && (
+              <p className="mt-1 max-w-sm text-sm text-slate-500">
+                {hasActiveFilters
+                  ? 'Ningún pedido coincide con los filtros aplicados. Ajústalos o restablécelos para ver más.'
+                  : 'Cuando lleguen pedidos del canal digital aparecerán aquí. También puedes crear uno manualmente.'}
+              </p>
+              {hasActiveFilters ? (
                 <button type="button" onClick={resetFilters}
-                  className="mt-4 rounded-lg border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/10">
-                  Restablecer filtros
+                  className="mt-5 inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/10">
+                  <X className="h-3.5 w-3.5" /> Restablecer filtros
+                </button>
+              ) : (
+                <button type="button" onClick={() => setCreateOpen(true)}
+                  className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-500">
+                  <Plus className="h-3.5 w-3.5" /> Nueva orden
                 </button>
               )}
             </div>

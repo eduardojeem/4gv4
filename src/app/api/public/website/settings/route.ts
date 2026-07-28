@@ -52,6 +52,16 @@ export async function GET(request: NextRequest) {
           enabled: normalized.checkout.payment.transfer.enabled,
           label: normalized.checkout.payment.transfer.label,
           instructions: normalized.checkout.payment.transfer.instructions,
+          bankAlias: normalized.checkout.payment.transfer.bankAlias,
+          bankCbu: normalized.checkout.payment.transfer.bankCbu,
+          bankName: normalized.checkout.payment.transfer.bankName,
+          transferOptions: normalized.checkout.payment.transfer.transferOptions?.map((option) => ({
+            id: option.id,
+            bankName: option.bankName,
+            alias: option.alias,
+            accountNumber: option.accountNumber,
+            accountHolder: option.accountHolder,
+          })),
         },
         digital_wallet: {
           enabled: normalized.checkout.payment.digital_wallet.enabled,

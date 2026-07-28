@@ -14,10 +14,13 @@ import {
   Loader2, Save, Briefcase, Wrench, Shield, Package, Check, Plus, Trash2, 
   Smartphone, Monitor, Battery, Cpu, Zap, Headset, ArrowUp, ArrowDown, 
   Clock, Sparkles, Laptop, Edit3, Droplet, Camera,
-  Eye, EyeOff, Receipt, Wallet, Landmark, Banknote, CreditCard
+  Eye, EyeOff, Receipt, Wallet, Landmark, Banknote, CreditCard,
+  AlertTriangle, CheckCircle2, Globe2, RotateCcw
 } from 'lucide-react'
 import { Service } from '@/types/website-settings'
 import { getWebsiteSettingsDefaults } from '@/lib/website/default-settings'
+import { getActivePublicServices } from '@/lib/website/services'
+import { SectionHowItWorks } from '@/components/admin/website/SectionHowItWorks'
 import {
   Dialog,
   DialogContent,
@@ -91,6 +94,59 @@ const FINANCIAL_SERVICE_PRESETS: Array<Omit<Service, 'id'>> = [
     category: 'Operaciones bancarias',
     ctaUrl: '/inicio#contacto',
   },
+  {
+    title: 'Western Union',
+    description: 'Envio y retiro de dinero por Western Union, sujeto a disponibilidad y requisitos del operador.',
+    icon: 'banknote',
+    color: 'yellow',
+    benefits: ['Envios internacionales', 'Retiros de dinero', 'Atencion en local'],
+    active: true,
+    price: 'Consultar comision',
+    priceNote: 'segun operacion',
+    duration: 'En el momento',
+    category: 'Giros internacionales',
+    featured: true,
+    ctaUrl: '/inicio#contacto',
+  },
+  {
+    title: 'Giros nacionales',
+    description: 'Envio y retiro de dinero dentro del pais mediante los operadores disponibles en el local.',
+    icon: 'banknote',
+    color: 'green',
+    benefits: ['Envios nacionales', 'Retiros', 'Comprobante de operacion'],
+    active: true,
+    price: 'Consultar comision',
+    priceNote: 'segun operador',
+    duration: 'En el momento',
+    category: 'Giros y transferencias',
+    ctaUrl: '/inicio#contacto',
+  },
+  {
+    title: 'Recargas y paquetes',
+    description: 'Carga de saldo y activacion de paquetes para lineas de las operadoras disponibles.',
+    icon: 'zap',
+    color: 'cyan',
+    benefits: ['Recarga de saldo', 'Paquetes de internet', 'Confirmacion inmediata'],
+    active: true,
+    price: 'Segun recarga',
+    priceNote: 'consultar operadoras',
+    duration: 'En el momento',
+    category: 'Telefonia',
+    ctaUrl: '/inicio#contacto',
+  },
+  {
+    title: 'Cobro de cuotas',
+    description: 'Recepcion de pagos de cuotas para empresas y entidades habilitadas en el punto de cobro.',
+    icon: 'credit-card',
+    color: 'purple',
+    benefits: ['Pago de cuotas', 'Comprobante', 'Consulta de disponibilidad'],
+    active: true,
+    price: 'Consultar comision',
+    priceNote: 'segun entidad',
+    duration: 'En el momento',
+    category: 'Cobranzas',
+    ctaUrl: '/inicio#contacto',
+  },
 ]
 
 const COLOR_OPTIONS = [
@@ -110,21 +166,25 @@ const COLOR_OPTIONS = [
   { value: 'sky', label: 'Cielo', class: 'bg-sky-100 text-sky-600 border-sky-200 hover:bg-sky-200' },
 ]
 
-const COLOR_GRADIENTS: Record<string, string> = {
-  blue: 'from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10',
-  green: 'from-green-50 to-teal-50 dark:from-green-900/10 dark:to-teal-900/10',
-  purple: 'from-purple-50 to-pink-50 dark:from-purple-900/10 dark:to-pink-900/10',
-  orange: 'from-orange-50 to-amber-50 dark:from-orange-900/10 dark:to-amber-900/10',
-  red: 'from-red-50 to-rose-50 dark:from-red-900/10 dark:to-rose-900/10',
-  indigo: 'from-indigo-50 to-blue-50 dark:from-indigo-900/10 dark:to-blue-900/10',
-  teal: 'from-teal-50 to-emerald-50 dark:from-teal-900/10 dark:to-emerald-900/10',
-  yellow: 'from-yellow-50 to-amber-50 dark:from-yellow-900/10 dark:to-amber-900/10',
-  cyan: 'from-cyan-50 to-sky-50 dark:from-cyan-900/10 dark:to-sky-900/10',
-  pink: 'from-pink-50 to-rose-50 dark:from-pink-900/10 dark:to-rose-900/10',
-  rose: 'from-rose-50 to-red-50 dark:from-rose-900/10 dark:to-red-900/10',
-  amber: 'from-amber-50 to-yellow-50 dark:from-amber-900/10 dark:to-yellow-900/10',
-  emerald: 'from-emerald-50 to-green-50 dark:from-emerald-900/10 dark:to-green-900/10',
-  sky: 'from-sky-50 to-blue-50 dark:from-sky-900/10 dark:to-blue-900/10',
+function isServiceReady(service: Service): boolean {
+  const benefits = (service.benefits || [])
+    .map((benefit) => benefit.trim())
+    .filter(Boolean)
+
+  return (
+    service.title.trim().length >= 3 &&
+    service.description.trim().length >= 10 &&
+    benefits.length >= 1 &&
+    benefits.length <= 10
+  )
+}
+
+function createServiceId(label?: string): string {
+  const suffix = label
+    ? `-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+    : ''
+
+  return `service-${Date.now()}${suffix}`
 }
 
 export function ServicesManager() {
@@ -135,9 +195,17 @@ export function ServicesManager() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingService, setEditingService] = useState<Service | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
-  const services = servicesDraft ?? settings?.services ?? getWebsiteSettingsDefaults().services
+  const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false)
+  const defaults = getWebsiteSettingsDefaults()
+  const services = servicesDraft ?? settings?.services ?? defaults.services
+  const savedServices = settings?.services ?? defaults.services
   const hasChanges = servicesDraft !== null
-  const activeServicesCount = services.filter((service) => service.active !== false).length
+  const activeServicesCount = getActivePublicServices(services).length
+  const savedActiveServicesCount = getActivePublicServices(savedServices).length
+  const hiddenServicesCount = services.length - activeServicesCount
+  const readyServicesCount = services.filter(isServiceReady).length
+  const pageEnabled = settings?.company_info?.servicesPageEnabled !== false
+  const pagePublished = pageEnabled && savedActiveServicesCount > 0
 
   const dirtyCtx = useWebsiteEditorDirty()
   useEffect(() => {
@@ -146,18 +214,7 @@ export function ServicesManager() {
   }, [hasChanges, dirtyCtx])
 
   const handleSaveAll = async () => {
-    const invalidService = services.find((service) => {
-      const title = service.title?.trim() || ''
-      const description = service.description?.trim() || ''
-      const validBenefits = (service.benefits || []).map((b) => b.trim()).filter(Boolean)
-
-      return (
-        title.length < 3 ||
-        description.length < 10 ||
-        validBenefits.length < 1 ||
-        validBenefits.length > 10
-      )
-    })
+    const invalidService = services.find((service) => !isServiceReady(service))
 
     if (invalidService) {
       toast.error('Hay servicios inválidos', {
@@ -188,8 +245,15 @@ export function ServicesManager() {
   }
 
   const handleOpenAdd = () => {
+    if (services.length >= 10) {
+      toast.error('Límite de servicios alcanzado', {
+        description: 'Puedes cargar hasta 10 servicios.',
+      })
+      return
+    }
+
     const newService: Service = {
-      id: `service-${Date.now()}`,
+      id: createServiceId(),
       title: '',
       description: '',
       icon: 'smartphone',
@@ -212,7 +276,7 @@ export function ServicesManager() {
 
     const newService: Service = {
       ...preset,
-      id: `service-${Date.now()}-${preset.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      id: createServiceId(preset.title),
       benefits: [...preset.benefits],
     }
 
@@ -305,6 +369,31 @@ export function ServicesManager() {
     setServicesDraft(updated)
   }
 
+  const handlePageVisibilityChange = async (enabled: boolean) => {
+    if (enabled && savedActiveServicesCount === 0) {
+      toast.error('Primero guarda un servicio activo', {
+        description: 'La página pública necesita al menos un servicio activo guardado.',
+      })
+      return
+    }
+
+    setIsUpdatingVisibility(true)
+    const currentInfo = settings?.company_info ?? defaults.company_info
+    const result = await updateSetting('company_info', {
+      ...currentInfo,
+      servicesPageEnabled: enabled,
+    })
+    setIsUpdatingVisibility(false)
+
+    if (result.success) {
+      toast.success(enabled ? 'Página de servicios publicada' : 'Página de servicios ocultada')
+    } else {
+      toast.error('No se pudo actualizar la publicación', {
+        description: result.error,
+      })
+    }
+  }
+
   if (isLoading && servicesDraft === null && !settings) {
     return <div className="p-8 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></div>
   }
@@ -315,53 +404,127 @@ export function ServicesManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-              <Briefcase className="h-6 w-6" />
-            </div>
-            Gestión de Servicios
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Personaliza el catálogo de servicios que verán tus visitantes ({activeServicesCount} activos)</p>
+          <div className="flex items-center gap-2">
+            <Briefcase className="h-5 w-5 text-primary" aria-hidden="true" />
+            <h2 className="text-lg font-semibold">Servicios públicos</h2>
+          </div>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Define qué ofreces, en qué orden se muestra y cuándo estará disponible para tus clientes.
+          </p>
         </div>
-        <Button onClick={handleOpenAdd} className="bg-blue-600 hover:bg-blue-700 text-white px-6 h-11 rounded-xl shadow-lg shadow-blue-200 dark:shadow-none transition-all active:scale-95">
-          <Plus className="mr-2 h-5 w-5" /> Nuevo Servicio
+        <Button
+          type="button"
+          onClick={handleOpenAdd}
+          disabled={services.length >= 10}
+          className="h-10 shrink-0 rounded-md"
+        >
+          <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+          Nuevo servicio
         </Button>
       </div>
 
-      {/* Services page toggle */}
-      <Card className="border-blue-100 dark:border-blue-900/40">
-        <CardContent className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <Eye className="h-5 w-5 text-blue-600" />
-            <div>
-              <p className="font-medium text-sm">Página de servicios pública</p>
-              <p className="text-xs text-muted-foreground">Muestra un link &quot;Servicios&quot; en el menú de tu tienda con precios y detalle</p>
+      <Card className="rounded-lg shadow-none">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 gap-3">
+              <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md ${
+                pagePublished
+                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                  : 'bg-muted text-muted-foreground'
+              }`}>
+                {pagePublished
+                  ? <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
+                  : <Globe2 className="h-5 w-5" aria-hidden="true" />}
+              </div>
+              <div>
+                <p className="text-sm font-semibold">
+                  {pagePublished ? 'Página publicada' : 'Página no disponible'}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {pagePublished
+                    ? `${savedActiveServicesCount} servicio${savedActiveServicesCount === 1 ? '' : 's'} activo${savedActiveServicesCount === 1 ? '' : 's'} visible${savedActiveServicesCount === 1 ? '' : 's'} en el menú público.`
+                    : savedActiveServicesCount === 0
+                      ? 'Guarda al menos un servicio activo para poder publicar esta página.'
+                      : 'La página y el enlace “Servicios” están ocultos para los visitantes.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-md border bg-muted/20 px-3 py-2 lg:min-w-[230px]">
+              <div>
+                <Label htmlFor="services-page-enabled" className="text-sm font-medium">
+                  Mostrar página
+                </Label>
+                <p className="text-[11px] text-muted-foreground">Este cambio se guarda al instante.</p>
+              </div>
+              {isUpdatingVisibility
+                ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                : (
+                  <Switch
+                    id="services-page-enabled"
+                    checked={pageEnabled}
+                    onCheckedChange={handlePageVisibilityChange}
+                    disabled={isSaving || (!pageEnabled && savedActiveServicesCount === 0)}
+                  />
+                )}
             </div>
           </div>
-          <Switch
-            checked={settings?.company_info?.servicesPageEnabled !== false && services.length > 0}
-            onCheckedChange={async (enabled) => {
-              const currentInfo = settings?.company_info ?? getWebsiteSettingsDefaults().company_info
-              await updateSetting('company_info', { ...currentInfo, servicesPageEnabled: enabled })
-              toast.success(enabled ? 'Página de servicios activada' : 'Página de servicios desactivada')
-            }}
-            disabled={isSaving || services.length === 0}
+
+          <div className="mt-4 grid grid-cols-3 divide-x rounded-md border bg-background">
+            <div className="px-3 py-2">
+              <p className="text-lg font-semibold">{activeServicesCount}</p>
+              <p className="text-[11px] text-muted-foreground">Activos</p>
+            </div>
+            <div className="px-3 py-2">
+              <p className="text-lg font-semibold">{hiddenServicesCount}</p>
+              <p className="text-[11px] text-muted-foreground">Ocultos</p>
+            </div>
+            <div className="px-3 py-2">
+              <p className="text-lg font-semibold">{readyServicesCount}/{services.length}</p>
+              <p className="text-[11px] text-muted-foreground">Completos</p>
+            </div>
+          </div>
+
+          {pageEnabled && activeServicesCount === 0 && (
+            <div className="mt-4 flex gap-2 border-l-2 border-amber-500 bg-amber-50/60 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              Al guardar sin servicios activos, la página pública dejará de estar disponible.
+            </div>
+          )}
+
+          <SectionHowItWorks
+            sectionName="la página pública de servicios"
+            steps={[
+              {
+                title: 'Crea y ordena tu catálogo',
+                description: 'Carga hasta 10 servicios, completa sus beneficios y define cuáles estarán activos.',
+              },
+              {
+                title: 'Guarda los cambios',
+                description: 'Las ediciones, el orden y el estado de cada servicio se aplican con el botón inferior.',
+              },
+              {
+                title: 'Publica la página',
+                description: 'Activa “Mostrar página” para agregar Servicios al menú público. Este control se guarda al instante.',
+              },
+            ]}
           />
         </CardContent>
       </Card>
 
-      <Card className="border-emerald-100 dark:border-emerald-900/40">
+      <Card className="rounded-lg shadow-none">
         <CardContent className="p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-4">
             <div>
               <p className="text-sm font-semibold text-foreground">Plantillas para pagos y operaciones</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Agrega servicios frecuentes como facturas, billeteras digitales o depositos bancarios y ajustalos antes de publicar.
+                Agrega una base editable para facturas, billeteras, bancos, Western Union, giros, recargas o cobranzas.
+                Confirma operadores, requisitos y comisiones antes de publicar.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[520px]">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {FINANCIAL_SERVICE_PRESETS.map((preset) => {
                 const IconComp = ICON_OPTIONS.find((option) => option.value === preset.icon)?.icon || Receipt
                 return (
@@ -369,7 +532,7 @@ export function ServicesManager() {
                     key={preset.title}
                     type="button"
                     variant="outline"
-                    className="h-auto justify-start gap-2 rounded-xl px-3 py-2 text-left"
+                    className="h-auto justify-start gap-2 rounded-md px-3 py-2 text-left"
                     onClick={() => handleAddPreset(preset)}
                     disabled={services.length >= 10}
                   >
@@ -386,102 +549,131 @@ export function ServicesManager() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="space-y-3">
         {services.map((service, index) => {
           const IconComp = ICON_OPTIONS.find(o => o.value === service.icon)?.icon || Smartphone
           const colorClass = COLOR_OPTIONS.find(o => o.value === service.color)?.class || COLOR_OPTIONS[0].class
-          const gradient = COLOR_GRADIENTS[service.color] || COLOR_GRADIENTS.blue
-          const isActive = service.active !== false // Default to true if undefined
+          const isActive = service.active !== false
+          const isReady = isServiceReady(service)
 
           return (
-            <Card key={service.id} className={`group overflow-hidden border-none shadow-sm hover:shadow-xl transition-all duration-300 bg-white dark:bg-gray-800 rounded-2xl ${!isActive ? 'opacity-60 grayscale' : ''}`}>
-              <CardHeader className={`bg-gradient-to-br ${gradient} p-5 relative overflow-hidden`}>
-                {/* Fondo decorativo sutil */}
-                <div className="absolute -right-4 -top-4 opacity-5 pointer-events-none">
-                  <IconComp className="h-24 w-24" />
-                </div>
-                
-                <div className="flex items-start justify-between relative z-10">
-                  <div className={`p-3.5 rounded-2xl ${colorClass} shadow-md bg-white/90 dark:bg-black/20 backdrop-blur-md`}>
-                    <IconComp className="h-7 w-7" />
-                  </div>
-                  <div className="flex gap-1.5 translate-x-1 group-hover:translate-x-0 transition-transform">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={`h-8 w-8 rounded-full bg-white/50 hover:bg-white backdrop-blur-sm ${isActive ? 'text-green-600 hover:text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
-                      onClick={() => handleToggleActive(index)}
-                      title={isActive ? "Desactivar servicio" : "Activar servicio"}
-                    >
-                      {isActive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 rounded-full bg-white/50 hover:bg-white text-gray-500 hover:text-blue-600 backdrop-blur-sm"
-                      onClick={() => handleMove(index, 'up')}
-                      disabled={index === 0}
-                    >
-                      <ArrowUp className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 rounded-full bg-white/50 hover:bg-white text-gray-500 hover:text-blue-600 backdrop-blur-sm"
-                      onClick={() => handleMove(index, 'down')}
-                      disabled={index === services.length - 1}
-                    >
-                      <ArrowDown className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 rounded-full bg-white/50 hover:bg-red-50 text-gray-500 hover:text-red-500 backdrop-blur-sm"
-                      onClick={() => handleDeleteService(index)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <div className="mt-5 relative z-10">
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white leading-tight truncate">
-                    {service.title || 'Sin Título'}
-                  </h3>
-                </div>
-              </CardHeader>
-
-              <CardContent className="p-5 space-y-5">
-                <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 min-h-18">
-                  {service.description || 'Sin descripción configurada para este servicio.'}
-                </p>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-gray-400">
-                    <span>Beneficios</span>
-                    <span className="text-gray-300">{service.benefits.length}</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {service.benefits.slice(0, 3).map((b, bi) => (
-                      <div key={bi} className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <Check className="h-3 w-3 text-green-500 shrink-0" />
-                        <span className="truncate">{b || 'Punto clave...'}</span>
+            <Card
+              key={service.id}
+              className={`overflow-hidden rounded-lg shadow-none ${!isActive ? 'bg-muted/20' : ''}`}
+            >
+              <div className="grid md:grid-cols-[minmax(0,1fr)_270px]">
+                <CardHeader className="space-y-3 border-b p-4 md:border-b-0 md:border-r">
+                  <div className="flex items-start gap-3">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md border ${colorClass}`}>
+                      <IconComp className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="break-words text-sm font-semibold">
+                          {service.title || 'Servicio sin título'}
+                        </h3>
+                        <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-medium ${
+                          isActive
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+                            : 'border-border bg-muted text-muted-foreground'
+                        }`}>
+                          {isActive ? 'Activo' : 'Oculto'}
+                        </span>
+                        {!isReady && (
+                          <span className="rounded-sm border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                            Incompleto
+                          </span>
+                        )}
                       </div>
+                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                        {service.description || 'Completa una descripción para explicar este servicio.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span>{service.category || 'Sin categoría'}</span>
+                    {service.price && <span className="font-medium text-foreground">{service.price}</span>}
+                    {service.duration && <span>{service.duration}</span>}
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {service.benefits.slice(0, 3).map((benefit, benefitIndex) => (
+                      <span
+                        key={`${service.id}-benefit-${benefitIndex}`}
+                        className="max-w-full truncate rounded-sm bg-muted px-2 py-1 text-[11px] text-muted-foreground"
+                      >
+                        {benefit || 'Beneficio pendiente'}
+                      </span>
                     ))}
                     {service.benefits.length > 3 && (
-                      <p className="text-[10px] text-gray-400 italic mt-1">+ {service.benefits.length - 3} más...</p>
+                      <span className="rounded-sm bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                        +{service.benefits.length - 3} más
+                      </span>
                     )}
+                  </div>
+                </CardHeader>
+
+                <CardContent className="flex flex-col justify-between gap-3 p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Posición {index + 1}</span>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-md"
+                        onClick={() => handleMove(index, 'up')}
+                        disabled={index === 0}
+                        aria-label={`Subir ${service.title || 'servicio'}`}
+                        title="Subir"
+                      >
+                        <ArrowUp className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                        className="h-8 w-8 rounded-md"
+                        onClick={() => handleMove(index, 'down')}
+                        disabled={index === services.length - 1}
+                        aria-label={`Bajar ${service.title || 'servicio'}`}
+                        title="Bajar"
+                    >
+                        <ArrowDown className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                        className="h-8 w-8 rounded-md text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDeleteService(index)}
+                        aria-label={`Eliminar ${service.title || 'servicio'}`}
+                        title="Eliminar"
+                    >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </Button>
                   </div>
                 </div>
 
-                <Button 
-                  onClick={() => handleOpenEdit(index)}
-                  variant="outline" 
-                  className="w-full h-11 border-gray-100 dark:border-gray-700 hover:border-blue-500 hover:bg-blue-50/50 hover:text-blue-600 dark:hover:bg-blue-900/10 transition-all rounded-xl gap-2 font-medium"
-                >
-                  <Edit3 className="h-4 w-4" />
-                  Editar Servicio
-                </Button>
-              </CardContent>
+                  <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+                    <Label htmlFor={`service-active-${service.id}`} className="text-xs font-medium">
+                      Visible al público
+                    </Label>
+                    <Switch
+                      id={`service-active-${service.id}`}
+                      checked={isActive}
+                      onCheckedChange={() => handleToggleActive(index)}
+                    />
+                  </div>
+
+                  <Button
+                    onClick={() => handleOpenEdit(index)}
+                    variant="outline"
+                    className="h-9 w-full rounded-md gap-2"
+                  >
+                    <Edit3 className="h-4 w-4" aria-hidden="true" />
+                    Editar detalles
+                  </Button>
+                </CardContent>
+              </div>
             </Card>
           )
         })}
@@ -489,270 +681,351 @@ export function ServicesManager() {
 
       {/* Modal de Edición */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="w-[95vw] md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl md:rounded-3xl p-0 border-none shadow-2xl">
-          <DialogHeader className="p-6 md:p-8 pb-0">
-            <DialogTitle className="text-xl md:text-2xl font-bold flex items-center gap-3">
-              {editingIndex !== null ? (
-                <>
-                  <div className="p-2 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30 shrink-0">
-                    <Edit3 className="h-5 w-5" />
-                  </div>
-                  Editar Servicio
-                </>
-              ) : (
-                <>
-                  <div className="p-2 rounded-lg bg-green-50 text-green-600 dark:bg-green-900/30 shrink-0">
-                    <Plus className="h-5 w-5" />
-                  </div>
-                  Nuevo Servicio
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription className="text-gray-500 mt-1 text-sm md:text-base">
-              Completa los detalles para que tus clientes sepan exactamente qué ofreces.
-            </DialogDescription>
+        <DialogContent className="flex max-h-[92vh] w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-lg p-0 shadow-xl sm:w-[95vw] md:max-w-3xl">
+          <DialogHeader className="shrink-0 border-b px-5 py-4 pr-12 sm:px-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                {editingIndex !== null
+                  ? <Edit3 className="h-4 w-4" aria-hidden="true" />
+                  : <Plus className="h-4 w-4" aria-hidden="true" />}
+              </div>
+              <div>
+                <DialogTitle className="text-base font-semibold sm:text-lg">
+                  {editingIndex !== null ? 'Editar servicio' : 'Nuevo servicio'}
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs leading-relaxed sm:text-sm">
+                  Describe el servicio como lo verá el cliente. Los campos marcados con * son obligatorios.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
           {editingService && (
-            <div className="p-6 md:p-8 space-y-6 md:space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-                {/* Columna Izquierda: Identidad */}
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-xl border border-gray-100">
-                    <Label className="text-sm font-medium flex items-center gap-2 cursor-pointer" htmlFor="active-switch">
-                      {editingService.active !== false ? <Eye className="h-4 w-4 text-green-500" /> : <EyeOff className="h-4 w-4 text-gray-400" />}
-                      {editingService.active !== false ? 'Servicio Visible' : 'Servicio Oculto'}
-                    </Label>
-                    <Switch
-                      id="active-switch"
-                      checked={editingService.active !== false}
-                      onCheckedChange={(checked) => setEditingService({ ...editingService, active: checked })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Título del Servicio</Label>
-                    <Input
-                      value={editingService.title}
-                      onChange={(e) => setEditingService({ ...editingService, title: e.target.value })}
-                      placeholder="Ej: Cambio de Pantalla"
-                      className="h-11 md:h-12 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white transition-all text-sm md:text-base"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Descripción</Label>
-                    <Textarea
-                      value={editingService.description}
-                      onChange={(e) => setEditingService({ ...editingService, description: e.target.value })}
-                      placeholder="Escribe una breve descripción..."
-                      className="min-h-[100px] md:min-h-[120px] rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white transition-all resize-none text-xs md:text-sm leading-relaxed"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Precio</Label>
-                      <Input
-                        value={editingService.price || ''}
-                        onChange={(e) => setEditingService({ ...editingService, price: e.target.value })}
-                        placeholder="Desde Gs. 150.000"
-                        maxLength={30}
-                        className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
+            <>
+              <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-5 py-5 sm:px-6">
+                <section aria-labelledby="service-publication-title">
+                  <h3 id="service-publication-title" className="text-sm font-semibold">
+                    Publicación
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Controla si aparecerá en la página y si tendrá mayor protagonismo.
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
+                      <Label className="cursor-pointer" htmlFor="active-switch">
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          {editingService.active !== false
+                            ? <Eye className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                            : <EyeOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+                          Visible al público
+                        </span>
+                        <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                          Se mostrará después de guardar el catálogo.
+                        </span>
+                      </Label>
+                      <Switch
+                        id="active-switch"
+                        checked={editingService.active !== false}
+                        onCheckedChange={(checked) => setEditingService({ ...editingService, active: checked })}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Duración</Label>
-                      <Input
-                        value={editingService.duration || ''}
-                        onChange={(e) => setEditingService({ ...editingService, duration: e.target.value })}
-                        placeholder="30-60 min"
-                        maxLength={20}
-                        className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Categoría</Label>
-                      <Input
-                        value={editingService.category || ''}
-                        onChange={(e) => setEditingService({ ...editingService, category: e.target.value })}
-                        placeholder="Ej: Reparaciones, Accesorios"
-                        maxLength={50}
-                        className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Nota de precio</Label>
-                      <Input
-                        value={editingService.priceNote || ''}
-                        onChange={(e) => setEditingService({ ...editingService, priceNote: e.target.value })}
-                        placeholder="por unidad, por hora..."
-                        maxLength={30}
-                        className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-xl border border-gray-100">
-                    <Label className="text-sm font-medium flex items-center gap-2 cursor-pointer" htmlFor="featured-switch">
-                      <Sparkles className={`h-4 w-4 ${editingService.featured ? 'text-amber-500' : 'text-gray-400'}`} />
-                      {editingService.featured ? 'Servicio destacado' : 'No destacado'}
-                    </Label>
-                    <Switch
-                      id="featured-switch"
-                      checked={editingService.featured || false}
-                      onCheckedChange={(checked) => setEditingService({ ...editingService, featured: checked })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Enlace CTA (opcional)</Label>
-                    <Input
-                      value={editingService.ctaUrl || ''}
-                      onChange={(e) => setEditingService({ ...editingService, ctaUrl: e.target.value })}
-                      placeholder="/inicio#contacto"
-                      maxLength={200}
-                      className="h-10 rounded-xl bg-gray-50/50 border-gray-100 focus:bg-white text-xs"
-                    />
-                  </div>
-                </div>
-
-                {/* Columna Derecha: Estilo y Beneficios */}
-                <div className="space-y-6">
-                  <div className="space-y-3">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Personalización Visual</Label>
-                    <div className="bg-gray-50/50 dark:bg-gray-900/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-4">
-                      <div>
-                        <span className="text-[10px] text-gray-400 mb-2 block">Icono Representativo</span>
-                        <div className="grid grid-cols-6 gap-1.5 md:gap-2">
-                          {ICON_OPTIONS.map(opt => {
-                            const OIcon = opt.icon
-                            return (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => setEditingService({ ...editingService, icon: opt.value })}
-                                className={`p-2 md:p-2.5 rounded-xl border transition-all ${editingService.icon === opt.value ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-100 dark:border-gray-700 hover:border-blue-200 hover:text-blue-500'}`}
-                                title={opt.label}
-                              >
-                                <OIcon className="h-4 w-4 mx-auto" />
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-gray-400 mb-2 block">Color de Marca</span>
-                        <div className="grid grid-cols-7 gap-1.5 md:gap-2">
-                          {COLOR_OPTIONS.map(opt => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => setEditingService({ ...editingService, color: opt.value })}
-                              className={`h-6 md:h-7 rounded-lg border-2 transition-all flex items-center justify-center ${opt.class} ${editingService.color === opt.value ? 'ring-2 ring-blue-500 ring-offset-2' : 'opacity-40 hover:opacity-100'}`}
-                              title={opt.label}
-                            >
-                              {editingService.color === opt.value && <Check className="h-3 w-3 md:h-4 md:w-4" />}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest text-gray-400 flex justify-between items-center">
-                      Puntos Clave / Beneficios
-                      <button 
-                        type="button"
-                        onClick={() => setEditingService({ ...editingService, benefits: [...editingService.benefits, ''] })}
-                        className="text-blue-600 hover:text-blue-700 text-[10px] font-bold flex items-center gap-1"
-                      >
-                        <Plus className="h-3 w-3" /> Añadir
-                      </button>
-                    </Label>
-                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                      {editingService.benefits.map((b, bi) => (
-                        <div key={bi} className="flex gap-2 group">
-                          <Input
-                            value={b}
-                            onChange={(e) => {
-                              const newBenefits = [...editingService.benefits]
-                              newBenefits[bi] = e.target.value
-                              setEditingService({ ...editingService, benefits: newBenefits })
-                            }}
-                            className="h-9 md:h-10 rounded-xl bg-gray-50/50 border-gray-100 text-[11px] md:text-xs"
-                            placeholder="Ej: Instalación en 1 hora"
+                    <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
+                      <Label className="cursor-pointer" htmlFor="featured-switch">
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          <Sparkles
+                            className={`h-4 w-4 ${editingService.featured ? 'text-amber-500' : 'text-muted-foreground'}`}
+                            aria-hidden="true"
                           />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-9 w-9 md:h-10 md:w-10 text-gray-300 hover:text-red-500 shrink-0"
-                            onClick={() => {
-                              const newBenefits = editingService.benefits.filter((_, i) => i !== bi)
-                              setEditingService({ ...editingService, benefits: newBenefits })
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
+                          Servicio destacado
+                        </span>
+                        <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                          Ayuda a resaltarlo frente a los demás.
+                        </span>
+                      </Label>
+                      <Switch
+                        id="featured-switch"
+                        checked={editingService.featured || false}
+                        onCheckedChange={(checked) => setEditingService({ ...editingService, featured: checked })}
+                      />
                     </div>
                   </div>
-                </div>
+                </section>
+
+                <section aria-labelledby="service-details-title">
+                  <h3 id="service-details-title" className="text-sm font-semibold">
+                    Información principal
+                  </h3>
+                  <div className="mt-3 space-y-4">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label htmlFor="service-title">Título del servicio *</Label>
+                        <span className="text-[11px] text-muted-foreground">{editingService.title.length}/100</span>
+                      </div>
+                      <Input
+                        id="service-title"
+                        value={editingService.title}
+                        onChange={(e) => setEditingService({ ...editingService, title: e.target.value })}
+                        placeholder="Ej: Cambio de pantalla"
+                        maxLength={100}
+                        className="h-10 rounded-md"
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label htmlFor="service-description">Descripción para el cliente *</Label>
+                        <span className="text-[11px] text-muted-foreground">{editingService.description.length}/500</span>
+                      </div>
+                      <Textarea
+                        id="service-description"
+                        value={editingService.description}
+                        onChange={(e) => setEditingService({ ...editingService, description: e.target.value })}
+                        placeholder="Explica qué incluye el servicio, para quién es y qué puede esperar el cliente."
+                        maxLength={500}
+                        className="min-h-[96px] resize-y rounded-md text-sm leading-relaxed"
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="service-category">Categoría</Label>
+                        <Input
+                          id="service-category"
+                          value={editingService.category || ''}
+                          onChange={(e) => setEditingService({ ...editingService, category: e.target.value })}
+                          placeholder="Reparaciones"
+                          maxLength={80}
+                          className="h-10 rounded-md"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="service-price">Precio</Label>
+                        <Input
+                          id="service-price"
+                          value={editingService.price || ''}
+                          onChange={(e) => setEditingService({ ...editingService, price: e.target.value })}
+                          placeholder="Desde Gs. 150.000"
+                          maxLength={60}
+                          className="h-10 rounded-md"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="service-duration">Duración estimada</Label>
+                        <Input
+                          id="service-duration"
+                          value={editingService.duration || ''}
+                          onChange={(e) => setEditingService({ ...editingService, duration: e.target.value })}
+                          placeholder="30 a 60 minutos"
+                          maxLength={60}
+                          className="h-10 rounded-md"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="service-price-note">Aclaración del precio</Label>
+                        <Input
+                          id="service-price-note"
+                          value={editingService.priceNote || ''}
+                          onChange={(e) => setEditingService({ ...editingService, priceNote: e.target.value })}
+                          placeholder="Según diagnóstico o modelo"
+                          maxLength={60}
+                          className="h-10 rounded-md"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="service-cta">Enlace de consulta</Label>
+                        <Input
+                          id="service-cta"
+                          value={editingService.ctaUrl || ''}
+                          onChange={(e) => setEditingService({ ...editingService, ctaUrl: e.target.value })}
+                          placeholder="/inicio#contacto"
+                          maxLength={200}
+                          className="h-10 rounded-md"
+                        />
+                        <p className="text-[11px] text-muted-foreground">Usa una ruta interna o una URL HTTPS.</p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section aria-labelledby="service-benefits-title">
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <h3 id="service-benefits-title" className="text-sm font-semibold">
+                        Beneficios para el cliente *
+                      </h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Agrega entre 1 y 10 razones concretas para elegir este servicio.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditingService({ ...editingService, benefits: [...editingService.benefits, ''] })}
+                      disabled={editingService.benefits.length >= 10}
+                      className="h-8 shrink-0 rounded-md"
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      Agregar
+                    </Button>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {editingService.benefits.map((benefit, benefitIndex) => (
+                      <div key={benefitIndex} className="flex gap-2">
+                        <div className="relative min-w-0 flex-1">
+                          <Check className="pointer-events-none absolute left-3 top-3 h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                          <Input
+                            value={benefit}
+                            onChange={(event) => {
+                              const newBenefits = [...editingService.benefits]
+                              newBenefits[benefitIndex] = event.target.value
+                              setEditingService({ ...editingService, benefits: newBenefits })
+                            }}
+                            maxLength={200}
+                            className="h-10 rounded-md pl-9"
+                            placeholder="Ej: Diagnóstico incluido"
+                            aria-label={`Beneficio ${benefitIndex + 1}`}
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10 shrink-0 rounded-md text-muted-foreground hover:text-destructive"
+                          disabled={editingService.benefits.length <= 1}
+                          aria-label={`Eliminar beneficio ${benefitIndex + 1}`}
+                          onClick={() => {
+                            const newBenefits = editingService.benefits.filter((_, index) => index !== benefitIndex)
+                            setEditingService({ ...editingService, benefits: newBenefits })
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section aria-labelledby="service-appearance-title">
+                  <h3 id="service-appearance-title" className="text-sm font-semibold">
+                    Apariencia
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    El icono y el color ayudan a reconocer el servicio rápidamente.
+                  </p>
+                  <div className="mt-3 grid gap-5 md:grid-cols-[minmax(0,1fr)_220px]">
+                    <div>
+                      <Label className="text-xs">Icono</Label>
+                      <div className="mt-2 grid grid-cols-7 gap-2 sm:grid-cols-10">
+                        {ICON_OPTIONS.map((option) => {
+                          const OptionIcon = option.icon
+                          const selected = editingService.icon === option.value
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setEditingService({ ...editingService, icon: option.value })}
+                              className={`flex h-9 w-9 items-center justify-center rounded-md border transition-colors ${
+                                selected
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                              }`}
+                              title={option.label}
+                              aria-label={`Icono ${option.label}`}
+                              aria-pressed={selected}
+                            >
+                              <OptionIcon className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Color</Label>
+                      <div className="mt-2 grid grid-cols-7 gap-2">
+                        {COLOR_OPTIONS.map((option) => {
+                          const selected = editingService.color === option.value
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setEditingService({ ...editingService, color: option.value })}
+                              className={`flex h-7 w-7 items-center justify-center rounded-md border ${option.class} ${
+                                selected ? 'ring-2 ring-primary ring-offset-2' : 'opacity-60 hover:opacity-100'
+                              }`}
+                              title={option.label}
+                              aria-label={`Color ${option.label}`}
+                              aria-pressed={selected}
+                            >
+                              {selected && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </section>
               </div>
 
-              <DialogFooter className="pt-6 md:pt-8 border-t border-gray-50 dark:border-gray-800 gap-3">
-                <Button 
-                  variant="ghost" 
-                  onClick={() => setIsDialogOpen(false)} 
-                  className="w-full md:w-auto rounded-xl h-11 md:h-12 px-8 text-gray-500 font-bold"
+              <DialogFooter className="shrink-0 gap-2 border-t bg-background px-5 py-3 sm:px-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDialogOpen(false)}
+                  className="h-10 w-full rounded-md sm:w-auto"
                 >
                   Cancelar
                 </Button>
-                <Button 
-                  onClick={handleApplyChanges} 
-                  className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-11 md:h-12 px-10 font-bold shadow-lg shadow-blue-100"
+                <Button
+                  type="button"
+                  onClick={handleApplyChanges}
+                  className="h-10 w-full rounded-md sm:min-w-[150px] sm:w-auto"
                 >
-                  {editingIndex !== null ? 'Actualizar' : 'Añadir'}
+                  {editingIndex !== null ? 'Guardar edición' : 'Crear servicio'}
                 </Button>
               </DialogFooter>
-            </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
 
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 md:sticky md:bottom-6 md:justify-end">
-        {hasChanges && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setServicesDraft(null)}
-            className="shadow-2xl h-14 rounded-full px-6 bg-background/80 backdrop-blur border md:h-16 md:rounded-2xl md:px-8 font-bold transition-all hover:scale-105 active:scale-95 text-muted-foreground"
-          >
-            Descartar
-          </Button>
-        )}
-        <Button 
-          onClick={handleSaveAll} 
-          disabled={isSaving || !hasChanges}
-          size="lg"
-          className="shadow-2xl px-8 md:px-12 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 h-14 md:h-16 rounded-full md:rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 disabled:grayscale"
-        >
-          {isSaving ? (
-            <><Loader2 className="mr-3 h-5 w-5 md:h-6 md:w-6 animate-spin" /> <span className="hidden md:inline">Guardando...</span></>
-          ) : (
-            <>
-              <Save className="mr-3 h-5 w-5 md:h-6 md:w-6" /> 
-              <span className="hidden md:inline">Guardar Todo ({hasChanges ? '¡Pendiente!' : 'Al día'})</span>
-              <span className="md:hidden">Guardar</span>
-            </>
-          )}
-        </Button>
+      <div className="sticky bottom-0 z-30 -mx-2 border-t bg-background/95 px-2 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:-mx-4 sm:px-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span
+              className={`h-2 w-2 rounded-full ${hasChanges ? 'bg-amber-500' : 'bg-emerald-500'}`}
+              aria-hidden="true"
+            />
+            <span>{hasChanges ? 'Hay cambios del catálogo sin guardar' : 'El catálogo está guardado'}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setServicesDraft(null)}
+              disabled={isSaving || !hasChanges}
+              className="h-10 rounded-md"
+            >
+              <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
+              Descartar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveAll}
+              disabled={isSaving || !hasChanges}
+              className="h-10 rounded-md"
+            >
+              {isSaving
+                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                : <Save className="mr-2 h-4 w-4" aria-hidden="true" />}
+              {isSaving ? 'Guardando...' : 'Guardar cambios'}
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   )
