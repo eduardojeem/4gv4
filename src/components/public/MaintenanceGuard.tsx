@@ -3,15 +3,20 @@
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { MaintenancePage } from './MaintenancePage'
 import { Loader2 } from 'lucide-react'
+import type { WebsiteSettings } from '@/types/website-settings'
 
 interface MaintenanceGuardProps {
   children: React.ReactNode
+  initialSettings?: WebsiteSettings | null
 }
 
-export function MaintenanceGuard({ children }: MaintenanceGuardProps) {
-  const { settings, isLoading, error } = useWebsiteSettings()
+export function MaintenanceGuard({ children, initialSettings = null }: MaintenanceGuardProps) {
+  const { settings, isLoading } = useWebsiteSettings()
+  const effectiveSettings = settings ?? initialSettings
 
-  if (isLoading) {
+  // Public layouts already load the settings on the server. Keep rendering that
+  // snapshot while SWR revalidates instead of replacing the whole storefront.
+  if (isLoading && !effectiveSettings) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -22,14 +27,13 @@ export function MaintenanceGuard({ children }: MaintenanceGuardProps) {
     )
   }
 
-  // If there's an error or no settings, we allow children to render 
-  // to avoid blocking the site if the API fails, but usually we'd have settings.
-  if (error || !settings) {
+  // If no settings are available, allow the site to render with its defaults.
+  if (!effectiveSettings) {
     return <>{children}</>
   }
 
-  if (settings.maintenance_mode?.enabled) {
-    return <MaintenancePage maintenanceMode={settings.maintenance_mode} />
+  if (effectiveSettings.maintenance_mode?.enabled) {
+    return <MaintenancePage maintenanceMode={effectiveSettings.maintenance_mode} />
   }
 
   return <>{children}</>

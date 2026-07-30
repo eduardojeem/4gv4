@@ -72,7 +72,7 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
   const hasContact = phone || address || email || website
 
   return (
-    <main>
+    <div>
       {/* ── Hero ── */}
       <section className="relative overflow-hidden border-b border-slate-200 dark:border-slate-800">
         {/* Gradient strip */}
@@ -290,6 +290,6 @@ export default async function PublicOrganizationPage({ params }: PageProps) {
           </div>
         )}
       </section>
-    </main>
+    </div>
   )
 }

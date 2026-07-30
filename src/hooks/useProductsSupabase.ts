@@ -59,6 +59,18 @@ interface ProductApiPayload {
   }>
 }
 
+interface ProductsListApiPayload {
+  success?: boolean
+  data?: {
+    products?: Product[]
+    total?: number
+    page?: number
+    per_page?: number
+  }
+  error?: string
+  message?: string
+}
+
 function getProductApiError(payload: ProductApiPayload | null, fallback: string) {
   if (!payload) return fallback
 
@@ -205,105 +217,35 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
         return
       }
 
-      let query = supabase
-        .from('products')
-        .select(`
-          *,
-          category:categories(id, name, description),
-          supplier:suppliers(id, name, contact_name, phone, address)
-        `, { count: 'exact' })
+      const params = new URLSearchParams({
+        page: String(Math.max(1, activePagination.page)),
+        per_page: String(activePagination.limit > 0 ? activePagination.limit : 50),
+        sort: activeSort.field,
+        direction: activeSort.direction,
+        stock_status: activeFilters.stockStatus || 'all',
+      })
 
-      // Aplicar filtros
-      if (activeFilters.search) {
-        query = query.or(`name.ilike.%${activeFilters.search}%,sku.ilike.%${activeFilters.search}%,brand.ilike.%${activeFilters.search}%`)
-      }
+      if (activeFilters.search) params.set('query', activeFilters.search)
+      if (activeFilters.category) params.set('category_id', activeFilters.category)
+      if (activeFilters.supplier) params.set('supplier_id', activeFilters.supplier)
+      if (activeFilters.brand) params.set('brand', activeFilters.brand)
+      if (activeFilters.priceMin !== undefined) params.set('price_min', String(activeFilters.priceMin))
+      if (activeFilters.priceMax !== undefined) params.set('price_max', String(activeFilters.priceMax))
+      if (activeFilters.isActive !== undefined) params.set('is_active', String(activeFilters.isActive))
+      if (activeFilters.featured !== undefined) params.set('featured', String(activeFilters.featured))
+      if (selectedBranchId) params.set('strict_branch_stock', 'true')
 
-      if (activeFilters.category) {
-        query = query.eq('category_id', activeFilters.category)
-      }
+      const response = await fetch(`/api/products?${params.toString()}`, {
+        headers: branchHeaders(selectedBranchId),
+      })
+      const payload = await response.json().catch(() => null) as ProductsListApiPayload | null
 
-      if (activeFilters.supplier) {
-        query = query.eq('supplier_id', activeFilters.supplier)
-      }
-
-      if (activeFilters.brand) {
-        query = query.ilike('brand', activeFilters.brand)
-      }
-
-      if (activeFilters.isActive !== undefined) {
-        query = query.eq('is_active', activeFilters.isActive)
+      if (!response.ok || payload?.success === false || !Array.isArray(payload?.data?.products)) {
+        throw new Error(payload?.message || payload?.error || 'No se pudieron cargar los productos')
       }
 
-      if (activeFilters.featured !== undefined) {
-        query = query.eq('featured', activeFilters.featured)
-      }
-
-      if (activeFilters.priceMin !== undefined) {
-        query = query.gte('sale_price', activeFilters.priceMin)
-      }
-
-      if (activeFilters.priceMax !== undefined) {
-        query = query.lte('sale_price', activeFilters.priceMax)
-      }
-
-      if (activeFilters.stockStatus && activeFilters.stockStatus !== 'all') {
-        if (activeFilters.stockStatus === 'in_stock' && !selectedBranchId) {
-          query = query.filter('stock_quantity', 'gt', 0)
-        } else if (activeFilters.stockStatus === 'low_stock' && !selectedBranchId) {
-          // PostgREST no permite comparar columnas directamente (stock_quantity <= min_stock).
-          // Filtramos parcialmente en SQL y completamos en memoria más abajo.
-          query = query.filter('stock_quantity', 'gt', 0)
-        } else if (activeFilters.stockStatus === 'out_of_stock' && !selectedBranchId) {
-          query = query.filter('stock_quantity', 'eq', 0)
-        }
-      }
-
-      // Aplicar ordenamiento mapeando a columnas reales de la BD
-      const sortColumnMap: Record<string, string> = {
-        name: 'name',
-        sku: 'sku',
-        category: 'category_id',
-        price: 'sale_price',
-        stock: 'stock_quantity',
-        supplier: 'supplier_id',
-        margin: 'sale_price',
-        created_at: 'created_at'
-      }
-      const sortColumn = sortColumnMap[activeSort.field] || 'created_at'
-      query = query.order(sortColumn, { ascending: activeSort.direction === 'asc' })
-
-      // Aplicar paginación solo cuando corresponda.
-      // Para low_stock evitamos paginar antes del filtro en memoria.
-      const shouldPaginate =
-        activePagination.limit > 0 && activeFilters.stockStatus !== 'low_stock'
-      if (shouldPaginate) {
-        const from = (activePagination.page - 1) * activePagination.limit
-        const to = from + activePagination.limit - 1
-        query = query.range(from, to)
-      }
-      
-      const { data, error, count } = await query
-
-      if (error) {
-        console.error('Supabase error fetching products:', error)
-        throw error
-      }
-      
-      let resultData = await applySelectedBranchStock((data || []) as unknown as Product[])
-      if (activeFilters.stockStatus === 'low_stock') {
-        resultData = resultData.filter(isLowStock)
-      } else if (activeFilters.stockStatus === 'in_stock') {
-        resultData = resultData.filter((product) => !isOutOfStock(product))
-      } else if (activeFilters.stockStatus === 'out_of_stock') {
-        resultData = resultData.filter(isOutOfStock)
-      }
-
-      if (!resultData || resultData.length === 0) {
-        setProducts([])
-      } else {
-        setProducts(resultData)
-      }
-      setTotalCount(activeFilters.stockStatus === 'low_stock' ? resultData.length : (count || 0))
+      setProducts(payload.data.products)
+      setTotalCount(Number(payload.data.total || 0))
     } catch (err) {
       console.error('Error fetching products:', err)
       setError(err instanceof Error ? err.message : 'Error desconocido')
@@ -311,7 +253,7 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
     } finally {
       setLoading(false)
     }
-  }, [applySelectedBranchStock, selectedBranchId, supabase, filters, sort, pagination, enabled])
+  }, [selectedBranchId, filters, sort, pagination, enabled])
 
   // Función para obtener categorías
   const fetchCategories = useCallback(async () => {

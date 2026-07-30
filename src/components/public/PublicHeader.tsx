@@ -34,8 +34,9 @@ import { useRouter, usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname, isTenantPublicSection } from '@/lib/saas/tenant'
 import { AuthModal } from '@/components/public/AuthModal'
 import { isPublicServicesPageAvailable } from '@/lib/website/services'
+import type { WebsiteSettings } from '@/types/website-settings'
 
-export function PublicHeader() {
+export function PublicHeader({ initialSettings = null }: { initialSettings?: WebsiteSettings | null }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
@@ -44,6 +45,7 @@ export function PublicHeader() {
   const [mounted, setMounted] = useState(false)
   const { user, signOut } = useAuth()
   const { settings } = useWebsiteSettings()
+  const effectiveSettings = settings ?? initialSettings
   const router = useRouter()
   const pathname = usePathname()
   const mobileMenuRef = useRef<HTMLDivElement>(null)
@@ -52,7 +54,7 @@ export function PublicHeader() {
     setMounted(true)
   }, [])
 
-  const companyInfo = settings?.company_info
+  const companyInfo = effectiveSettings?.company_info
   // Only show the organization's own phone — never the platform-level env fallback.
   const phoneDisplay = companyInfo?.phone || ''
   const phoneClean = phoneDisplay?.replace(/\D/g, '')
@@ -143,10 +145,10 @@ export function PublicHeader() {
   }
 
   const servicesEnabled = isPublicServicesPageAvailable(
-    settings?.company_info?.servicesPageEnabled,
-    settings?.services
+    effectiveSettings?.company_info?.servicesPageEnabled,
+    effectiveSettings?.services
   )
-  const offersEnabled = settings?.offers_section?.enabled !== false
+  const offersEnabled = effectiveSettings?.offers_section?.enabled !== false
 
   const navLinks = [
     { href: withTenantPrefix('/inicio'), label: 'Inicio', icon: null },
@@ -411,6 +413,8 @@ export function PublicHeader() {
       <div
         id="public-mobile-menu"
         ref={mobileMenuRef}
+        aria-hidden={!mobileMenuOpen}
+        inert={!mobileMenuOpen}
         className={`overflow-y-auto border-t border-border/50 bg-background transition-all duration-300 ease-in-out md:hidden ${
           mobileMenuOpen ? 'max-h-[calc(100vh-4rem)] opacity-100' : 'max-h-0 opacity-0 border-transparent'
         }`}
@@ -512,7 +516,10 @@ export function PublicHeader() {
               {companyInfo?.hours?.saturday && (
                 <div className="flex items-center gap-2">
                   <Clock className="h-3.5 w-3.5" />
-                  <span>{'Sab: '}{companyInfo.hours.saturday}</span>
+                  <span>
+                    {'Sab: '}
+                    {companyInfo.hours.saturday.replace(/^(sáb|sab)\s*:\s*/i, '')}
+                  </span>
                 </div>
               )}
               {phoneDisplay && (

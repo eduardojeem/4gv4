@@ -5,12 +5,13 @@
 
 "use client";
 
-import React, { useEffect, useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Info } from "lucide-react";
+import { AlertCircle, Info, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useProductsSupabase } from "@/hooks/useProductsSupabase";
 import { useProductsDashboard } from "@/hooks/useProductsDashboard";
 import { ProductModal } from "@/components/dashboard/product-modal";
@@ -60,6 +61,7 @@ export default function ProductsPage() {
     suppliers,
     alerts,
     loading,
+    error: productsError,
     dashboardStats,
     createProduct,
     updateProduct,
@@ -112,6 +114,20 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const initialUrlApplied = useRef(false);
+
+  useEffect(() => {
+    if (initialUrlApplied.current || typeof window === "undefined") return;
+    initialUrlApplied.current = true;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") === "true") {
+      setCreateModalOpen(true);
+    }
+    if (params.get("filter") === "low_stock") {
+      handleQuickFilter("low_stock");
+    }
+  }, [handleQuickFilter]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [serverSearch, setServerSearch] = useState("");
@@ -695,6 +711,20 @@ export default function ProductsPage() {
         )}
 
         {/* Products Display */}
+        {productsError && products.length === 0 && !loading && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>No se pudieron cargar los productos</AlertTitle>
+            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span>{productsError}</span>
+              <Button type="button" variant="outline" size="sm" onClick={handleRefresh}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Reintentar
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Card className="border-0 shadow-md">
           <div className="p-6">
             {viewMode === "grid" ? (

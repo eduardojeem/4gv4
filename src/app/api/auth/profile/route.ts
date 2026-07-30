@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient as createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { normalizeRole } from '@/lib/auth/role-utils'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { mapOrganizationRoleToDashboardRole } from '@/lib/auth/section-access'
+import { getDashboardPermissionsForOrganizationRole } from '@/lib/auth/organization-dashboard-permissions'
 
 function toProfileStatus(value: unknown) {
   return value === 'active' || value === 'inactive' || value === 'suspended'
@@ -66,7 +69,13 @@ export async function GET() {
       is_active?: boolean | null
     }>
 
-    const role = normalizeRole(roleRow?.role ?? profileRow?.role ?? undefined) ?? 'cliente'
+    const globalRole = normalizeRole(roleRow?.role ?? profileRow?.role ?? undefined) ?? 'cliente'
+    const organization = await getCurrentOrganizationContext(user.id)
+    const role = globalRole === 'super_admin'
+      ? globalRole
+      : organization
+        ? mapOrganizationRoleToDashboardRole(organization.role)
+        : globalRole
 
     return NextResponse.json({
       role,
@@ -78,10 +87,13 @@ export async function GET() {
         location: profileRow?.location || '',
         delivery_location: getDeliveryLocation(profileRow?.preferences),
       },
-      permissions: permissionRows
-        .filter((row) => row.is_active !== false)
-        .map((row) => row.permission)
-        .filter((permission): permission is string => Boolean(permission)),
+      permissions: organization && globalRole !== 'super_admin'
+        ? getDashboardPermissionsForOrganizationRole(organization.role)
+        : permissionRows
+          .filter((row) => row.is_active !== false)
+          .map((row) => row.permission)
+          .filter((permission): permission is string => Boolean(permission)),
+      organizationPermissions: Boolean(organization && globalRole !== 'super_admin'),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error interno'

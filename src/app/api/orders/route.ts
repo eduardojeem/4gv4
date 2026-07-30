@@ -5,10 +5,10 @@ import { logger } from '@/lib/logger'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { getOrderStatusDbValues, normalizeOrderStatus } from '@/lib/orders/flow'
+import { startOfDayInTimeZone } from '@/lib/date/timezone'
 import { sendEmail } from '@/lib/email/resend'
 import { renderOrderConfirmationEmail } from '@/lib/email/templates'
 import { generateOrderNumber, normalizeOrder, sanitizeOrderSearch } from '@/lib/orders/helpers'
-import { releaseReservedStock, reserveOrderStock, type OrderStockItem } from '@/lib/orders/stock'
 import {
   getCatalogUnitPrice,
   hasDuplicateProductIds,
@@ -120,9 +120,18 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
     let stats: Record<string, number> | null = null
     let meta: { todayCount: number; todayRevenue: number } | null = null
     if (includeStats) {
-      const startOfToday = new Date()
-      startOfToday.setHours(0, 0, 0, 0)
-      const startOfTodayIso = startOfToday.toISOString()
+      // Day boundaries must resolve in the organization's zone, not the host's.
+      const { data: orgRow, error: orgError } = await supabase
+        .from('organizations')
+        .select('timezone')
+        .eq('id', organization.id)
+        .maybeSingle()
+
+      if (orgError) {
+        logger.warn('Organization timezone lookup failed for order stats', { error: orgError, organizationId: organization.id })
+      }
+
+      const startOfTodayIso = startOfDayInTimeZone(orgRow?.timezone as string | undefined).toISOString()
 
       const [statsResults, todayCountResult, todayPaidResult] = await Promise.all([
         Promise.all(
@@ -139,17 +148,31 @@ export const GET = withTenantAuth({ permission: 'ecommerce.orders.manage' }, asy
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organization.id)
           .gte('created_at', startOfTodayIso),
+        // "Cobrado hoy" is driven by when the payment was confirmed, not when
+        // the order was created — an order placed yesterday and paid today
+        // belongs to today's revenue.
         supabase
-          .from('customer_orders')
-          .select('total')
+          .from('customer_order_payment_history')
+          .select('amount')
           .eq('organization_id', organization.id)
-          .gte('created_at', startOfTodayIso)
-          .ilike('payment_status', 'PAID'),
+          .eq('to_status', 'PAID')
+          .gte('created_at', startOfTodayIso),
       ])
 
+      const statsError = statsResults.find((result) => result.error)?.error
+      if (statsError) {
+        logger.warn('Order status counts query failed', { error: statsError, organizationId: organization.id })
+      }
+      if (todayCountResult.error) {
+        logger.warn('Today order count query failed', { error: todayCountResult.error, organizationId: organization.id })
+      }
+      if (todayPaidResult.error) {
+        logger.warn('Today revenue query failed', { error: todayPaidResult.error, organizationId: organization.id })
+      }
+
       stats = Object.fromEntries(STAT_STATUSES.map((s, i) => [s, statsResults[i].count ?? 0]))
-      const todayRevenue = ((todayPaidResult.data ?? []) as Array<{ total: unknown }>)
-        .reduce((sum, row) => sum + Number(row.total || 0), 0)
+      const todayRevenue = ((todayPaidResult.data ?? []) as Array<{ amount: unknown }>)
+        .reduce((sum, row) => sum + Number(row.amount || 0), 0)
       meta = { todayCount: todayCountResult.count ?? 0, todayRevenue }
     }
 
@@ -199,8 +222,7 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
         error: error instanceof Error ? error.message : 'No se pudo validar la sucursal.',
       }, { status: 403 })
     }
-    let customerId = input.customerId || null
-    let createdCustomerId: string | null = null
+    const customerId = input.customerId || null
     let customerSnapshot = input.customer ?? null
 
     if (customerId) {
@@ -319,181 +341,78 @@ export const POST = withTenantAuth({ permission: 'ecommerce.orders.manage' }, as
       return NextResponse.json({ success: false, error: amountsError }, { status: 400 })
     }
     const total = subtotal + input.shippingCost - input.discountAmount
-    const now = new Date().toISOString()
     const stockClient = createAdminSupabase()
-    let reservedItems: OrderStockItem[] = []
-    let createdOrderId: string | null = null
-
-    const stockReservation = await reserveOrderStock(
-      stockClient,
-      organization.id,
-      orderItems,
-      branchScope.branchId
+    const orderNumber = generateOrderNumber()
+    const { data: atomicResult, error: atomicError } = await stockClient.rpc(
+      'create_dashboard_order_atomic',
+      {
+        p_organization_id: organization.id,
+        p_branch_id: branchScope.branchId,
+        p_actor_id: user.id,
+        p_customer_id: customerId,
+        p_customer: customerSnapshot,
+        p_order: {
+          order_number: orderNumber,
+          payment_method: input.paymentMethod as PaymentMethod,
+          fulfillment_type: input.fulfillmentType as FulfillmentType,
+          subtotal,
+          shipping_cost: input.shippingCost,
+          discount_amount: input.discountAmount,
+          total,
+          notes: input.notes || null,
+        },
+        p_items: orderItems,
+      }
     )
-    if (!stockReservation.success) {
-      return NextResponse.json({ success: false, error: stockReservation.error }, { status: 409 })
+
+    if (atomicError) {
+      const status = atomicError.message.includes('Insufficient stock') ? 409 : 400
+      return NextResponse.json({ success: false, error: atomicError.message }, { status })
     }
 
-    reservedItems = stockReservation.reserved.map((item) => ({
-      product_id: item.productId,
-      product_name: item.productName,
-      quantity: item.quantity,
-    }))
+    const createdOrderId = (atomicResult as { order_id?: string } | null)?.order_id
+    if (!createdOrderId) {
+      throw new Error('La base de datos no devolvio el pedido creado.')
+    }
 
-    try {
-      if (!customerId) {
-        const { data: createdCustomer, error: customerError } = await supabase
-          .from('customers')
-          .insert({
-            organization_id: organization.id,
-            name: customerSnapshot.name,
-            email: customerSnapshot.email || null,
-            phone: customerSnapshot.phone || '',
-            address: customerSnapshot.address || null,
-            status: 'active',
-            customer_type: 'regular',
-            created_at: now,
-            updated_at: now,
-          })
-          .select('id')
-          .single()
-
-        if (customerError) throw customerError
-        customerId = createdCustomer.id
-        createdCustomerId = createdCustomer.id
-      }
-
-      const { data: order, error: orderError } = await supabase
-      .from('customer_orders')
-      .insert({
-        organization_id: organization.id,
-        branch_id: branchScope.branchId,
-        customer_id: customerId,
-        order_number: generateOrderNumber(),
-        status: 'PENDING',
-        payment_status: 'PENDING',
-        payment_method: input.paymentMethod as PaymentMethod,
-        fulfillment_type: input.fulfillmentType as FulfillmentType,
-        customer_name: customerSnapshot.name,
-        customer_email: customerSnapshot.email || null,
-        customer_phone: customerSnapshot.phone || null,
-        customer_address: customerSnapshot.address || null,
-        subtotal,
-        tax_amount: 0,
-        shipping_cost: input.shippingCost,
-        discount_amount: input.discountAmount,
-        total,
-        notes: input.notes || null,
-        stock_reserved: true,
-        created_by: user.id,
-        created_at: now,
-        updated_at: now,
-      })
-      .select('*')
-      .single()
-
-      if (orderError) throw orderError
-      createdOrderId = order.id
-
-      const { error: itemsError } = await supabase
-      .from('customer_order_items')
-      .insert(orderItems.map((item) => ({
-        ...item,
-        organization_id: organization.id,
-        order_id: order.id,
-      })))
-
-      if (itemsError) throw itemsError
-
-      const { error: historyError } = await supabase.from('customer_order_status_history').insert({
-      organization_id: organization.id,
-      order_id: order.id,
-      to_status: 'PENDING',
-      note: 'Pedido creado desde el dashboard.',
-      changed_by: user.id,
-      })
-      if (historyError) throw historyError
-
-      const { data: fullOrder } = await supabase
+    const { data: fullOrder, error: fullOrderError } = await supabase
       .from('customer_orders')
       .select('*, order_items:customer_order_items(*)')
-      .eq('id', order.id)
+      .eq('id', createdOrderId)
       .eq('organization_id', organization.id)
       .single()
 
-      // Send order confirmation email (non-blocking)
-      if (order.customer_email) {
+    if (fullOrderError) throw fullOrderError
+
+    // Send order confirmation email (non-blocking)
+    if (fullOrder.customer_email) {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
         const emailItems = ((fullOrder?.order_items ?? []) as Array<Record<string, unknown>>).map((item) => ({
           name: String(item.product_name || item.name || 'Producto'),
           quantity: Number(item.quantity || 1),
           price: Number(item.unit_price || item.price || 0),
         }))
-        const trackUrl = `${appUrl}/${organization.slug}/track?orderNumber=${encodeURIComponent(order.order_number)}`
+        const trackUrl = `${appUrl}/${organization.slug}/track?orderNumber=${encodeURIComponent(fullOrder.order_number)}`
         sendEmail({
-          to: order.customer_email,
-          subject: `Pedido confirmado #${order.order_number}`,
+          to: fullOrder.customer_email,
+          subject: `Pedido confirmado #${fullOrder.order_number}`,
           html: renderOrderConfirmationEmail({
-            customerName: order.customer_name || 'Cliente',
-            orderCode: order.order_number,
+            customerName: fullOrder.customer_name || 'Cliente',
+            orderCode: fullOrder.order_number,
             items: emailItems,
-            total: Number(order.total || 0),
-            deliveryMethod: order.fulfillment_type === 'PICKUP' ? 'pickup' : 'delivery',
+            total: Number(fullOrder.total || 0),
+            deliveryMethod: fullOrder.fulfillment_type === 'PICKUP' ? 'pickup' : 'delivery',
             trackUrl,
             brand: { name: organization.name },
           }),
           log: {
             organizationId: organization.id,
-            customerName: order.customer_name || undefined,
+            customerName: fullOrder.customer_name || undefined,
           },
         }).catch((err) => logger.error('Failed to send order confirmation email', { error: err }))
-      }
-
-      return NextResponse.json({ success: true, data: normalizeOrder(fullOrder ?? order) }, { status: 201 })
-    } catch (error) {
-      if (createdOrderId) {
-        const { error: cleanupOrderError } = await supabase
-          .from('customer_orders')
-          .delete()
-          .eq('id', createdOrderId)
-          .eq('organization_id', organization.id)
-        if (cleanupOrderError) {
-          logger.error('Failed to clean up a partially created order', {
-            error: cleanupOrderError,
-            orderId: createdOrderId,
-          })
-        }
-      }
-      if (reservedItems.length > 0) {
-        try {
-          await releaseReservedStock(
-            stockClient,
-            organization.id,
-            reservedItems,
-            branchScope.branchId
-          )
-        } catch (releaseError) {
-          logger.error('Failed to release stock after order creation error', {
-            error: releaseError,
-            branchId: branchScope.branchId,
-          })
-        }
-      }
-      if (createdCustomerId) {
-        const { error: cleanupCustomerError } = await supabase
-          .from('customers')
-          .delete()
-          .eq('id', createdCustomerId)
-          .eq('organization_id', organization.id)
-        if (cleanupCustomerError) {
-          logger.error('Failed to clean up a customer from a failed order', {
-            error: cleanupCustomerError,
-            customerId: createdCustomerId,
-          })
-        }
-      }
-      throw error
     }
+
+    return NextResponse.json({ success: true, data: normalizeOrder(fullOrder) }, { status: 201 })
   } catch (error) {
     logger.error('Orders API POST error', { error })
     return NextResponse.json({ success: false, error: 'No se pudo crear el pedido.' }, { status: 500 })

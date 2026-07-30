@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { roleHasPermission, type Permission } from '@/lib/saas/permissions'
 
 export const FULL_REPAIR_SELECT = `
   *,
@@ -31,7 +32,10 @@ export function organizationRequiredResponse() {
   )
 }
 
-export async function resolveRepairRouteContext(request: Request): Promise<RepairRouteContext | NextResponse> {
+export async function resolveRepairRouteContext(
+  request: Request,
+  permission: Permission = 'repairs.orders.read'
+): Promise<RepairRouteContext | NextResponse> {
   const auth = await requireStaff()
   const authResponse = getAuthResponse(auth)
   if (authResponse) return authResponse
@@ -41,6 +45,12 @@ export async function resolveRepairRouteContext(request: Request): Promise<Repai
 
   if (!organization) {
     return organizationRequiredResponse()
+  }
+  if (!roleHasPermission(organization.role, permission)) {
+    return NextResponse.json(
+      { error: 'No tenes permiso para realizar esta accion sobre reparaciones.' },
+      { status: 403 }
+    )
   }
 
   const requestedBranchId = getRequestedBranchId(request)
@@ -94,4 +104,3 @@ export async function assertRepairExists(ctx: RepairRouteContext, repairId: stri
   if (error) throw error
   return Boolean(data)
 }
-

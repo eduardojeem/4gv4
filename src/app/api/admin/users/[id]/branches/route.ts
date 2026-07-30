@@ -171,12 +171,29 @@ async function setPrimaryBranch(
   }
 
   const nowIso = new Date().toISOString()
+  const { data: targetBranch, error: targetBranchError } = await supabaseAdmin
+    .from('branches')
+    .select('organization_id')
+    .eq('id', branchId)
+    .single()
+
+  if (targetBranchError) throw targetBranchError
+
+  const { data: organizationBranches, error: organizationBranchesError } =
+    await supabaseAdmin
+      .from('branches')
+      .select('id')
+      .eq('organization_id', targetBranch.organization_id)
+
+  if (organizationBranchesError) throw organizationBranchesError
+  const organizationBranchIds = (organizationBranches ?? []).map((branch) => branch.id)
 
   const { error: clearPrimaryError } = await supabaseAdmin
     .from('user_branch_assignments')
     .update({ is_primary: false, updated_at: nowIso })
     .eq('user_id', userId)
     .eq('is_active', true)
+    .in('branch_id', organizationBranchIds)
     .neq('branch_id', branchId)
 
   if (clearPrimaryError) throw clearPrimaryError

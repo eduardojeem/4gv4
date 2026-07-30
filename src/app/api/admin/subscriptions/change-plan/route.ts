@@ -11,6 +11,7 @@ import {
   createSubscriptionPagoparCheckout,
   SubscriptionCheckoutError,
 } from '@/lib/saas/pagopar-subscription-checkout'
+import { parsePagoparPaymentMethod } from '@/lib/payments/pagopar'
 
 export async function GET() {
   const auth = await resolveRequestAuthUser()
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
   const newPlan = typeof body.plan === 'string' ? body.plan.trim() : ''
+  const paymentMethod = parsePagoparPaymentMethod(body.paymentMethod ?? 'card')
 
   if (!newPlan) {
     return NextResponse.json({ error: 'Falta el campo plan.' }, { status: 400 })
@@ -67,11 +69,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (planRequiresPayment(assessment.targetPlan)) {
+      if (!paymentMethod) {
+        return NextResponse.json({ error: 'Forma de pago de Pagopar no válida.' }, { status: 400 })
+      }
+
       const checkout = await createSubscriptionPagoparCheckout({
         organization,
         userEmail: auth.user.email,
         targetPlanCode: assessment.targetPlan.code,
         canChangePlan: true,
+        paymentMethod,
       })
       return NextResponse.json({ success: true, pendingPayment: true, ...checkout })
     }

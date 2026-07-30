@@ -1,15 +1,34 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { normalizeRole } from '@/lib/auth/role-utils'
-import { canRoleAccessSection } from '@/lib/auth/section-access'
+import {
+  canRoleAccessSection,
+  mapOrganizationRoleToDashboardRole,
+} from '@/lib/auth/section-access'
 import type { UserRole } from '@/lib/auth/roles-permissions'
-import { getTenantSlugFromPath, getTenantSlugFromRequest, isTenantPublicSection } from '@/lib/saas/tenant'
+import {
+  getTenantSlugFromPath,
+  getTenantSlugFromRequest,
+  isTenantPublicSection,
+  normalizeDefaultPublicOrgSlug,
+} from '@/lib/saas/tenant'
 import { ACTIVE_ORGANIZATION_COOKIE } from '@/lib/saas/active-organization'
 
 const PROXY_AUTH_TIMEOUT_MS = 4000
 const PROXY_PROFILE_TIMEOUT_MS = 3000
-const DEFAULT_PUBLIC_ORG_SLUG = process.env.DEFAULT_PUBLIC_ORG_SLUG || 'default'
-const LEGACY_PUBLIC_PATHS = ['/inicio', '/productos', '/mis-reparaciones']
+const DEFAULT_PUBLIC_ORG_SLUG = normalizeDefaultPublicOrgSlug(process.env.DEFAULT_PUBLIC_ORG_SLUG)
+const DEFAULT_PUBLIC_HOME = DEFAULT_PUBLIC_ORG_SLUG
+  ? `/${DEFAULT_PUBLIC_ORG_SLUG}/inicio`
+  : '/marketplace'
+const LEGACY_PUBLIC_PATHS = [
+  '/inicio',
+  '/productos',
+  '/ofertas',
+  '/servicios',
+  '/mis-reparaciones',
+  '/track',
+  '/carrito',
+]
 
 function redirectLegacyPublicPath(request: NextRequest) {
   const pathname = request.nextUrl.pathname
@@ -27,7 +46,13 @@ function redirectLegacyPublicPath(request: NextRequest) {
   }
 
   const url = request.nextUrl.clone()
-  url.pathname = `/${DEFAULT_PUBLIC_ORG_SLUG}${pathname}`
+  if (DEFAULT_PUBLIC_ORG_SLUG) {
+    url.pathname = `/${DEFAULT_PUBLIC_ORG_SLUG}${pathname}`
+  } else {
+    url.pathname = pathname.startsWith('/productos')
+      ? pathname.replace(/^\/productos/, '/marketplace/productos')
+      : '/marketplace'
+  }
 
   return NextResponse.redirect(url, 308)
 }
@@ -310,11 +335,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const effectiveRole = normalizedRole ?? 'cliente'
+  let effectiveRole = (normalizedRole ?? 'cliente') as UserRole
   const isActiveUser = roleIsActive && profileIsActive
   let isClientOrViewer = !isActiveUser || effectiveRole === 'cliente'
-  const isAdmin = isActiveUser && (effectiveRole === 'admin' || effectiveRole === 'super_admin')
-  const isSuperAdmin = isActiveUser && effectiveRole === 'super_admin'
 
   // If profile says 'cliente' but user owns/manages an organization, grant dashboard access
   if (isClientOrViewer && user && isActiveUser) {
@@ -328,20 +351,31 @@ export async function middleware(request: NextRequest) {
         const adminSupabase = createAdminClient(adminUrl, serviceKey, {
           auth: { autoRefreshToken: false, persistSession: false },
         })
+        const activeOrganizationId = request.cookies.get(ACTIVE_ORGANIZATION_COOKIE)?.value
+        let membershipQuery = adminSupabase
+          .from('organization_members')
+          .select('role,organization_id')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .in('role', ['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'])
+
+        if (activeOrganizationId) {
+          membershipQuery = membershipQuery.eq('organization_id', activeOrganizationId)
+        }
+
         const { data: orgRows } = await withTimeout(
           Promise.resolve(
-            adminSupabase
-              .from('organization_members')
-              .select('role')
-              .eq('user_id', user.id)
-              .eq('status', 'active')
-              .in('role', ['owner', 'admin', 'manager', 'cashier', 'technician', 'seller'])
+            membershipQuery
+              .order('created_at', { ascending: true })
               .limit(1)
-          ) as unknown as Promise<{ data: { role: string }[] | null }>,
+          ) as unknown as Promise<{ data: { role: string; organization_id: string }[] | null }>,
           PROXY_PROFILE_TIMEOUT_MS,
           { data: null }
         )
         if (orgRows && orgRows.length > 0) {
+          effectiveRole = mapOrganizationRoleToDashboardRole(
+            orgRows[0].role as Parameters<typeof mapOrganizationRoleToDashboardRole>[0]
+          )
           isClientOrViewer = false
         }
       }
@@ -349,6 +383,9 @@ export async function middleware(request: NextRequest) {
       // If query fails, keep original isClientOrViewer value
     }
   }
+
+  const isAdmin = isActiveUser && (effectiveRole === 'admin' || effectiveRole === 'super_admin')
+  const isSuperAdmin = isActiveUser && effectiveRole === 'super_admin'
 
   // Rutas protegidas (dashboard) - requieren autenticacion y rol no-cliente
   if (isProtectedRoute) {
@@ -359,12 +396,12 @@ export async function middleware(request: NextRequest) {
 
     if (isClientOrViewer) {
       // Cliente sin permiso al dashboard → redirigir a su tienda pública
-      return redirectWithCookies(request, supabaseResponse, `/${DEFAULT_PUBLIC_ORG_SLUG}/inicio`)
+      return redirectWithCookies(request, supabaseResponse, DEFAULT_PUBLIC_HOME)
     }
 
     // Restricción por sección para roles limitados (vendedor/tecnico).
     // Misma fuente de verdad que el guard client-side, aplicada server-side.
-    if (!canRoleAccessSection(effectiveRole as UserRole, pathname)) {
+    if (!canRoleAccessSection(effectiveRole, pathname)) {
       return redirectWithCookies(request, supabaseResponse, '/dashboard')
     }
   }
@@ -393,7 +430,7 @@ export async function middleware(request: NextRequest) {
   // Si ya autenticado y en ruta de auth, redirigir segun rol
   if (isAuthRoute && user) {
     const requestedRedirect = sanitizeLocalRedirect(request.nextUrl.searchParams.get('redirect'), '/dashboard')
-    const target = isClientOrViewer ? `/${DEFAULT_PUBLIC_ORG_SLUG}/inicio` : requestedRedirect
+    const target = isClientOrViewer ? DEFAULT_PUBLIC_HOME : requestedRedirect
     return redirectWithCookies(request, supabaseResponse, target)
   }
 

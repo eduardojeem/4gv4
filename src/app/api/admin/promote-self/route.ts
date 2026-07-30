@@ -1,127 +1,48 @@
 import { NextResponse } from 'next/server'
 import { createClient as createServerSupabase } from '@/lib/supabase/server'
-import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 
-/**
- * POST /api/admin/promote-self
- * 
- * Permite que un usuario se promueva a admin SOLO si:
- * 1. No existen otros administradores en el sistema (primer setup)
- * 2. O si está en modo de desarrollo (con variable de entorno)
- * 
- * SEGURIDAD: Este endpoint está diseñado para el setup inicial del sistema.
- * Una vez que existe un admin, solo ese admin puede crear otros admins.
- */
 export async function POST() {
+  if (process.env.ALLOW_ADMIN_SELF_PROMOTION !== 'true') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   try {
     const supabase = await createServerSupabase()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    const admin = createAdminSupabase()
-
-    // SEGURIDAD: Verificar si ya existen administradores (en ambas tablas)
-    const { count: adminCountRoles } = await admin
-      .from('user_roles')
-      .select('*', { count: 'exact', head: true })
-      .in('role', ['admin', 'super_admin'])
-      .eq('is_active', true)
-
-    const { count: adminCountProfiles } = await admin
-      .from('profiles')
-      .select('*', { count: 'exact', head: true })
-      .in('role', ['admin', 'super_admin'])
-
-    const totalAdmins = Math.max(adminCountRoles ?? 0, adminCountProfiles ?? 0)
-
-    // Si ya existen admins, denegar siempre (solo permite primer admin)
-    if (totalAdmins > 0) {
-      logger.warn('Unauthorized self-promotion attempt', {
+    const { data: promoted, error } = await supabase.rpc('bootstrap_first_admin')
+    if (error) {
+      logger.error('Atomic first-admin bootstrap failed', {
+        error: error.message,
         userId: user.id,
-        email: user.email,
-        existingAdmins: totalAdmins
       })
+      return NextResponse.json({ error: 'Could not complete admin bootstrap' }, { status: 500 })
+    }
 
-      // Registrar intento de escalación de privilegios
-      await admin.from('audit_log').insert({
-        user_id: user.id,
-        action: 'unauthorized_self_promotion_attempt',
-        resource: 'auth',
-        resource_id: user.id,
-        new_values: { 
-          attempted_role: 'admin',
-          existing_admins: totalAdmins,
-          blocked: true
-        }
-      })
-
+    if (!promoted) {
       return NextResponse.json(
-        { 
-          error: 'Forbidden', 
-          message: 'Administrators already exist. Contact an existing admin for privileges.' 
+        {
+          error: 'Forbidden',
+          message: 'Administrators already exist. Contact an existing administrator.',
         },
         { status: 403 }
       )
     }
 
-    // Permitir promocion (primer admin del sistema)
-    logger.info('Self-promotion to admin - first admin setup', {
-      userId: user.id,
-      isFirstAdmin: true,
-    })
-
-    const { error: profileError } = await admin
-      .from('profiles')
-      .upsert({
-        id: user.id,
-        role: 'admin',
-        full_name: user.user_metadata?.full_name ?? null,
-        updated_at: new Date().toISOString()
-      })
-    
-    if (profileError) {
-      logger.error('Failed to update profile', { error: profileError })
-      return NextResponse.json({ error: profileError.message }, { status: 500 })
-    }
-
-    const { error: roleError } = await admin
-      .from('user_roles')
-      .upsert({
-        user_id: user.id,
-        role: 'admin',
-        is_active: true,
-        updated_at: new Date().toISOString()
-      })
-    
-    if (roleError) {
-      logger.error('Failed to update user role', { error: roleError })
-      return NextResponse.json({ error: roleError.message }, { status: 500 })
-    }
-
-    // Registrar promoción exitosa
-    await admin.from('audit_log').insert({
-      user_id: user.id,
-      action: 'grant_admin_self',
-      resource: 'auth',
-      resource_id: user.id,
-      new_values: { 
-        role_ui: 'admin', 
-        role_db: 'admin',
-        is_first_admin: true
-      }
-    })
-
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      message: 'Successfully promoted to admin (first administrator)',
+      message: 'Successfully promoted to first administrator',
     })
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error'
-    logger.error('Self-promotion error', { error: errorMessage })
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+  } catch (error) {
+    logger.error('Self-promotion error', { error })
+    return NextResponse.json({ error: 'Could not complete admin bootstrap' }, { status: 500 })
   }
 }

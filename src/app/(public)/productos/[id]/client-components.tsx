@@ -180,7 +180,11 @@ export function ProductActions({ product, isInStock }: ProductActionsProps) {
       return
     }
 
-    addProduct(product, displayPrice, 1)
+    const result = addProduct(product, displayPrice, 1)
+    if (result.limited) {
+      toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
+      return
+    }
     toast.success('Producto agregado al carrito')
   }
 

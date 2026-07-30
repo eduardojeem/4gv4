@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { resolvePublicOrganization } from '@/lib/saas/public-tenant'
+import { resolvePublicStorefrontOrganization } from '@/lib/saas/public-tenant'
 import { applyAutomaticPromotionToProduct, evaluatePublicCoupon, mapPublicPromotion } from '@/lib/public-promotions'
 import { getClientIp, rateLimiter } from '@/lib/rate-limiter'
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ success: false, error: 'Código o carrito inválido.' }, { status: 400 })
 
   const supabase = createAdminSupabase()
-  const organization = await resolvePublicOrganization(request, supabase)
+  const organization = await resolvePublicStorefrontOrganization(request, supabase)
   if (!organization) return NextResponse.json({ success: false, error: 'Organización no encontrada.' }, { status: 404 })
 
   const productIds = parsed.data.items.map((item) => item.productId)

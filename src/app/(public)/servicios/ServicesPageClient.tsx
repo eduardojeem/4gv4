@@ -7,12 +7,13 @@ import {
   MessageCircle,
   ShieldCheck,
   Sparkles,
-  Star,
   Wrench,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { colorMap, iconMap } from '@/lib/constants/brand-theme'
+import { iconMap } from '@/lib/constants/brand-theme'
+import { usePublicTenantPrefix } from '@/lib/public/tenant-client'
+import { prefixPublicTenantPath } from '@/lib/public/tenant-path-shared'
 import { cn } from '@/lib/utils'
 import { formatWhatsAppPhone, openWhatsApp } from '@/lib/whatsapp'
 import type { Service } from '@/types/website-settings'
@@ -45,6 +46,7 @@ const CARD_BG: Record<string, string> = {
 }
 
 export function ServicesPageClient({ services, companyName, whatsapp }: ServicesPageClientProps) {
+  const { tenantPrefix } = usePublicTenantPrefix()
   const activeServices = useMemo(
     () => services.filter((service) => service.active !== false),
     [services]
@@ -153,8 +155,11 @@ export function ServicesPageClient({ services, companyName, whatsapp }: Services
                     const Icon = iconMap[service.icon] || Wrench
                     const cardGradient = CARD_BG[service.color] || CARD_BG.blue
                     const benefits = Array.isArray(service.benefits) ? service.benefits.filter(Boolean) : []
-                    const ctaHref = service.ctaUrl?.trim()
-                    const isExternalCta = /^https?:\/\//i.test(ctaHref || '')
+                    const rawCtaHref = service.ctaUrl?.trim()
+                    const isExternalCta = /^https?:\/\//i.test(rawCtaHref || '')
+                    const ctaHref = rawCtaHref && !isExternalCta
+                      ? prefixPublicTenantPath(tenantPrefix, rawCtaHref)
+                      : rawCtaHref
                     const ctaButtonClass = cn(
                       'w-full gap-2 rounded-xl font-bold transition-colors shadow-sm',
                       `group-hover:border-transparent group-hover:bg-gradient-to-br ${cardGradient} group-hover:text-white`

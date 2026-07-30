@@ -15,6 +15,7 @@ export const TENANT_PUBLIC_SECTION_NAMES = [
 ] as const
 
 const TENANT_PATH_SECTIONS = new Set<string>(TENANT_PUBLIC_SECTION_NAMES)
+const SAFE_TENANT_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,47}$/
 
 function stripPort(host: string) {
   return host.split(':')[0]?.toLowerCase() ?? ''
@@ -91,6 +92,11 @@ export function getTenantSlugFromPathname(pathname: string): string {
 
 export function isTenantPublicSection(section: string | undefined): boolean {
   return !!section && TENANT_PATH_SECTIONS.has(section)
+}
+
+export function normalizeDefaultPublicOrgSlug(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase() ?? ''
+  return SAFE_TENANT_SLUG_RE.test(normalized) ? normalized : null
 }
 
 /** Append `?org=<slug>` (or `&org=`) to a public API URL so it resolves the right tenant. */

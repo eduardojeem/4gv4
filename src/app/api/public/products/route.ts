@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger'
 import { resolveWholesaleStatus } from '@/lib/api/products-server'
 import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 import { applyAutomaticPromotionToProduct, mapPublicPromotion } from '@/lib/public-promotions'
+import { parsePublicProductsQuery } from '@/lib/public/products-query'
 
 // Sanitize search input to prevent PostgREST injection
 function sanitizeSearch(input: string): string {
@@ -27,12 +28,9 @@ export async function GET(request: NextRequest) {
     const query = sanitizeSearch(rawQuery)
     const categoryId = searchParams.get('category_id')
     const brand = searchParams.get('brand')
-    const minPrice = parseFloat(searchParams.get('min_price') || '0')
-    const maxPrice = parseFloat(searchParams.get('max_price') || '999999')
+    const { page, perPage, minPrice, maxPrice } = parsePublicProductsQuery(searchParams)
     const inStock = searchParams.get('in_stock') === 'true'
     const hasOffer = searchParams.get('has_offer') === 'true'
-    const page = parseInt(searchParams.get('page') || '1')
-    const perPage = Math.min(parseInt(searchParams.get('per_page') || '20'), 50)
     const sort = searchParams.get('sort') || 'name'
 
     const supabase = createAdminSupabase()
@@ -149,9 +147,8 @@ export async function GET(request: NextRequest) {
         category: cat ? { id: cat.id, name: cat.name } : undefined,
         sale_price: p.sale_price as number,
         wholesale_price: isWholesale ? (p.wholesale_price as number | null) : null,
-        // Only expose stock status, not exact quantity
-        stock_quantity: (p.stock_quantity as number) > 0 ? 1 : 0,
-        in_stock: (p.stock_quantity as number) > 0,
+        stock_quantity: Number(p.stock_quantity ?? 0),
+        in_stock: Number(p.stock_quantity ?? 0) > 0,
         is_active: p.is_active as boolean,
         featured: (p.featured as boolean) || false,
         has_offer: priced.has_offer,

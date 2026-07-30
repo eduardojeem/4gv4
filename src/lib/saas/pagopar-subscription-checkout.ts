@@ -1,5 +1,10 @@
 import { randomUUID } from 'crypto'
-import { createPagoparOrder, getPagoparAmountInPyg, isPagoparConfigured } from '@/lib/payments/pagopar'
+import {
+  createPagoparOrder,
+  getPagoparAmountInPyg,
+  isPagoparConfigured,
+  type PagoparPaymentMethod,
+} from '@/lib/payments/pagopar'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import {
   assessPlanChange,
@@ -42,8 +47,9 @@ export async function createSubscriptionPagoparCheckout(params: {
   userEmail?: string | null
   targetPlanCode?: string | null
   canChangePlan: boolean
+  paymentMethod: PagoparPaymentMethod
 }) {
-  const { organization, userEmail, targetPlanCode, canChangePlan } = params
+  const { organization, userEmail, targetPlanCode, canChangePlan, paymentMethod } = params
 
   if (!isPagoparConfigured()) {
     throw new SubscriptionCheckoutError('Pagopar no está configurado.', 501)
@@ -89,6 +95,7 @@ export async function createSubscriptionPagoparCheckout(params: {
   }
 
   const admin = createAdminSupabase()
+  const pendingPaymentMethod = paymentMethod === 'qr' ? 'Pagopar QR' : 'Pagopar Tarjeta'
   const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
   const { data: reusablePayment } = await admin
     .from('subscription_payments')
@@ -97,6 +104,7 @@ export async function createSubscriptionPagoparCheckout(params: {
     .eq('plan_id', targetPlan.code)
     .eq('provider', 'pagopar')
     .eq('status', 'pending')
+    .eq('payment_method', pendingPaymentMethod)
     .gte('created_at', fifteenMinutesAgo)
     .not('receipt_url', 'is', null)
     .order('created_at', { ascending: false })
@@ -107,6 +115,7 @@ export async function createSubscriptionPagoparCheckout(params: {
     return {
       checkoutUrl: reusablePayment.receipt_url,
       planCode: targetPlan.code,
+      paymentMethod,
       reused: true,
     }
   }
@@ -121,7 +130,7 @@ export async function createSubscriptionPagoparCheckout(params: {
       amount: amountPyg,
       currency: 'PYG',
       status: 'pending',
-      payment_method: 'Pagopar',
+      payment_method: pendingPaymentMethod,
       provider: 'pagopar',
       external_reference: externalReference,
     })
@@ -147,6 +156,7 @@ export async function createSubscriptionPagoparCheckout(params: {
       description: `Suscripción ${targetPlan.name} - ${organization.name}`,
       externalReference,
       itemId: Number.parseInt(payment.id.replace(/[^\d]/g, '').slice(0, 9), 10) || 1,
+      paymentMethod,
     })
 
     const { error: updateError } = await admin
@@ -165,6 +175,7 @@ export async function createSubscriptionPagoparCheckout(params: {
     return {
       checkoutUrl: order.checkoutUrl,
       planCode: targetPlan.code,
+      paymentMethod,
       reused: false,
     }
   } catch (error) {

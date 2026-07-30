@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
 import { withBranchFilter } from '@/lib/branches/client'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { roleHasPermission } from '@/lib/saas/permissions'
 import { canCreateRepair } from '@/lib/saas/subscription-service'
 import {
   isNextResponse,
@@ -52,7 +53,7 @@ function organizationRequiredResponse() {
 
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await resolveRepairRouteContext(request)
+    const ctx = await resolveRepairRouteContext(request, 'repairs.orders.create')
     if (isNextResponse(ctx)) return ctx
 
     const body = await request.json() as Record<string, unknown>
@@ -172,6 +173,9 @@ export async function GET(request: NextRequest) {
 
   if (!organization) {
     return organizationRequiredResponse()
+  }
+  if (!roleHasPermission(organization.role, 'repairs.orders.read')) {
+    return NextResponse.json({ error: 'No tenes permiso para ver reparaciones.' }, { status: 403 })
   }
 
   try {

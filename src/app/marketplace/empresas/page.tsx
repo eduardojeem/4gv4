@@ -22,7 +22,7 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
   const organizations = await getMarketplaceOrganizations(120)
 
   return (
-    <main>
+    <div>
       {/* ── Header ── */}
       <section className="relative overflow-hidden border-b border-slate-200 dark:border-slate-800">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(6,182,212,0.07),transparent)]" />
@@ -63,6 +63,6 @@ export default async function MarketplaceOrganizationsPage({ searchParams }: Pag
         <TopRatedCarousel organizations={organizations} />
         <EmpresasClient organizations={organizations} initialQuery={q ?? ''} />
       </section>
-    </main>
+    </div>
   )
 }

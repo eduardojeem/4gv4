@@ -1,5 +1,6 @@
 'use client'
 
+import { useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ArrowRight, Smartphone, Headphones, Laptop, Battery, Cpu, Shield, Package, Camera, Watch, Tablet, Cable } from 'lucide-react'
@@ -39,12 +40,17 @@ function getCategoryPreset(name: string) {
  * the catalog filtered by a category. Hidden when the store has no categories.
  */
 export function CategoryShowcase() {
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false
+  )
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
   const { categories, isLoading } = usePublicCategories()
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return (
       <section className="bg-muted/30 py-16 md:py-20">
         <div className="container">

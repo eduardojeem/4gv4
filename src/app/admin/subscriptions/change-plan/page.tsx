@@ -16,8 +16,10 @@ import Link from 'next/link'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { PagoparPaymentMethodSelector } from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
 import { cn } from '@/lib/utils'
 import type { CommercialPlan, OrganizationUsage } from '@/lib/saas/subscription-service'
+import type { PagoparPaymentMethod } from '@/lib/payments/pagopar'
 
 type PageData = {
   currentPlan: CommercialPlan
@@ -157,6 +159,7 @@ export default function ChangePlanPage() {
   const [error, setError] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<ConflictResource[]>([])
   const [success, setSuccess] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<PagoparPaymentMethod>('card')
 
   useEffect(() => {
     fetch('/api/admin/subscriptions/change-plan')
@@ -178,7 +181,7 @@ export default function ChangePlanPage() {
       const response = await fetch('/api/admin/subscriptions/change-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: planCode }),
+        body: JSON.stringify({ plan: planCode, paymentMethod }),
       })
       const payload = await response.json().catch(() => ({}))
 
@@ -251,6 +254,22 @@ export default function ChangePlanPage() {
           Los planes pagos se activan únicamente después de que Pagopar confirme el cobro.
         </AlertDescription>
       </Alert>
+
+      <section className="max-w-md space-y-2" aria-labelledby="pagopar-method-title">
+        <div>
+          <h2 id="pagopar-method-title" className="text-sm font-semibold">
+            Forma de pago para el nuevo plan
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Esta selección se aplicará únicamente a los planes pagos.
+          </p>
+        </div>
+        <PagoparPaymentMethodSelector
+          value={paymentMethod}
+          onChange={setPaymentMethod}
+          disabled={changingPlanCode !== null}
+        />
+      </section>
 
       {error && (
         <div className="space-y-3">

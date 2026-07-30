@@ -28,6 +28,16 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 interface Review {
   id: string
@@ -44,18 +54,20 @@ interface Review {
 interface ReviewsStats {
   average: number
   count: number
+  pending: number
 }
 
 type FilterStatus = 'all' | 'pending' | 'approved'
 
 export function ReviewsManagement() {
   const [reviews, setReviews] = useState<Review[]>([])
-  const [stats, setStats] = useState<ReviewsStats>({ average: 0, count: 0 })
+  const [stats, setStats] = useState<ReviewsStats>({ average: 0, count: 0, pending: 0 })
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [filter, setFilter] = useState<FilterStatus>('pending')
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const [reviewToDelete, setReviewToDelete] = useState<string | null>(null)
   const pageSize = 20
 
   const fetchReviews = useCallback(async () => {
@@ -66,10 +78,12 @@ export function ReviewsManagement() {
         `/api/admin/reviews?status=${filter}&limit=${pageSize}&offset=${offset}`
       )
       const data = await res.json()
-      if (data.success) {
+      if (res.ok && data.success) {
         setReviews(data.data.reviews)
         setStats(data.data.stats)
         setTotal(data.data.pagination.total)
+      } else {
+        toast.error(data?.error || 'Error al cargar reseñas')
       }
     } catch {
       toast.error('Error al cargar reseñas')
@@ -88,7 +102,7 @@ export function ReviewsManagement() {
       const res = await fetch(`/api/admin/reviews/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_approved: true }),
+        body: JSON.stringify({ is_approved: true, is_visible: true }),
       })
       if (res.ok) {
         toast.success('Reseña aprobada')
@@ -146,11 +160,11 @@ export function ReviewsManagement() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar esta reseña permanentemente?')) return
     setActionLoading(id)
     try {
       const res = await fetch(`/api/admin/reviews/${id}`, { method: 'DELETE' })
       if (res.ok) {
+        setReviewToDelete(null)
         toast.success('Reseña eliminada')
         fetchReviews()
       } else {
@@ -164,7 +178,7 @@ export function ReviewsManagement() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const pendingCount = reviews.filter((r) => !r.is_approved).length
+  const pendingCount = stats.pending
 
   return (
     <div className="space-y-4">
@@ -356,7 +370,7 @@ export function ReviewsManagement() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleDelete(review.id)}
+                          onClick={() => setReviewToDelete(review.id)}
                           disabled={actionLoading === review.id}
                           title="Eliminar"
                         >
@@ -403,6 +417,36 @@ export function ReviewsManagement() {
           </div>
         )}
       </Card>
+
+      <AlertDialog
+        open={Boolean(reviewToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !actionLoading) setReviewToDelete(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar reseña</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción elimina permanentemente la reseña y no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(actionLoading)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              disabled={!reviewToDelete || Boolean(actionLoading)}
+              onClick={(event) => {
+                event.preventDefault()
+                if (reviewToDelete) void handleDelete(reviewToDelete)
+              }}
+            >
+              {actionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Eliminar definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

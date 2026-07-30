@@ -136,7 +136,11 @@ export function ProductCard(props: ProductCardProps) {
       toast.error('Producto sin stock')
       return
     }
-    addProduct(product, Number(displayPrice || 0), 1)
+    const result = addProduct(product, Number(displayPrice || 0), 1)
+    if (result.limited) {
+      toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
+      return
+    }
     toast.success('Agregado al carrito')
     if (closeModal) setQuickViewOpen(false)
     setJustAdded(true)
@@ -164,7 +168,7 @@ export function ProductCard(props: ProductCardProps) {
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="object-contain p-4 transition-transform duration-500 group-hover:scale-[1.06]"
               priority={priority}
-              quality={80}
+              quality={75}
               onError={() => setImageError(true)}
               unoptimized={
                 imageSrc.startsWith('data:') || imageSrc === '/placeholder-product.svg'
@@ -326,7 +330,7 @@ export function ProductCard(props: ProductCardProps) {
                 fill
                 sizes="384px"
                 className="object-contain p-6"
-                quality={90}
+                quality={75}
                 onError={() => setImageError(true)}
                 unoptimized={
                   imageSrc.startsWith('data:') || imageSrc === '/placeholder-product.svg'

@@ -4,8 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { generateOrderNumber, normalizeOrder } from '@/lib/orders/helpers'
-import { releaseReservedStock, reserveOrderStock, type OrderStockItem } from '@/lib/orders/stock'
-import { resolvePublicOrganization } from '@/lib/saas/public-tenant'
+import { resolvePublicStorefrontOrganization } from '@/lib/saas/public-tenant'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
 import { applyAutomaticPromotionToProduct, evaluatePublicCoupon, mapPublicPromotion, type PublicPromotion } from '@/lib/public-promotions'
 import { applyWebsiteSettingsDefaults } from '@/lib/website/default-settings'
@@ -25,7 +24,7 @@ const publicOrderSchema = z.object({
   items: z.array(z.object({
     productId: z.string().uuid(),
     quantity: z.number().int().min(1).max(999),
-  })).min(1),
+  })).min(1).max(50),
   fulfillmentType: z.enum(['PICKUP', 'DELIVERY']).default('PICKUP'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'DIGITAL_WALLET']).default('CASH'),
   shippingCost: z.number().min(0).max(9_999_999).default(0),
@@ -46,21 +45,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  let supabase: ReturnType<typeof createAdminSupabase> | null = null
-  let reservedItems: OrderStockItem[] = []
-  let reservedOrganizationId: string | null = null
-  let createdOrderId: string | null = null
-  let claimedLimitedPromotion: PublicPromotion | null = null
-
   try {
-    supabase = createAdminSupabase()
+    const supabase = createAdminSupabase()
     const validation = publicOrderSchema.safeParse(await request.json())
     if (!validation.success) {
       return NextResponse.json({ success: false, error: 'Validation failed', details: validation.error.issues }, { status: 400 })
     }
 
     const input = validation.data
-    const organization = await resolvePublicOrganization(request, supabase)
+    const organization = await resolvePublicStorefrontOrganization(request, supabase)
 
     if (!organization) {
       return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 404 })
@@ -88,7 +81,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const productIds = input.items.map((item) => item.productId)
+    const requestedByProduct = new Map<string, number>()
+    for (const item of input.items) {
+      requestedByProduct.set(
+        item.productId,
+        (requestedByProduct.get(item.productId) ?? 0) + item.quantity
+      )
+    }
+    const requestedItems = Array.from(requestedByProduct, ([productId, quantity]) => ({
+      productId,
+      quantity,
+    }))
+    const productIds = requestedItems.map((item) => item.productId)
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('id, name, sku, category_id, sale_price, has_offer, offer_price, stock_quantity, is_active')
@@ -104,6 +108,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Un producto del carrito ya no esta disponible.' }, { status: 400 })
     }
 
+    const stockConflicts = requestedItems.flatMap((item) => {
+      const product = productMap.get(item.productId) as Record<string, unknown>
+      const available = Math.max(0, Number(product.stock_quantity || 0))
+      return item.quantity > available
+        ? [{
+            productId: item.productId,
+            name: String(product.name ?? 'Producto'),
+            requested: item.quantity,
+            available,
+          }]
+        : []
+    })
+
+    if (stockConflicts.length > 0) {
+      return NextResponse.json({
+        success: false,
+        code: 'STOCK_CHANGED',
+        error: 'Actualizamos el carrito porque cambió el stock disponible.',
+        data: { conflicts: stockConflicts },
+      }, { status: 409 })
+    }
+
     const { data: automaticRows } = await supabase
       .from('promotions')
       .select('*')
@@ -112,14 +138,8 @@ export async function POST(request: NextRequest) {
       .eq('is_active', true)
     const automaticPromotions = (automaticRows ?? []).map((row) => mapPublicPromotion(row as Record<string, unknown>))
 
-    const orderItems = input.items.map((item) => {
+    const orderItems = requestedItems.map((item) => {
       const product = productMap.get(item.productId) as Record<string, unknown>
-      const stock = Number(product.stock_quantity || 0)
-      if (stock <= 0) {
-        throw new Error(`${String(product.name)} no tiene stock disponible.`)
-      }
-
-      const quantity = Math.min(item.quantity, stock)
       const priced = applyAutomaticPromotionToProduct({
         id: item.productId,
         category_id: product.category_id ? String(product.category_id) : null,
@@ -133,9 +153,9 @@ export async function POST(request: NextRequest) {
         product_id: item.productId,
         product_name: String(product.name ?? 'Producto'),
         product_sku: product.sku ? String(product.sku) : null,
-        quantity,
+        quantity: item.quantity,
         unit_price: unitPrice,
-        subtotal: unitPrice * quantity,
+        subtotal: unitPrice * item.quantity,
         category_id: product.category_id ? String(product.category_id) : null,
       }
     })
@@ -185,35 +205,6 @@ export async function POST(request: NextRequest) {
       discountAmount = result.discount_amount
     }
 
-    const stockReservation = await reserveOrderStock(supabase, organization.id, orderItems)
-    if (!stockReservation.success) {
-      return NextResponse.json({ success: false, error: stockReservation.error }, { status: 409 })
-    }
-    reservedOrganizationId = organization.id
-    reservedItems = stockReservation.reserved.map((item) => ({
-      product_id: item.productId,
-      product_name: item.productName,
-      quantity: item.quantity,
-    }))
-
-    if (appliedPromotion?.usage_limit != null) {
-      const { data: claimed } = await supabase
-        .from('promotions')
-        .update({ usage_count: appliedPromotion.usage_count + 1 })
-        .eq('id', appliedPromotion.id)
-        .eq('organization_id', organization.id)
-        .eq('usage_count', appliedPromotion.usage_count)
-        .lt('usage_count', appliedPromotion.usage_limit)
-        .select('id')
-        .maybeSingle()
-      if (!claimed) {
-        await releaseReservedStock(supabase, organization.id, reservedItems)
-        reservedItems = []
-        return NextResponse.json({ success: false, error: 'El código promocional alcanzó su límite de usos.' }, { status: 409 })
-      }
-      claimedLimitedPromotion = appliedPromotion
-    }
-
     const now = new Date().toISOString()
     const normalizedEmail = input.customer.email?.trim().toLowerCase() || null
     const normalizedPhone = input.customer.phone?.trim() || ''
@@ -234,26 +225,45 @@ export async function POST(request: NextRequest) {
       customerId = existingCustomer?.id ?? null
     }
 
-    if (!customerId) {
-      const { data: customer, error: customerError } = await supabase
-        .from('customers')
-        .insert({
-          organization_id: organization.id,
+    const orderNumber = generateOrderNumber()
+    const notes = [input.notes, appliedPromotion ? `Cupón: ${appliedPromotion.code}` : null]
+      .filter(Boolean)
+      .join(' · ') || null
+    const total = Math.max(0, subtotal + shippingCost - discountAmount)
+
+    const { data: atomicResult, error: atomicError } = await supabase.rpc(
+      'create_public_order_atomic',
+      {
+        p_organization_id: organization.id,
+        p_customer_id: customerId,
+        p_customer: {
           name: input.customer.name,
           email: normalizedEmail,
           phone: normalizedPhone,
           address: input.customer.address || null,
-          status: 'active',
-          customer_type: 'regular',
-          created_at: now,
-          updated_at: now,
-        })
-        .select('id')
-        .single()
+        },
+        p_order: {
+          order_number: orderNumber,
+          payment_method: input.paymentMethod,
+          fulfillment_type: input.fulfillmentType,
+          subtotal,
+          shipping_cost: shippingCost,
+          discount_amount: discountAmount,
+          total,
+          notes,
+        },
+        p_items: orderItems,
+        p_promotion_id: appliedPromotion?.id ?? null,
+      }
+    )
 
-      if (customerError) throw customerError
-      customerId = customer.id
+    if (atomicError) throw atomicError
+
+    const created = atomicResult as { order_id?: string; customer_id?: string } | null
+    if (!created?.order_id || !created.customer_id) {
+      throw new Error('La base de datos no devolvió el pedido creado.')
     }
+    customerId = created.customer_id
 
     // Best-effort: if the buyer is a logged-in customer, link this store's
     // customer record to their global account so the order shows up in their
@@ -285,104 +295,43 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const { data: order, error: orderError } = await supabase
-      .from('customer_orders')
-      .insert({
-        organization_id: organization.id,
-        customer_id: customerId,
-        order_number: generateOrderNumber(),
-        status: 'PENDING',
-        payment_status: 'PENDING',
-        payment_method: input.paymentMethod,
-        fulfillment_type: input.fulfillmentType,
-        customer_name: input.customer.name,
-        customer_email: normalizedEmail,
-        customer_phone: normalizedPhone || null,
-        customer_address: input.customer.address || null,
-        subtotal,
-        shipping_cost: shippingCost,
-        discount_amount: discountAmount,
-        tax_amount: 0,
-        total: Math.max(0, subtotal + shippingCost - discountAmount),
-        notes: [input.notes, appliedPromotion ? `Cupón: ${appliedPromotion.code}` : null].filter(Boolean).join(' · ') || null,
-        stock_reserved: true,
-        created_at: now,
-        updated_at: now,
-      })
-      .select('*')
-      .single()
-
-    if (orderError) throw orderError
-    createdOrderId = order.id
-
-    const { error: itemsError } = await supabase
-      .from('customer_order_items')
-      .insert(orderItems.map((item) => ({
-        product_id: item.product_id,
-        product_name: item.product_name,
-        product_sku: item.product_sku,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        subtotal: item.subtotal,
-        organization_id: organization.id,
-        order_id: order.id,
-      })))
-
-    if (itemsError) throw itemsError
-
-    const { error: historyError } = await supabase.from('customer_order_status_history').insert({
-      organization_id: organization.id,
-      order_id: order.id,
-      to_status: 'PENDING',
-      note: 'Pedido creado desde la tienda publica.',
-    })
-    if (historyError) throw historyError
-
-    if (appliedPromotion && appliedPromotion.usage_limit == null) {
-      await supabase
-        .from('promotions')
-        .update({ usage_count: appliedPromotion.usage_count + 1, updated_at: now })
-        .eq('id', appliedPromotion.id)
-        .eq('organization_id', organization.id)
-        .eq('usage_count', appliedPromotion.usage_count)
-    }
-
     const { data: fullOrder } = await supabase
       .from('customer_orders')
       .select('*, order_items:customer_order_items(*)')
-      .eq('id', order.id)
+      .eq('id', created.order_id)
       .eq('organization_id', organization.id)
       .single()
 
-    reservedItems = []
-    return NextResponse.json({ success: true, data: normalizeOrder(fullOrder ?? order) }, { status: 201 })
+    if (!fullOrder) throw new Error('No se pudo recuperar el pedido creado.')
+    return NextResponse.json({ success: true, data: normalizeOrder(fullOrder) }, { status: 201 })
   } catch (error) {
-    if (supabase && reservedItems.length > 0 && reservedOrganizationId) {
-      try {
-        if (createdOrderId) {
-          await supabase
-            .from('customer_orders')
-            .delete()
-            .eq('id', createdOrderId)
-            .eq('organization_id', reservedOrganizationId)
-        }
-        await releaseReservedStock(supabase, reservedOrganizationId, reservedItems)
-        if (claimedLimitedPromotion) {
-          await supabase
-            .from('promotions')
-            .update({ usage_count: claimedLimitedPromotion.usage_count })
-            .eq('id', claimedLimitedPromotion.id)
-            .eq('organization_id', reservedOrganizationId)
-            .eq('usage_count', claimedLimitedPromotion.usage_count + 1)
-        }
-      } catch (releaseError) {
-        logger.error('Public order stock rollback error', { error: releaseError })
-      }
+    const message = error instanceof Error
+      ? error.message
+      : String((error as { message?: unknown } | null)?.message ?? '')
+    const stockMatch = message.match(/STOCK_CHANGED\|([0-9a-f-]+)\|(\d+)/i)
+    if (stockMatch) {
+      return NextResponse.json({
+        success: false,
+        code: 'STOCK_CHANGED',
+        error: 'El stock cambió mientras confirmabas. Revisá la cantidad disponible.',
+        data: {
+          conflicts: [{
+            productId: stockMatch[1],
+            available: Number(stockMatch[2]),
+          }],
+        },
+      }, { status: 409 })
+    }
+    if (message.includes('PROMOTION_LIMIT_REACHED')) {
+      return NextResponse.json({
+        success: false,
+        error: 'El código promocional alcanzó su límite de usos.',
+      }, { status: 409 })
     }
 
     logger.error('Public order creation error', { error })
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'No se pudo crear el pedido.' },
+      { success: false, error: 'No se pudo crear el pedido.' },
       { status: 500 }
     )
   }

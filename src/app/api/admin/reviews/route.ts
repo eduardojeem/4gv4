@@ -48,11 +48,18 @@ async function getHandler(request: NextRequest, context: AdminAuthContext) {
     }
 
     // Stats
-    const { data: org } = await supabase
-      .from('organizations')
-      .select('review_rating_avg, review_count')
-      .eq('id', orgId)
-      .single()
+    const [{ data: org }, { count: pendingCount }] = await Promise.all([
+      supabase
+        .from('organizations')
+        .select('review_rating_avg, review_count')
+        .eq('id', orgId)
+        .single(),
+      supabase
+        .from('organization_reviews')
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('is_approved', false),
+    ])
 
     return NextResponse.json({
       success: true,
@@ -61,6 +68,7 @@ async function getHandler(request: NextRequest, context: AdminAuthContext) {
         stats: {
           average: Number(org?.review_rating_avg ?? 0),
           count: org?.review_count ?? 0,
+          pending: pendingCount ?? 0,
         },
         pagination: { total: count ?? 0, limit, offset },
       },

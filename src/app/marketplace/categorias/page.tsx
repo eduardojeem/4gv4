@@ -20,7 +20,7 @@ export default async function MarketplaceCategoriesPage() {
   ])
 
   return (
-    <main className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
       
       {/* ── Header Hero Premium con Mesh Gradients ── */}
       <section className="relative overflow-hidden border-b border-slate-200/60 bg-white/70 backdrop-blur-md dark:border-slate-800/50 dark:bg-slate-900/60 py-14 sm:py-16">
@@ -85,6 +85,6 @@ export default async function MarketplaceCategoriesPage() {
           />
         </section>
       )}
-    </main>
+    </div>
   )
 }

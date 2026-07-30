@@ -7,6 +7,7 @@ import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/
 type RouteBody = {
   p_sale_data?: {
     code?: unknown
+    idempotency_key?: unknown
     customer_id?: unknown
     total_amount?: unknown
     subtotal_amount?: unknown
@@ -301,6 +302,11 @@ export async function POST(request: Request) {
     const code = typeof saleData.code === 'string' && saleData.code.trim()
       ? saleData.code.trim()
       : `POS-${Date.now()}`
+    const idempotencyKey = (
+      request.headers.get('x-idempotency-key')
+      || (typeof saleData.idempotency_key === 'string' ? saleData.idempotency_key : '')
+      || code
+    ).trim().slice(0, 160)
     const paymentMethodVariants = buildPaymentMethodVariants(paymentMethod)
     const statusVariants = buildStatusVariants(status)
     const paymentStatusVariants = buildStatusVariants(paymentStatus)
@@ -321,6 +327,21 @@ export async function POST(request: Request) {
     }
 
     const supabase = createAdminSupabase()
+    const { data: existingSale } = await supabase
+      .from('sales')
+      .select('id')
+      .eq('organization_id', organization.id)
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle()
+
+    if (existingSale?.id) {
+      return NextResponse.json({
+        success: true,
+        saleId: existingSale.id,
+        data: { id: existingSale.id },
+        idempotent: true,
+      })
+    }
     const productIds = [...new Set(items.map(item => item.productId))]
     const requestedQuantities = items.reduce((acc, item) => {
       acc.set(item.productId, (acc.get(item.productId) || 0) + item.quantity)
@@ -396,6 +417,7 @@ export async function POST(request: Request) {
         for (const paymentStatusVariant of paymentStatusVariants) {
           salePayloadAttempts.push({
             organization_id: organization.id,
+            idempotency_key: idempotencyKey,
             code,
             customer_id: customerId,
             created_by: staffAuth.user.id,
@@ -413,6 +435,7 @@ export async function POST(request: Request) {
 
           salePayloadAttempts.push({
             organization_id: organization.id,
+            idempotency_key: idempotencyKey,
             code,
             customer_id: customerId,
             branch_id: branchScope.branchId,
@@ -429,6 +452,7 @@ export async function POST(request: Request) {
 
           salePayloadAttempts.push({
             organization_id: organization.id,
+            idempotency_key: idempotencyKey,
             sale_number: code,
             customer_id: customerId,
             user_id: staffAuth.user.id,
@@ -443,6 +467,7 @@ export async function POST(request: Request) {
 
           salePayloadAttempts.push({
             organization_id: organization.id,
+            idempotency_key: idempotencyKey,
             sale_number: code,
             customer_id: customerId,
             branch_id: branchScope.branchId,
@@ -456,6 +481,7 @@ export async function POST(request: Request) {
 
           salePayloadAttempts.push({
             organization_id: organization.id,
+            idempotency_key: idempotencyKey,
             customer_id: customerId,
             user_id: staffAuth.user.id,
             branch_id: branchScope.branchId,
@@ -469,6 +495,7 @@ export async function POST(request: Request) {
 
           salePayloadAttempts.push({
             organization_id: organization.id,
+            idempotency_key: idempotencyKey,
             customer_id: customerId,
             branch_id: branchScope.branchId,
             total_amount: totalAmount,
@@ -481,6 +508,7 @@ export async function POST(request: Request) {
           if (customerId) {
             salePayloadAttempts.push({
               organization_id: organization.id,
+              idempotency_key: idempotencyKey,
               code,
               created_by: staffAuth.user.id,
               branch_id: branchScope.branchId,
@@ -497,6 +525,7 @@ export async function POST(request: Request) {
 
             salePayloadAttempts.push({
               organization_id: organization.id,
+              idempotency_key: idempotencyKey,
               sale_number: code,
               user_id: staffAuth.user.id,
               branch_id: branchScope.branchId,
@@ -515,6 +544,22 @@ export async function POST(request: Request) {
     const { saleId, error: saleInsertError } = await insertSaleRow(supabase, salePayloadAttempts)
 
     if (!saleId) {
+      const { data: concurrentSale } = await supabase
+        .from('sales')
+        .select('id')
+        .eq('organization_id', organization.id)
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle()
+
+      if (concurrentSale?.id) {
+        return NextResponse.json({
+          success: true,
+          saleId: concurrentSale.id,
+          data: { id: concurrentSale.id },
+          idempotent: true,
+        })
+      }
+
       const normalizedError = normalizeSupabaseError(saleInsertError)
       console.error('[pos/process-sale] Error creating sale:', normalizedError)
       return NextResponse.json(
@@ -534,102 +579,27 @@ export async function POST(request: Request) {
       )
     }
 
-    const previousStocks: Array<{ productId: string; stock: number; branchStock: number }> = []
-
-    for (const [productId, requestedQuantity] of requestedQuantities.entries()) {
-      const product = productsMap.get(productId)
-      const currentStock = Number(product?.stock_quantity || 0)
-      const nextStock = Math.max(0, currentStock - requestedQuantity)
-      const branchCurrentStock = branchInventoryMap.has(productId)
-        ? Number(branchInventoryMap.get(productId) || 0)
-        : currentStock
-      const nextBranchStock = Math.max(0, branchCurrentStock - requestedQuantity)
-
-      const { error: stockError } = await supabase
-        .from('products')
-        .update({ stock_quantity: nextStock })
-        .eq('id', productId)
-        .eq('organization_id', organization.id)
-
-      if (stockError) {
-        console.error('[pos/process-sale] Error updating stock:', normalizeSupabaseError(stockError))
-
-        for (const snapshot of previousStocks) {
-          await supabase
-            .from('products')
-            .update({ stock_quantity: snapshot.stock })
-            .eq('id', snapshot.productId)
-            .eq('organization_id', organization.id)
-
-          await supabase
-            .from('branch_inventory')
-            .upsert({
-              branch_id: branchScope.branchId,
-              product_id: snapshot.productId,
-              stock_quantity: snapshot.branchStock,
-            }, {
-              onConflict: 'branch_id,product_id',
-            })
-        }
-
-        await supabase.from('sale_items').delete().eq('sale_id', saleId).eq('organization_id', organization.id)
-        await supabase.from('sales').delete().eq('id', saleId).eq('organization_id', organization.id)
-
-        return NextResponse.json(
-          { error: 'No se pudo actualizar el stock de los productos vendidos.' },
-          { status: 500 }
-        )
+    const { data: stockUpdated, error: stockError } = await supabase.rpc(
+      'decrement_pos_stock_batch_atomic',
+      {
+        p_organization_id: organization.id,
+        p_branch_id: branchScope.branchId,
+        p_items: Array.from(requestedQuantities.entries()).map(([productId, quantity]) => ({
+          product_id: productId,
+          quantity,
+        })),
       }
+    )
 
-      if (branchScope.branchId) {
-        const { error: branchInventoryError } = await supabase
-          .from('branch_inventory')
-          .upsert({
-            branch_id: branchScope.branchId,
-            product_id: productId,
-            stock_quantity: nextBranchStock,
-          }, {
-            onConflict: 'branch_id,product_id',
-          })
+    if (stockError || stockUpdated !== true) {
+      console.error('[pos/process-sale] Atomic stock update failed:', normalizeSupabaseError(stockError))
+      await supabase.from('sale_items').delete().eq('sale_id', saleId).eq('organization_id', organization.id)
+      await supabase.from('sales').delete().eq('id', saleId).eq('organization_id', organization.id)
 
-        if (branchInventoryError) {
-          console.error('[pos/process-sale] Error updating branch stock:', normalizeSupabaseError(branchInventoryError))
-
-          await supabase
-            .from('products')
-            .update({ stock_quantity: currentStock })
-            .eq('id', productId)
-            .eq('organization_id', organization.id)
-
-          for (const snapshot of previousStocks) {
-            await supabase
-              .from('products')
-              .update({ stock_quantity: snapshot.stock })
-              .eq('id', snapshot.productId)
-              .eq('organization_id', organization.id)
-
-            await supabase
-              .from('branch_inventory')
-              .upsert({
-                branch_id: branchScope.branchId,
-                product_id: snapshot.productId,
-                stock_quantity: snapshot.branchStock,
-              }, {
-                onConflict: 'branch_id,product_id',
-              })
-          }
-
-          await supabase.from('sale_items').delete().eq('sale_id', saleId).eq('organization_id', organization.id)
-          await supabase.from('sales').delete().eq('id', saleId).eq('organization_id', organization.id)
-
-          return NextResponse.json(
-            { error: 'No se pudo sincronizar el stock de la sucursal para los productos vendidos.' },
-            { status: 500 }
-          )
-        }
-      }
-
-      previousStocks.push({ productId, stock: currentStock, branchStock: branchCurrentStock })
+      return NextResponse.json(
+        { error: stockError?.message || 'Stock insuficiente para completar la venta.' },
+        { status: stockError?.message?.includes('Insufficient stock') ? 409 : 500 }
+      )
     }
 
     return NextResponse.json({

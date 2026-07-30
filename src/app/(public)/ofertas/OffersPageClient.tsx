@@ -158,7 +158,11 @@ function OfferCard({
       unit_measure: 'unidad',
       barcode: null,
     }
-    addProduct(product, offer.offer_price, 1)
+    const result = addProduct(product, offer.offer_price, 1)
+    if (result.limited) {
+      toast.info(`Ya agregaste el máximo disponible (${result.quantity}).`)
+      return
+    }
     toast.success('Agregado al carrito')
     setAddedToCart(true)
     setTimeout(() => setAddedToCart(false), 2000)

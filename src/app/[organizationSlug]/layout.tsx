@@ -17,7 +17,7 @@ export default async function OrganizationPublicLayout({
   const customBrandColor = settings?.company_info?.customBrandColor
 
   return (
-    <MaintenanceGuard>
+    <MaintenanceGuard initialSettings={settings}>
       <CartProviderWithDrawer>
         <div 
           className="flex min-h-screen flex-col" 
@@ -29,10 +29,10 @@ export default async function OrganizationPublicLayout({
           style={brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } as React.CSSProperties : undefined}
         >
           <SkipToContentLink />
-          <PublicHeader />
+          <PublicHeader initialSettings={settings} />
           <CustomerLinkBanner />
-          <main id="main-content" className="flex-1">{children}</main>
-          <PublicFooter />
+          <div className="flex-1">{children}</div>
+          <PublicFooter initialSettings={settings} />
           <WhatsAppFloatButton />
         </div>
       </CartProviderWithDrawer>

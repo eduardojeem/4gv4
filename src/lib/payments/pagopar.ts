@@ -3,6 +3,13 @@ import { createHash } from 'crypto'
 const PAGOPAR_API_BASE_URL = 'https://api.pagopar.com/api'
 const PAGOPAR_CHECKOUT_BASE_URL = 'https://www.pagopar.com/pagos'
 
+export type PagoparPaymentMethod = 'card' | 'qr'
+
+const PAGOPAR_PAYMENT_METHOD_IDS: Record<PagoparPaymentMethod, number> = {
+  card: 9,
+  qr: 24,
+}
+
 type PagoparBuyer = {
   ruc?: string | null
   email?: string | null
@@ -19,6 +26,7 @@ type CreatePagoparOrderInput = {
   description: string
   externalReference: string
   itemId: number
+  paymentMethod: PagoparPaymentMethod
 }
 
 type PagoparCreateResponse = {
@@ -60,6 +68,19 @@ function maxPaymentDate() {
 
 export function isPagoparConfigured() {
   return Boolean(process.env.PAGOPAR_PUBLIC_KEY && process.env.PAGOPAR_PRIVATE_KEY)
+}
+
+export function parsePagoparPaymentMethod(value: unknown): PagoparPaymentMethod | null {
+  return value === 'card' || value === 'qr' ? value : null
+}
+
+export function getPagoparPaymentMethodId(method: PagoparPaymentMethod) {
+  return PAGOPAR_PAYMENT_METHOD_IDS[method]
+}
+
+export function getPagoparCheckoutUrl(hash: string, method: PagoparPaymentMethod) {
+  const paymentMethodId = getPagoparPaymentMethodId(method)
+  return `${PAGOPAR_CHECKOUT_BASE_URL}/${encodeURIComponent(hash)}?forma_pago=${paymentMethodId}`
 }
 
 export function getPagoparAmountInPyg(amount: number, currency: string) {
@@ -152,7 +173,7 @@ export async function createPagoparOrder(input: CreatePagoparOrderInput): Promis
     fecha_maxima_pago: maxPaymentDate(),
     id_pedido_comercio: input.externalReference,
     descripcion_resumen: input.description,
-    forma_pago: Number(process.env.PAGOPAR_DEFAULT_PAYMENT_METHOD || '9'),
+    forma_pago: getPagoparPaymentMethodId(input.paymentMethod),
   }
 
   const response = await fetch(`${PAGOPAR_API_BASE_URL}/comercios/2.0/iniciar-transaccion`, {
@@ -174,7 +195,7 @@ export async function createPagoparOrder(input: CreatePagoparOrderInput): Promis
   const hash = payload.resultado[0].data
 
   return {
-    checkoutUrl: `${PAGOPAR_CHECKOUT_BASE_URL}/${hash}`,
+    checkoutUrl: getPagoparCheckoutUrl(hash, input.paymentMethod),
     providerOrderId: payload.resultado[0].pedido ? String(payload.resultado[0].pedido) : null,
     hash,
     raw: payload,

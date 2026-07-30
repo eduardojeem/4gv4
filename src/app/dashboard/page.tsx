@@ -34,7 +34,7 @@ import { config } from '@/lib/config'
 import { useBranch } from '@/contexts/branch-context'
 import { withBranchFilter } from '@/lib/branches/client'
 import { formatCurrency } from '@/lib/currency'
-import { COMPLETED_SALE_STATUSES, PENDING_SALE_STATUSES, isCompletedSaleStatus } from '@/lib/sales-status'
+import { COMPLETED_SALE_STATUSES, isCompletedSaleStatus } from '@/lib/sales-status'
 import { ACTIVE_REPAIR_STATUSES } from '@/lib/constants/repair-status'
 import { cn } from '@/lib/utils'
 import {
@@ -178,7 +178,7 @@ export default function DashboardPage() {
   const [orgSlug, setOrgSlug] = useState<string | null>(null)
   const [stats, setStats] = useState<KpiStat[]>([
     { title: 'Ventas del día', value: '—', icon: Banknote, tone: 'emerald', href: '/dashboard/reports' },
-    { title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo', href: '/dashboard/pos' },
+    { title: 'Órdenes activas', value: '—', icon: ShoppingCart, tone: 'indigo', href: '/dashboard/orders' },
     { title: 'Clientes nuevos', value: '—', icon: Users, tone: 'violet', href: '/dashboard/customers' },
     { title: 'Productos', value: '—', icon: Package, tone: 'cyan', href: '/dashboard/products' },
     { title: 'Stock bajo', value: '—', icon: AlertTriangle, tone: 'amber', href: '/dashboard/products?filter=low_stock' },
@@ -272,7 +272,10 @@ export default function DashboardPage() {
           selectedBranchId,
         ),
         withBranchFilter(
-          supabase.from('sales').select('id', { count: 'exact', head: true }).in('status', [...PENDING_SALE_STATUSES]),
+          supabase
+            .from('customer_orders')
+            .select('id', { count: 'exact', head: true })
+            .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED']),
           selectedBranchId,
         ),
         supabase.from('customers').select('created_at').gte('created_at', startOfWeek.toISOString()),
@@ -342,8 +345,8 @@ export default function DashboardPage() {
         {
           title: 'Órdenes activas',
           value: String(activeOrders),
-          subtitle: 'pendientes de pago',
-          icon: ShoppingCart, tone: 'indigo', href: '/dashboard/pos',
+          subtitle: 'pedidos por completar',
+          icon: ShoppingCart, tone: 'indigo', href: '/dashboard/orders',
           badge: activeOrders > 0 ? 'Atender' : undefined,
         },
         {
@@ -415,8 +418,8 @@ export default function DashboardPage() {
   const quickActions = [
     { title: 'Nueva venta', icon: ShoppingCart, href: '/dashboard/pos', tone: 'indigo' as const },
     { title: 'Nueva reparación', icon: Wrench, href: '/dashboard/repairs?new=true', tone: 'amber' as const },
-    { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers', tone: 'violet' as const },
-    { title: 'Nuevo producto', icon: Package, href: '/dashboard/products', tone: 'emerald' as const },
+    { title: 'Nuevo cliente', icon: Users, href: '/dashboard/customers?new=true', tone: 'violet' as const },
+    { title: 'Nuevo producto', icon: Package, href: '/dashboard/products?new=true', tone: 'emerald' as const },
     { title: 'Ver reportes', icon: BarChart3, href: '/dashboard/reports', tone: 'cyan' as const },
     { title: 'Mi tienda pública', icon: Store, href: orgSlug ? `/${orgSlug}/inicio` : '/marketplace/empresas', tone: 'emerald' as const },
     { title: 'Marketplace', icon: Globe, href: '/marketplace', tone: 'cyan' as const },

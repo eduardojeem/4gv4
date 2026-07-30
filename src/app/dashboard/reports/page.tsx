@@ -43,6 +43,9 @@ import { createClient } from '@/lib/supabase/client'
 import { RealtimeChannel } from '@supabase/supabase-js'
 import { ReportsProductsTab } from '@/components/reports/ReportsProductsTab'
 import { useCanViewCost } from '@/hooks/use-can-view-cost'
+import { useBranch } from '@/contexts/branch-context'
+import { withBranchFilter } from '@/lib/branches/client'
+import { chunkQueryValues } from '@/lib/analytics/query-batches'
 
 // Sanitiza una celda CSV: previene inyección de fórmulas y escapa comas/comillas/saltos.
 function csvCell(value: unknown): string {
@@ -84,6 +87,7 @@ interface KpiDelta {
 }
 
 export default function ReportsPage() {
+  const { selectedBranchId } = useBranch()
   const { planCode, organizationName } = useSubscriptionStatus()
   const canExport = canExportReports(planCode) // exportar/descargar: Basic en adelante
   const canViewCost = useCanViewCost()
@@ -266,23 +270,30 @@ export default function ReportsPage() {
         const previousFrom = new Date(previousTo.getTime() - periodMs)
 
         // Obtener ventas del periodo actual
-        const { data: sales, error: salesError } = await supabase
-          .from('sales')
-          .select('id, created_at, total_amount, status, customer_id')
-          .gte('created_at', dateRange.from.toISOString())
-          .lte('created_at', dateRange.to.toISOString())
-          .order('created_at', { ascending: true })
+        const { data: sales, error: salesError } = await withBranchFilter(
+          supabase
+            .from('sales')
+            .select('id, created_at, total_amount, status, customer_id')
+            .gte('created_at', dateRange.from.toISOString())
+            .lte('created_at', dateRange.to.toISOString())
+            .order('created_at', { ascending: true }),
+          selectedBranchId
+        )
 
-        const safeSales = salesError ? [] : (sales ?? [])
+        if (salesError) throw salesError
+        const safeSales = sales ?? []
         const completedSales = safeSales.filter(sale => isCompletedSaleStatus((sale as any).status))
 
         // Datos de clientes actual + periodo anterior y ventas periodo anterior
         const [{ data: previousSales, error: previousSalesError }, { data: newCustomers, error: customersError }, { data: previousCustomers, error: previousCustomersError }] = await Promise.all([
-          supabase
-            .from('sales')
-            .select('id, total_amount, status')
-            .gte('created_at', previousFrom.toISOString())
-            .lte('created_at', previousTo.toISOString()),
+          withBranchFilter(
+            supabase
+              .from('sales')
+              .select('id, total_amount, status')
+              .gte('created_at', previousFrom.toISOString())
+              .lte('created_at', previousTo.toISOString()),
+            selectedBranchId
+          ),
           supabase
             .from('customers')
             .select('created_at')
@@ -295,9 +306,12 @@ export default function ReportsPage() {
             .lte('created_at', previousTo.toISOString())
         ])
 
-        const safeCustomers = customersError ? [] : (newCustomers ?? [])
-        const safePreviousCustomers = previousCustomersError ? [] : (previousCustomers ?? [])
-        const safePreviousSales = previousSalesError ? [] : (previousSales ?? [])
+        if (previousSalesError) throw previousSalesError
+        if (customersError) throw customersError
+        if (previousCustomersError) throw previousCustomersError
+        const safeCustomers = newCustomers ?? []
+        const safePreviousCustomers = previousCustomers ?? []
+        const safePreviousSales = previousSales ?? []
         const previousCompletedSales = safePreviousSales.filter((sale: any) => isCompletedSaleStatus(sale.status))
 
         const sumSales = (rows: any[]) => rows.reduce((sum, row) => sum + (Number(row.total_amount) || 0), 0)
@@ -323,38 +337,48 @@ export default function ReportsPage() {
         // Obtener items de venta para análisis de productos y categorías
         const itemsFrom = dateRange.from <= categoryDateRange.from ? dateRange.from : categoryDateRange.from
         const itemsTo = dateRange.to >= categoryDateRange.to ? dateRange.to : categoryDateRange.to
-        const { data: itemSales, error: itemSalesError } = await supabase
-          .from('sales')
-          .select('id, created_at, status')
-          .gte('created_at', itemsFrom.toISOString())
-          .lte('created_at', itemsTo.toISOString())
-        const safeItemSales = itemSalesError ? [] : (itemSales ?? [])
+        const { data: itemSales, error: itemSalesError } = await withBranchFilter(
+          supabase
+            .from('sales')
+            .select('id, created_at, status')
+            .gte('created_at', itemsFrom.toISOString())
+            .lte('created_at', itemsTo.toISOString()),
+          selectedBranchId
+        )
+        if (itemSalesError) throw itemSalesError
+        const safeItemSales = itemSales ?? []
         const completedSalesForItems = safeItemSales.filter((sale: any) => isCompletedSaleStatus(sale.status))
         const completedSalesForItemsById = new Map(completedSalesForItems.map((sale: any) => [sale.id, sale]))
 
         let safeSaleItems: any[] = []
         if (completedSalesForItems.length > 0) {
           const saleIds = completedSalesForItems.map((sale: any) => sale.id)
-          const { data: saleItems, error: itemsError } = await supabase
-            .from('sale_items')
-            .select(`
-              sale_id,
-              product_id,
-              quantity,
-              unit_price,
-              subtotal,
-              product:products (
-                id,
-                name,
-                purchase_price,
-                category:categories (
-                  name
-                )
-              )
-            `)
-            .in('sale_id', saleIds)
-
-          const safeSaleItemsRaw = itemsError ? [] : (saleItems ?? [])
+          const saleItemResults = await Promise.all(
+            chunkQueryValues(saleIds).map((saleIdBatch) =>
+              supabase
+                .from('sale_items')
+                .select(`
+                  sale_id,
+                  product_id,
+                  quantity,
+                  unit_price,
+                  subtotal,
+                  product:products (
+                    id,
+                    name,
+                    purchase_price,
+                    category:categories (
+                      name
+                    )
+                  )
+                `)
+                .in('sale_id', saleIdBatch)
+            )
+          )
+          const itemsError = saleItemResults.find((result) => result.error)?.error
+          if (itemsError) throw itemsError
+          const saleItems = saleItemResults.flatMap((result) => result.data ?? [])
+          const safeSaleItemsRaw = saleItems
           safeSaleItems = safeSaleItemsRaw.map((item: any) => {
             const sale = completedSalesForItemsById.get(item.sale_id)
             return {
@@ -409,13 +433,17 @@ export default function ReportsPage() {
         const totalOrders = processedSalesData.reduce((sum, item) => sum + item.orders, 0)
         setAvgPurchasesPerCustomer(uniqueCustomersCount > 0 ? totalOrders / uniqueCustomersCount : 0)
 
-        const { data: repairsData, error: repairsError } = await supabase
-          .from('repairs')
-          .select('id, created_at, received_at, completed_at, status, final_cost, labor_cost, parts_cost')
-          .gte('created_at', dateRange.from.toISOString())
-          .lte('created_at', dateRange.to.toISOString())
+        const { data: repairsData, error: repairsError } = await withBranchFilter(
+          supabase
+            .from('repairs')
+            .select('id, created_at, received_at, completed_at, status, final_cost, labor_cost, parts_cost')
+            .gte('created_at', dateRange.from.toISOString())
+            .lte('created_at', dateRange.to.toISOString()),
+          selectedBranchId
+        )
 
-        const safeRepairs = repairsError ? [] : (repairsData ?? [])
+        if (repairsError) throw repairsError
+        const safeRepairs = repairsData ?? []
 
         const trendMap: Record<string, number> = {}
         const statusMap: Record<string, number> = {}
@@ -547,7 +575,7 @@ export default function ReportsPage() {
     }
 
     fetchReportsData()
-  }, [dateRange, categoryDateRange, refreshTrigger, toLocalDateKey])
+  }, [dateRange, categoryDateRange, refreshTrigger, selectedBranchId, toLocalDateKey])
 
   useEffect(() => {
     const now = new Date()
@@ -1063,7 +1091,6 @@ export default function ReportsPage() {
     </div>
   )
 }
-
 
 
 

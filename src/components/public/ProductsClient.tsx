@@ -24,7 +24,7 @@ import { MarketplaceProductModal } from './MarketplaceProductModal'
 type SortKey = 'default' | 'price_asc' | 'price_desc' | 'name_asc'
 type ViewMode = 'grid' | 'compact'
 
-const PAGE_SIZE = 40
+const PAGE_SIZE = 24
 
 type Props = {
   products: MarketplaceProduct[]

@@ -1,35 +1,37 @@
 import type { UserRole } from './roles-permissions'
+import type { OrganizationRole } from '@/lib/saas/permissions'
 
 /**
- * Fuente ÚNICA de verdad para el acceso por sección del dashboard.
+ * Fuente unica de acceso por seccion del dashboard.
  *
- * Solo `vendedor` y `tecnico` están restringidos. Cualquier otro rol con acceso
- * al dashboard (admin, super_admin, owner, o cliente-con-membresía que el
- * middleware ya validó) tiene acceso completo. Esto evita bloquear por error a
- * dueños cuyo `profiles.role` quedó como 'cliente'.
- *
- * La consume tanto el sidebar (para ocultar) como el guard del layout (para
- * cerrar el acceso por URL directa).
+ * El rol de la organizacion activa se traduce al modelo historico de la UI.
+ * `cliente` falla cerrado: debe existir una membresia staff valida antes de
+ * habilitar cualquier ruta del dashboard.
  */
 
-const RESTRICTED_ROLES = ['vendedor', 'tecnico'] as const
-type RestrictedRole = (typeof RESTRICTED_ROLES)[number]
+type RestrictedRole = 'vendedor' | 'tecnico'
 
-// Prefijos de sección permitidos por rol restringido.
 const ALLOWED_SECTIONS: Record<RestrictedRole, string[]> = {
   vendedor: [
     '/dashboard/pos',
+    '/dashboard/products',
+    '/dashboard/categories',
     '/dashboard/customers',
     '/dashboard/orders',
     '/dashboard/credits',
     '/dashboard/repairs',
+    '/dashboard/promotions',
+    '/dashboard/reports',
     '/dashboard/profile',
     '/dashboard/onboarding',
   ],
   tecnico: [
     '/dashboard/pos',
+    '/dashboard/products',
+    '/dashboard/categories',
     '/dashboard/customers',
     '/dashboard/repairs',
+    '/dashboard/reports',
     '/dashboard/technician',
     '/dashboard/profile',
     '/dashboard/onboarding',
@@ -40,15 +42,26 @@ function isRestricted(role: UserRole | undefined): role is RestrictedRole {
   return role === 'vendedor' || role === 'tecnico'
 }
 
-/** ¿Puede el rol acceder a la ruta del dashboard indicada? */
+export function mapOrganizationRoleToDashboardRole(role: OrganizationRole): UserRole {
+  switch (role) {
+    case 'owner':
+    case 'admin':
+      return 'admin'
+    case 'manager':
+    case 'cashier':
+    case 'seller':
+      return 'vendedor'
+    case 'technician':
+      return 'tecnico'
+    default:
+      return 'cliente'
+  }
+}
+
 export function canRoleAccessSection(role: UserRole | undefined, path: string): boolean {
-  // Roles no restringidos (admin, super_admin, owner, etc.) → acceso completo.
+  if (!role || role === 'cliente') return false
   if (!isRestricted(role)) return true
-
-  // El home del dashboard siempre es accesible.
   if (path === '/dashboard') return true
-
-  // Fuera del dashboard (p.ej. /admin) los roles restringidos no entran.
   if (!path.startsWith('/dashboard')) return false
 
   return ALLOWED_SECTIONS[role].some(

@@ -59,7 +59,7 @@ export default async function MarketplaceSearchPage({ searchParams }: PageProps)
     : organizations
 
   return (
-    <main>
+    <div>
       <section className="relative overflow-hidden border-b border-slate-200 dark:border-slate-800">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(6,182,212,0.08),transparent)]" />
         <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -132,6 +132,6 @@ export default async function MarketplaceSearchPage({ searchParams }: PageProps)
           </div>
         )}
       </section>
-    </main>
+    </div>
   )
 }

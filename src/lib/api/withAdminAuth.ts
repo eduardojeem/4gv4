@@ -124,24 +124,6 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
         }
       }
 
-      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
-        try {
-          await supabase.from('audit_log').insert({
-            user_id: auth.user.id,
-            action: 'admin_api_access',
-            resource: 'admin_api',
-            resource_id: request.nextUrl.pathname,
-            new_values: {
-              path: request.nextUrl.pathname,
-              method: request.method,
-              userRole: auth.user.role,
-            },
-          })
-        } catch (err) {
-          logger.error('Failed to log admin access', { error: err })
-        }
-      }
-
       let organizationId: string | null = null
       if (auth.user.role !== 'super_admin') {
         try {
@@ -220,6 +202,26 @@ export function withAdminAuth(handler: AdminAuthenticatedHandler) {
           role: auth.user.role,
         },
         organizationId,
+      }
+
+      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
+        try {
+          await supabase.from('audit_log').insert({
+            user_id: auth.user.id,
+            action: 'admin_api_access',
+            resource: 'admin_api',
+            resource_id: request.nextUrl.pathname,
+            organization_id: organizationId,
+            new_values: {
+              path: request.nextUrl.pathname,
+              method: request.method,
+              userRole: auth.user.role,
+              organization_id: organizationId,
+            },
+          })
+        } catch (err) {
+          logger.error('Failed to log admin access', { error: err })
+        }
       }
 
       return await handler(request, context)

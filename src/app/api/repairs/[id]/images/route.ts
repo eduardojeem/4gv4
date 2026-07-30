@@ -10,7 +10,7 @@ type RouteParams = { params: Promise<{ id: string }> }
 
 export async function POST(request: NextRequest, context: RouteParams) {
   try {
-    const ctx = await resolveRepairRouteContext(request)
+    const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
     if (isNextResponse(ctx)) return ctx
 
     const { id } = await context.params
@@ -52,4 +52,3 @@ export async function POST(request: NextRequest, context: RouteParams) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
-

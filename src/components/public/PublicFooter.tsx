@@ -5,11 +5,12 @@ import { Mail, Phone, MapPin, Clock } from 'lucide-react'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
+import type { WebsiteSettings } from '@/types/website-settings'
 
-export function PublicFooter() {
+export function PublicFooter({ initialSettings = null }: { initialSettings?: WebsiteSettings | null }) {
   const { settings } = useWebsiteSettings()
   const pathname = usePathname()
-  const company = settings?.company_info
+  const company = (settings ?? initialSettings)?.company_info
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const tenantPrefix = tenantSlug ? `/${tenantSlug}` : ''
 

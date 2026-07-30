@@ -26,7 +26,7 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
   const featuredProducts = products.filter((p) => p.featured && !(p.has_offer && p.offer_price))
 
   return (
-    <main className="min-h-screen">
+    <div className="min-h-screen">
 
       {/* ── Hero ───────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b border-slate-200 dark:border-slate-800">
@@ -166,6 +166,6 @@ export default async function MarketplaceProductsPage({ searchParams }: PageProp
           initialCategory={categoria ?? ''}
         />
       </section>
-    </main>
+    </div>
   )
 }

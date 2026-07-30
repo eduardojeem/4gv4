@@ -12,8 +12,7 @@ import type {
   AdminAuditEntry,
   CashMonitorMetrics,
   SessionFilter,
-  RemoteActionPayload,
-  SessionStatus
+  RemoteActionPayload
 } from '../types'
 
 export function useCashMonitor() {
@@ -381,100 +380,23 @@ export function useCashMonitor() {
 
   const performAdminAction = useCallback(async (
     action: string,
-    payload: RemoteActionPayload,
-    newStatus?: SessionStatus
+    payload: RemoteActionPayload
   ) => {
     if (!supabase) return false
 
     try {
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = userData.user?.id
-      if (!userId) {
-        toast.error('No autenticado')
-        return false
-      }
-
-      // Get current session state for audit
-      let currentSessionQuery = supabase
-        .from('cash_closures')
-        .select('*')
-        .eq('id', payload.sessionId)
-
-      currentSessionQuery = withBranchFilter(currentSessionQuery, selectedBranchId)
-      const { data: currentSession } = await currentSessionQuery.single()
-
-      if (!currentSession) {
-        toast.error('Sesión no encontrada')
-        return false
-      }
-
-      // Update session status
-      const updateData: Record<string, unknown> = {}
-
-      if (newStatus) {
-        updateData.status = newStatus
-      }
-
-      switch (action) {
-        case 'remote_close':
-          updateData.status = 'closed'
-          updateData.date = new Date().toISOString()
-          updateData.closed_by = userId
-          break
-        case 'suspend':
-          updateData.status = 'suspended'
-          updateData.suspended_by = userId
-          updateData.suspended_at = new Date().toISOString()
-          break
-        case 'unsuspend':
-          updateData.status = 'open'
-          updateData.suspended_by = null
-          updateData.suspended_at = null
-          break
-        case 'block':
-          updateData.status = 'blocked'
-          updateData.blocked_by = userId
-          updateData.blocked_at = new Date().toISOString()
-          break
-        case 'unblock':
-          updateData.status = 'open'
-          updateData.blocked_by = null
-          updateData.blocked_at = null
-          break
-        case 'reopen':
-          updateData.status = 'open'
-          updateData.date = null
-          updateData.closed_by = null
-          break
-      }
-
-      let updateQuery = supabase
-        .from('cash_closures')
-        .update(updateData)
-        .eq('id', payload.sessionId)
-
-      updateQuery = withBranchFilter(updateQuery, selectedBranchId)
-      const { error: updateError } = await updateQuery
-
-      if (updateError) throw updateError
-
-      // Log audit entry
-      const { error: auditError } = await supabase
-        .from('cash_admin_audit')
-        .insert({
-          session_id: payload.sessionId,
-          register_id: payload.registerId,
+      const response = await fetch('/api/admin/cash-monitor/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: payload.sessionId,
           action,
-          performed_by: userId,
           reason: payload.reason,
-          previous_state: currentSession,
-          new_state: { ...currentSession, ...updateData },
-          ip_address: null, // Would need server-side to get real IP
-          user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null
-        })
-
-      if (auditError) {
-        console.error('Error logging audit:', auditError)
+        }),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Acción fallida')
       }
 
       toast.success(`Acción "${action}" ejecutada correctamente`)
@@ -487,7 +409,7 @@ export function useCashMonitor() {
       toast.error(`Error: ${msg}`)
       return false
     }
-  }, [selectedBranchId, supabase, fetchSessions, fetchAuditLog])
+  }, [supabase, fetchSessions, fetchAuditLog])
 
   // Specific action shortcuts
   const remoteClose = useCallback((payload: RemoteActionPayload) =>

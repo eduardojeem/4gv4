@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { getTenantSlugFromRequest } from '@/lib/saas/tenant'
+import { getTenantSlugFromRequest, normalizeDefaultPublicOrgSlug } from '@/lib/saas/tenant'
 
 export type PublicOrganization = {
   id: string
@@ -12,7 +12,7 @@ export type PublicOrganization = {
   marketplace_public: boolean | null
 }
 
-const FALLBACK_PUBLIC_ORG_SLUG = process.env.DEFAULT_PUBLIC_ORG_SLUG || 'default'
+const FALLBACK_PUBLIC_ORG_SLUG = normalizeDefaultPublicOrgSlug(process.env.DEFAULT_PUBLIC_ORG_SLUG)
 const SAFE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,47}$/
 
 export function toPublicOrganizationPayload(organization: PublicOrganization) {
@@ -57,7 +57,7 @@ export async function resolvePublicOrganizationBySlug(
 ) {
   const slug = requestedSlug || FALLBACK_PUBLIC_ORG_SLUG
 
-  if (!SAFE_SLUG_RE.test(slug)) {
+  if (!slug || !SAFE_SLUG_RE.test(slug)) {
     return null
   }
 

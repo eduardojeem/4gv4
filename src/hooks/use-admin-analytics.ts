@@ -2,9 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { endOfDay, format, isAfter, isBefore, startOfDay, subDays } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
 import { isCompletedSaleStatus } from '@/lib/sales-status'
-import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
+import {
+  applyBranchInventoryToProducts,
+  loadBranchInventoryStockMap,
+  type BranchInventoryClient,
+} from '@/lib/branches/inventory'
+import { chunkQueryValues } from '@/lib/analytics/query-batches'
 
 export type AnalyticsPreset = 'today' | '7d' | '30d' | '90d' | 'custom'
+const ANALYTICS_CACHE_TTL_MS = 5 * 60 * 1000
 
 type InsightTone = 'success' | 'warning' | 'danger' | 'info'
 type MetricTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
@@ -315,12 +321,6 @@ function formatMoney(value: number): string {
   }).format(value)
 }
 
-function formatPercent(value: number | null): string {
-  if (value === null || Number.isNaN(value)) return '--'
-  const sign = value > 0 ? '+' : ''
-  return `${sign}${value.toFixed(1)}%`
-}
-
 function percentChange(current: number, previous: number): number | null {
   if (previous <= 0) return current > 0 ? 100 : null
   return ((current - previous) / previous) * 100
@@ -452,8 +452,6 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
 
   // Cache control: avoid re-fetching if data is fresh
   const lastFetchRef = useRef<{ timestamp: number; key: string } | null>(null)
-  const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
-
   const filterKey = useMemo(
     () => `${filters.from.toISOString()}_${filters.to.toISOString()}_${filters.branch}`,
     [filters.from, filters.to, filters.branch]
@@ -462,7 +460,7 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
   const isCacheFresh = useCallback(() => {
     if (!lastFetchRef.current) return false
     if (lastFetchRef.current.key !== filterKey) return false
-    return Date.now() - lastFetchRef.current.timestamp < CACHE_TTL_MS
+    return Date.now() - lastFetchRef.current.timestamp < ANALYTICS_CACHE_TTL_MS
   }, [filterKey])
 
   const fetchAnalytics = useCallback(async (mode: 'initial' | 'refresh' = 'refresh') => {
@@ -615,14 +613,25 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       const allMovements = (cashMovementsResponse.data || []) as CashMovementRecord[]
       const allAlerts = (cashAlertsResponse.data || []) as CashAlertRecord[]
       const baseProducts = (productsResponse.data || []) as Array<ProductRecord & { id: string; stock_quantity?: number | string | null }>
-      const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
-        supabase,
+      const inventoryProducts = baseProducts.map((product) => ({
+        ...product,
+        stock_quantity: toNumber(product.stock_quantity),
+      }))
+      const { stockMap, branchScoped } = await loadBranchInventoryStockMap(
+        supabase as unknown as BranchInventoryClient,
         filters.branch === 'all' ? null : filters.branch,
         baseProducts.map((product) => String(product.id))
       )
-      const allProducts = (applyBranchInventoryToProducts as any)(baseProducts, stockMap, branchScoped) as ProductRecord[]
+      const allProducts = applyBranchInventoryToProducts(
+        inventoryProducts,
+        stockMap,
+        branchScoped
+      ) as ProductRecord[]
       const productStockMap = new Map(
-        allProducts.map((product: any) => [String(product.id), toNumber(product.stock_quantity ?? product.stock)])
+        allProducts.map((product) => [
+          String(product.id),
+          toNumber(product.stock_quantity ?? product.stock),
+        ])
       )
       const movedProducts = new Set(
         ((productMovementsResponse.data || []) as Array<{ product_id: string; branch_id?: string | null }>)
@@ -685,26 +694,27 @@ export function useAdminAnalytics(filters: AdminAnalyticsFilters) {
       })
 
       const selectedSaleIds = selectedSales.map((sale) => String(sale.id)).filter(Boolean)
-      let saleItemsResponse: { data: SaleItemRecord[] | null; error: unknown } = { data: [], error: null }
+      let selectedSaleItems: SaleItemRecord[] = []
       if (selectedSaleIds.length > 0) {
         try {
-          saleItemsResponse = (await supabase
-            .from('sale_items')
-            .select('id, sale_id, product_id, quantity, subtotal, unit_price, product:products(id, name, purchase_price, stock_quantity, category:categories(name))')
-            .in('sale_id', selectedSaleIds.slice(0, 500))) as unknown as { data: SaleItemRecord[] | null; error: unknown }
+          const responses = await Promise.all(
+            chunkQueryValues(selectedSaleIds).map((saleIds) =>
+              supabase
+                .from('sale_items')
+                .select('id, sale_id, product_id, quantity, subtotal, unit_price, product:products(id, name, purchase_price, stock_quantity, category:categories(name))')
+                .in('sale_id', saleIds)
+            )
+          )
+          const failedResponse = responses.find((response) => response.error)
+          if (failedResponse?.error) throw failedResponse.error
+
+          selectedSaleItems = responses.flatMap(
+            (response) => (response.data ?? []) as unknown as SaleItemRecord[]
+          )
         } catch (e) {
           console.warn('[analytics] sale_items query failed:', e)
         }
       }
-
-      if (saleItemsResponse.error) {
-        const saleItemsErrorMessage = saleItemsResponse.error instanceof Error
-          ? saleItemsResponse.error.message
-          : String(saleItemsResponse.error)
-        console.warn('[analytics] sale_items error:', saleItemsErrorMessage)
-      }
-
-      const selectedSaleItems = (saleItemsResponse.data || []) as SaleItemRecord[]
 
       const customerIds = Array.from(
         new Set(selectedSales.map((sale) => String(sale.customer_id || '')).filter(Boolean))

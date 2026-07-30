@@ -3,6 +3,7 @@ import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/requi
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { logger } from '@/lib/logger'
+import { roleHasPermission, type Permission } from '@/lib/saas/permissions'
 
 type PromotionRow = {
   id: string
@@ -58,6 +59,16 @@ async function resolveOrganization(auth: AuthResult) {
   return getCurrentOrganizationContext(auth.user.id)
 }
 
+function requirePromotionPermission(
+  organization: Awaited<ReturnType<typeof getCurrentOrganizationContext>>,
+  permission: Permission
+) {
+  if (!organization || !roleHasPermission(organization.role, permission)) {
+    return NextResponse.json({ error: 'Permisos insuficientes para esta promocion.' }, { status: 403 })
+  }
+  return null
+}
+
 // GET - Obtener promoción específica
 export async function GET(
   _request: NextRequest,
@@ -72,6 +83,10 @@ export async function GET(
     const organization = await resolveOrganization(auth)
     if (!organization) {
       return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
+    {
+      const response = requirePromotionPermission(organization, 'promotions.read')
+      if (response) return response
     }
 
     const { id } = await params
@@ -136,6 +151,10 @@ export async function PUT(
     const organization = await resolveOrganization(auth)
     if (!organization) {
       return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
+    {
+      const response = requirePromotionPermission(organization, 'promotions.update')
+      if (response) return response
     }
 
     const { id } = await params
@@ -302,6 +321,10 @@ export async function DELETE(
     if (!organization) {
       return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
     }
+    {
+      const response = requirePromotionPermission(organization, 'promotions.delete')
+      if (response) return response
+    }
 
     const { id } = await params
     const supabase = await createClient()
@@ -379,6 +402,10 @@ export async function PATCH(
     const organization = await resolveOrganization(auth)
     if (!organization) {
       return NextResponse.json({ error: 'Organizacion requerida' }, { status: 403 })
+    }
+    {
+      const response = requirePromotionPermission(organization, 'promotions.update')
+      if (response) return response
     }
 
     const { id } = await params

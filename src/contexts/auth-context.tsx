@@ -22,6 +22,7 @@ export interface AuthUser extends SupabaseUser {
   role?: UserRole
   status?: ProfileStatus
   permissions?: string[]
+  organizationPermissions?: boolean
   profile?: {
     name?: string
     avatar_url?: string
@@ -99,6 +100,7 @@ const buildAuthUser = (
   role: userProfile.role ?? 'cliente',
   status: userProfile.status ?? 'active',
   permissions: userProfile.permissions ?? [],
+  organizationPermissions: userProfile.organizationPermissions ?? false,
   profile: userProfile.profile ?? {}
 })
 
@@ -109,6 +111,7 @@ const toStoredAuthProfile = (authUser: AuthUser | null): Partial<AuthUser> | nul
     role: authUser.role,
     status: authUser.status,
     permissions: authUser.permissions ?? [],
+    organizationPermissions: authUser.organizationPermissions ?? false,
     profile: authUser.profile ?? {},
   }
 }
@@ -207,6 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           delivery_location?: unknown
         }
         permissions?: unknown
+        organizationPermissions?: unknown
       }
 
       const resolvedRole = toUserRole(profilePayload.role)
@@ -226,7 +230,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           location: typeof profileData.location === 'string' ? profileData.location : '',
           delivery_location: isDeliveryLocation(profileData.delivery_location) ? profileData.delivery_location : undefined,
         },
-        permissions: Array.from(new Set(directPermissions))
+        permissions: Array.from(new Set(directPermissions)),
+        organizationPermissions: profilePayload.organizationPermissions === true,
       }
     } catch {
       return defaultProfile
@@ -488,8 +493,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Funciones de verificación de permisos
   const checkPermission = useCallback((permission: string): boolean => {
     if (!user?.role) return false
+    if (user.organizationPermissions) {
+      return Boolean(user.permissions?.includes(permission))
+    }
     return hasEffectivePermission(user.role, permission, user.permissions)
-  }, [user?.role, user?.permissions])
+  }, [user?.organizationPermissions, user?.permissions, user?.role])
 
   const checkCanManageUser = useCallback((targetRole: UserRole): boolean => {
     if (!user?.role) return false

@@ -36,8 +36,10 @@ export async function GET(
     // Get repair ID from ticket number
     const { data: repair } = await supabase
       .from('repairs')
-      .select('id')
+      .select('id, organization_id')
+      .eq('id', session.repairId)
       .eq('ticket_number', ticketId)
+      .eq('organization_id', session.organizationId)
       .single()
     
     if (!repair) {

@@ -3,6 +3,7 @@ import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase, mapUiRoleToDbRole } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
 import { canCreateResource } from '@/lib/saas/subscription-service'
+import { canWriteGlobalUserIdentity } from '@/lib/auth/admin-role-scope'
 
 type CanonicalRole = 'super_admin' | 'admin' | 'vendedor' | 'tecnico' | 'cliente'
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
@@ -414,7 +415,10 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
   }
 
   const nextRole = typeof body?.role === 'string' ? normalizeRole(body.role) : currentRole
-  const nextStatus = typeof body?.status === 'string' ? normalizeStatus(body.status) : normalizeStatus(profile?.status)
+  const nextStatus =
+    typeof body?.status === 'string'
+      ? normalizeStatus(body.status)
+      : normalizeStatus(membershipRow?.status ?? profile?.status)
 
   if (nextRole === 'super_admin' && context.user.role !== 'super_admin') {
     return NextResponse.json({ success: false, error: 'Solo un super admin puede asignar super_admin' }, { status: 403 })
@@ -481,8 +485,9 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
   if (typeof body?.department === 'string') profilePayload.department = body.department
   if (typeof body?.phone === 'string') profilePayload.phone = body.phone
   if (typeof body?.avatar_url === 'string') profilePayload.avatar_url = body.avatar_url
-  if (typeof body?.role === 'string') profilePayload.role = nextRole
-  if (typeof body?.status === 'string') profilePayload.status = nextStatus
+  const canWriteGlobalIdentity = canWriteGlobalUserIdentity(context.user.role)
+  if (canWriteGlobalIdentity && typeof body?.role === 'string') profilePayload.role = nextRole
+  if (canWriteGlobalIdentity && typeof body?.status === 'string') profilePayload.status = nextStatus
   // NOTA: los permisos específicos ahora se persisten SOLO en la tabla
   // user_permissions (fuente de verdad única, ver bloque más abajo). Ya no se
   // escribe la columna profiles.permissions; queda vestigial hasta dropearla en
@@ -497,7 +502,10 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
 
   if (updateError) throw updateError
 
-  if (typeof body?.role === 'string' || typeof body?.status === 'string') {
+  if (
+    canWriteGlobalIdentity &&
+    (typeof body?.role === 'string' || typeof body?.status === 'string')
+  ) {
     const nowIso = new Date().toISOString()
     const { error: roleError } = await supabaseAdmin.from('user_roles').upsert(
       {
@@ -510,22 +518,26 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
     )
 
     if (roleError) throw roleError
+  }
 
-    if (context.organizationId && nextRole !== 'super_admin') {
-      const { error: memberError } = await supabaseAdmin
-        .from('organization_members')
-        .upsert(
-          {
-            organization_id: context.organizationId,
-            user_id: userId,
-            role: mapAppRoleToOrgRole(nextRole),
-            status: nextStatus === 'active' ? 'active' : 'suspended',
-          },
-          { onConflict: 'organization_id,user_id' }
-        )
+  if (
+    context.organizationId &&
+    nextRole !== 'super_admin' &&
+    (typeof body?.role === 'string' || typeof body?.status === 'string')
+  ) {
+    const { error: memberError } = await supabaseAdmin
+      .from('organization_members')
+      .upsert(
+        {
+          organization_id: context.organizationId,
+          user_id: userId,
+          role: mapAppRoleToOrgRole(nextRole),
+          status: nextStatus === 'active' ? 'active' : 'suspended',
+        },
+        { onConflict: 'organization_id,user_id' }
+      )
 
-      if (memberError) throw memberError
-    }
+    if (memberError) throw memberError
   }
 
   if (Array.isArray(body?.permissions)) {
@@ -574,7 +586,18 @@ async function updateUser(request: NextRequest, context: AdminAuthContext) {
 
   return NextResponse.json({
     success: true,
-    data: mapProfile(updatedProfile, undefined, Array.isArray(body?.permissions) ? body.permissions : undefined),
+    data: mapProfile(
+      updatedProfile,
+      context.organizationId && nextRole !== 'super_admin'
+        ? {
+            user_id: userId,
+            organization_id: context.organizationId,
+            role: mapAppRoleToOrgRole(nextRole),
+            status: nextStatus,
+          }
+        : undefined,
+      Array.isArray(body?.permissions) ? body.permissions : undefined
+    ),
   })
 }
 

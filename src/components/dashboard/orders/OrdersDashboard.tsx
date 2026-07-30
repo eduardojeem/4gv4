@@ -737,6 +737,11 @@ export function OrdersDashboard() {
       const updated = payload.data as CustomerOrder
       setOrders((cur) => cur.map((r) => r.id === order.id ? updated : r))
       setDetailOrder((cur) => cur?.id === order.id ? updated : cur)
+      // Keep "Cobrado hoy" live: the server attributes revenue to the day the
+      // payment was confirmed, so a fresh PAID transition always lands on today.
+      if (updated.payment_status === 'PAID' && order.payment_status !== 'PAID') {
+        setTodayRevenue((cur) => cur + Number(updated.total || 0))
+      }
       toast({ title: 'Pago actualizado', description: `${order.order_number} → ${PAYMENT_STATUS_META[paymentStatus].label}` })
     } catch (error) {
       toast({ title: 'No se pudo actualizar el pago', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })

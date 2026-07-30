@@ -43,7 +43,7 @@ export default async function PublicLayout({
   const customBrandColor = settings?.company_info?.customBrandColor
 
   return (
-    <MaintenanceGuard>
+    <MaintenanceGuard initialSettings={settings}>
       <CartProviderWithDrawer>
         <div 
           className="flex min-h-screen flex-col" 
@@ -54,9 +54,9 @@ export default async function PublicLayout({
           style={brandColor === 'custom' && customBrandColor ? { '--brand-primary': customBrandColor } as React.CSSProperties : undefined}
         >
           <SkipToContentLink />
-          <PublicHeader />
-          <main id="main-content" className="flex-1">{children}</main>
-          <PublicFooter />
+          <PublicHeader initialSettings={settings} />
+          <div className="flex-1">{children}</div>
+          <PublicFooter initialSettings={settings} />
           <WhatsAppFloatButton />
         </div>
       </CartProviderWithDrawer>

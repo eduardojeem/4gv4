@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { requireStaff, getAuthResponse, type AuthResult } from '@/lib/auth/require-auth'
 import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { roleHasPermission } from '@/lib/saas/permissions'
 import { FULL_REPAIR_SELECT } from '@/app/api/repairs/_lib'
 import { canTransition } from '@/lib/repairs/state-machine'
 import type { RepairStatus } from '@/types/repairs'
@@ -77,6 +78,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     if (!organization) {
       return NextResponse.json({ ok: false, error: 'organization_required' }, { status: 403 })
+    }
+    if (!roleHasPermission(organization.role, 'repairs.orders.update')) {
+      return NextResponse.json({ ok: false, error: 'forbidden' }, { status: 403 })
     }
 
     const { id } = await context.params

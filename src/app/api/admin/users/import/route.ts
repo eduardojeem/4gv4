@@ -5,6 +5,7 @@ import { withAdminAuth } from '@/lib/api/withAdminAuth'
 import { logger } from '@/lib/logger'
 import { sendEmail, renderBrandedEmail } from '@/lib/email/resend'
 import { canCreateResource } from '@/lib/saas/subscription-service'
+import { canWriteGlobalUserIdentity } from '@/lib/auth/admin-role-scope'
 import { siteUrl } from '@/lib/site-url'
 
 type ImportUser = {
@@ -241,6 +242,9 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
         const status = u.status
         const phone = u.phone
         const department = u.department
+        const canWriteGlobalIdentity = canWriteGlobalUserIdentity(context.user.role)
+        const globalRole: CanonicalRole = canWriteGlobalIdentity ? role : 'cliente'
+        const globalStatus: ProfileStatus = canWriteGlobalIdentity ? status : 'active'
 
         try {
           const existingId = existingMap.get(email)
@@ -261,9 +265,11 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
               id: existingId,
               full_name: fullName,
               email,
-              role,
-              status,
               updated_at: nowIso,
+            }
+            if (canWriteGlobalIdentity) {
+              profilePayload.role = globalRole
+              profilePayload.status = globalStatus
             }
             if (phone !== null) profilePayload.phone = phone
             if (department !== null) profilePayload.department = department
@@ -274,16 +280,18 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
             )
             if (profileError) throw profileError
 
-            const { error: roleError } = await supabaseAdmin.from('user_roles').upsert(
-              {
-                user_id: existingId,
-                role,
-                is_active: status === 'active',
-                updated_at: nowIso,
-              },
-              { onConflict: 'user_id' }
-            )
-            if (roleError) throw roleError
+            if (canWriteGlobalIdentity) {
+              const { error: roleError } = await supabaseAdmin.from('user_roles').upsert(
+                {
+                  user_id: existingId,
+                  role: globalRole,
+                  is_active: globalStatus === 'active',
+                  updated_at: nowIso,
+                },
+                { onConflict: 'user_id' }
+              )
+              if (roleError) throw roleError
+            }
 
             if (context.organizationId && role !== 'super_admin') {
               await supabaseAdmin.from('organization_members').upsert(
@@ -308,7 +316,7 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
             password,
             // Confirm email immediately so the recovery link works
             email_confirm: true,
-            app_metadata: { role },
+            app_metadata: { role: globalRole },
             user_metadata: {
               full_name: fullName,
               status,
@@ -327,8 +335,8 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
               id: userId,
               full_name: fullName,
               email,
-              role,
-              status,
+              role: globalRole,
+              status: globalStatus,
               updated_at: nowIso,
             }
             if (phone !== null) profilePayload.phone = phone
@@ -343,8 +351,8 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
             const { error: roleError } = await supabaseAdmin.from('user_roles').upsert(
               {
                 user_id: userId,
-                role,
-                is_active: status === 'active',
+                role: globalRole,
+                is_active: globalStatus === 'active',
                 updated_at: nowIso,
               },
               { onConflict: 'user_id' }
@@ -373,7 +381,7 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
                   redirectTo: siteUrl('/auth/callback?next=/auth/reset-password'),
                 },
               })
-              inviteLink = (linkData as any)?.properties?.action_link ?? null
+              inviteLink = linkData?.properties?.action_link ?? null
 
               // Send email automatically if we have a link
               if (inviteLink) {
@@ -405,8 +413,12 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
           }
 
           results.push({ email, ok: true, invite_link: inviteLink })
-        } catch (e: any) {
-          results.push({ email, ok: false, error: e?.message || 'Unknown error' })
+        } catch (error: unknown) {
+          results.push({
+            email,
+            ok: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })
         }
       }
     } else {
@@ -488,8 +500,12 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
 
           // In fallback mode, signUp sends a confirmation email automatically
           results.push({ email, ok: true, invite_link: null })
-        } catch (e: any) {
-          results.push({ email, ok: false, error: e?.message || 'Unknown error' })
+        } catch (error: unknown) {
+          results.push({
+            email,
+            ok: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })
         }
       }
     }
@@ -524,9 +540,10 @@ async function handler(req: NextRequest, context: { user: { id: string; email?: 
     })
 
     return NextResponse.json({ ok: true, imported: okCount, failed: errorCount, results })
-  } catch (e: any) {
-    logger.error('User import error', { error: e?.message })
-    return NextResponse.json({ ok: false, error: e?.message || 'Unexpected error' }, { status: 500 })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unexpected error'
+    logger.error('User import error', { error: message })
+    return NextResponse.json({ ok: false, error: message }, { status: 500 })
   }
 }
 

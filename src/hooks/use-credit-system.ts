@@ -11,6 +11,8 @@ import { formatCurrency } from '@/lib/currency'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders } from '@/lib/branches/client'
 
 // Interfaces sincronizadas con Supabase
 export interface CreditInfo {
@@ -214,6 +216,7 @@ const mockCreditSales: CreditSale[] = [
 ]
 
 export function useCreditSystem(): UseCreditSystemReturn {
+  const { selectedBranchId } = useBranch()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -404,14 +407,39 @@ export function useCreditSystem(): UseCreditSystemReturn {
         return false
       }
 
-      // 2. Insertar pagos (Los triggers de BD deberían actualizar estados)
-      const { error: paymentError } = await supabase
-        .from('credit_payments')
-        .insert(paymentsToInsert)
+      // Cada cuota se registra mediante el endpoint transaccional. La base
+      // bloquea la cuota y asocia el efectivo a la caja de la sucursal activa.
+      let appliedTotal = 0
+      for (const payment of paymentsToInsert) {
+        const response = await fetch('/api/credits', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...branchHeaders(selectedBranchId),
+          },
+          body: JSON.stringify({
+            installmentId: payment.installment_id,
+            amount: payment.amount,
+            method: payment.payment_method,
+            notes: payment.notes,
+            branchId: selectedBranchId,
+          }),
+        })
+        const payload = await response.json() as {
+          success?: boolean
+          error?: string
+          data?: { appliedAmount?: number }
+        }
 
-      if (paymentError) {
-        console.error('Error recording payments:', paymentError)
-        throw new Error('Error al registrar los pagos en base de datos')
+        if (!response.ok || !payload.success) {
+          await loadCreditData(customerId)
+          const partial = appliedTotal > 0
+            ? ` Se aplicaron ${formatCurrency(appliedTotal)} antes del error.`
+            : ''
+          throw new Error((payload.error || 'Error al registrar el pago.') + partial)
+        }
+
+        appliedTotal += Number(payload.data?.appliedAmount || 0)
       }
 
       if (remainingPayment > 0) {
@@ -430,7 +458,7 @@ export function useCreditSystem(): UseCreditSystemReturn {
       toast.error(message)
       return false
     }
-  }, [credits, installments, loadCreditData, supabase])
+  }, [credits, installments, loadCreditData, selectedBranchId])
 
   // Obtener resumen de crédito del cliente (SINCRONIZADO)
   const getCreditSummary = useCallback((customer: Customer): CreditSummary => {

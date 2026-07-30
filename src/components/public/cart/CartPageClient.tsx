@@ -115,9 +115,12 @@ export function CartPageClient({
   productsHref: string
   trackHref: string
 }) {
+  const customerLoginHref = organizationSlug
+    ? `/${organizationSlug}/cliente/login?next=${encodeURIComponent(`/${organizationSlug}/carrito`)}`
+    : '/login?redirect=/carrito'
   const { toast } = useToast()
   const { user, loading: loadingAuth, refreshUser } = useAuth()
-  const { items, subtotal, setQuantity, removeItem, clear } = usePublicCart()
+  const { items, subtotal, setQuantity, setAvailableStock, removeItem, clear } = usePublicCart()
   const { settings: siteSettings } = useWebsiteSettings()
   const checkout = siteSettings?.checkout ?? getWebsiteSettingsDefaults().checkout
   const transferOptions = checkout.payment.transfer.transferOptions ?? []
@@ -304,6 +307,13 @@ export function CartPageClient({
 
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || payload?.success === false) {
+        if (payload?.code === 'STOCK_CHANGED' && Array.isArray(payload?.data?.conflicts)) {
+          for (const conflict of payload.data.conflicts) {
+            if (typeof conflict?.productId === 'string') {
+              setAvailableStock(conflict.productId, Number(conflict.available || 0))
+            }
+          }
+        }
         throw new Error(payload?.error || 'No se pudo crear el pedido.')
       }
 
@@ -425,7 +435,7 @@ export function CartPageClient({
               ) : (
                 <>
                   <LogIn className="h-4 w-4 shrink-0" />
-                  <span>¿Tenés cuenta? <Link href="/login" className="font-semibold text-primary hover:underline">Iniciá sesión</Link> para pre-cargar tus datos.</span>
+                  <span>¿Tenés cuenta? <Link href={customerLoginHref} className="font-semibold text-primary hover:underline">Iniciá sesión</Link> para pre-cargar tus datos.</span>
                 </>
               )}
             </div>
@@ -462,15 +472,33 @@ export function CartPageClient({
                         <p className="text-xs text-muted-foreground">{item.sku || 'Sin SKU'} · {formatMoney(item.unitPrice)} c/u</p>
                         <div className="mt-2.5 flex w-fit items-center rounded-xl border bg-muted/40">
                           <Button variant="ghost" size="icon" className="h-7 w-7 rounded-l-xl"
-                            onClick={() => setQuantity(item.productId, item.quantity - 1)}>
+                            onClick={() => setQuantity(item.productId, item.quantity - 1)}
+                            aria-label={`Quitar una unidad de ${item.name}`}>
                             <Minus className="h-3 w-3" />
                           </Button>
                           <span className="min-w-7 text-center text-xs font-bold">{item.quantity}</span>
                           <Button variant="ghost" size="icon" className="h-7 w-7 rounded-r-xl"
-                            onClick={() => setQuantity(item.productId, item.quantity + 1)}>
+                            onClick={() => setQuantity(item.productId, item.quantity + 1)}
+                            disabled={item.availableStock != null && item.quantity >= item.availableStock}
+                            aria-label={`Agregar una unidad de ${item.name}`}
+                            title={item.availableStock != null && item.quantity >= item.availableStock
+                              ? `Máximo disponible: ${item.availableStock}`
+                              : undefined}>
                             <Plus className="h-3 w-3" />
                           </Button>
                         </div>
+                        {item.availableStock != null && (
+                          <p className={cn(
+                            'mt-1 text-[11px]',
+                            item.quantity >= item.availableStock
+                              ? 'font-medium text-amber-700 dark:text-amber-300'
+                              : 'text-muted-foreground'
+                          )}>
+                            {item.quantity >= item.availableStock
+                              ? `Máximo disponible: ${item.availableStock}`
+                              : `${item.availableStock} disponibles`}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
                         <strong className="font-black tabular-nums">{formatMoney(item.quantity * item.unitPrice)}</strong>

@@ -6,7 +6,6 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { canTransitionOrderStatus, normalizeOrderStatus } from '@/lib/orders/flow'
 import { normalizeOrder } from '@/lib/orders/helpers'
-import { releaseReservedStock } from '@/lib/orders/stock'
 
 const statusSchema = z.object({
   status: z.enum(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED', 'CANCELLED']),
@@ -52,26 +51,29 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
       }, { status: 409 })
     }
 
-    let shouldReleaseStock = false
     if (status === 'CANCELLED' && currentStatus !== 'CANCELLED') {
-      const { data: stockData, error: stockError } = await supabase
+      const adminSupabase = createAdminSupabase()
+      const { error: cancellationError } = await adminSupabase.rpc(
+        'cancel_customer_order_atomic',
+        {
+          p_organization_id: organization.id,
+          p_order_id: id,
+          p_actor_id: user.id,
+          p_note: validation.data.note || null,
+        }
+      )
+
+      if (cancellationError) throw cancellationError
+
+      const { data: cancelledOrder, error: cancelledOrderError } = await supabase
         .from('customer_orders')
-        .select('stock_reserved, branch_id, order_items:customer_order_items(product_id, product_name, quantity)')
+        .select('*, order_items:customer_order_items(*)')
         .eq('id', id)
         .eq('organization_id', organization.id)
-        .maybeSingle()
+        .single()
 
-      if (stockError) {
-        logger.warn('Order stock reservation lookup failed during cancellation', { error: stockError, orderId: id })
-      } else if (stockData?.stock_reserved) {
-        await releaseReservedStock(
-          createAdminSupabase(),
-          organization.id,
-          stockData.order_items ?? [],
-          stockData.branch_id
-        )
-        shouldReleaseStock = true
-      }
+      if (cancelledOrderError) throw cancelledOrderError
+      return NextResponse.json({ success: true, data: normalizeOrder(cancelledOrder) })
     }
 
     const now = new Date().toISOString()
@@ -79,16 +81,11 @@ export const PATCH = withTenantAuth({ permission: 'ecommerce.orders.manage' }, a
     if (status === 'DELIVERED' && currentStatus !== 'DELIVERED') {
       terminalDates.delivered_at = now
     }
-    if (status === 'CANCELLED' && currentStatus !== 'CANCELLED') {
-      terminalDates.cancelled_at = now
-    }
-
     const { data, error } = await supabase
       .from('customer_orders')
       .update({
         status,
         ...terminalDates,
-        ...(shouldReleaseStock ? { stock_reserved: false } : {}),
         updated_at: now,
       })
       .eq('id', id)

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
+import { createClient } from '@/lib/supabase/server'
+import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 
 const CREDIT_ALLOWED_ROLES = new Set(['owner', 'admin', 'manager', 'seller'])
 
@@ -167,6 +169,7 @@ type RegisterCreditPaymentBody = {
   method?: unknown
   amount?: unknown
   notes?: unknown
+  branchId?: unknown
 }
 
 export const POST = withTenantAuth({ permission: 'crm.customers.manage', module: 'credits' }, async (request, { organization, user }) => {
@@ -193,108 +196,49 @@ export const POST = withTenantAuth({ permission: 'crm.customers.manage', module:
       return NextResponse.json({ success: false, error: 'Metodo de pago invalido.' }, { status: 400 })
     }
 
-    const supabase = createAdminSupabase()
-    const { data: installment, error: installmentError } = await supabase
-      .from('credit_installments')
-      .select('id, credit_id, installment_number, amount, amount_paid, status')
-      .eq('id', installmentId)
-      .maybeSingle()
+    const branch = await resolveBranchScopeForUser({
+      userId: user.id,
+      role: user.role as Parameters<typeof resolveBranchScopeForUser>[0]['role'],
+      requestedBranchId: getRequestedBranchId(request, body.branchId),
+      organizationId: organization.id,
+      strict: true,
+    })
 
-    if (installmentError) {
-      throw installmentError
+    if (method === 'cash' && !branch.branchId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Selecciona una sucursal y abri una caja para registrar pagos en efectivo.',
+      }, { status: 400 })
     }
 
-    if (!installment) {
-      return NextResponse.json({ success: false, error: 'La cuota no existe.' }, { status: 404 })
+    const supabase = await createClient()
+    const { data, error } = await supabase.rpc('register_credit_payment_atomic', {
+      p_organization_id: organization.id,
+      p_branch_id: branch.branchId,
+      p_installment_id: installmentId,
+      p_amount: requestedAmount,
+      p_method: method,
+      p_notes: notes,
+    })
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
     }
 
-    const { data: credit, error: creditError } = await supabase
-      .from('credit_details')
-      .select('id, customer_name, organization_id')
-      .eq('id', installment.credit_id)
-      .eq('organization_id', organization.id)
-      .maybeSingle()
-
-    if (creditError) {
-      throw creditError
-    }
-
-    if (!credit) {
-      return NextResponse.json({ success: false, error: 'La cuota no pertenece a tu organización.' }, { status: 404 })
-    }
-
-    const baseAmount = Math.max(0, Number(installment.amount || 0))
-    const currentPaid = Math.min(baseAmount, Math.max(0, Number(installment.amount_paid || 0)))
-    const outstanding = Math.max(0, baseAmount - currentPaid)
-
-    if (outstanding <= 0 || installment.status === 'paid') {
-      return NextResponse.json({ success: false, error: 'La cuota ya no tiene saldo pendiente.' }, { status: 400 })
-    }
-
-    const appliedAmount = Math.max(0, Math.min(requestedAmount, outstanding))
-
-    if (appliedAmount <= 0) {
-      return NextResponse.json({ success: false, error: 'No hay saldo disponible para aplicar.' }, { status: 400 })
-    }
-
-    const { error: paymentError } = await supabase
-      .from('credit_payments')
-      .insert({
-        credit_id: installment.credit_id,
-        installment_id: installmentId,
-        amount: appliedAmount,
-        payment_method: method,
-        notes,
-      })
-
-    if (paymentError) {
-      throw paymentError
-    }
-
-    try {
-      // Scopeado por organización: el cliente admin bypasea RLS, y sin este
-      // filtro el movimiento podía engancharse a la caja abierta de OTRA
-      // organización (cualquier sesión "principal" de todo el sistema).
-      const { data: openSessions } = await supabase
-        .from('cash_closures')
-        .select('id, register_id')
-        .eq('organization_id', organization.id)
-        .is('date', null)
-        .order('created_at', { ascending: false })
-
-      const targetSession = (openSessions || []).find(
-        (session) => session.register_id?.toLowerCase() === 'principal'
-      ) || (openSessions || [])[0]
-
-      if (targetSession) {
-        const reason = `Cobro cuota crédito${credit.customer_name ? ` - ${credit.customer_name}` : ''}${notes ? ` (${notes})` : ''}`
-
-        await supabase.from('cash_movements').insert({
-          session_id: targetSession.id,
-          type: 'cash_in',
-          amount: appliedAmount,
-          reason,
-          payment_method: method,
-          created_by: user.id,
-          created_at: new Date().toISOString(),
-          organization_id: organization.id,
-        })
-      }
-    } catch (cashError) {
-      logger.warn('Credit payment cash movement could not be recorded', {
-        error: cashError,
-        installmentId,
-        organizationId: organization.id,
-      })
-    }
+    const result = data as {
+      installment_id?: string
+      credit_id?: string
+      installment_number?: number
+      applied_amount?: number
+    } | null
 
     return NextResponse.json({
       success: true,
       data: {
-        installmentId,
-        creditId: installment.credit_id,
-        installmentNumber: installment.installment_number,
-        appliedAmount,
+        installmentId: result?.installment_id ?? installmentId,
+        creditId: result?.credit_id,
+        installmentNumber: result?.installment_number,
+        appliedAmount: Number(result?.applied_amount || 0),
       },
     })
   } catch (error) {

@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, CreditCard } from 'lucide-react'
+import { AlertTriangle, CreditCard, QrCode } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { PagoparPaymentMethodSelector } from '@/components/admin/subscriptions/PagoparPaymentMethodSelector'
+import type { PagoparPaymentMethod } from '@/lib/payments/pagopar'
 
 type PagoparPaymentButtonProps = {
   missingFields?: string[]
@@ -14,6 +16,7 @@ type PagoparPaymentButtonProps = {
 export function PagoparPaymentButton({ missingFields = [], isPaidPlan, planName, planAmount }: PagoparPaymentButtonProps) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [message, setMessage] = useState<string | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<PagoparPaymentMethod>('card')
 
   if (!isPaidPlan) return null
 
@@ -27,26 +30,43 @@ export function PagoparPaymentButton({ missingFields = [], isPaidPlan, planName,
     setStatus('loading')
     setMessage(null)
 
-    const response = await fetch('/api/admin/subscriptions/payments/pagopar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    })
-    const payload = await response.json().catch(() => null) as { checkoutUrl?: string; error?: string } | null
+    try {
+      const response = await fetch('/api/admin/subscriptions/payments/pagopar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentMethod }),
+      })
+      const payload = await response.json().catch(() => null) as { checkoutUrl?: string; error?: string } | null
 
-    if (!response.ok || !payload?.checkoutUrl) {
+      if (!response.ok || !payload?.checkoutUrl) {
+        setStatus('error')
+        setMessage(payload?.error || 'No se pudo iniciar el pago con Pagopar.')
+        return
+      }
+
+      window.location.assign(payload.checkoutUrl)
+    } catch {
       setStatus('error')
-      setMessage(payload?.error || 'No se pudo iniciar el pago con Pagopar.')
-      return
+      setMessage('No se pudo conectar con Pagopar. Intentá nuevamente.')
     }
-
-    window.location.href = payload.checkoutUrl
   }
 
+  const PaymentIcon = paymentMethod === 'qr' ? QrCode : CreditCard
+
   return (
-    <div className="space-y-2">
-      <Button type="button" onClick={startPayment} disabled={status === 'loading'} className="gap-2">
-        <CreditCard className="h-4 w-4" />
-        {status === 'loading' ? 'Conectando con Pagopar...' : 'Pagar con Pagopar'}
+    <div className="w-full max-w-sm space-y-3">
+      <PagoparPaymentMethodSelector
+        value={paymentMethod}
+        onChange={setPaymentMethod}
+        disabled={status === 'loading'}
+      />
+      <Button type="button" onClick={startPayment} disabled={status === 'loading'} className="w-full gap-2">
+        <PaymentIcon className="h-4 w-4" />
+        {status === 'loading'
+          ? 'Conectando con Pagopar...'
+          : paymentMethod === 'qr'
+            ? 'Pagar con QR'
+            : 'Pagar con tarjeta'}
       </Button>
       <p className="text-xs text-muted-foreground">{planName} · {planAmount}/mes</p>
       {missingFields.length > 0 && (

@@ -17,14 +17,38 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     
     const query = searchParams.get('query')
     const categoryId = searchParams.get('category_id')
+    const supplierId = searchParams.get('supplier_id')
     const brand = searchParams.get('brand')
-    const inStock = searchParams.get('in_stock') === 'true'
+    const requestedStockStatus = searchParams.get('stock_status')
+    const stockStatus = requestedStockStatus === 'low_stock' || requestedStockStatus === 'out_of_stock'
+      ? requestedStockStatus
+      : searchParams.get('in_stock') === 'true' || requestedStockStatus === 'in_stock'
+        ? 'in_stock'
+        : 'all'
+    const priceMinParam = searchParams.get('price_min')
+    const priceMaxParam = searchParams.get('price_max')
+    const priceMin = priceMinParam === null ? null : Number(priceMinParam)
+    const priceMax = priceMaxParam === null ? null : Number(priceMaxParam)
+    const isActive = searchParams.get('is_active')
+    const featured = searchParams.get('featured')
+    const requestedSort = searchParams.get('sort') || 'name'
+    const sortColumns: Record<string, string> = {
+      name: 'name',
+      sku: 'sku',
+      category: 'category_id',
+      price: 'sale_price',
+      stock: 'stock_quantity',
+      supplier: 'supplier_id',
+      margin: 'sale_price',
+      created_at: 'created_at',
+    }
+    const sortColumn = sortColumns[requestedSort] || 'name'
+    const sortAscending = searchParams.get('direction') !== 'desc'
     const strictBranchStock = searchParams.get('strict_branch_stock') === 'true'
-    const page = parseInt(searchParams.get('page') || '1')
-    const perPage = parseInt(searchParams.get('per_page') || '50')
+    const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1)
+    const perPage = Math.min(100, Math.max(1, Number.parseInt(searchParams.get('per_page') || '50', 10) || 50))
     const requestedBranchId = getRequestedBranchId(request)
     
-    const supabase = await createClient()
     const branchScope = await resolveBranchScopeForUser({
       userId: user.id,
       role: user.role as AppRole | undefined,
@@ -32,39 +56,77 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       organizationId: organization.id,
       strict: Boolean(requestedBranchId),
     })
+    // Authentication, permission and tenant scope were resolved above. Use the
+    // server client for a stable read contract instead of depending on browser
+    // RLS policies that can drift from the dashboard permission model.
+    const supabase = createAdminSupabase()
     
     // Build query
     let queryBuilder = supabase
       .from('products')
-      .select('*, category:categories(id, name)', { count: 'exact' })
+      .select(`
+        *,
+        category:categories(id, name, description),
+        supplier:suppliers(id, name, contact_name, phone, address)
+      `, { count: 'exact' })
       .eq('organization_id', organization.id)
     
     // Apply filters
     if (query) {
+      const safeQuery = query.replace(/[,%()]/g, ' ').trim()
       queryBuilder = queryBuilder.or(
-        `name.ilike.%${query}%,sku.ilike.%${query}%,description.ilike.%${query}%,brand.ilike.%${query}%`
+        `name.ilike.%${safeQuery}%,sku.ilike.%${safeQuery}%,description.ilike.%${safeQuery}%,brand.ilike.%${safeQuery}%`
       )
     }
     
     if (categoryId) {
       queryBuilder = queryBuilder.eq('category_id', categoryId)
     }
+
+    if (supplierId) {
+      queryBuilder = queryBuilder.eq('supplier_id', supplierId)
+    }
     
     if (brand) {
       queryBuilder = queryBuilder.ilike('brand', brand)
     }
-    
-    if (inStock && !branchScope.branchId) {
+
+    if (priceMin !== null && Number.isFinite(priceMin)) {
+      queryBuilder = queryBuilder.gte('sale_price', priceMin)
+    }
+
+    if (priceMax !== null && Number.isFinite(priceMax)) {
+      queryBuilder = queryBuilder.lte('sale_price', priceMax)
+    }
+
+    if (isActive === 'true' || isActive === 'false') {
+      queryBuilder = queryBuilder.eq('is_active', isActive === 'true')
+    }
+
+    if (featured === 'true' || featured === 'false') {
+      queryBuilder = queryBuilder.eq('featured', featured === 'true')
+    }
+
+    if (stockStatus === 'in_stock' && !branchScope.branchId) {
+      queryBuilder = queryBuilder.gt('stock_quantity', 0)
+    } else if (stockStatus === 'out_of_stock' && !branchScope.branchId) {
+      queryBuilder = queryBuilder.eq('stock_quantity', 0)
+    } else if (stockStatus === 'low_stock' && !branchScope.branchId) {
       queryBuilder = queryBuilder.gt('stock_quantity', 0)
     }
     
-    // Apply pagination
     const from = (page - 1) * perPage
     const to = from + perPage - 1
-    
+    const needsInMemoryPagination =
+      stockStatus === 'low_stock' ||
+      (Boolean(branchScope.branchId) && stockStatus !== 'all')
+
+    queryBuilder = queryBuilder.order(sortColumn, { ascending: sortAscending })
+    if (!needsInMemoryPagination) {
+      queryBuilder = queryBuilder.range(from, to)
+    }
+
     const { data: products, error, count } = await queryBuilder
-      .range(from, to)
-      .order('name', { ascending: true })
     
     if (error) {
       logger.error('Failed to fetch products', { error: error.message, code: error.code })
@@ -88,9 +150,19 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
           }
         })
       : applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped)
-    const filteredProducts = inStock
-      ? branchAwareProducts.filter((product) => Number(product.stock_quantity || 0) > 0)
-      : branchAwareProducts
+    const stockFilteredProducts = branchAwareProducts.filter((product) => {
+      const stock = Number(product.stock_quantity || 0)
+      if (stockStatus === 'in_stock') return stock > 0
+      if (stockStatus === 'out_of_stock') return stock <= 0
+      if (stockStatus === 'low_stock') {
+        return stock > 0 && stock <= Number(product.min_stock || 0)
+      }
+      return true
+    })
+    const filteredProducts = needsInMemoryPagination
+      ? stockFilteredProducts.slice(from, to + 1)
+      : stockFilteredProducts
+    const filteredTotal = needsInMemoryPagination ? stockFilteredProducts.length : (count || 0)
 
     // Ocultar el costo (purchase_price) a quien no sea admin/super_admin ni
     // tenga el permiso específico products.read_cost.
@@ -113,7 +185,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
       success: true,
       data: {
         products: visibleProducts,
-        total: branchScoped && inStock ? filteredProducts.length : (count || 0),
+        total: filteredTotal,
         page,
         per_page: perPage
       }

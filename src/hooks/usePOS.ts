@@ -288,11 +288,13 @@ export function usePOS() {
                 reference_number: payment.reference,
                 status: 'completed'
             }))
+            const idempotencyKey = crypto.randomUUID()
 
             const response = await fetch('/api/pos/process-sale', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'x-idempotency-key': idempotencyKey,
                     ...branchHeaders(selectedBranchId),
                 },
                 body: JSON.stringify({

@@ -113,7 +113,7 @@ function normalizeImages(images: unknown[], repairId: string) {
 
 export async function PATCH(request: NextRequest, context: RouteParams) {
   try {
-    const ctx = await resolveRepairRouteContext(request)
+    const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
     if (isNextResponse(ctx)) return ctx
 
     const { id } = await context.params
@@ -224,7 +224,7 @@ export async function PATCH(request: NextRequest, context: RouteParams) {
 
 export async function DELETE(request: NextRequest, context: RouteParams) {
   try {
-    const ctx = await resolveRepairRouteContext(request)
+    const ctx = await resolveRepairRouteContext(request, 'repairs.orders.update')
     if (isNextResponse(ctx)) return ctx
 
     const { id } = await context.params
@@ -267,4 +267,3 @@ export async function DELETE(request: NextRequest, context: RouteParams) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
-

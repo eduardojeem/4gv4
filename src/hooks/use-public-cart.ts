@@ -5,9 +5,11 @@ import { usePathname } from 'next/navigation'
 import {
   PUBLIC_CART_EVENT,
   addPublicProductToCart,
+  clampPublicCartQuantity,
   clearPublicCart,
   getPublicCartItems,
   getTenantSlugFromPathname,
+  setPublicCartItemStock,
   setPublicCartItems,
   type PublicCartItem,
 } from '@/lib/public-cart'
@@ -40,9 +42,15 @@ export function usePublicCart() {
 
   const setQuantity = useCallback((productId: string, quantity: number) => {
     const next = getPublicCartItems(tenantSlug)
-      .map((item) => item.productId === productId ? { ...item, quantity: Math.max(0, Math.min(999, quantity)) } : item)
+      .map((item) => item.productId === productId
+        ? { ...item, quantity: clampPublicCartQuantity(quantity, item.availableStock) }
+        : item)
       .filter((item) => item.quantity > 0)
     setPublicCartItems(tenantSlug, next)
+  }, [tenantSlug])
+
+  const setAvailableStock = useCallback((productId: string, availableStock: number) => {
+    return setPublicCartItemStock(tenantSlug, productId, availableStock)
   }, [tenantSlug])
 
   const removeItem = useCallback((productId: string) => {
@@ -55,5 +63,5 @@ export function usePublicCart() {
     return addPublicProductToCart({ tenantSlug, product, unitPrice, quantity })
   }, [tenantSlug])
 
-  return { tenantSlug, items, count, subtotal, addProduct, setQuantity, removeItem, clear }
+  return { tenantSlug, items, count, subtotal, addProduct, setQuantity, setAvailableStock, removeItem, clear }
 }

@@ -18,38 +18,35 @@ import { useAuth } from '@/contexts/auth-context'
 import { useDashboardLayout } from '@/contexts/DashboardLayoutContext'
 import { Button } from '@/components/ui/button'
 import type { LucideIcon } from 'lucide-react'
+import { canRoleAccessSection } from '@/lib/auth/section-access'
 
 type NavItem = {
   name: string
   href: string
   icon: LucideIcon
-  roles: Array<'admin' | 'vendedor' | 'tecnico'>
 }
 
 const MOBILE_NAV_ITEMS: NavItem[] = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'vendedor', 'tecnico'] },
-  { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart, roles: ['admin', 'vendedor'] },
-  { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag, roles: ['admin', 'vendedor'] },
-  { name: 'Productos', href: '/dashboard/products', icon: Package, roles: ['admin', 'vendedor'] },
-  { name: 'Clientes', href: '/dashboard/customers', icon: Users, roles: ['admin', 'vendedor'] },
-  { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench, roles: ['admin', 'vendedor', 'tecnico'] },
-  { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3, roles: ['admin', 'vendedor'] },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart },
+  { name: 'Pedidos', href: '/dashboard/orders', icon: ShoppingBag },
+  { name: 'Productos', href: '/dashboard/products', icon: Package },
+  { name: 'Clientes', href: '/dashboard/customers', icon: Users },
+  { name: 'Reparaciones', href: '/dashboard/repairs', icon: Wrench },
+  { name: 'Reportes', href: '/dashboard/reports', icon: BarChart3 },
 ]
 
 export const MobileNav = memo(function MobileNav() {
   const pathname = usePathname()
   const { user } = useAuth()
   const { toggleSidebar } = useDashboardLayout()
-  const userRole = (user?.role || 'vendedor') as 'admin' | 'vendedor' | 'tecnico'
-
-  // Development mode check
-  const isDev = process.env.NODE_ENV === 'development'
+  const userRole = user?.role
 
   const filteredItems = useMemo(() => {
-    return MOBILE_NAV_ITEMS.filter(item => 
-      isDev ? true : item.roles.includes(userRole)
-    ).slice(0, 5) // Show max 5 items + menu button
-  }, [userRole, isDev])
+    return MOBILE_NAV_ITEMS
+      .filter((item) => canRoleAccessSection(userRole, item.href))
+      .slice(0, 5)
+  }, [userRole])
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden border-t border-border bg-background/95 backdrop-blur-sm supports-backdrop-filter:bg-background/80 shadow-lg">

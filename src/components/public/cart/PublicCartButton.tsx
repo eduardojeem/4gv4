@@ -16,6 +16,13 @@ export function PublicCartButton() {
   // Bump animation whenever a new item is added
   const prevCount = useRef(count)
   const [bump, setBump] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    // Keep the server and first client render identical even when SWR is warm.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (count > prevCount.current) {
@@ -28,7 +35,7 @@ export function PublicCartButton() {
     prevCount.current = count
   }, [count])
 
-  if (isLoading || (settings && settings.checkout.commerceMode !== 'cart')) {
+  if (!mounted || isLoading || (settings && settings.checkout.commerceMode !== 'cart')) {
     return null
   }
 
@@ -41,7 +48,7 @@ export function PublicCartButton() {
         bump && 'scale-110'
       )}
       onClick={open}
-      aria-label={`Abrir carrito${count > 0 ? ` — ${count} producto${count !== 1 ? 's' : ''}` : ''}`}
+      aria-label={`Abrir carrito${count > 0 ? ` — ${count} unidad${count !== 1 ? 'es' : ''}` : ''}`}
     >
       <ShoppingCart className={cn('h-4 w-4 transition-transform duration-150', bump && 'scale-125')} />
       <span className="hidden sm:inline">Carrito</span>

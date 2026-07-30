@@ -14,7 +14,7 @@ import { getPasswordChecks, sanitizeRedirectPath, validatePassword } from '@/lib
 function MarketplaceCustomerRegisterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = sanitizeRedirectPath(searchParams.get('redirect')) || '/marketplace'
+  const redirectTo = sanitizeRedirectPath(searchParams.get('redirect'), '/marketplace')
   const loginHref = `/login?redirect=${encodeURIComponent(redirectTo)}`
 
   const [showPassword, setShowPassword] = useState(false)

@@ -477,11 +477,10 @@ export function CustomerCreditHistory({ customer, onClose, compact = false }: Cu
                   <SelectItem value="cash">Efectivo</SelectItem>
                   <SelectItem value="card">Tarjeta</SelectItem>
                   <SelectItem value="transfer">Transferencia</SelectItem>
-                  <SelectItem value="check">Cheque</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {(paymentMethod === 'transfer' || paymentMethod === 'check') && (
+            {paymentMethod === 'transfer' && (
               <div>
                 <Label htmlFor="reference">Referencia</Label>
                 <Input

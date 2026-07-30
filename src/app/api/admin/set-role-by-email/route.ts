@@ -1,18 +1,10 @@
 ﻿import { NextResponse } from 'next/server'
 import { createAdminSupabase, mapUiRoleToDbRole } from '@/lib/supabase/admin'
-import { requireAdmin, getAuthResponse } from '@/lib/auth/require-auth'
+import { withSuperAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { isValidEmail } from '@/lib/auth/password-validation'
 
-export async function POST(request: Request) {
+async function handler(request: Request, context: AdminAuthContext) {
   try {
-    // Solo un admin puede cambiar roles por email
-    const auth = await requireAdmin()
-    const authResponse = getAuthResponse(auth)
-    if (authResponse) return authResponse
-    if (!auth.authenticated) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const body = await request.json().catch(() => ({}))
     const email = typeof body?.email === 'string' ? body.email.trim() : ''
     const uiRole = (typeof body?.role === 'string' ? body.role : 'cliente')
@@ -57,10 +49,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Rol invalido: ${uiRole}` }, { status: 400 })
     }
 
-    if (dbRole === 'super_admin' && auth.role !== 'super_admin') {
-      return NextResponse.json({ error: 'No tienes permisos para asignar super_admin' }, { status: 403 })
-    }
-
     const { error: upsertError } = await admin
       .from('user_roles')
       .upsert({ user_id: targetUser.id, role: dbRole })
@@ -76,7 +64,7 @@ export async function POST(request: Request) {
 
     // Audit log
     await admin.from('audit_log').insert({
-      user_id: auth.user.id,
+      user_id: context.user.id,
       action: 'assign_role_by_email',
       resource_type: 'user',
       resource_id: targetUser.id,
@@ -84,7 +72,7 @@ export async function POST(request: Request) {
         email,
         ui_role: uiRole,
         db_role: dbRole,
-        assigned_by: auth.user.email,
+        assigned_by: context.user.email,
       },
     })
 
@@ -98,3 +86,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
+
+export const POST = withSuperAdminAuth(handler)

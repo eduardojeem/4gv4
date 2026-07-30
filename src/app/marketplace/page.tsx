@@ -60,7 +60,7 @@ export default async function MarketplacePage() {
   const totalProducts = organizations.reduce((s, o) => s + o.products_count, 0)
 
   return (
-    <main>
+    <div>
       {/* ── Hero ── */}
       <section className="relative overflow-hidden border-b border-slate-200 dark:border-slate-800">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_-5%,rgba(6,182,212,0.13),transparent)] dark:bg-[radial-gradient(ellipse_80%_55%_at_50%_-5%,rgba(6,182,212,0.07),transparent)]" />
@@ -240,6 +240,6 @@ export default async function MarketplacePage() {
           organizations={organizations.filter((o) => o.featured_products.length > 0).slice(0, 3)}
         />
       )}
-    </main>
+    </div>
   )
 }

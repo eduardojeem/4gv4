@@ -162,7 +162,8 @@ export async function POST(request: NextRequest) {
         reviewer_email: reviewer_email?.toLowerCase() || null,
         rating,
         comment: comment || null,
-        is_approved: true, // Aprobación automática para transparencia
+        is_approved: false,
+        is_visible: true,
       })
       .select('id, created_at')
       .single()

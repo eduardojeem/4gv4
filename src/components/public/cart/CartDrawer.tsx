@@ -157,6 +157,7 @@ export function CartDrawer() {
                             type="button"
                             onClick={() => setQuantity(item.productId, item.quantity - 1)}
                             className="flex h-8 w-8 items-center justify-center rounded-l-full text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-foreground"
+                            aria-label={`Quitar una unidad de ${item.name}`}
                           >
                             <Minus className="h-3.5 w-3.5" />
                           </button>
@@ -167,10 +168,22 @@ export function CartDrawer() {
                             type="button"
                             onClick={() => setQuantity(item.productId, item.quantity + 1)}
                             className="flex h-8 w-8 items-center justify-center rounded-r-full text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-foreground"
+                            disabled={item.availableStock != null && item.quantity >= item.availableStock}
+                            aria-label={`Agregar una unidad de ${item.name}`}
+                            title={item.availableStock != null && item.quantity >= item.availableStock
+                              ? `Máximo disponible: ${item.availableStock}`
+                              : undefined}
                           >
                             <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>
+                        {item.availableStock != null && (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {item.quantity >= item.availableStock
+                              ? `Máximo disponible: ${item.availableStock}`
+                              : `${item.availableStock} disponibles`}
+                          </p>
+                        )}
 
                         {/* Line total */}
                         <span className="text-sm font-bold text-slate-900 dark:text-white">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { logger } from '@/lib/logger'
-import { resolvePublicOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
+import { resolvePublicStorefrontOrganization, toPublicOrganizationPayload } from '@/lib/saas/public-tenant'
 
 type PublicCategoryNode = {
   id: string
@@ -19,7 +19,7 @@ type PublicCategoryNode = {
 export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminSupabase()
-    const organization = await resolvePublicOrganization(request, supabase)
+    const organization = await resolvePublicStorefrontOrganization(request, supabase)
 
     if (!organization) {
       return NextResponse.json(

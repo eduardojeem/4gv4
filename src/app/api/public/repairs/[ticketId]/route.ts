@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { verifyPublicToken, extractBearerToken } from '@/lib/public-session'
+import {
+  extractBearerToken,
+  isPublicRepairSessionAuthorized,
+  verifyPublicToken,
+} from '@/lib/public-session'
 import { verifyRepairHash } from '@/lib/repair-qr'
 import { PublicRepair } from '@/types/public'
 import { logger } from '@/lib/logger'
-import { LRUCache } from '@/lib/cache'
 import { resolvePublicOrganizationBySlug } from '@/lib/saas/public-tenant'
-
-// Cache for repair details - 100 entries, 5 minute TTL
-const repairCache = new LRUCache<PublicRepair>(100, 5 * 60 * 1000)
 
 /**
  * GET /api/public/repairs/[ticketId]
@@ -42,14 +42,13 @@ export async function GET(
       token = extractBearerToken(authHeader) || undefined
     }
 
-    let isTokenAuthorized = false
-    
-    if (token) {
-      const session = await verifyPublicToken(token)
-      if (session && session.ticketNumber === ticketId) {
-        isTokenAuthorized = true
-      }
-    }
+    const session = token ? await verifyPublicToken(token) : null
+    const hasMatchingTokenTicket = session?.ticketNumber === ticketId
+    const tokenMatchesRequestedOrganization =
+      !organization || session?.organizationId === organization.id
+    const hasAuthorizedTokenClaims = Boolean(
+      session && hasMatchingTokenTicket && tokenMatchesRequestedOrganization
+    )
 
     const supabase = await createClient()
     const { data: auth } = await supabase.auth.getUser()
@@ -68,26 +67,13 @@ export async function GET(
     }
 
     // 2. If not authenticated via token, QR hash, or tenant customer session, reject
-    if (!isTokenAuthorized && !verifyHash && !customerIdForUser) {
+    if ((!hasMatchingTokenTicket || !tokenMatchesRequestedOrganization) && !verifyHash && !customerIdForUser) {
       return NextResponse.json(
         { success: false, error: 'Token de autenticación requerido' },
         { status: 401 }
       )
     }
     
-    // Check cache (with lazy cleanup of expired entries)
-    if (isTokenAuthorized) {
-      repairCache.cleanup()
-      const cached = repairCache.get(`${organization?.id || 'public'}:${ticketId}`)
-      if (cached) {
-        return NextResponse.json({
-          success: true,
-          data: cached,
-          cached: true
-        })
-      }
-    }
-
     // Fetch repair data with specific fields only
     let repairQuery = supabase
       .from('repairs')
@@ -108,7 +94,8 @@ export async function GET(
         estimated_completion,
         completed_at,
         technician_id,
-        customer_id
+        customer_id,
+        organization_id
       `)
       .eq('ticket_number', ticketId)
 
@@ -116,7 +103,13 @@ export async function GET(
       repairQuery = repairQuery.eq('organization_id', organization.id)
     }
 
-    if (customerIdForUser && !isTokenAuthorized && !verifyHash) {
+    if (hasAuthorizedTokenClaims && session) {
+      repairQuery = repairQuery
+        .eq('id', session.repairId)
+        .eq('organization_id', session.organizationId)
+    }
+
+    if (customerIdForUser && !hasAuthorizedTokenClaims && !verifyHash) {
       repairQuery = repairQuery.eq('customer_id', customerIdForUser)
     }
 
@@ -127,6 +120,19 @@ export async function GET(
       return NextResponse.json(
         { success: false, error: 'Reparación no encontrada' },
         { status: 404 }
+      )
+    }
+
+    const isTokenAuthorized = isPublicRepairSessionAuthorized(session, {
+      repairId: repair.id,
+      ticketNumber: repair.ticket_number,
+      organizationId: repair.organization_id,
+    })
+
+    if (!isTokenAuthorized && !verifyHash && !customerIdForUser) {
+      return NextResponse.json(
+        { success: false, error: 'No autorizado' },
+        { status: 403 }
       )
     }
 
@@ -188,9 +194,6 @@ export async function GET(
       }
     }
     
-    // Cache the result
-    repairCache.set(`${organization?.id || 'public'}:${ticketId}`, publicRepair)
-    
     return NextResponse.json({
       success: true,
       data: publicRepair,
@@ -203,11 +206,4 @@ export async function GET(
       { status: 500 }
     )
   }
-}
-
-/**
- * Invalidate cache for a specific ticket (called when repair is updated)
- */
-export function invalidateRepairCache(ticketId: string, organizationId?: string) {
-  repairCache.delete(`${organizationId || 'public'}:${ticketId}`)
 }

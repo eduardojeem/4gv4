@@ -54,9 +54,13 @@ const DEFAULT_TRUST_BADGES = [
 ]
 
 function getTrustBadges(customBadges?: string[]) {
-  if (!customBadges || customBadges.length === 0) return DEFAULT_TRUST_BADGES
+  const labels = customBadges
+    ?.map((label) => label.trim())
+    .filter(Boolean)
+    .map((label) => /^garant[ií]a escrita$/i.test(label) ? 'Garantía escrita' : label) ?? []
+  if (labels.length === 0) return DEFAULT_TRUST_BADGES
   const icons = [CheckCircle, Star, Wrench]
-  return customBadges.map((label, i) => ({
+  return labels.map((label, i) => ({
     icon: icons[i % icons.length],
     label
   }))

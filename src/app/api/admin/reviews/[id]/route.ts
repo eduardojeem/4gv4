@@ -89,17 +89,26 @@ async function deleteHandler(
       )
     }
 
-    const { error } = await supabase
+    const { data: deletedReview, error } = await supabase
       .from('organization_reviews')
       .delete()
       .eq('id', id)
       .eq('organization_id', orgId)
+      .select('id')
+      .maybeSingle()
 
     if (error) {
       logger.error('[admin/reviews] Delete error', { error })
       return NextResponse.json(
         { success: false, error: 'No se pudo eliminar la reseña' },
         { status: 500 }
+      )
+    }
+
+    if (!deletedReview) {
+      return NextResponse.json(
+        { success: false, error: 'Reseña no encontrada' },
+        { status: 404 }
       )
     }
 

@@ -148,7 +148,8 @@ export async function POST(request: NextRequest) {
         estimated_completion,
         completed_at,
         technician_id,
-        customer_id
+        customer_id,
+        organization_id
       `)
       .eq('ticket_number', normalizedTicket)
 
@@ -261,6 +262,7 @@ export async function POST(request: NextRequest) {
     const token = await generatePublicToken({
       repairId: repair.id,
       ticketNumber: repair.ticket_number,
+      organizationId: repair.organization_id,
       contact: normalizedContact
     }, tokenExpiresIn)
     

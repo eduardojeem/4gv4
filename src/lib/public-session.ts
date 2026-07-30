@@ -20,8 +20,25 @@ function getSecretKey(): Uint8Array {
 export interface PublicSessionPayload {
   repairId: string
   ticketNumber: string
+  organizationId: string
   contact: string
   [key: string]: unknown
+}
+
+export function isPublicRepairSessionAuthorized(
+  session: PublicSessionPayload | null | undefined,
+  resource: {
+    repairId: string
+    ticketNumber: string
+    organizationId: string
+  }
+): boolean {
+  return Boolean(
+    session &&
+    session.repairId === resource.repairId &&
+    session.ticketNumber === resource.ticketNumber &&
+    session.organizationId === resource.organizationId
+  )
 }
 
 /**

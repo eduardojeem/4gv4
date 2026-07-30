@@ -151,8 +151,16 @@ export function OffersCarousel({ companyName, settings }: OffersCarouselProps) {
   const [isSectionVisible, setIsSectionVisible] = useState(true)
   const [isDocumentVisible, setIsDocumentVisible] = useState(true)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  // Garantiza que servidor y cliente rendericen lo mismo en el primer paint.
+  // Sin esto, el servidor ve isLoading=true (skeleton) pero el cliente puede ver
+  // datos ya cacheados (carousel), causando el mismatch de hidratación.
+  const [isMounted, setIsMounted] = useState(false)
   const trackRef = useRef<HTMLDivElement | null>(null)
   const sectionRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -251,7 +259,8 @@ export function OffersCarousel({ companyName, settings }: OffersCarouselProps) {
           </Button>
         </div>
 
-        {isLoading ? (
+        {/* Skeleton: siempre igual en servidor y cliente hasta el montaje */}
+        {(!isMounted || isLoading) ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 3 }).map((_, idx) => (
               <div key={idx} className="h-64 animate-pulse rounded-2xl border bg-muted/40" />

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { config } from '@/lib/config'
 import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
-import { withBranchFilter } from '@/lib/branches/client'
+import { branchHeaders, withBranchFilter } from '@/lib/branches/client'
 
 export interface CashMovement {
     id: string
@@ -389,60 +389,37 @@ export function useCashRegister() {
             }
 
             const actorId = await resolveActorId(userId)
-
-            // cash_closures / cash_movements tienen RLS por organización
-            // (has_org_permission(organization_id, ...)). Hay que setear
-            // organization_id en el insert o la política lo rechaza.
-            let organizationId: string | null = null
-            if (actorId) {
-                const { data: orgRow } = await supabase
-                    .from('organization_members')
-                    .select('organization_id')
-                    .eq('user_id', actorId)
-                    .eq('status', 'active')
-                    .limit(1)
-                    .maybeSingle()
-                organizationId = (orgRow as { organization_id?: string } | null)?.organization_id ?? null
+            const response = await fetch('/api/pos/cash-register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...branchHeaders(selectedBranchId),
+                },
+                body: JSON.stringify({
+                    registerId,
+                    openingBalance,
+                    note,
+                    branchId: selectedBranchId,
+                }),
+            })
+            const payload = await response.json() as {
+                success?: boolean
+                error?: string
+                data?: {
+                    id: string
+                    register_id: string
+                    opening_balance: number
+                    opened_by?: string | null
+                    opened_at?: string
+                }
             }
-            if (!organizationId) {
-                toast.error('No se pudo determinar tu organización para abrir la caja.')
-                return false
+
+            if (!response.ok || !payload.success || !payload.data) {
+                throw new Error(payload.error || 'No se pudo abrir la caja.')
             }
-
-            // Create new session (closure record with status implicitly open)
-            const { data: session, error: sessionError } = await supabase
-                .from('cash_closures')
-                .insert({
-                    register_id: registerId,
-                    opening_balance: openingBalance,
-                    type: 'z',
-                    date: null, // Explicitly null to mark as open
-                    opened_by: actorId || null,
-                    organization_id: organizationId,
-                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
-                })
-                .select()
-                .single()
-
-            if (sessionError) throw sessionError
 
             const openingReason = note?.trim() ? `Apertura de caja — ${note.trim()}` : 'Apertura de caja'
-
-            // Create opening movement
-            const { error: movementError } = await supabase
-                .from('cash_movements')
-                .insert({
-                    session_id: session.id,
-                    type: 'opening',
-                    amount: openingBalance,
-                    reason: openingReason,
-                    created_by: actorId,
-                    created_at: new Date().toISOString(),
-                    organization_id: organizationId,
-                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
-                })
-
-            if (movementError) throw movementError
+            const session = payload.data
 
             const nextSession: CashRegisterSession = {
                 ...session,
@@ -451,7 +428,7 @@ export function useCashRegister() {
                 opened_by: session.opened_by || actorId || 'system',
                 opening_balance: session.opening_balance,
                 status: 'open',
-                opened_at: session.created_at,
+                opened_at: session.opened_at || new Date().toISOString(),
                 movements: [{
                     id: crypto.randomUUID(),
                     type: 'opening',
@@ -495,48 +472,30 @@ export function useCashRegister() {
                 return true
             }
 
-            // Calcular balance esperado desde movimientos
-            const expectedBalance = currentSession.movements.reduce((sum, mov) => {
-                if (mov.type === 'opening' || mov.type === 'sale' || mov.type === 'cash_in') {
-                    return sum + mov.amount
-                } else if (mov.type === 'cash_out') {
-                    return sum - mov.amount
-                }
-                return sum
-            }, 0)
+            await resolveActorId(userId)
+            const response = await fetch('/api/pos/cash-register', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...branchHeaders(selectedBranchId),
+                },
+                body: JSON.stringify({
+                    sessionId: currentSession.id,
+                    closingBalance,
+                    branchId: selectedBranchId,
+                }),
+            })
+            const payload = await response.json() as {
+                success?: boolean
+                error?: string
+                data?: { discrepancy?: number }
+            }
 
-            const discrepancy = closingBalance - expectedBalance
-            const actorId = await resolveActorId(userId)
+            if (!response.ok || !payload.success) {
+                throw new Error(payload.error || 'No se pudo cerrar la caja.')
+            }
 
-            // Fix #3: actualizar en DB primero — si falla, NO limpiar estado local
-            let closureUpdate = supabase
-                .from('cash_closures')
-                .update({
-                    closed_by: actorId || null,
-                    closing_balance: closingBalance,
-                    expected_balance: expectedBalance,
-                    discrepancy,
-                    date: new Date().toISOString()
-                })
-                .eq('id', currentSession.id)
-
-            closureUpdate = withBranchFilter(closureUpdate, selectedBranchId)
-            const { error: updateError } = await closureUpdate
-
-            if (updateError) throw updateError
-
-            // Insertar movimiento de cierre (no crítico si falla)
-            await supabase
-                .from('cash_movements')
-                .insert({
-                    session_id: currentSession.id,
-                    type: 'closing',
-                    amount: closingBalance,
-                    reason: 'Cierre de caja',
-                    created_by: actorId,
-                    created_at: new Date().toISOString(),
-                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
-                })
+            const discrepancy = Number(payload.data?.discrepancy || 0)
 
             // Solo limpiar estado local DESPUÉS de confirmar éxito en DB
             setCurrentSession(null)

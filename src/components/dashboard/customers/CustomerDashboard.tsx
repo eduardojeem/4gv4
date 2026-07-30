@@ -124,6 +124,14 @@ export function CustomerDashboard() {
   const { creditSummaries } = useCustomersWithCredits(customers)
   const [activeTab, setActiveTab] = useState("customers")
   const [showCreateModal, setShowCreateModal] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('new') === 'true') {
+      setShowCreateModal(true)
+    }
+  }, [])
   const [compactMode, setCompactMode] = useState(true)
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
   const [, setShowExportDialog] = useState(false)

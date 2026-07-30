@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { parsePagoparNotificationAmount } from '@/lib/payments/pagopar'
+import {
+  getPagoparCheckoutUrl,
+  getPagoparPaymentMethodId,
+  parsePagoparNotificationAmount,
+  parsePagoparPaymentMethod,
+} from '@/lib/payments/pagopar'
 
 describe('parsePagoparNotificationAmount', () => {
   it('accepts numeric amounts', () => {
@@ -19,5 +24,25 @@ describe('parsePagoparNotificationAmount', () => {
   it('rejects invalid and negative amounts', () => {
     expect(parsePagoparNotificationAmount('invalid')).toBeNull()
     expect(parsePagoparNotificationAmount(-1)).toBeNull()
+  })
+})
+
+describe('Pagopar payment methods', () => {
+  it('maps card and QR to the official Pagopar identifiers', () => {
+    expect(getPagoparPaymentMethodId('card')).toBe(9)
+    expect(getPagoparPaymentMethodId('qr')).toBe(24)
+  })
+
+  it('rejects payment methods outside the supported allowlist', () => {
+    expect(parsePagoparPaymentMethod('card')).toBe('card')
+    expect(parsePagoparPaymentMethod('qr')).toBe('qr')
+    expect(parsePagoparPaymentMethod('24')).toBeNull()
+    expect(parsePagoparPaymentMethod('transfer')).toBeNull()
+  })
+
+  it('builds a checkout URL that keeps the selected payment method', () => {
+    expect(getPagoparCheckoutUrl('pedido-hash', 'qr')).toBe(
+      'https://www.pagopar.com/pagos/pedido-hash?forma_pago=24',
+    )
   })
 })

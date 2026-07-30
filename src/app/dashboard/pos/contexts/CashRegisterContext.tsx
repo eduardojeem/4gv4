@@ -3,7 +3,8 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react'
 import { CashRegisterState, CashMovement } from '../types'
 import { toast } from 'sonner'
-import { createClient } from '@/lib/supabase/client'
+import { useBranch } from '@/contexts/branch-context'
+import { branchHeaders } from '@/lib/branches/client'
 import { useCashRegister } from '@/hooks/useCashRegister'
 
 // Extended types for advanced features
@@ -147,6 +148,7 @@ interface CashRegisterContextType {
 const CashRegisterContext = createContext<CashRegisterContextType | undefined>(undefined)
 
 export function CashRegisterProvider({ children }: { children: React.ReactNode }) {
+  const { selectedBranchId } = useBranch()
   // Use the hook internally
   const {
     registers: hookRegisters,
@@ -324,12 +326,6 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     hookFetchAuditLog()
   }, [loadRegisters, hookFetchHistory, hookFetchAuditLog])
 
-  // Supabase client (kept for direct ops if needed)
-  const supabase = useMemo(() => {
-    try { return createClient() } catch { return null }
-  }, [])
-
-
   // Save prefs
   useEffect(() => {
     try {
@@ -431,45 +427,35 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     return zClosureHistory.find(z => z.id === closureId) || null
   }, [zClosureHistory])
 
-  // Fix #8: persistir arqueo en DB como movimiento especial
   const performCashCount = useCallback(async (count: CashCount) => {
-    setLastCashCount(count)
-
-    // Intentar persistir en DB como un movimiento informativo
-    if (supabase && currentRegisterState.isOpen) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        // Buscar sesión activa para asociar el arqueo
-        const { data: session } = await supabase
-          .from('cash_closures')
-          .select('id')
-          .is('date', null)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (session) {
-          await supabase.from('cash_movements').insert({
-            session_id: session.id,
-            type: 'cash_in', // Tipo genérico compatible con el schema
-            amount: count.total,
-            reason: `Arqueo de caja: contado ${count.total.toLocaleString()} Gs. (esperado: ${currentRegisterState.balance.toLocaleString()} Gs.)`,
-            created_by: user?.id || null,
-            created_at: count.timestamp
-          })
-
-          // Revertir el efecto en el balance desregistrando el movimiento de arqueo
-          // (el arqueo es solo informativo, no modifica el saldo real)
-          // Nota: si se requiere persistencia pura sin efecto en balance, 
-          // se necesita una tabla dedicada 'cash_counts'
-        }
-      } catch (e) {
-        console.warn('No se pudo persistir el arqueo en DB:', e)
-      }
+    if (!currentSession || !currentRegisterState.isOpen) {
+      toast.error('Abrí una caja antes de registrar el arqueo')
+      return
     }
 
+    const response = await fetch('/api/pos/cash-counts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...branchHeaders(selectedBranchId),
+      },
+      body: JSON.stringify({
+        sessionId: currentSession.id,
+        total: count.total,
+        bills: count.bills,
+        coins: count.coins,
+        branchId: selectedBranchId,
+      }),
+    })
+    const payload = await response.json() as { success?: boolean; error?: string }
+
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.error || 'No se pudo registrar el arqueo')
+    }
+
+    setLastCashCount(count)
     toast.success(`Arqueo registrado: ${count.total.toLocaleString()} Gs. contados`)
-  }, [supabase, currentRegisterState])
+  }, [currentSession, currentRegisterState.isOpen, selectedBranchId])
 
   const calculateDiscrepancy = useCallback((): number => {
     if (!lastCashCount) return 0
