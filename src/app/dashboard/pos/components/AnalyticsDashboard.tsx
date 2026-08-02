@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Package, AlertCircl
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { SalesMetrics } from '../lib/analytics-engine'
+import { formatCurrency } from '@/lib/currency'
 
 interface AnalyticsDashboardProps {
   metrics: SalesMetrics
@@ -11,13 +12,6 @@ interface AnalyticsDashboardProps {
 }
 
 export function AnalyticsDashboard({ metrics, className }: AnalyticsDashboardProps) {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-MX', {
-      style: 'currency',
-      currency: 'MXN'
-    }).format(amount)
-  }
-
   const formatPercent = (value: number) => {
     const sign = value >= 0 ? '+' : ''
     return `${sign}${value.toFixed(1)}%`

@@ -1,5 +1,12 @@
+import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
+import { DEFAULT_LIMITS, normalizePlanCode } from '@/lib/saas/subscription-service'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { normalizePlanCode, DEFAULT_LIMITS } from '@/lib/saas/subscription-service'
+import { chunkValues, fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
+import {
+  calculateRoundedDistribution,
+  calculateUsagePercent,
+  countCashRegistersByOrganization,
+} from '@/lib/superadmin/metrics-calculations'
 
 export type ResourceKey = 'users' | 'products' | 'branches' | 'cashRegisters' | 'categories'
 
@@ -9,14 +16,19 @@ export type OrgUsageRow = {
   slug: string
   plan: string
   planCode: string
+  contractedPlanCode: string
   subscriptionStatus: string | null
+  paymentStatus: string | null
+  subscriptionBlocked: boolean
+  subscriptionExpired: boolean
   trialEndsAt: string | null
   periodEndsAt: string | null
   usage: Record<ResourceKey, number>
   limits: Record<ResourceKey, number | null>
   overallPercent: number
-  atRisk: boolean     // any resource ≥ 80%
-  overLimit: boolean  // any resource > 100%
+  nearLimit: boolean
+  atRisk: boolean
+  overLimit: boolean
 }
 
 export type SaasMetricsData = {
@@ -26,7 +38,7 @@ export type SaasMetricsData = {
     atRisk: number
     nearLimit: number
     overLimit: number
-    avgUsagePercent: number
+    blocked: number
   }
   planDistribution: Array<{ plan: string; count: number; percent: number }>
   statusDistribution: Array<{ status: string; count: number }>
@@ -42,21 +54,24 @@ const RESOURCE_LABELS: Record<ResourceKey, string> = {
   categories: 'Categorías',
 }
 
+type PageResult<T> = PromiseLike<{
+  data: T[] | null
+  error: { message: string } | null
+}>
+
 function calcPercent(current: number, limit: number | null): number {
-  if (limit === null || limit === 0) return 0
-  return Math.round((current / limit) * 100)
+  return calculateUsagePercent(current, limit)
 }
 
 function calcOverall(usage: Record<ResourceKey, number>, limits: Record<ResourceKey, number | null>): number {
   const percentages = (Object.keys(limits) as ResourceKey[])
-    .filter((k) => limits[k] !== null)
-    .map((k) => calcPercent(usage[k], limits[k]))
+    .filter((key) => limits[key] !== null)
+    .map((key) => calcPercent(usage[key], limits[key]))
 
-  if (!percentages.length) return 0
-  return Math.round(percentages.reduce((a, b) => a + b, 0) / percentages.length)
+  return percentages.length ? Math.max(...percentages) : 0
 }
 
-function countByOrg(rows: Array<{ organization_id: string | null }>, orgIds: Set<string>): Map<string, number> {
+function countByOrg(rows: Array<{ organization_id: string | null }>, orgIds: Set<string>) {
   const counts = new Map<string, number>()
   orgIds.forEach((id) => counts.set(id, 0))
   rows.forEach((row) => {
@@ -67,49 +82,118 @@ function countByOrg(rows: Array<{ organization_id: string | null }>, orgIds: Set
   return counts
 }
 
+async function fetchChunkedRows<T>(
+  chunks: string[][],
+  fetchPage: (ids: string[], from: number, to: number) => PageResult<T>
+) {
+  const pages = await Promise.all(
+    chunks.map((ids) => fetchAllRows<T>((from, to) => fetchPage(ids, from, to)))
+  )
+  return pages.flat()
+}
+
 export async function getSaasMetrics(): Promise<SaasMetricsData> {
   const admin = createAdminSupabase()
-
-  // 1. Fetch orgs + their subscriptions in one query
-  const { data: orgsData } = await admin
+  const orgs = await fetchAllRows<{
+    id: string
+    name: string
+    slug: string | null
+    plan: string | null
+  }>((from, to) => admin
     .from('organizations')
-    .select('id, name, slug, plan, created_at')
+    .select('id, name, slug, plan')
     .order('name', { ascending: true })
+    .range(from, to))
+  const orgIds = new Set(orgs.map((organization) => organization.id))
 
-  const orgs = orgsData ?? []
-  const orgIds = new Set(orgs.map((o) => o.id))
+  if (orgs.length === 0) {
+    return {
+      orgs: [],
+      summary: { total: 0, atRisk: 0, nearLimit: 0, overLimit: 0, blocked: 0 },
+      planDistribution: [],
+      statusDistribution: [],
+      mostConstrainedResource: null,
+      fetchedAt: new Date().toISOString(),
+    }
+  }
 
-  // 2. Fetch subscriptions for all orgs
-  const { data: subsData } = await admin
-    .from('subscriptions')
-    .select('organization_id, plan, status, trial_ends_at, current_period_ends_at')
-    .in('organization_id', Array.from(orgIds))
-
-  const subsByOrg = new Map(
-    (subsData ?? []).map((s) => [s.organization_id, s])
-  )
-
-  // 3. Bulk fetch all resource rows (5 queries total, counted in JS)
-  const [membersRes, productsRes, branchesRes, cashRegsRes, categoriesRes] = await Promise.all([
-    admin.from('organization_members').select('organization_id').in('organization_id', Array.from(orgIds)),
-    admin.from('products').select('organization_id').in('organization_id', Array.from(orgIds)),
-    admin.from('branches').select('organization_id').in('organization_id', Array.from(orgIds)),
-    admin.from('cash_registers').select('organization_id').in('organization_id', Array.from(orgIds)),
-    admin.from('categories').select('organization_id').in('organization_id', Array.from(orgIds)),
+  const organizationChunks = chunkValues(Array.from(orgIds))
+  const [subscriptions, memberRows, productRows, branchRows, categoryRows, plansResult] = await Promise.all([
+    fetchChunkedRows(organizationChunks, (ids, from, to) => admin
+      .from('subscriptions')
+      .select('organization_id, plan, status, payment_status, trial_ends_at, current_period_ends_at')
+      .in('organization_id', ids)
+      .range(from, to)),
+    fetchChunkedRows(organizationChunks, (ids, from, to) => admin
+      .from('organization_members')
+      .select('organization_id')
+      .in('organization_id', ids)
+      .neq('role', 'customer')
+      .eq('status', 'active')
+      .range(from, to)),
+    fetchChunkedRows(organizationChunks, (ids, from, to) => admin
+      .from('products')
+      .select('organization_id')
+      .in('organization_id', ids)
+      .range(from, to)),
+    fetchChunkedRows(organizationChunks, (ids, from, to) => admin
+      .from('branches')
+      .select('id, organization_id')
+      .in('organization_id', ids)
+      .range(from, to)),
+    fetchChunkedRows(organizationChunks, (ids, from, to) => admin
+      .from('categories')
+      .select('organization_id')
+      .in('organization_id', ids)
+      .range(from, to)),
+    admin.from('plans').select('code, limits').eq('is_active', true),
   ])
 
-  const memberCounts = countByOrg(membersRes.data ?? [], orgIds)
-  const productCounts = countByOrg(productsRes.data ?? [], orgIds)
-  const branchCounts = countByOrg(branchesRes.data ?? [], orgIds)
-  const cashRegCounts = countByOrg(cashRegsRes.data ?? [], orgIds)
-  const categoryCounts = countByOrg(categoriesRes.data ?? [], orgIds)
+  if (plansResult.error) {
+    throw new Error(`No se pudieron cargar los límites de planes: ${plansResult.error.message}`)
+  }
 
-  // 4. Build per-org rows
-  const orgRows: OrgUsageRow[] = orgs.map((org) => {
-    const sub = subsByOrg.get(org.id)
-    const planCode = normalizePlanCode(sub?.plan ?? org.plan ?? 'FREE')
-    const planLimits = DEFAULT_LIMITS[planCode] ?? DEFAULT_LIMITS.FREE
+  const branchChunks = chunkValues(branchRows.map((branch) => branch.id))
+  const cashRegisterRows = branchChunks.length === 0
+    ? []
+    : await fetchChunkedRows(branchChunks, (ids, from, to) => admin
+        .from('cash_registers')
+        .select('branch_id')
+        .in('branch_id', ids)
+        .range(from, to))
 
+  const subsByOrg = new Map(
+    subscriptions.map((subscription) => [subscription.organization_id, subscription])
+  )
+  const limitsByPlan = new Map(
+    (plansResult.data ?? []).map((plan) => [
+      normalizePlanCode(plan.code),
+      (plan.limits && typeof plan.limits === 'object' ? plan.limits : {}) as Record<string, number | null>,
+    ])
+  )
+  const memberCounts = countByOrg(memberRows, orgIds)
+  const productCounts = countByOrg(productRows, orgIds)
+  const branchCounts = countByOrg(branchRows, orgIds)
+  const cashRegisterCounts = countCashRegistersByOrganization(
+    branchRows.map((branch) => ({ id: branch.id, organizationId: branch.organization_id })),
+    cashRegisterRows.map((register) => ({ branchId: register.branch_id }))
+  )
+  const categoryCounts = countByOrg(categoryRows, orgIds)
+
+  const orgRows: OrgUsageRow[] = orgs.map((organization) => {
+    const subscription = subsByOrg.get(organization.id)
+    const contractedPlanCode = normalizePlanCode(subscription?.plan ?? organization.plan ?? 'FREE')
+    const subscriptionAccess = evaluateSubscriptionStatus({
+      status: subscription?.status,
+      paymentStatus: subscription?.payment_status,
+      trialEndsAt: subscription?.trial_ends_at,
+      periodEndsAt: subscription?.current_period_ends_at,
+    })
+    const planCode = subscriptionAccess.isExpired ? normalizePlanCode('FREE') : contractedPlanCode
+    const planLimits = {
+      ...(DEFAULT_LIMITS[planCode] ?? DEFAULT_LIMITS.FREE),
+      ...(limitsByPlan.get(planCode) ?? {}),
+    }
     const limits: Record<ResourceKey, number | null> = {
       users: planLimits.users ?? null,
       products: planLimits.products ?? null,
@@ -117,84 +201,87 @@ export async function getSaasMetrics(): Promise<SaasMetricsData> {
       cashRegisters: planLimits.cashRegisters ?? null,
       categories: planLimits.categories ?? null,
     }
-
     const usage: Record<ResourceKey, number> = {
-      users: memberCounts.get(org.id) ?? 0,
-      products: productCounts.get(org.id) ?? 0,
-      branches: branchCounts.get(org.id) ?? 0,
-      cashRegisters: cashRegCounts.get(org.id) ?? 0,
-      categories: categoryCounts.get(org.id) ?? 0,
+      users: memberCounts.get(organization.id) ?? 0,
+      products: productCounts.get(organization.id) ?? 0,
+      branches: branchCounts.get(organization.id) ?? 0,
+      cashRegisters: cashRegisterCounts.get(organization.id) ?? 0,
+      categories: categoryCounts.get(organization.id) ?? 0,
     }
-
     const overallPercent = calcOverall(usage, limits)
-    const resourcePercents = (Object.keys(limits) as ResourceKey[]).map((k) => calcPercent(usage[k], limits[k]))
-    const atRisk = resourcePercents.some((p) => p >= 80)
-    const overLimit = resourcePercents.some((p) => p > 100)
+    const resourcePercents = (Object.keys(limits) as ResourceKey[])
+      .map((key) => calcPercent(usage[key], limits[key]))
+    const overLimit = resourcePercents.some((percent) => percent > 100)
+    const atRisk = !overLimit && resourcePercents.some((percent) => percent >= 80)
+    const nearLimit = !atRisk && !overLimit && resourcePercents.some((percent) => percent >= 60)
 
     return {
-      id: org.id,
-      name: org.name,
-      slug: org.slug ?? '',
+      id: organization.id,
+      name: organization.name,
+      slug: organization.slug ?? '',
       plan: planCode,
       planCode,
-      subscriptionStatus: sub?.status ?? null,
-      trialEndsAt: sub?.trial_ends_at ?? null,
-      periodEndsAt: sub?.current_period_ends_at ?? null,
+      contractedPlanCode,
+      subscriptionStatus: subscription?.status ?? null,
+      paymentStatus: subscription?.payment_status ?? null,
+      subscriptionBlocked: subscriptionAccess.isBlocked,
+      subscriptionExpired: subscriptionAccess.isExpired,
+      trialEndsAt: subscription?.trial_ends_at ?? null,
+      periodEndsAt: subscription?.current_period_ends_at ?? null,
       usage,
       limits,
       overallPercent,
+      nearLimit,
       atRisk,
       overLimit,
     }
   })
 
-  // 5. Summary stats
-  const atRiskCount = orgRows.filter((o) => o.atRisk).length
-  const nearLimitCount = orgRows.filter((o) => !o.atRisk && o.overallPercent >= 50).length
-  const overLimitCount = orgRows.filter((o) => o.overLimit).length
-  const avgUsage = orgRows.length
-    ? Math.round(orgRows.reduce((sum, o) => sum + o.overallPercent, 0) / orgRows.length)
-    : 0
-
-  // 6. Plan distribution
   const planMap = new Map<string, number>()
-  orgRows.forEach((o) => planMap.set(o.plan, (planMap.get(o.plan) ?? 0) + 1))
-  const planDistribution = Array.from(planMap.entries())
-    .map(([plan, count]) => ({ plan, count, percent: Math.round((count / orgRows.length) * 100) }))
-    .sort((a, b) => b.count - a.count)
+  orgRows.forEach((organization) => {
+    planMap.set(organization.plan, (planMap.get(organization.plan) ?? 0) + 1)
+  })
+  const planEntries = Array.from(planMap.entries()).sort((left, right) => right[1] - left[1])
+  const roundedPlanPercents = calculateRoundedDistribution(planEntries.map(([, count]) => count))
+  const planDistribution = planEntries.map(([plan, count], index) => ({
+    plan,
+    count,
+    percent: roundedPlanPercents[index] ?? 0,
+  }))
 
-  // 7. Status distribution
   const statusMap = new Map<string, number>()
-  orgRows.forEach((o) => {
-    const s = o.subscriptionStatus ?? 'sin_suscripcion'
-    statusMap.set(s, (statusMap.get(s) ?? 0) + 1)
+  orgRows.forEach((organization) => {
+    const status = organization.subscriptionStatus ?? 'sin_suscripcion'
+    statusMap.set(status, (statusMap.get(status) ?? 0) + 1)
   })
   const statusDistribution = Array.from(statusMap.entries())
     .map(([status, count]) => ({ status, count }))
-    .sort((a, b) => b.count - a.count)
+    .sort((left, right) => right.count - left.count)
 
-  // 8. Most constrained resource
-  const resourceAvgs = (Object.keys(RESOURCE_LABELS) as ResourceKey[]).map((key) => {
-    const percents = orgRows
-      .filter((o) => o.limits[key] !== null)
-      .map((o) => calcPercent(o.usage[key], o.limits[key]))
-    const avg = percents.length ? Math.round(percents.reduce((a, b) => a + b, 0) / percents.length) : 0
-    return { key, label: RESOURCE_LABELS[key], avgPercent: avg }
+  const resourceAvgs = (Object.keys(RESOURCE_LABELS) as ResourceKey[]).flatMap((key) => {
+    const percentages = orgRows
+      .filter((organization) => organization.limits[key] !== null)
+      .map((organization) => calcPercent(organization.usage[key], organization.limits[key]))
+    if (percentages.length === 0) return []
+    return [{
+      key,
+      label: RESOURCE_LABELS[key],
+      avgPercent: Math.round(percentages.reduce((sum, percent) => sum + percent, 0) / percentages.length),
+    }]
   })
-  const mostConstrainedResource = resourceAvgs.sort((a, b) => b.avgPercent - a.avgPercent)[0] ?? null
 
   return {
     orgs: orgRows,
     summary: {
       total: orgRows.length,
-      atRisk: atRiskCount,
-      nearLimit: nearLimitCount,
-      overLimit: overLimitCount,
-      avgUsagePercent: avgUsage,
+      atRisk: orgRows.filter((organization) => organization.atRisk).length,
+      nearLimit: orgRows.filter((organization) => organization.nearLimit).length,
+      overLimit: orgRows.filter((organization) => organization.overLimit).length,
+      blocked: orgRows.filter((organization) => organization.subscriptionBlocked).length,
     },
     planDistribution,
     statusDistribution,
-    mostConstrainedResource,
+    mostConstrainedResource: resourceAvgs.sort((left, right) => right.avgPercent - left.avgPercent)[0] ?? null,
     fetchedAt: new Date().toISOString(),
   }
 }

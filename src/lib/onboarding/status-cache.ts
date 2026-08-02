@@ -12,7 +12,7 @@ export interface OnboardingStatusPayload {
   completed?: boolean
 }
 
-const STORAGE_KEY = 'onboarding-status-v1'
+const STORAGE_KEY = 'onboarding-status-v2'
 
 let cached: OnboardingStatusPayload | null = null
 let inflight: Promise<OnboardingStatusPayload | null> | null = null

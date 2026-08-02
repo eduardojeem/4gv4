@@ -69,7 +69,7 @@ import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 import { useAuth } from '@/hooks/use-auth'
 import { ROLE_PERMISSIONS } from '@/lib/auth/roles-permissions'
 import { format } from 'date-fns'
@@ -159,7 +159,6 @@ function EditUserDialog({
 }) {
   const [formData, setFormData] = useState<Partial<User>>({})
   const { canManageUser } = useAuth()
-  const { toast } = useToast()
 
   useEffect(() => {
     if (user) {
@@ -171,19 +170,16 @@ function EditUserDialog({
     if (!user || !formData.role) return
 
     if (!canManageUser(user.role as any)) {
-      toast({
-        title: 'Error',
-        description: 'No tienes permisos para editar este usuario',
-        variant: 'destructive'
+      toast.error('Sin permisos', {
+        description: 'No tienes permisos para editar este usuario.'
       })
       return
     }
 
     onSave({ ...user, ...formData } as User)
     onOpenChange(false)
-    toast({
-      title: 'Usuario actualizado',
-      description: 'Los cambios se han guardado correctamente'
+    toast.success('Usuario actualizado', {
+      description: 'Los cambios se guardaron correctamente.'
     })
   }
 
@@ -316,7 +312,6 @@ export default function UserManagement() {
   const [selectedRole, setSelectedRole] = useState<DashboardUserRole>('viewer')
   
   const { hasPermission, canManageUser } = useAuth()
-  const { toast } = useToast()
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -347,10 +342,8 @@ export default function UserManagement() {
         }
       } catch (error) {
         console.error('Error fetching users:', error)
-        toast({
-          title: 'Error',
-          description: 'No se pudieron cargar los usuarios',
-          variant: 'destructive'
+        toast.error('No se pudieron cargar los usuarios', {
+          description: 'Intenta nuevamente.'
         })
       } finally {
         setLoading(false)
@@ -392,10 +385,8 @@ export default function UserManagement() {
 
   const handleEditUser = (user: User) => {
     if (!canManageUser(user.role as any)) {
-      toast({
-        title: 'Sin permisos',
-        description: 'No tienes permisos para editar este usuario',
-        variant: 'destructive'
+      toast.error('Sin permisos', {
+        description: 'No tienes permisos para editar este usuario.'
       })
       return
     }
@@ -410,10 +401,8 @@ export default function UserManagement() {
   const handleToggleUserStatus = (userId: string) => {
     const user = users.find(u => u.id === userId)
     if (!user || !canManageUser(user.role as any)) {
-      toast({
-        title: 'Sin permisos',
-        description: 'No tienes permisos para modificar este usuario',
-        variant: 'destructive'
+      toast.error('Sin permisos', {
+        description: 'No tienes permisos para modificar este usuario.'
       })
       return
     }
@@ -422,9 +411,8 @@ export default function UserManagement() {
       u.id === userId ? { ...u, is_active: !u.is_active } : u
     ))
     
-    toast({
-      title: 'Estado actualizado',
-      description: `Usuario ${user.is_active ? 'desactivado' : 'activado'} correctamente`
+    toast.success('Estado actualizado', {
+      description: `Usuario ${user.is_active ? 'desactivado' : 'activado'} correctamente.`
     })
   }
 

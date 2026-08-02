@@ -1,21 +1,31 @@
 'use client'
 
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
-  Save, RotateCcw, AlertCircle, HelpCircle,
-  Loader2, Globe, Package, Palette, Building2
+  AlertCircle,
+  Building2,
+  ExternalLink,
+  Globe,
+  Info,
+  Loader2,
+  Palette,
+  ReceiptText,
+  RotateCcw,
+  Save,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { toast } from 'sonner'
 import { useSharedSettings } from '@/hooks/use-shared-settings'
 import { useAuth } from '@/contexts/auth-context'
 import { useTheme } from '@/contexts/theme-context'
@@ -27,8 +37,25 @@ import {
 } from '@/lib/theme/color-schemes'
 import { SystemColorSchemePicker } from '@/components/system/system-color-scheme-picker'
 import { getAdminSettingsText } from '@/lib/i18n/admin-settings'
+import {
+  SUPPORTED_CURRENCIES,
+  SUPPORTED_LANGUAGES,
+  formatCurrency,
+  getCurrencyDefinition,
+} from '@/lib/currency'
+
+type FieldErrors = Partial<Record<
+  'companyName' | 'companyEmail' | 'companyPhone' | 'companyRuc' | 'companyAddress' | 'city' | 'taxRate',
+  string
+>>
+
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null
+  return <p id={id} className="text-xs text-destructive" role="alert">{message}</p>
+}
 
 export default function AdminSettingsPage() {
+  const router = useRouter()
   const {
     settings,
     originalSettings,
@@ -36,66 +63,85 @@ export default function AdminSettingsPage() {
     isLoading,
     isSaving,
     error,
-    settingsSource,
     updateSetting,
     saveSettings,
-    resetSettings
+    resetSettings,
+    reloadSettings,
   } = useSharedSettings()
-  const { loading: authLoading } = useAuth()
+  const { loading: authLoading, isSuperAdmin } = useAuth()
   const { setTheme, setColorScheme } = useTheme()
-  const t = getAdminSettingsText(settings.language)
-
+  const t = getAdminSettingsText('es')
   const [activeTab, setActiveTab] = useState('company')
+  const [currencyChangeConfirmed, setCurrencyChangeConfirmed] = useState(false)
 
-  // Validación inline de los campos obligatorios (espeja el esquema Zod del
-  // servidor) para dar feedback antes de intentar guardar.
-  const nameValid = settings.companyName.trim().length > 0
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings.companyEmail.trim())
-  const canSave = nameValid && emailValid
-
-  const changedFields = useMemo(() => {
-    return Object.keys(settings).reduce((count, key) => {
-      const typedKey = key as keyof typeof settings
-      return JSON.stringify(settings[typedKey]) === JSON.stringify(originalSettings[typedKey])
-        ? count
-        : count + 1
-    }, 0)
-  }, [settings, originalSettings])
-
-  // Sync theme on first load
-  const initialSyncDone = useRef(false)
   useEffect(() => {
-    if (isLoading || initialSyncDone.current) return
+    if (!authLoading && isSuperAdmin) router.replace('/superadmin/settings')
+  }, [authLoading, isSuperAdmin, router])
+
+  const validationErrors = useMemo<FieldErrors>(() => {
+    const next: FieldErrors = {}
+    const name = settings.companyName.trim()
+    const email = settings.companyEmail.trim()
+    if (!name) next.companyName = 'Ingresá el nombre de la empresa.'
+    else if (name.length > 100) next.companyName = 'El nombre no puede superar 100 caracteres.'
+    if (!email) next.companyEmail = 'Ingresá el email de la empresa.'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) next.companyEmail = 'Ingresá un email válido.'
+    if (settings.companyPhone.length > 50) next.companyPhone = 'El teléfono no puede superar 50 caracteres.'
+    if (settings.companyRuc.length > 50) next.companyRuc = 'El RUC no puede superar 50 caracteres.'
+    if (settings.companyAddress.length > 500) next.companyAddress = 'La dirección no puede superar 500 caracteres.'
+    if (settings.city.length > 100) next.city = 'La ciudad no puede superar 100 caracteres.'
+    if (!Number.isFinite(settings.taxRate) || settings.taxRate < 0 || settings.taxRate > 100) {
+      next.taxRate = 'El IVA debe estar entre 0 y 100%.'
+    }
+    return next
+  }, [settings])
+
+  const currencyChanged = settings.currency !== originalSettings.currency
+  const canSave = Object.keys(validationErrors).length === 0
+    && (!currencyChanged || currencyChangeConfirmed)
+  const selectedCurrency = getCurrencyDefinition(settings.currency)
+  const selectedLanguage = SUPPORTED_LANGUAGES.find(({ code }) => code === settings.language)
+    ?? SUPPORTED_LANGUAGES[0]
+  const currencyPreview = formatCurrency(1234567.89, {
+    currency: settings.currency,
+    language: settings.language,
+  })
+  const changedFields = useMemo(() => (
+    Object.keys(settings).reduce((count, key) => {
+      const typedKey = key as keyof typeof settings
+      return JSON.stringify(settings[typedKey]) === JSON.stringify(originalSettings[typedKey]) ? count : count + 1
+    }, 0)
+  ), [settings, originalSettings])
+
+  const initialSyncDone = useRef(false)
+  const themeDirtyRef = useRef(false)
+  const savedThemeRef = useRef({ theme: originalSettings.theme, color: originalSettings.primaryColor })
+
+  useEffect(() => {
+    if (isSuperAdmin || isLoading || initialSyncDone.current) return
     setTheme(settings.theme as 'light' | 'dark' | 'system')
     setColorScheme(isSystemColorScheme(settings.primaryColor) ? settings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME)
     initialSyncDone.current = true
-  }, [isLoading, settings.theme, settings.primaryColor, setTheme, setColorScheme])
+  }, [isSuperAdmin, isLoading, settings.theme, settings.primaryColor, setTheme, setColorScheme])
 
-  // El tema/color se aplican en vivo (preview) pero el theme-context los persiste
-  // en localStorage. Si el admin cambia el tema y sale SIN guardar, revertimos al
-  // baseline guardado para no dejar el tema desincronizado con la BD.
-  const themeDirtyRef = useRef(false)
-  const savedThemeRef = useRef({ theme: originalSettings.theme, color: originalSettings.primaryColor })
   useEffect(() => {
     if (!themeDirtyRef.current) {
       savedThemeRef.current = { theme: originalSettings.theme, color: originalSettings.primaryColor }
     }
   }, [originalSettings.theme, originalSettings.primaryColor])
-  useEffect(() => {
-    return () => {
-      if (!themeDirtyRef.current) return
-      const { theme, color } = savedThemeRef.current
-      setTheme(theme as 'light' | 'dark' | 'system')
-      setColorScheme(isSystemColorScheme(color) ? color : DEFAULT_SYSTEM_COLOR_SCHEME)
-    }
+
+  useEffect(() => () => {
+    if (!themeDirtyRef.current) return
+    const { theme, color } = savedThemeRef.current
+    setTheme(theme as 'light' | 'dark' | 'system')
+    setColorScheme(isSystemColorScheme(color) ? color : DEFAULT_SYSTEM_COLOR_SCHEME)
   }, [setTheme, setColorScheme])
 
-  // Aviso del navegador al cerrar/recargar con cambios sin guardar.
   useEffect(() => {
     if (!hasChanges) return
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault()
-      e.returnValue = ''
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
@@ -113,50 +159,23 @@ export default function AdminSettingsPage() {
     themeDirtyRef.current = true
   }
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-7 w-7 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">
-            {authLoading ? t.loadingAuth : t.loadingSettings}
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  const canRenderFallback = settingsSource === 'cache'
-
-  if (error && !canRenderFallback) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="w-full max-w-md border-destructive/50">
-          <CardContent className="flex flex-col items-center gap-4 p-6">
-            <AlertCircle className="h-10 w-10 text-destructive" />
-            <div className="text-center">
-              <h3 className="text-lg font-semibold">{t.errorTitle}</h3>
-              <p className="text-sm text-muted-foreground mt-1">{error}</p>
-            </div>
-            <Button onClick={() => window.location.reload()} variant="outline" size="sm">
-              {t.retry}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   const handleSave = async () => {
-    const result = await saveSettings()
-    if (result.success) {
-      // El tema quedó persistido en la BD: el baseline pasa a ser el actual.
-      themeDirtyRef.current = false
-      savedThemeRef.current = { theme: settings.theme, color: settings.primaryColor }
-      toast.success(t.saved)
-    } else {
-      toast.error(result.error || t.saveError)
+    if (!canSave) {
+      setActiveTab(validationErrors.taxRate || currencyChanged ? 'operations' : 'company')
+      toast.error(currencyChanged && !currencyChangeConfirmed
+        ? 'Confirmá el impacto del cambio de moneda antes de guardar.'
+        : 'Revisá los campos marcados antes de guardar.')
+      return
     }
+    const result = await saveSettings({ confirmCurrencyChange: currencyChangeConfirmed })
+    if (!result.success) {
+      toast.error(result.error || t.saveError)
+      return
+    }
+    themeDirtyRef.current = false
+    setCurrencyChangeConfirmed(false)
+    savedThemeRef.current = { theme: settings.theme, color: settings.primaryColor }
+    toast.success(t.saved)
   }
 
   const handleReset = () => {
@@ -164,306 +183,309 @@ export default function AdminSettingsPage() {
     setTheme(originalSettings.theme as 'light' | 'dark' | 'system')
     setColorScheme(isSystemColorScheme(originalSettings.primaryColor) ? originalSettings.primaryColor : DEFAULT_SYSTEM_COLOR_SCHEME)
     themeDirtyRef.current = false
+    setCurrencyChangeConfirmed(false)
     toast.info(t.discarded)
+  }
+
+  if (authLoading || isLoading || isSuperAdmin) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">
+            {isSuperAdmin ? 'Abriendo configuración global…' : authLoading ? t.loadingAuth : t.loadingSettings}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Card className="w-full max-w-md border-destructive/50">
+          <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
+            <AlertCircle className="h-9 w-9 text-destructive" />
+            <div>
+              <h2 className="font-semibold">No se pudo cargar la configuración</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{error}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => void reloadSettings()}>
+              Reintentar
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   const selectedColorScheme = getSystemColorSchemeOption(settings.primaryColor)
   const selectedColorSchemeText = t.appearance.colorSchemes[selectedColorScheme.value] ?? selectedColorScheme
   const timeZoneOptions = Object.entries(t.regional.timeZones)
-  const quickColorValue = ['blue', 'green', 'purple', 'orange', 'red'].includes(settings.primaryColor)
-    ? settings.primaryColor
-    : '__catalog__'
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t.title}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {t.subtitle}
-          </p>
+    <div className="mx-auto max-w-5xl space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40 text-primary">
+            <Building2 className="h-5 w-5" />
+          </span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight">Configuración de la organización</h1>
+              <Badge variant="outline">Organización activa</Badge>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Datos empresariales, reglas de operación y apariencia del panel.
+            </p>
+          </div>
         </div>
-        {hasChanges && (
-          <Badge variant="secondary" className="self-start sm:self-auto text-xs gap-1">
-            <AlertCircle className="h-3 w-3" />
-            {changedFields} {t.unsaved}
+        {hasChanges ? (
+          <Badge variant="secondary" className="w-fit gap-1.5">
+            <AlertCircle className="h-3.5 w-3.5" />{changedFields} cambio{changedFields === 1 ? '' : 's'} pendiente{changedFields === 1 ? '' : 's'}
           </Badge>
-        )}
+        ) : null}
       </div>
 
-      {/* Cache warning */}
-      {error && canRenderFallback && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>{t.cacheTitle}</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+      <Alert className="border-primary/20 bg-primary/5">
+        <Info />
+        <AlertTitle>Alcance de estos ajustes</AlertTitle>
+        <AlertDescription>
+          Los datos de empresa se usan en comprobantes y documentos. Cada sucursal conserva su propio teléfono, dirección y responsable.
+        </AlertDescription>
+      </Alert>
 
-      {/* Save bar — sticky para seguir accesible al scrollear el formulario */}
-      {hasChanges && (
-        <div className="sticky top-2 z-20 flex items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-primary/10">
-          <span className="min-w-0 truncate text-sm font-medium text-primary">
-            {t.unsavedBar}
-          </span>
+      {hasChanges ? (
+        <div className="sticky top-2 z-20 flex flex-col gap-3 rounded-lg border bg-background/95 p-3 shadow-md backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Cambios sin guardar</p>
+            <p className="text-xs text-muted-foreground">
+              {canSave ? 'Revisá los valores y confirmá para aplicarlos.' : `${Object.keys(validationErrors).length} campo${Object.keys(validationErrors).length === 1 ? '' : 's'} requiere${Object.keys(validationErrors).length === 1 ? '' : 'n'} atención.`}
+            </p>
+          </div>
           <div className="flex shrink-0 gap-2">
-            <Button variant="ghost" size="sm" onClick={handleReset} disabled={isSaving}>
-              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-              {t.discard}
+            <Button variant="outline" size="sm" onClick={handleReset} disabled={isSaving}>
+              <RotateCcw className="mr-2 h-4 w-4" />Descartar
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={isSaving || !canSave}>
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
-              {isSaving ? t.saving : t.save}
+            <Button size="sm" onClick={() => void handleSave()} disabled={isSaving || !canSave}>
+              {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              {isSaving ? 'Guardando…' : 'Guardar cambios'}
             </Button>
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
-        <TabsList className="h-auto w-full justify-start overflow-x-auto">
-          <TabsTrigger value="company" className="text-xs gap-1.5">
-            <Building2 className="h-3.5 w-3.5" />
-            {t.tabs.company}
-          </TabsTrigger>
-          <TabsTrigger value="appearance" className="text-xs gap-1.5">
-            <Palette className="h-3.5 w-3.5" />
-            {t.tabs.appearance}
-          </TabsTrigger>
-          <TabsTrigger value="inventory" className="text-xs gap-1.5">
-            <Package className="h-3.5 w-3.5" />
-            {t.tabs.inventory}
-          </TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-5">
+        <TabsList className="grid h-10 w-full grid-cols-3 sm:w-[470px]">
+          <TabsTrigger value="company"><Building2 />Empresa</TabsTrigger>
+          <TabsTrigger value="operations"><ReceiptText />Operación</TabsTrigger>
+          <TabsTrigger value="appearance"><Palette />Apariencia</TabsTrigger>
         </TabsList>
 
-        {/* Company Tab */}
-        <TabsContent value="company" className="space-y-5 mt-0">
-          <Card className="border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-blue-500" />
-                {t.company.title}
-              </CardTitle>
-              <CardDescription>{t.company.description}</CardDescription>
+        <TabsContent value="company" className="m-0 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Identidad y contacto empresarial</CardTitle>
+              <CardDescription>Información utilizada en tickets, recibos y documentos generados por el sistema.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="companyName">{t.company.name} <span className="text-destructive">*</span></Label>
-                  <Input
-                    id="companyName"
-                    value={settings.companyName}
-                    onChange={(e) => updateSetting('companyName', e.target.value)}
-                    aria-invalid={!nameValid}
-                    className={!nameValid ? 'border-destructive focus-visible:ring-destructive' : undefined}
-                  />
+                  <Label htmlFor="companyName">Nombre de la empresa <span className="text-destructive">*</span></Label>
+                  <Input id="companyName" value={settings.companyName} onChange={(event) => updateSetting('companyName', event.target.value)} aria-invalid={Boolean(validationErrors.companyName)} aria-describedby={validationErrors.companyName ? 'companyName-error' : undefined} />
+                  <FieldError id="companyName-error" message={validationErrors.companyName} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyRuc">{t.company.ruc}</Label>
-                  <Input id="companyRuc" value={settings.companyRuc} onChange={(e) => updateSetting('companyRuc', e.target.value)} placeholder="80012345-6" />
+                  <Label htmlFor="companyRuc">RUC o identificación fiscal</Label>
+                  <Input id="companyRuc" value={settings.companyRuc} onChange={(event) => updateSetting('companyRuc', event.target.value)} placeholder="80012345-6" aria-invalid={Boolean(validationErrors.companyRuc)} aria-describedby={validationErrors.companyRuc ? 'companyRuc-error' : undefined} />
+                  <FieldError id="companyRuc-error" message={validationErrors.companyRuc} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyEmail">{t.company.email} <span className="text-destructive">*</span></Label>
-                  <Input
-                    id="companyEmail"
-                    type="email"
-                    value={settings.companyEmail}
-                    onChange={(e) => updateSetting('companyEmail', e.target.value)}
-                    aria-invalid={!emailValid}
-                    className={!emailValid ? 'border-destructive focus-visible:ring-destructive' : undefined}
-                  />
+                  <Label htmlFor="companyEmail">Email empresarial <span className="text-destructive">*</span></Label>
+                  <Input id="companyEmail" type="email" value={settings.companyEmail} onChange={(event) => updateSetting('companyEmail', event.target.value)} aria-invalid={Boolean(validationErrors.companyEmail)} aria-describedby={validationErrors.companyEmail ? 'companyEmail-error' : undefined} />
+                  <FieldError id="companyEmail-error" message={validationErrors.companyEmail} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyPhone">{t.company.phone}</Label>
-                  <Input id="companyPhone" value={settings.companyPhone} onChange={(e) => updateSetting('companyPhone', e.target.value)} />
+                  <Label htmlFor="companyPhone">Teléfono empresarial</Label>
+                  <Input id="companyPhone" value={settings.companyPhone} onChange={(event) => updateSetting('companyPhone', event.target.value)} placeholder="+595…" aria-invalid={Boolean(validationErrors.companyPhone)} aria-describedby={validationErrors.companyPhone ? 'companyPhone-error' : undefined} />
+                  <FieldError id="companyPhone-error" message={validationErrors.companyPhone} />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="companyAddress">Dirección empresarial</Label>
+                  <Textarea id="companyAddress" value={settings.companyAddress} onChange={(event) => updateSetting('companyAddress', event.target.value)} rows={2} className="resize-none" aria-invalid={Boolean(validationErrors.companyAddress)} aria-describedby={validationErrors.companyAddress ? 'companyAddress-error' : undefined} />
+                  <FieldError id="companyAddress-error" message={validationErrors.companyAddress} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="city">{t.company.city}</Label>
-                  <Input id="city" value={settings.city} onChange={(e) => updateSetting('city', e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currency">{t.company.currency}</Label>
-                  <Select value={settings.currency} onValueChange={(v) => updateSetting('currency', v)}>
-                    <SelectTrigger id="currency"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PYG">PYG - Guaraní</SelectItem>
-                      <SelectItem value="USD">USD - Dólar</SelectItem>
-                      <SelectItem value="EUR">EUR - Euro</SelectItem>
-                      <SelectItem value="MXN">MXN - Peso mexicano</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="taxRate" className="flex items-center gap-1.5">
-                    {t.company.tax}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild><HelpCircle className="h-3.5 w-3.5 text-muted-foreground" /></TooltipTrigger>
-                        <TooltipContent><p>{t.company.taxHelp}</p></TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
-                  <Input id="taxRate" type="number" min="0" max="100" value={settings.taxRate} onChange={(e) => updateSetting('taxRate', e.target.value === '' ? 0 : parseFloat(e.target.value) || 0)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sessionTimeout">{t.company.session}</Label>
-                  <Input id="sessionTimeout" type="number" min="5" max="480" value={settings.sessionTimeout} onChange={(e) => updateSetting('sessionTimeout', e.target.value === '' ? 0 : parseInt(e.target.value) || 0)} />
+                  <Label htmlFor="city">Ciudad</Label>
+                  <Input id="city" value={settings.city} onChange={(event) => updateSetting('city', event.target.value)} aria-invalid={Boolean(validationErrors.city)} aria-describedby={validationErrors.city ? 'city-error' : undefined} />
+                  <FieldError id="city-error" message={validationErrors.city} />
                 </div>
               </div>
-              <div className="space-y-2 pt-2">
-                <Label htmlFor="companyAddress">{t.company.address}</Label>
-                <Textarea id="companyAddress" value={settings.companyAddress} onChange={(e) => updateSetting('companyAddress', e.target.value)} rows={2} className="resize-none" />
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Regional */}
-          <Card className="border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Globe className="h-4 w-4 text-blue-500" />
-                {t.regional.title}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="setting-language">{t.regional.language}</Label>
-                  <Select value={settings.language} onValueChange={(v) => updateSetting('language', v)}>
-                    <SelectTrigger id="setting-language"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="es">{t.regional.spanish}</SelectItem>
-                      <SelectItem value="en">{t.regional.english}</SelectItem>
-                      <SelectItem value="pt">{t.regional.portuguese}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="setting-timezone">{t.regional.timeZone}</Label>
-                  <Select value={settings.timeZone} onValueChange={(v) => updateSetting('timeZone', v)}>
-                    <SelectTrigger id="setting-timezone"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {timeZoneOptions.map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
-                      ))}
-                      {!t.regional.timeZones[settings.timeZone as keyof typeof t.regional.timeZones] && settings.timeZone ? (
-                        <SelectItem value={settings.timeZone}>{settings.timeZone}</SelectItem>
-                      ) : null}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">{t.regional.timeZoneHelp}</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="setting-dateformat">{t.regional.dateFormat}</Label>
-                  <Select value={settings.dateFormat} onValueChange={(v) => updateSetting('dateFormat', v)}>
-                    <SelectTrigger id="setting-dateformat"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-                      <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-                      <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-muted-foreground">El contacto y responsable de cada sede se administran por separado.</p>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/admin/branches">Administrar sucursales<ExternalLink className="ml-2 h-4 w-4" /></Link>
+                </Button>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Appearance Tab */}
-        <TabsContent value="appearance" className="space-y-5 mt-0">
-          <Card className="border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Palette className="h-4 w-4 text-violet-500" />
-                {t.appearance.title}
-              </CardTitle>
-              <CardDescription>{t.appearance.description}</CardDescription>
+        <TabsContent value="operations" className="m-0 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Ventas y configuración regional</CardTitle>
+              <CardDescription>Valores utilizados por POS, cálculos de IVA y fechas operativas.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div>
+                    <Label htmlFor="currency">Moneda base</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Se utiliza para precios, caja, POS y comprobantes de la organización.</p>
+                  </div>
+                  <Select
+                    value={settings.currency}
+                    onValueChange={(value) => {
+                      updateSetting('currency', value)
+                      setCurrencyChangeConfirmed(false)
+                    }}
+                  >
+                    <SelectTrigger id="currency"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {SUPPORTED_CURRENCIES.map((currency) => (
+                        <SelectItem key={currency.code} value={currency.code}>
+                          {currency.code} - {currency.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center justify-between gap-4 rounded-md bg-muted/50 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Vista previa</p>
+                      <p className="truncate text-sm font-semibold tabular-nums">{currencyPreview}</p>
+                    </div>
+                    <Badge variant="outline">{selectedCurrency.code}</Badge>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div>
+                    <Label htmlFor="setting-language">Idioma y formato regional</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Define separadores numéricos y el idioma preferido de la organización.</p>
+                  </div>
+                  <Select value={settings.language} onValueChange={(value) => updateSetting('language', value)}>
+                    <SelectTrigger id="setting-language"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {SUPPORTED_LANGUAGES.map((language) => (
+                        <SelectItem key={language.code} value={language.code}>
+                          {language.name} - {language.locale}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>
+                      Formato seleccionado: {selectedLanguage.locale}. La interfaz general continúa en español;
+                      inglés y portugués preparan el formato regional mientras se completa la traducción integral.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="setting-theme">{t.appearance.theme}</Label>
-                  <Select value={settings.theme} onValueChange={handleThemeChange}>
-                    <SelectTrigger id="setting-theme"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="light">{t.appearance.light}</SelectItem>
-                      <SelectItem value="dark">{t.appearance.dark}</SelectItem>
-                      <SelectItem value="system">{t.appearance.system}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="taxRate">IVA aplicado (%)</Label>
+                  <Input id="taxRate" type="number" min="0" max="100" step="0.01" value={settings.taxRate} onChange={(event) => updateSetting('taxRate', event.target.value === '' ? 0 : Number(event.target.value))} aria-invalid={Boolean(validationErrors.taxRate)} aria-describedby={validationErrors.taxRate ? 'taxRate-error' : 'taxRate-help'} />
+                  <FieldError id="taxRate-error" message={validationErrors.taxRate} />
+                  {!validationErrors.taxRate ? <p id="taxRate-help" className="text-xs text-muted-foreground">El servidor vuelve a calcular este porcentaje al confirmar una venta.</p> : null}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="setting-quickcolor">{t.appearance.quickColor}</Label>
-                  <Select value={quickColorValue} onValueChange={(v) => { if (v !== '__catalog__') handleColorChange(v as SystemColorScheme) }}>
-                    <SelectTrigger id="setting-quickcolor"><SelectValue placeholder={t.appearance.chooseColor} /></SelectTrigger>
+                  <Label htmlFor="setting-timezone">Zona horaria</Label>
+                  <Select value={settings.timeZone} onValueChange={(value) => updateSetting('timeZone', value)}>
+                    <SelectTrigger id="setting-timezone"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__catalog__">{t.appearance.catalog}</SelectItem>
-                      <SelectItem value="blue">{t.appearance.blue}</SelectItem>
-                      <SelectItem value="green">{t.appearance.green}</SelectItem>
-                      <SelectItem value="purple">{t.appearance.purple}</SelectItem>
-                      <SelectItem value="orange">{t.appearance.orange}</SelectItem>
-                      <SelectItem value="red">{t.appearance.red}</SelectItem>
+                      {timeZoneOptions.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">Determina cierres diarios, reportes y agrupaciones por fecha.</p>
                 </div>
               </div>
 
-              <div className="mt-4 space-y-3 rounded-xl border border-primary/10 bg-primary/5 p-4">
-                <Label>{t.appearance.schemeCatalog}</Label>
-                <SystemColorSchemePicker
-                  value={settings.primaryColor}
-                  onChange={handleColorChange}
-                  labels={t.appearance.colorSchemes}
-                  footerText={t.appearance.colorSchemeFooter}
-                />
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold">{selectedColorSchemeText.label}</p>
-                    <p className="text-xs text-muted-foreground">{selectedColorSchemeText.description}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">{t.appearance.primary}</span>
-                    <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">{t.appearance.surface}</span>
-                  </div>
-                </div>
-              </div>
+              {currencyChanged ? (
+                <Alert variant="destructive">
+                  <AlertCircle />
+                  <AlertTitle>Cambio de moneda pendiente</AlertTitle>
+                  <AlertDescription className="space-y-3">
+                    <p>
+                      Cambiar de {originalSettings.currency} a {settings.currency} no convierte precios, saldos,
+                      cuotas ni ventas existentes. Como los históricos no guardan una moneda por operación,
+                      también podrán mostrarse con el símbolo nuevo.
+                    </p>
+                    <label className="flex cursor-pointer items-start gap-3 rounded-md border border-destructive/30 bg-background/70 p-3 text-foreground">
+                      <Checkbox
+                        checked={currencyChangeConfirmed}
+                        onCheckedChange={(checked) => setCurrencyChangeConfirmed(checked === true)}
+                        aria-describedby="currency-change-confirmation"
+                      />
+                      <span id="currency-change-confirmation" className="text-sm leading-5">
+                        Entiendo el impacto y revisé los precios y saldos antes de aplicar el cambio.
+                      </span>
+                    </label>
+                  </AlertDescription>
+                </Alert>
+              ) : null}
 
-              <div className="space-y-2 pt-2">
-                <Label htmlFor="setting-perpage">{t.appearance.perPage}</Label>
-                <Select value={String(settings.itemsPerPage)} onValueChange={(v) => updateSetting('itemsPerPage', parseInt(v))}>
-                  <SelectTrigger id="setting-perpage" className="w-[120px]"><SelectValue /></SelectTrigger>
+              <Alert>
+                <Globe />
+                <AlertTitle>Impacto operativo</AlertTitle>
+                <AlertDescription>
+                  El IVA se aplica a nuevas operaciones. El cambio de idioma modifica el formato regional;
+                  no traduce nombres, productos ni contenido escrito por la organización.
+                </AlertDescription>
+              </Alert>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="appearance" className="m-0 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Apariencia del panel</CardTitle>
+              <CardDescription>El tema se previsualiza inmediatamente y se confirma al guardar.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="max-w-xs space-y-2">
+                <Label htmlFor="setting-theme">Tema</Label>
+                <Select value={settings.theme} onValueChange={handleThemeChange}>
+                  <SelectTrigger id="setting-theme"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="10">10</SelectItem>
-                    <SelectItem value="20">20</SelectItem>
-                    <SelectItem value="50">50</SelectItem>
-                    <SelectItem value="100">100</SelectItem>
+                    <SelectItem value="light">Claro</SelectItem>
+                    <SelectItem value="dark">Oscuro</SelectItem>
+                    <SelectItem value="system">Usar configuración del sistema</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        {/* Inventory Tab */}
-        <TabsContent value="inventory" className="space-y-5 mt-0">
-          <Card className="border shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Package className="h-4 w-4 text-violet-500" />
-                {t.inventory.title}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="setting-lowstock">{t.inventory.lowStock}</Label>
-                <Input id="setting-lowstock" type="number" min="1" value={settings.lowStockThreshold} onChange={(e) => updateSetting('lowStockThreshold', e.target.value === '' ? 0 : parseInt(e.target.value) || 0)} />
-                <p className="text-xs text-muted-foreground">{t.inventory.lowStockHelp}</p>
+              <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+                <div>
+                  <Label>Esquema de color</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">Elegí un esquema consistente para botones, enlaces y estados destacados.</p>
+                </div>
+                <SystemColorSchemePicker value={settings.primaryColor} onChange={handleColorChange} labels={t.appearance.colorSchemes} footerText={t.appearance.colorSchemeFooter} />
+                <div className="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{selectedColorSchemeText.label}</p>
+                    <p className="text-xs text-muted-foreground">{selectedColorSchemeText.description}</p>
+                  </div>
+                  <Badge className="w-fit">Color principal</Badge>
+                </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
-
       </Tabs>
     </div>
   )

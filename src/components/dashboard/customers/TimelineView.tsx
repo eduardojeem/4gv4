@@ -31,6 +31,7 @@ import { Customer } from '@/hooks/use-customer-state'
 import { customerService } from '@/services/customer-service'
 import { useCustomerRepairs } from '@/hooks/useCustomerRepairs'
 import { toast } from 'sonner'
+import { formatCurrency as formatMoney } from '@/lib/currency'
 
 interface ActivityItem {
   id: string
@@ -199,11 +200,7 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
 
   const formatCurrency = (amount?: number) => {
     if (!amount) return 'N/A'
-    return new Intl.NumberFormat('es-PY', {
-      style: 'currency',
-      currency: 'PYG',
-      minimumFractionDigits: 0
-    }).format(amount)
+    return formatMoney(amount)
   }
 
   const formatDate = (dateString: string) => {

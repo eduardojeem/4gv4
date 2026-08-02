@@ -1,14 +1,22 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { InvoicesDashboard, type InvoiceRow } from '@/components/superadmin/InvoicesDashboard'
+import { chunkValues, fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 
 async function getInvoicesData() {
   const admin = createAdminSupabase()
 
-  const { data: paymentsData } = await admin
-    .from('subscription_payments')
-    .select('id, organization_id, subscription_id, plan_id, amount, currency, status, payment_method, provider, provider_payment_id, external_reference, receipt_url, paid_at, created_at')
-    .order('created_at', { ascending: false })
-    .limit(500)
+  const paymentsData = await fetchAllRows<{
+    id: string; organization_id: string; subscription_id: string | null; plan_id: string | null
+    amount: number; currency: string; status: string; payment_method: string | null
+    provider: string | null; provider_payment_id: string | null; external_reference: string | null
+    receipt_url: string | null; paid_at: string | null; created_at: string | null
+  }>((from, to) =>
+    admin
+      .from('subscription_payments')
+      .select('id, organization_id, subscription_id, plan_id, amount, currency, status, payment_method, provider, provider_payment_id, external_reference, receipt_url, paid_at, created_at')
+      .order('created_at', { ascending: false })
+      .range(from, to)
+  )
 
   const payments = (paymentsData ?? []) as Array<{
     id: string; organization_id: string; subscription_id: string | null; plan_id: string | null
@@ -19,9 +27,13 @@ async function getInvoicesData() {
 
   const orgIds = Array.from(new Set(payments.map((p) => p.organization_id).filter(Boolean)))
 
-  const { data: orgsData } = orgIds.length
-    ? await admin.from('organizations').select('id, name, slug, plan').in('id', orgIds)
-    : { data: [] }
+  const orgsData = orgIds.length
+    ? (await Promise.all(chunkValues(orgIds).map(async (ids) => {
+        const { data, error } = await admin.from('organizations').select('id, name, slug, plan').in('id', ids)
+        if (error) throw new Error(error.message)
+        return data ?? []
+      }))).flat()
+    : []
 
   const orgsById = new Map(
     (orgsData ?? []).map((o: { id: string; name: string; slug: string; plan: string | null }) => [o.id, o])
@@ -54,5 +66,5 @@ async function getInvoicesData() {
 
 export default async function SuperAdminInvoicesPage() {
   const rows = await getInvoicesData()
-  return <InvoicesDashboard rows={rows} />
+  return <InvoicesDashboard rows={rows} referenceTime={new Date().toISOString()} />
 }

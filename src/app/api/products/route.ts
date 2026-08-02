@@ -75,7 +75,7 @@ export const GET = withTenantAuth({ permission: 'products.read', module: 'invent
     if (query) {
       const safeQuery = query.replace(/[,%()]/g, ' ').trim()
       queryBuilder = queryBuilder.or(
-        `name.ilike.%${safeQuery}%,sku.ilike.%${safeQuery}%,description.ilike.%${safeQuery}%,brand.ilike.%${safeQuery}%`
+        `name.ilike.%${safeQuery}%,sku.ilike.%${safeQuery}%,description.ilike.%${safeQuery}%,brand.ilike.%${safeQuery}%,barcode.eq.${safeQuery}`
       )
     }
     

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
-import { deriveTechnicalModules } from '@/lib/saas/plan-modules'
 
 type UpdatePlanBody = {
   name?: unknown
@@ -39,46 +38,6 @@ function optionalJson(value: unknown) {
   if (value === null) return null
   if (Array.isArray(value) || typeof value === 'object') return value
   return undefined
-}
-
-function canonicalPlanCode(tier: unknown) {
-  const normalized = typeof tier === 'string' ? tier.toLowerCase().trim() : ''
-  if (normalized === 'basic' || normalized === 'starter') return 'BASIC'
-  if (normalized === 'pro' || normalized === 'profesional' || normalized === 'professional') return 'PRO'
-  if (normalized === 'enterprise') return 'ENTERPRISE'
-  return 'FREE'
-}
-
-function parseLimit(limits: unknown, key: string, fallback: number | null) {
-  if (!limits || typeof limits !== 'object') return fallback
-  const value = (limits as Record<string, unknown>)[key]
-  if (value === null) return null
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    if (value.toLowerCase().startsWith('ilimit')) return null
-    const parsed = Number(value.replace(/[^\d]/g, ''))
-    return Number.isFinite(parsed) ? parsed : fallback
-  }
-  return fallback
-}
-
-function technicalLimits(plan: { tier?: unknown; limits?: unknown }) {
-  const code = canonicalPlanCode(plan.tier)
-  const defaults: Record<string, Record<string, number | null>> = {
-    FREE: { users: 2, branches: 1, cashRegisters: 1, products: 50, categories: null },
-    BASIC: { users: 10, branches: 2, cashRegisters: 3, products: 500, categories: null },
-    PRO: { users: 25, branches: 5, cashRegisters: 10, products: 5000, categories: null },
-    ENTERPRISE: { users: null, branches: null, cashRegisters: null, products: null, categories: null },
-  }
-  const fallback = defaults[code] ?? defaults.FREE
-
-  return {
-    users: parseLimit(plan.limits, 'users', fallback.users),
-    branches: parseLimit(plan.limits, 'branches', fallback.branches),
-    cashRegisters: parseLimit(plan.limits, 'cashRegisters', fallback.cashRegisters),
-    products: parseLimit(plan.limits, 'products', fallback.products),
-    categories: parseLimit(plan.limits, 'categories', fallback.categories),
-  }
 }
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -137,11 +96,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   const admin = createAdminSupabase()
 
-  // Si se marca como popular, destildar los demás primero (solo uno puede ser popular)
-  if (patch.is_popular === true) {
-    await admin.from('subscription_plans').update({ is_popular: false }).neq('id', id)
-  }
-
   const { data: plan, error } = await admin
     .from('subscription_plans')
     .update(patch)
@@ -155,20 +109,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
   if (!plan) {
     return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
-  }
-
-  const canonicalCode = canonicalPlanCode(plan.tier)
-  if (canonicalCode) {
-    const canonicalPatch: Record<string, unknown> = {
-      name: plan.name,
-      limits: technicalLimits(plan),
-      is_active: plan.is_active !== false,
-      modules: deriveTechnicalModules(canonicalCode, plan.features),
-    }
-
-    await admin
-      .from('plans')
-      .upsert({ code: canonicalCode, ...canonicalPatch }, { onConflict: 'code' })
   }
 
   await admin.from('tenant_audit_log').insert({

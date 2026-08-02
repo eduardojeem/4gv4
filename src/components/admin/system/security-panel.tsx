@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
 import { useSecurityLogs, type SecurityLog } from '@/hooks/use-security-logs'
 import { cn } from '@/lib/utils'
@@ -94,7 +94,6 @@ export function SecurityPanel() {
   const [currentPage, setCurrentPage] = useState(1)
   const [isBlocking, setIsBlocking] = useState<string | null>(null)
   const { logs, stats, totalCount, users, isLoading, error, fetchSecurityLogs } = useSecurityLogs()
-  const { toast } = useToast()
   const { user, isAdmin, isSuperAdmin } = useAuth()
 
   const requestFilters = useMemo(() => ({
@@ -128,19 +127,19 @@ export function SecurityPanel() {
 
   async function refresh() {
     await fetchSecurityLogs(requestFilters, true)
-    toast({ title: 'Eventos actualizados', description: 'Se recargó el registro de seguridad.' })
+    toast.success('Eventos actualizados', { description: 'Se recargó el registro de seguridad.' })
   }
 
   async function blockUser(userId?: string) {
     if (!userId) return
 
     if (userId === user?.id) {
-      toast({ title: 'Acción no permitida', description: 'No puedes suspender tu propia cuenta.', variant: 'destructive' })
+      toast.error('Acción no permitida', { description: 'No puedes suspender tu propia cuenta.' })
       return
     }
 
     if (!isAdmin && !isSuperAdmin) {
-      toast({ title: 'Sin permisos', description: 'Solo administradores pueden suspender usuarios.', variant: 'destructive' })
+      toast.error('Sin permisos', { description: 'Solo administradores pueden suspender usuarios.' })
       return
     }
 
@@ -162,13 +161,11 @@ export function SecurityPanel() {
         throw new Error(payload?.error || 'No se pudo suspender al usuario.')
       }
 
-      toast({ title: 'Usuario suspendido', description: 'La cuenta quedó inactiva para nuevos accesos.' })
+      toast.success('Usuario suspendido', { description: 'La cuenta quedó inactiva para nuevos accesos.' })
       await fetchSecurityLogs(requestFilters, true)
     } catch (err) {
-      toast({
-        title: 'No se pudo suspender',
+      toast.error('No se pudo suspender', {
         description: err instanceof Error ? err.message : 'Error inesperado.',
-        variant: 'destructive',
       })
     } finally {
       setIsBlocking(null)
@@ -177,7 +174,7 @@ export function SecurityPanel() {
 
   function exportCsv() {
     if (logs.length === 0) {
-      toast({ title: 'Sin datos', description: 'No hay eventos para exportar con los filtros actuales.', variant: 'destructive' })
+      toast.info('Sin datos', { description: 'No hay eventos para exportar con los filtros actuales.' })
       return
     }
 

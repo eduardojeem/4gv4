@@ -22,9 +22,13 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Store,
+  Building2,
+  Clock,
 } from 'lucide-react'
 import { SupabaseUser } from '@/hooks/use-users-supabase'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { cn } from '@/lib/utils'
 
 type SortDirection = 'asc' | 'desc' | null
 
@@ -92,11 +96,42 @@ function getStatusConfig(status: string) {
   return STATUS_CONFIG[status] ?? { label: status, className: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700', dot: 'bg-gray-400' }
 }
 
-function formatLastLogin(value: string | null | undefined): string {
-  if (!value) return '—'
+function formatLastLogin(value: string | null | undefined): { text: string; fullDate: string; activeTone: 'recent' | 'weekly' | 'old' | 'never' } {
+  if (!value) return { text: 'Nunca', fullDate: 'Sin registros de inicio de sesión', activeTone: 'never' }
   const date = new Date(value)
-  if (!Number.isFinite(date.getTime())) return '—'
-  return date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+  if (!Number.isFinite(date.getTime())) return { text: 'Nunca', fullDate: 'Sin registros', activeTone: 'never' }
+
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  let text = ''
+  let activeTone: 'recent' | 'weekly' | 'old' | 'never' = 'old'
+
+  if (diffMins < 2) {
+    text = 'Hace un momento'
+    activeTone = 'recent'
+  } else if (diffMins < 60) {
+    text = `Hace ${diffMins} min`
+    activeTone = 'recent'
+  } else if (diffHours < 24) {
+    text = `Hace ${diffHours}h`
+    activeTone = 'recent'
+  } else if (diffDays === 1) {
+    text = 'Ayer'
+    activeTone = 'recent'
+  } else if (diffDays < 7) {
+    text = `Hace ${diffDays} días`
+    activeTone = 'weekly'
+  } else {
+    text = date.toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' })
+    activeTone = 'old'
+  }
+
+  const fullDate = date.toLocaleString('es-PY', { dateStyle: 'medium', timeStyle: 'short' })
+  return { text, fullDate, activeTone }
 }
 
 function getLastLoginTimestamp(value: string | null | undefined): number {
@@ -122,7 +157,7 @@ export function UsersTable({
   const [sortDir, setSortDir] = useState<SortDirection>(null)
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
-  const tableColSpan = showOrganization ? 7 : 6
+  const tableColSpan = showOrganization ? 8 : 7
 
   const sortedUsers = useMemo(() => {
     if (!sortDir) return users
@@ -149,10 +184,11 @@ export function UsersTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30 hover:bg-muted/30">
-              <TableHead className="w-[280px] pl-4 font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+              <TableHead className="w-[260px] pl-4 font-semibold text-xs uppercase tracking-wide text-muted-foreground">
                 Usuario
               </TableHead>
               <TableHead className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Rol</TableHead>
+              <TableHead className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">Sucursal</TableHead>
               {showOrganization ? (
                 <TableHead className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">
                   Organización
@@ -168,6 +204,7 @@ export function UsersTable({
                   className="flex items-center gap-1.5 hover:text-foreground transition-colors group"
                   title={sortDir === null ? 'Ordenar por último acceso' : sortDir === 'desc' ? 'Más reciente primero' : 'Más antiguo primero'}
                 >
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                   Último acceso
                   <SortIcon
                     className={`h-3.5 w-3.5 transition-colors ${sortDir ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}
@@ -234,12 +271,56 @@ export function UsersTable({
 
                     {/* Role */}
                     <TableCell className="py-3">
-                      <Badge
-                        variant="outline"
-                        className={`font-medium text-xs px-2 py-0.5 ${roleConf.className}`}
-                      >
-                        {roleConf.label}
-                      </Badge>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge
+                          variant="outline"
+                          className={`font-medium text-xs px-2 py-0.5 ${roleConf.className}`}
+                        >
+                          {roleConf.label}
+                        </Badge>
+                        {user.isWholesale ? (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 px-2 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20"
+                          >
+                            <Store className="h-3 w-3" />
+                            Mayorista
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </TableCell>
+
+                    {/* Sucursal */}
+                    <TableCell className="py-3">
+                      {user.branches && user.branches.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1 max-w-[220px]">
+                          {user.branches.map((b) => (
+                            <Badge
+                              key={b.id}
+                              variant="outline"
+                              className={cn(
+                                'text-[11px] gap-1 px-2 py-0.5 font-medium shadow-none transition-colors',
+                                b.isPrimary
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700'
+                              )}
+                            >
+                              <Building2 className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span className="truncate max-w-[120px]">{b.name}</span>
+                              {b.isPrimary && (
+                                <span className="text-[9px] uppercase font-bold text-blue-600 dark:text-blue-400 shrink-0">
+                                  (Principal)
+                                </span>
+                              )}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/60 italic flex items-center gap-1">
+                          <Building2 className="h-3 w-3 text-muted-foreground/40" />
+                          Todas
+                        </span>
+                      )}
                     </TableCell>
 
                     {/* Organisation (superadmin only) */}
@@ -282,7 +363,23 @@ export function UsersTable({
 
                     {/* Last login */}
                     <TableCell className="hidden lg:table-cell py-3 text-sm text-muted-foreground">
-                      {formatLastLogin(user.lastLogin)}
+                      {(() => {
+                        const { text, fullDate, activeTone } = formatLastLogin(user.lastLogin)
+                        const dotColor =
+                          activeTone === 'recent'
+                            ? 'bg-emerald-500 animate-pulse'
+                            : activeTone === 'weekly'
+                            ? 'bg-amber-500'
+                            : activeTone === 'old'
+                            ? 'bg-slate-400'
+                            : 'bg-slate-300 dark:bg-slate-700'
+                        return (
+                          <div className="flex items-center gap-1.5 cursor-help" title={fullDate}>
+                            <span className={`h-2 w-2 rounded-full ${dotColor} shrink-0`} />
+                            <span className="text-xs font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">{text}</span>
+                          </div>
+                        )
+                      })()}
                     </TableCell>
 
                     {/* Actions */}

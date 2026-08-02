@@ -323,7 +323,9 @@ export async function middleware(request: NextRequest) {
       )
       profileIsActive = !profile.status || profile.status === 'active'
 
-      if (!rawRole) {
+      // Superadmin is canonical in user_roles. A stale profile must never
+      // restore platform access after revocation.
+      if (!rawRole && profile.role !== 'super_admin') {
         rawRole = profile.role
       }
 

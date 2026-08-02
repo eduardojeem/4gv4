@@ -7,7 +7,6 @@ import {
   MoreHorizontal,
   XCircle,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -67,10 +66,19 @@ export function SubscriptionTable({ items, onOpenDetail, onCopyValue }: Props) {
               <TableRow
                 key={sub.id}
                 className={cn(
-                  'cursor-pointer border-slate-100 transition-colors hover:bg-slate-50/80 dark:border-slate-800/60 dark:hover:bg-slate-800/30',
+                  'cursor-pointer border-slate-100 transition-colors hover:bg-slate-50/80 focus-visible:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-slate-400 dark:border-slate-800/60 dark:hover:bg-slate-800/30 dark:focus-visible:bg-slate-800/30',
                   attention && 'bg-orange-50/30 dark:bg-orange-950/10'
                 )}
+                tabIndex={0}
+                aria-label={`Ver suscripción de ${sub.organization_name}`}
                 onClick={() => onOpenDetail(sub)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    onOpenDetail(sub)
+                  }
+                }}
               >
                 {/* Org */}
                 <TableCell>

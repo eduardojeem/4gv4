@@ -62,6 +62,7 @@ import searchService from '@/services/search-service'
 import { formatCurrency } from '@/lib/currency'
 import { useCustomers } from '@/contexts/CustomerContext'
 import { usePlanModule } from '@/contexts/SubscriptionStatusContext'
+import { cn } from '@/lib/utils'
 
 
 // Tipos para la navegación
@@ -586,43 +587,91 @@ export function CustomerDashboard() {
   }, [selectedCustomer])
 
   return (
-    <div className="min-h-screen bg-slate-50 p-3 dark:bg-slate-950 sm:p-4 lg:p-6">
-      <div className="mx-auto max-w-7xl space-y-5 sm:space-y-6">
+    <div className="flex flex-col gap-4">
+
+        {/* ── Header — estilo consistente con Reparaciones ── */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between"
+          className="rounded-2xl border border-slate-200 bg-slate-950 text-white shadow-sm dark:border-slate-800"
         >
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
-              <Users className="h-4 w-4" />
-              CRM
-            </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950 dark:text-slate-50">
-              Clientes
-            </h1>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              {totalCustomers} registrados · {activeCustomers} activos · {filteredCustomers.length} en vista
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-800">
-              <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Compacto</span>
-              <Switch
-                checked={compactMode}
-                onCheckedChange={setCompactMode}
-                aria-label="Alternar modo compacto"
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Actualizar
-              </Button>
-              <Button size="sm" onClick={handleAddCustomer}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nuevo
-              </Button>
+          <div className="flex flex-col gap-4 p-4 sm:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              {/* Left: info */}
+              <div className="max-w-3xl space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/90">
+                    CRM
+                  </Badge>
+                </div>
+                <div className="space-y-1">
+                  <h1 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
+                    Clientes
+                  </h1>
+                  <p className="max-w-2xl text-sm leading-6 text-white/70">
+                    Gestiona tu cartera, historial y créditos desde una sola vista.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-1.5 text-sm font-medium text-white/85">
+                    <Users className="mr-1.5 h-4 w-4" />
+                    {totalCustomers} registrados
+                  </Badge>
+                  <Badge className="rounded-full border-0 px-3 py-1.5 text-sm font-medium bg-white/[0.08] text-white">
+                    {activeCustomers} activos
+                  </Badge>
+                  {filteredCustomers.length !== totalCustomers && (
+                    <Badge className="rounded-full border-0 px-3 py-1.5 text-sm font-medium bg-cyan-500/15 text-cyan-100">
+                      {filteredCustomers.length} en vista
+                    </Badge>
+                  )}
+                  {creditMetrics.overduePayments > 0 && (
+                    <Badge className="rounded-full border-0 px-3 py-1.5 text-sm font-medium bg-red-500/15 text-red-100">
+                      {creditMetrics.overduePayments} vencidos
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Right: actions */}
+              <div className="flex flex-col gap-3 lg:min-w-[260px] lg:max-w-[300px]">
+                <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                  <Button
+                    onClick={handleAddCustomer}
+                    className="h-10 flex-1 gap-2 rounded-xl bg-emerald-500 text-white shadow-sm shadow-emerald-950/20 hover:bg-emerald-400 focus-visible:ring-2 focus-visible:ring-emerald-200"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Nuevo cliente
+                    <kbd className="ml-auto hidden h-6 items-center rounded-full border border-emerald-200/70 bg-emerald-50 px-2 font-mono text-[10px] font-semibold text-emerald-900 sm:inline-flex">
+                      Ctrl + N
+                    </kbd>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    className="h-10 flex-1 gap-2 rounded-xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                  >
+                    <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+                    Actualizar
+                  </Button>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white/70">
+                  {creditMetrics.overduePayments > 0 ? (
+                    <span className="inline-flex items-center gap-2">
+                      <ArrowDownCircle className="h-4 w-4 text-red-200" />
+                      Hay {creditMetrics.overduePayments} cuotas vencidas por revisar.
+                    </span>
+                  ) : creditMetrics.totalActiveCredits > 0 ? (
+                    <span className="inline-flex items-center gap-2">
+                      <ArrowUpCircle className="h-4 w-4 text-emerald-200" />
+                      {creditMetrics.totalActiveCredits} créditos al día.
+                    </span>
+                  ) : (
+                    <span>Sin deudas pendientes. Cartera al día.</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -702,19 +751,28 @@ export function CustomerDashboard() {
           transition={{ delay: 0.1 }}
         >
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex items-center justify-between overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/90 p-1 shadow-sm dark:border-slate-800/80 dark:bg-slate-950/70">
               <TabsList className="inline-flex h-auto min-w-max gap-1 bg-transparent p-0">
                 {dashboardTabs.map((tab) => (
                   <TabsTrigger
                     key={tab.value}
                     value={tab.value}
-                    className="flex min-h-9 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition-colors data-[state=active]:bg-slate-950 data-[state=active]:text-white dark:text-slate-300 dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
+                    className="flex min-h-9 items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-slate-500 transition-all data-[state=active]:bg-slate-950 data-[state=active]:text-white data-[state=active]:shadow-sm dark:text-slate-400 dark:data-[state=active]:bg-white/10 dark:data-[state=active]:text-white"
                   >
                     {tab.icon}
                     <span>{tab.label}</span>
                   </TabsTrigger>
                 ))}
               </TabsList>
+              {/* Compact toggle movido al tab bar */}
+              <div className="flex shrink-0 items-center gap-2 pr-2">
+                <span className="hidden text-xs text-slate-500 sm:block dark:text-slate-400">Compacto</span>
+                <Switch
+                  checked={compactMode}
+                  onCheckedChange={setCompactMode}
+                  aria-label="Alternar modo compacto"
+                />
+              </div>
             </div>
 
             {/* Tab Content */}
@@ -877,6 +935,7 @@ export function CustomerDashboard() {
                     <CustomerListView
                       customers={paginatedCustomers}
                       selectedCustomers={selectedCustomers}
+                      creditSummaries={creditSummaries}
                       viewMode={viewMode}
                       onViewModeChange={setViewMode}
                       onCustomerToggle={(customerId) => {
@@ -1008,7 +1067,6 @@ export function CustomerDashboard() {
 
           </Tabs>
         </motion.div>
-      </div>
 
       {/* Modal para crear cliente */}
       {showCreateModal && (

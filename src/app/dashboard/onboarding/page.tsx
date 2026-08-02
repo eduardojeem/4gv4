@@ -2,35 +2,14 @@ import { redirect } from 'next/navigation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { OnboardingClient } from '@/components/dashboard/onboarding/OnboardingClient'
-
-type MembershipRow = {
-  organization_id: string
-  role: string
-  organizations:
-    | {
-        id: string
-        name: string
-        slug: string
-        plan: string
-      }
-    | Array<{
-        id: string
-        name: string
-        slug: string
-        plan: string
-      }>
-    | null
-}
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 
 type SettingsModules = {
   onboarding?: {
     status?: string
     completed_at?: string | null
   }
-}
-
-function getOrganization(row: MembershipRow) {
-  return Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
 }
 
 export default async function DashboardOnboardingPage() {
@@ -49,25 +28,19 @@ export default async function DashboardOnboardingPage() {
     .eq('id', user.id)
     .maybeSingle()
 
+  const organization = await getCurrentOrganizationContext(user.id)
   const role = typeof profile?.role === 'string' ? profile.role : null
   const status = typeof profile?.status === 'string' ? profile.status : null
   const isActiveUser = status !== 'inactive' && status !== 'suspended'
-  const canAccessOnboarding = Boolean(isActiveUser && (role === 'admin' || role === 'super_admin'))
+  const canAccessOnboarding = Boolean(
+    isActiveUser
+    && organization
+    && (role === 'super_admin' || organization.role === 'owner' || organization.role === 'admin')
+  )
 
   if (!canAccessOnboarding) {
     redirect('/dashboard')
   }
-
-  const { data: membership } = await admin
-    .from('organization_members')
-    .select('organization_id, role, organizations!inner(id, name, slug, plan)')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  const organization = membership ? getOrganization(membership as unknown as MembershipRow) : null
 
   if (!organization) {
     redirect('/dashboard')
@@ -117,6 +90,7 @@ export default async function DashboardOnboardingPage() {
   ])
 
   const modules = (settings?.modules ?? {}) as SettingsModules
+  const adminSettings = getTenantAdminSettings(settings?.modules)
   const companyInfo = (companyInfoSetting?.value ?? {}) as {
     phone?: string
     email?: string
@@ -137,9 +111,9 @@ export default async function DashboardOnboardingPage() {
 
   const hasCompanyInfo = Boolean(
     (settings?.display_name || organization.name) &&
-    (branch?.phone || companyInfo.phone) &&
-    (branch?.address || companyInfo.address) &&
-    (branch?.city)
+    (adminSettings.companyPhone ?? branch?.phone ?? companyInfo.phone) &&
+    (adminSettings.companyAddress ?? branch?.address ?? companyInfo.address) &&
+    (adminSettings.city ?? branch?.city)
   )
 
   return (
@@ -165,14 +139,15 @@ export default async function DashboardOnboardingPage() {
         displayName: settings?.display_name || organization.name,
         currency: settings?.currency || 'PYG',
         timezone: settings?.timezone || 'America/Asuncion',
-        phone: branch?.phone || companyInfo.phone || '',
-        email: branch?.email || companyInfo.email || '',
-        address: branch?.address || companyInfo.address || '',
-        city: branch?.city || '',
+        language: adminSettings.language || 'es',
+        phone: adminSettings.companyPhone ?? branch?.phone ?? companyInfo.phone ?? '',
+        email: adminSettings.companyEmail ?? branch?.email ?? companyInfo.email ?? '',
+        address: adminSettings.companyAddress ?? branch?.address ?? companyInfo.address ?? '',
+        city: adminSettings.city ?? branch?.city ?? '',
         weekdays: companyInfo.hours?.weekdays || 'Lunes a viernes, 08:00 a 18:00',
         saturday: companyInfo.hours?.saturday || 'Sabado, 08:00 a 12:00',
-        logoUrl: companyInfo.logoUrl || '',
-        ruc: companyInfo.ruc || '',
+        logoUrl: organization.logoUrl || companyInfo.logoUrl || '',
+        ruc: adminSettings.companyRuc ?? companyInfo.ruc ?? '',
         whatsapp: companyInfo.whatsapp || '',
         businessType: companyInfo.businessType || '',
         instagram: companyInfo.instagram || '',

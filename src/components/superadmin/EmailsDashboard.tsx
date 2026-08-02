@@ -327,10 +327,8 @@ export function EmailsDashboard({ data, supabaseProjectRef }: { data: EmailsData
   useEffect(() => {
     if (!autoRefresh) {
       if (countdownRef.current) clearInterval(countdownRef.current)
-      setCountdown(AUTO_REFRESH_INTERVAL)
       return
     }
-    setCountdown(AUTO_REFRESH_INTERVAL)
     countdownRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -342,6 +340,11 @@ export function EmailsDashboard({ data, supabaseProjectRef }: { data: EmailsData
     }, 1000)
     return () => { if (countdownRef.current) clearInterval(countdownRef.current) }
   }, [autoRefresh, router])
+
+  function toggleAutoRefresh() {
+    setCountdown(AUTO_REFRESH_INTERVAL)
+    setAutoRefresh((enabled) => !enabled)
+  }
 
   const filteredTemplates = useMemo(
     () => data.templates.filter((template) => templateSource === 'all' || template.source === templateSource),
@@ -386,7 +389,7 @@ export function EmailsDashboard({ data, supabaseProjectRef }: { data: EmailsData
           <Button
             variant={autoRefresh ? 'default' : 'outline'}
             className="gap-2"
-            onClick={() => setAutoRefresh((v) => !v)}
+            onClick={toggleAutoRefresh}
             title="Actualizar automaticamente cada 30 segundos"
           >
             <Timer className="h-4 w-4" />

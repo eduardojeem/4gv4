@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { OrganizationRole } from '@/lib/saas/permissions'
 import type { SaaSPlan } from '@/lib/saas/plans'
+import { clearOnboardingStatusCache } from '@/lib/onboarding/status-cache'
 
 type OrganizationOption = {
   id: string
@@ -89,6 +90,7 @@ export function OrganizationSwitcher({ compact = false }: { compact?: boolean })
       if (!response.ok) return
 
       setActiveId(organizationId)
+      clearOnboardingStatusCache()
       window.dispatchEvent(new CustomEvent('organization:changed', { detail: { organizationId } }))
       router.refresh()
     } finally {

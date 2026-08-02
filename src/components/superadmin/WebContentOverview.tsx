@@ -5,12 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
-  ArrowUpDown,
-  Building2,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Clock,
   ExternalLink,
   Eye,
   EyeOff,
@@ -25,11 +20,8 @@ import {
   Phone,
   RefreshCw,
   Search,
-  Settings,
   Sparkles,
-  Star,
   Store,
-  XCircle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -37,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { StatCard } from '@/components/superadmin/StatCard'
 import { cn } from '@/lib/utils'
+import { SortIndicator } from '@/components/superadmin/sort-indicator'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -230,13 +223,6 @@ export function WebContentOverview({ data }: { data: WebContentData }) {
     return list
   }, [data.orgs, search, filter, sortKey, sortDir])
 
-  const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sortKey !== col) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
-    return sortDir === 'asc'
-      ? <ChevronUp className="ml-1 h-3 w-3 text-indigo-500" />
-      : <ChevronDown className="ml-1 h-3 w-3 text-indigo-500" />
-  }
-
   const thClass = 'px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400'
   const thBtn = 'flex cursor-pointer select-none items-center whitespace-nowrap hover:text-slate-800 dark:hover:text-slate-200 transition-colors'
 
@@ -358,24 +344,24 @@ export function WebContentOverview({ data }: { data: WebContentData }) {
                 <tr>
                   <th className={cn(thClass, 'pl-4')}>
                     <button className={thBtn} onClick={() => toggleSort('name')}>
-                      Empresa <SortIcon col="name" />
+                      Empresa <SortIndicator active={sortKey === 'name'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>
                     <button className={thBtn} onClick={() => toggleSort('plan')}>
-                      Plan <SortIcon col="plan" />
+                      Plan <SortIndicator active={sortKey === 'plan'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>
                     <button className={thBtn} onClick={() => toggleSort('completion')}>
-                      Completitud <SortIcon col="completion" />
+                      Completitud <SortIndicator active={sortKey === 'completion'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>Configurado</th>
                   <th className={thClass}>Visibilidad</th>
                   <th className={thClass}>
                     <button className={thBtn} onClick={() => toggleSort('updated')}>
-                      Actualizado <SortIcon col="updated" />
+                      Actualizado <SortIndicator active={sortKey === 'updated'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={cn(thClass, 'pr-4 text-right')}>Sitio</th>

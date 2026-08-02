@@ -11,6 +11,7 @@ import { DEFAULT_SYSTEM_COLOR_SCHEME } from "@/lib/theme/color-schemes";
 import { DEFAULT_PLATFORM_BRANDING, getPlatformBranding } from "@/lib/platform/branding";
 import "./globals.css";
 import { PredictivePrefetchInit } from "@/components/util/PredictivePrefetchInit";
+import { RegionalSettingsBoundary } from "@/components/providers/regional-settings-boundary";
 
 
 const geistSans = Geist({
@@ -73,14 +74,15 @@ export default function RootLayout({
         <ThemeProvider defaultColorScheme={DEFAULT_SYSTEM_COLOR_SCHEME}>
           <AccessibilityProvider>
             <AuthProvider>
-              <AppStateProvider>
-                <BranchProvider>
-                  <SWRProvider>
-                    <PredictivePrefetchInit />
-                    <main id="main-content" tabIndex={-1}>
-                      {children}
-                    </main>
-                    <Toaster
+              <RegionalSettingsBoundary>
+                <AppStateProvider>
+                  <BranchProvider>
+                    <SWRProvider>
+                      <PredictivePrefetchInit />
+                      <main id="main-content" tabIndex={-1}>
+                        {children}
+                      </main>
+                      <Toaster
                       position="top-right"
                       richColors
                       closeButton
@@ -90,14 +92,13 @@ export default function RootLayout({
                       gap={8}
                       offset={16}
                       toastOptions={{
+                        // No fijar background/color/border aca: los estilos inline
+                        // ganan por especificidad y anularian `richColors` y los
+                        // bordes por tipo, dejando exito/error/aviso identicos.
                         style: {
-                          background: 'hsl(var(--background))',
-                          border: '1px solid hsl(var(--border))',
-                          color: 'hsl(var(--foreground))',
                           fontSize: '14px',
-                          borderRadius: '8px',
+                          borderRadius: '10px',
                           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                          backdropFilter: 'blur(8px)',
                         },
                         className: 'toast-optimized',
                         descriptionClassName: 'toast-description',
@@ -120,10 +121,11 @@ export default function RootLayout({
                           fontWeight: '500',
                         }
                       }}
-                    />
-                  </SWRProvider>
-                </BranchProvider>
-              </AppStateProvider>
+                      />
+                    </SWRProvider>
+                  </BranchProvider>
+                </AppStateProvider>
+              </RegionalSettingsBoundary>
             </AuthProvider>
           </AccessibilityProvider>
         </ThemeProvider>

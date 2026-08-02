@@ -114,7 +114,7 @@ const EMPTY_FORM = {
 // Main component
 // ---------------------------------------------------------------------------
 
-export function NotificationsDashboard({ notifications: initial, total: initialTotal, organizations }: Props) {
+export function NotificationsDashboard({ notifications: initial, organizations }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [notifications, setNotifications] = useState(initial)

@@ -54,18 +54,26 @@ export async function resolveRepairRouteContext(
   }
 
   const requestedBranchId = getRequestedBranchId(request)
-  const branchScope = await resolveBranchScopeForUser({
-    userId: staffAuth.user.id,
-    role: staffAuth.role,
-    requestedBranchId,
-    organizationId: organization.id,
-    strict: Boolean(requestedBranchId),
-  })
+  let branchScope
+  try {
+    branchScope = await resolveBranchScopeForUser({
+      userId: staffAuth.user.id,
+      role: staffAuth.role,
+      requestedBranchId,
+      organizationId: organization.id,
+      strict: Boolean(requestedBranchId),
+    })
+  } catch {
+    return NextResponse.json(
+      { error: 'No tenes acceso a la sucursal seleccionada.' },
+      { status: 403 }
+    )
+  }
 
   if (!branchScope.branchId) {
     return NextResponse.json(
-      { error: 'No hay una sucursal operativa disponible para esta reparacion.' },
-      { status: 400 }
+      { error: 'No tenes una sucursal asignada para operar con reparaciones.' },
+      { status: 403 }
     )
   }
 

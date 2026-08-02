@@ -44,7 +44,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 import { useProductsSupabase } from '@/hooks/useProductsSupabase'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
@@ -112,7 +112,6 @@ export default function ProductDetailPage() {
   const params = useParams()
   const router = useRouter()
   const canViewCost = useCanViewCost()
-  const { toast } = useToast()
   const productId = params.id as string
 
   const {
@@ -153,15 +152,13 @@ export default function ProductDetailPage() {
       setProduct(data as unknown as ProductWithInstallments)
     } catch (e) {
       logger.error('Error loading product', { error: e })
-      toast({
-        title: "Error",
-        description: "No se pudo cargar la información del producto.",
-        variant: "destructive"
+      toast.error("No se pudo cargar el producto", {
+        description: "Intenta nuevamente."
       })
     } finally {
       setLoadingProduct(false)
     }
-  }, [productId, toast])
+  }, [productId])
 
   useEffect(() => {
     loadProduct()
@@ -169,14 +166,12 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     if (!loadingProduct && !product) {
-      toast({
-        title: "Producto no encontrado",
-        description: "El producto que buscas no existe o ha sido eliminado.",
-        variant: "destructive"
+      toast.error("Producto no encontrado", {
+        description: "El producto que buscas no existe o fue eliminado."
       })
       router.push('/dashboard/products')
     }
-  }, [product, loadingProduct, router, toast])
+  }, [product, loadingProduct, router])
 
   useEffect(() => {
     const fetchMovements = async () => {
@@ -320,11 +315,11 @@ export default function ProductDetailPage() {
     try {
       const result = await deleteProduct(product.id)
       if (!result.success) throw new Error(result.error || 'No se pudo eliminar el producto.')
-      toast({ title: "Producto eliminado", description: "El producto ha sido eliminado exitosamente." })
+      toast.success("Producto eliminado", { description: "El producto se eliminó exitosamente." })
       router.push('/dashboard/products')
     } catch (error) {
       logger.error('Error deleting product from detail page', { error, productId: product.id })
-      toast({ title: "Error", description: "No se pudo eliminar el producto.", variant: "destructive" })
+      toast.error("No se pudo eliminar el producto", { description: "Intenta nuevamente." })
     }
   }
 
@@ -332,19 +327,19 @@ export default function ProductDetailPage() {
     navigator.clipboard.writeText(product?.id || '')
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
-    toast({ title: "ID copiado", description: "El ID del producto ha sido copiado al portapapeles." })
+    toast.success("ID copiado", { description: "El ID del producto se copió al portapapeles." })
   }
 
   const handleShare = () => {
     const url = window.location.href
     navigator.clipboard.writeText(url)
-    toast({ title: "Enlace copiado", description: "El enlace del producto ha sido copiado al portapapeles." })
+    toast.success("Enlace copiado", { description: "El enlace del producto se copió al portapapeles." })
   }
 
   const handleCopyBarcode = () => {
     if (!normalizedBarcode) return
     navigator.clipboard.writeText(normalizedBarcode)
-    toast({ title: "Código copiado", description: "El código de barras fue copiado al portapapeles." })
+    toast.success("Código copiado", { description: "El código de barras se copió al portapapeles." })
   }
 
   const handleSearchBarcode = () => {

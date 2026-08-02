@@ -1,7 +1,9 @@
 import { Suspense } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Gauge, Loader2 } from 'lucide-react'
 import { getSaasMetrics } from '@/lib/superadmin/saas-metrics'
 import { SaasMetricsDashboard } from '@/components/superadmin/SaasMetricsDashboard'
+
+export const dynamic = 'force-dynamic'
 
 async function MetricsContent() {
   const data = await getSaasMetrics()
@@ -11,14 +13,18 @@ async function MetricsContent() {
 export default function SuperAdminSaaSMetricsPage() {
   return (
     <div className="mx-auto max-w-[1480px] space-y-2">
-      <div className="mb-6 space-y-1">
+      <header className="mb-6 space-y-2">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+          <Gauge className="h-3.5 w-3.5" />
+          Capacidad de los planes
+        </div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
           Métricas SaaS
         </h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Uso real por organización — límites de plan, recursos consumidos y alertas de capacidad.
+        <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+          Detectá qué organizaciones están cerca de sus límites y qué recurso requiere atención.
         </p>
-      </div>
+      </header>
 
       <Suspense fallback={
         <div className="flex items-center justify-center py-24">

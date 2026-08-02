@@ -1,5 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { getCommercialPlanPrices, normalizePlanCode } from '@/lib/saas/subscription-service'
+import { getCommercialPlanPrices } from '@/lib/saas/subscription-service'
+import { calculateRecurringRevenue } from '@/lib/superadmin/metrics-calculations'
 
 type TableCount = {
   key: string
@@ -66,6 +67,7 @@ type SubscriptionRow = {
   current_period_ends_at: string | null
   trial_ends_at: string | null
   cancel_at_period_end: boolean | null
+  payment_status: string | null
 }
 
 type OrganizationLookupRow = {
@@ -93,6 +95,11 @@ function getAttentionReason(subscription: SubscriptionRow) {
   if (renewalDays !== null && renewalDays >= 0 && renewalDays <= 7) return 'Renovacion proxima'
   if (renewalDays !== null && renewalDays < 0) return 'Periodo vencido'
   return 'Revisar'
+}
+
+function attentionDeadline(subscription: SubscriptionRow) {
+  const value = subscription.trial_ends_at || subscription.current_period_ends_at
+  return value ? new Date(value).getTime() : Number.MAX_SAFE_INTEGER
 }
 
 export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
@@ -126,13 +133,13 @@ export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
 
   const subscriptionsPromise = admin
     .from('subscriptions')
-    .select('id, organization_id, plan, status, current_period_ends_at, trial_ends_at, cancel_at_period_end')
+    .select('id, organization_id, plan, status, payment_status, current_period_ends_at, trial_ends_at, cancel_at_period_end')
 
   const [
     counts,
-    { data: recentOrganizations },
-    { data: organizationsForPlans },
-    { data: subscriptionsData },
+    recentOrganizationsResult,
+    organizationsForPlansResult,
+    subscriptionsResult,
     commercialPlanPrices,
   ] = await Promise.all([
     countsPromise,
@@ -142,13 +149,25 @@ export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
     commercialPlanPricesPromise,
   ])
 
+  const queryError = [
+    recentOrganizationsResult.error,
+    organizationsForPlansResult.error,
+    subscriptionsResult.error,
+  ].find(Boolean)
+  if (queryError) throw new Error(`No se pudo cargar el resumen: ${queryError.message}`)
+
+  const recentOrganizations = recentOrganizationsResult.data
+  const organizationsForPlans = organizationsForPlansResult.data
+  const subscriptionsData = subscriptionsResult.data
+  const subscriptions = (subscriptionsData ?? []) as SubscriptionRow[]
+  const subscriptionsByOrg = new Map(subscriptions.map((subscription) => [subscription.organization_id, subscription]))
+
   const planCounts = new Map<string, number>()
-  ;(organizationsForPlans ?? []).forEach((row: { plan?: string | null }) => {
-    const plan = row.plan || 'FREE'
+  ;(organizationsForPlans ?? []).forEach((row: { id: string; plan?: string | null }) => {
+    const plan = subscriptionsByOrg.get(row.id)?.plan || row.plan || 'FREE'
     planCounts.set(plan, (planCounts.get(plan) ?? 0) + 1)
   })
 
-  const subscriptions = (subscriptionsData ?? []) as SubscriptionRow[]
   const organizationLookup = new Map(
     ((organizationsForPlans ?? []) as OrganizationLookupRow[]).map((organization) => [organization.id, organization])
   )
@@ -161,9 +180,14 @@ export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
     const renewalDays = daysUntil(subscription.current_period_ends_at)
     return renewalDays !== null && renewalDays >= 0 && renewalDays <= 14
   }).length
-  const estimatedMrr = subscriptions
-    .filter((subscription) => subscription.status === 'active' || subscription.status === 'trialing')
-    .reduce((sum, subscription) => sum + (commercialPlanPrices[normalizePlanCode(subscription.plan)] ?? 0), 0)
+  const estimatedMrr = calculateRecurringRevenue(
+    subscriptions.map((subscription) => ({
+      plan: subscription.plan,
+      status: subscription.status,
+      paymentStatus: subscription.payment_status,
+    })),
+    commercialPlanPrices
+  ).mrr
 
   const attentionItems = subscriptions
     .filter((subscription) => {
@@ -173,10 +197,11 @@ export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
         subscription.status === 'past_due' ||
         subscription.status === 'unpaid' ||
         Boolean(subscription.cancel_at_period_end) ||
-        (renewalDays !== null && renewalDays <= 14) ||
+        (renewalDays !== null && renewalDays >= 0 && renewalDays <= 14) ||
         (trialDays !== null && trialDays >= 0 && trialDays <= 14)
       )
     })
+    .sort((a, b) => attentionDeadline(a) - attentionDeadline(b))
     .slice(0, 6)
     .map((subscription) => {
       const organization = organizationLookup.get(subscription.organization_id)

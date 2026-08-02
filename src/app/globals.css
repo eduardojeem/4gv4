@@ -111,6 +111,17 @@
   animation-play-state: paused;
 }
 
+/* Barcode scanner line animation */
+@keyframes scan-line {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(96px); }
+  100% { transform: translateY(0); }
+}
+
+.animate-scan-line {
+  animation: scan-line 2s ease-in-out infinite;
+}
+
 :root {
   --radius: 0.5rem;
   /* Modo claro suavizado: fondos off-white con tinte frío (menos glare que el
@@ -894,47 +905,12 @@
   }
 }
 
-/* Estilos optimizados para notificaciones */
-.toast-optimized {
-  @apply transition-all duration-300 ease-in-out;
-  animation: toast-slide-in 0.3s ease-out;
-}
-
-.toast-optimized[data-state="open"] {
-  animation: toast-slide-in 0.3s ease-out;
-}
-
-.toast-optimized[data-state="closed"] {
-  animation: toast-slide-out 0.2s ease-in;
-}
-
+/* Estilos optimizados para notificaciones.
+   No definir animaciones con `transform` aca: Sonner apila los toasts con sus
+   propios translate/scale y las animaciones custom compiten con esos valores,
+   provocando saltos al entrar y salir. Sonner ya trae su transicion. */
 .toast-description {
-  @apply text-sm opacity-90 mt-1;
-}
-
-/* Animaciones para toasts */
-@keyframes toast-slide-in {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes toast-slide-out {
-  from {
-    transform: translateX(0);
-    opacity: 1;
-  }
-
-  to {
-    transform: translateX(100%);
-    opacity: 0;
-  }
+  @apply text-sm mt-1;
 }
 
 /* Estilos para diferentes tipos de notificaciones */
@@ -958,8 +934,9 @@
   @apply border-l-4 border-l-gray-500;
 }
 
-/* Efectos hover para botones de acción en toasts */
-.toast-optimized button:hover {
+/* Efectos hover solo para botones de accion/cancelar; el boton de cerrar
+   queda excluido para que no se agrande al pasar el mouse. */
+.toast-optimized [data-button]:not([data-close-button]):hover {
   @apply transform scale-105 transition-transform duration-150;
 }
 

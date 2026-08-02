@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getSuperAdminUser } from '@/lib/superadmin/auth'
+import { logSuperAdminAction } from '@/lib/superadmin/audit'
+import {
+  validateGlobalNotification,
+  type GlobalNotificationInput,
+} from '@/lib/superadmin/notification-validation'
 
 export async function GET(request: NextRequest) {
   const superAdmin = await getSuperAdminUser()
@@ -12,6 +17,8 @@ export async function GET(request: NextRequest) {
   const PAGE_SIZE = 25
 
   const admin = createAdminSupabase()
+  await admin.rpc('dispatch_due_global_notifications')
+
   let query = admin
     .from('global_notifications')
     .select('*', { count: 'exact' })
@@ -32,48 +39,44 @@ export async function POST(request: NextRequest) {
   const superAdmin = await getSuperAdminUser()
   if (!superAdmin) return NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 })
 
-  const body = await request.json() as {
-    title?: string
-    body?: string
-    type?: string
-    target?: string
-    target_org_ids?: string[]
-    status?: string
-    scheduled_at?: string | null
-  }
+  const body = await request.json().catch(() => null) as GlobalNotificationInput | null
+  if (!body) return NextResponse.json({ error: 'JSON invalido.' }, { status: 400 })
 
-  const { title, body: msgBody, type, target, target_org_ids, status, scheduled_at } = body
-
-  if (!title?.trim() || !msgBody?.trim()) {
-    return NextResponse.json({ error: 'Titulo y cuerpo son obligatorios.' }, { status: 400 })
-  }
-  if (!['info', 'warning', 'success', 'danger'].includes(type ?? '')) {
-    return NextResponse.json({ error: 'Tipo invalido.' }, { status: 400 })
-  }
-  if (!['all', 'specific'].includes(target ?? '')) {
-    return NextResponse.json({ error: 'Destino invalido.' }, { status: 400 })
-  }
-  if (!['draft', 'scheduled', 'sent'].includes(status ?? '')) {
-    return NextResponse.json({ error: 'Estado invalido.' }, { status: 400 })
-  }
+  const validation = validateGlobalNotification(body)
+  if (validation.error) return NextResponse.json({ error: validation.error }, { status: 400 })
+  const notification = validation.data
 
   const admin = createAdminSupabase()
+  if (notification.target_org_ids) {
+    const { count, error: targetError } = await admin
+      .from('organizations')
+      .select('id', { count: 'exact', head: true })
+      .in('id', notification.target_org_ids)
+    if (targetError) return NextResponse.json({ error: 'No se pudieron validar las organizaciones.' }, { status: 500 })
+    if (count !== notification.target_org_ids.length) {
+      return NextResponse.json({ error: 'Una o mas organizaciones no existen.' }, { status: 400 })
+    }
+  }
+
   const { data, error } = await admin
     .from('global_notifications')
     .insert({
-      title: title.trim(),
-      body: msgBody.trim(),
-      type: type ?? 'info',
-      target: target ?? 'all',
-      target_org_ids: target === 'specific' ? (target_org_ids ?? []) : null,
-      status: status ?? 'draft',
-      scheduled_at: status === 'scheduled' ? (scheduled_at ?? null) : null,
-      sent_at: status === 'sent' ? new Date().toISOString() : null,
+      ...notification,
+      sent_at: notification.status === 'sent' ? new Date().toISOString() : null,
       created_by: superAdmin.id,
     })
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  await logSuperAdminAction({
+    actorId: superAdmin.id,
+    actorEmail: superAdmin.email,
+    action: 'notification.created',
+    resource: 'global_notifications',
+    resourceId: data.id,
+    newValues: notification,
+    request,
+  })
   return NextResponse.json(data, { status: 201 })
 }

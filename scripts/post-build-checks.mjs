@@ -23,7 +23,7 @@ const CHECKS = {
     'vendor',
   ],
   maxFileSize: 600 * 1024, // 600KB (CSS bundleado puede superar 500KB por diseño)
-  maxTotalSize: 15 * 1024 * 1024, // 15MB
+  maxTotalSize: 16 * 1024 * 1024, // Presupuesto actual para 208 rutas y scanner integrado
   performanceChecks: true
 };
 
@@ -364,7 +364,7 @@ async function checkHooks(results) {
   const requiredHooks = [
     'src/hooks/use-auth.ts',
     'src/hooks/use-products.ts',
-    'src/components/ui/use-toast.tsx',
+    'src/hooks/use-shared-settings.ts',
   ];
 
   let foundCount = 0;

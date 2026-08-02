@@ -5,6 +5,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { validatePassword } from '@/lib/auth/password-validation'
 import { logger } from '@/lib/logger'
 import { rateLimiter, getClientIp } from '@/lib/rate-limiter'
+import { linkPublicCustomerAccount } from '@/lib/customers/link-public-customer-account'
 
 const customerRegisterSchema = z.object({
   // Optional: when omitted the account is a marketplace-wide customer identity
@@ -18,14 +19,6 @@ const customerRegisterSchema = z.object({
     message: 'La contrasena no cumple los requisitos de seguridad',
   }),
 })
-
-function splitName(fullName: string) {
-  const parts = fullName.trim().split(/\s+/)
-  return {
-    firstName: parts[0] ?? fullName,
-    lastName: parts.slice(1).join(' ') || '',
-  }
-}
 
 function getSupabaseErrorMessage(result: unknown) {
   if (
@@ -123,8 +116,6 @@ export async function POST(request: Request) {
     }
 
     const userId = authData.user.id
-    const { firstName, lastName } = splitName(input.fullName)
-    const now = new Date().toISOString()
 
     // Si el email ya pertenecía a un usuario con rol de staff (Supabase puede devolver
     // el id existente por anti-enumeración), NO degradamos su rol a 'cliente'.
@@ -175,101 +166,27 @@ export async function POST(request: Request) {
 
     // Per-store link (only when registering from within a specific store).
     if (organization) {
-      let { data: existingCustomer } = await admin
-        .from('customers')
-        .select('id')
-        .eq('organization_id', organization.id)
-        .eq('profile_id', userId)
-        .maybeSingle()
-
-      if (!existingCustomer) {
-        const { data: emailCustomer } = await admin
-          .from('customers')
-          .select('id')
-          .eq('organization_id', organization.id)
-          .ilike('email', input.email)
-          .limit(1)
-          .maybeSingle()
-
-        existingCustomer = emailCustomer
-      }
-
-      if (!existingCustomer && input.phone) {
-        const { data: phoneCustomer } = await admin
-          .from('customers')
-          .select('id')
-          .eq('organization_id', organization.id)
-          .eq('phone', input.phone)
-          .limit(1)
-          .maybeSingle()
-
-        existingCustomer = phoneCustomer
-      }
-
-      const setupResults = await Promise.all([
-        admin.from('organization_members').upsert(
-          {
-            organization_id: organization.id,
-            user_id: userId,
-            role: 'customer',
-            status: 'active',
-          },
-          { onConflict: 'organization_id,user_id' }
-        ),
-        existingCustomer
-          ? admin
-              .from('customers')
-              .update({
-                name: input.fullName,
-                profile_id: userId,
-                first_name: firstName,
-                last_name: lastName,
-                email: input.email,
-                phone: input.phone || '',
-                status: 'active',
-                updated_at: now,
-              })
-              .eq('id', existingCustomer.id)
-              .eq('organization_id', organization.id)
-          : admin.from('customers').insert({
-              organization_id: organization.id,
-              profile_id: userId,
-              name: input.fullName,
-              first_name: firstName,
-              last_name: lastName,
-              email: input.email,
-              phone: input.phone || '',
-              customer_type: 'regular',
-              segment: 'new',
-              status: 'active',
-              created_at: now,
-              updated_at: now,
-            }),
-      ])
-
-      const setupError = setupResults.map(getSupabaseErrorMessage).find(Boolean)
-
-      if (setupError) {
+      try {
+        await linkPublicCustomerAccount(admin, {
+          organizationId: organization.id,
+          profileId: userId,
+          fullName: input.fullName,
+          email: input.email,
+          phone: input.phone,
+        })
+      } catch (linkError) {
         logger.error('Failed to finish public customer registration', {
-          error: setupError,
+          error: linkError,
           userId,
           organizationId: organization.id,
         })
-
-        const needsTenantCustomerIndex =
-          setupError.includes('idx_customers_profile_id') ||
-          setupError.toLowerCase().includes('duplicate key') ||
-          setupError.toLowerCase().includes('customers_profile_id')
-
         return NextResponse.json(
           {
             success: false,
-            code: needsTenantCustomerIndex ? 'tenant_customer_index_required' : 'customer_register_link_failed',
-            error: needsTenantCustomerIndex
-              ? 'Falta aplicar la migracion multiempresa de clientes. Ejecuta la migracion 20260601010000_customers_profile_tenant_unique.sql.'
-              : 'La cuenta fue creada, pero no se pudo vincular como cliente de esta empresa. Contacta soporte.',
+            code: 'customer_register_link_failed',
+            error: 'La cuenta fue creada, pero no se pudo vincular como cliente de esta empresa. Contacta soporte.',
           },
-          { status: needsTenantCustomerIndex ? 409 : 500 }
+          { status: 500 }
         )
       }
     }

@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 
 // Tipos de alertas
 export type AlertType = 
@@ -133,7 +133,6 @@ export function useAutomaticAlerts(products: any[] = []) {
   const [alertRules, setAlertRules] = useState<AlertRule[]>(defaultAlertRules)
   const [isEnabled, setIsEnabled] = useState(true)
   const lastCheckRef = useRef<Record<string, Date>>({})
-  const { toast } = useToast()
 
   // Función para verificar si una regla debe ejecutarse
   const shouldTriggerRule = useCallback((rule: AlertRule): boolean => {
@@ -212,11 +211,7 @@ export function useAutomaticAlerts(products: any[] = []) {
           }
         )
         setAlerts(prev => [alert, ...prev])
-        toast({
-          title: alert.title,
-          description: alert.message,
-          variant: 'default'
-        })
+        toast.warning(alert.title, { description: alert.message })
         lastCheckRef.current[stockLowRule.id] = new Date()
       }
     }
@@ -238,15 +233,11 @@ export function useAutomaticAlerts(products: any[] = []) {
           }
         )
         setAlerts(prev => [alert, ...prev])
-        toast({
-          title: alert.title,
-          description: alert.message,
-          variant: 'destructive'
-        })
+        toast.error(alert.title, { description: alert.message })
         lastCheckRef.current[stockOutRule.id] = new Date()
       }
     }
-  }, [products, alertRules, shouldTriggerRule, createAlert, toast])
+  }, [products, alertRules, shouldTriggerRule, createAlert])
 
   // Verificar productos vencidos y por vencer
   const checkExpiryAlerts = useCallback(() => {
@@ -302,15 +293,11 @@ export function useAutomaticAlerts(products: any[] = []) {
           }
         )
         setAlerts(prev => [alert, ...prev])
-        toast({
-          title: alert.title,
-          description: alert.message,
-          variant: 'destructive'
-        })
+        toast.error(alert.title, { description: alert.message })
         lastCheckRef.current[expiredRule.id] = new Date()
       }
     }
-  }, [products, alertRules, shouldTriggerRule, createAlert, toast])
+  }, [products, alertRules, shouldTriggerRule, createAlert])
 
   // Verificar métricas de ventas
   const checkSalesAlerts = useCallback(() => {

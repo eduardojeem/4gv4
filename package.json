@@ -91,6 +91,7 @@
     "dotenv": "^17.2.3",
     "framer-motion": "^12.23.26",
     "html2canvas": "^1.4.1",
+    "html5-qrcode": "2.3.8",
     "jose": "^5.9.6",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",

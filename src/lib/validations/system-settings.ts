@@ -3,6 +3,24 @@ import {
   DEFAULT_SYSTEM_COLOR_SCHEME,
   SYSTEM_COLOR_SCHEME_VALUES,
 } from '@/lib/theme/color-schemes'
+import {
+  SUPPORTED_CURRENCY_CODES,
+  SUPPORTED_LANGUAGE_CODES,
+  isSupportedCurrency,
+  isSupportedLanguage,
+} from '@/lib/currency'
+
+export const SupportedCurrencySchema = z.enum(SUPPORTED_CURRENCY_CODES)
+export const SupportedLanguageSchema = z.enum(SUPPORTED_LANGUAGE_CODES)
+
+export function isValidTimeZone(value: string) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format()
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * Esquema de validación para System Settings
@@ -41,7 +59,7 @@ export const SystemSettingsSchema = z.object({
     .default(''),
   
   // Configuración general
-  currency: z.enum(['PYG', 'USD', 'EUR', 'MXN']),
+  currency: SupportedCurrencySchema,
   
   taxRate: z.number()
     .min(0, 'La tasa de impuesto no puede ser negativa')
@@ -64,9 +82,9 @@ export const SystemSettingsSchema = z.object({
   itemsPerPage: z.number().int().min(5).max(100).default(10),
 
   // Configuración Regional
-  dateFormat: z.string().default('DD/MM/YYYY'),
-  timeZone: z.string().default('America/Asuncion'),
-  language: z.string().default('es'),
+  dateFormat: z.enum(['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD']).default('DD/MM/YYYY'),
+  timeZone: z.string().refine(isValidTimeZone, 'Zona horaria inválida').default('America/Asuncion'),
+  language: SupportedLanguageSchema.default('es'),
 
   // Características y Redes
   socialLinks: z.record(z.string(), z.string()).default({}),
@@ -153,13 +171,15 @@ export function mapDBToSettings(dbData: z.infer<typeof SystemSettingsDBSchema>):
     companyRuc: dbData.company_ruc || '',
     companyAddress: dbData.company_address || '',
     city: dbData.city || '',
-    currency: dbData.currency as 'PYG' | 'USD' | 'EUR' | 'MXN',
+    currency: isSupportedCurrency(dbData.currency) ? dbData.currency : 'PYG',
     taxRate: typeof dbData.tax_rate === 'string' ? parseFloat(dbData.tax_rate) : dbData.tax_rate,
     theme: (dbData.theme as 'light' | 'dark' | 'system') || 'system',
     primaryColor: (dbData.primary_color || 'blue') as import('@/lib/theme/color-schemes').SystemColorScheme,
-    dateFormat: dbData.date_format || 'DD/MM/YYYY',
-    timeZone: dbData.time_zone || 'America/Asuncion',
-    language: dbData.language || 'es',
+    dateFormat: dbData.date_format === 'MM/DD/YYYY' || dbData.date_format === 'YYYY-MM-DD'
+      ? dbData.date_format
+      : 'DD/MM/YYYY',
+    timeZone: dbData.time_zone && isValidTimeZone(dbData.time_zone) ? dbData.time_zone : 'America/Asuncion',
+    language: dbData.language && isSupportedLanguage(dbData.language) ? dbData.language : 'es',
     itemsPerPage: dbData.items_per_page ?? 10,
     socialLinks: (dbData.social_links as Record<string, string>) || {},
     features: (dbData.features as Record<string, boolean>) || {},

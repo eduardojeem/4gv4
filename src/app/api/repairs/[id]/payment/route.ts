@@ -236,6 +236,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
           .from('cash_closures')
           .select('id, register_id, branch_id')
           .eq('organization_id', ctx.organizationId)
+          .eq('branch_id', ctx.branchId)
           .is('date', null)
           .order('created_at', { ascending: false })
 
@@ -245,7 +246,6 @@ export async function POST(request: NextRequest, context: RouteParams) {
           branch_id: string | null
         }>
         const targetSession =
-          sessions.find((session) => session.branch_id === ctx.branchId) ??
           sessions.find((session) => (session.register_id ?? '').toLowerCase() === 'principal') ??
           sessions[0] ??
           null

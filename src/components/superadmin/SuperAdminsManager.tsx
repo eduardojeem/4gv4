@@ -19,12 +19,12 @@ import {
   ShieldOff,
   Trash2,
   UserCheck,
-  X,
   XCircle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
@@ -63,8 +63,8 @@ function relativeTime(value: string | null) {
   const days = Math.floor(hours / 24)
   if (days < 30) return `Hace ${days}d`
   const months = Math.floor(days / 30)
-  if (months < 12) return `Hace ${months}mes`
-  return `Hace ${Math.floor(months / 12)}a`
+  if (months < 12) return `Hace ${months} mes${months > 1 ? 'es' : ''}`
+  return `Hace ${Math.floor(months / 12)} año${Math.floor(months / 12) > 1 ? 's' : ''}`
 }
 
 function getInitials(name: string | null, email: string | null) {
@@ -431,57 +431,63 @@ export function SuperAdminsManager({ rows, currentUserId }: { rows: SuperAdminRo
         </div>
       </div>
 
-      {/* Revoke confirmation modal */}
-      {confirmRevoke && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader className="pb-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/40">
-                  <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                </div>
-                <div className="flex-1">
-                  <CardTitle className="text-base">Revocar rol de super_admin</CardTitle>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    El usuario perderá acceso global pero mantendrá su acceso normal con rol <code className="rounded bg-muted px-1 text-xs">admin</code>.
-                  </p>
-                </div>
-                <button onClick={() => setConfirmRevoke(null)} className="text-slate-400 hover:text-slate-600">
-                  <X className="h-4 w-4" />
-                </button>
+      {/* Revoke confirmation — Dialog accesible */}
+      <Dialog open={!!confirmRevoke} onOpenChange={(open) => { if (!open && !revoking) setConfirmRevoke(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-950/40">
+                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
               </div>
-            </CardHeader>
-            <CardContent>
+              <div>
+                <DialogTitle>Revocar rol de super_admin</DialogTitle>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  El usuario perderá acceso global pero mantendrá su acceso normal con rol{' '}
+                  <code className="rounded bg-muted px-1 text-xs">admin</code>.
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="space-y-4 px-6 pb-6">
+            {confirmRevoke && (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="text-sm font-semibold">{confirmRevoke.name || confirmRevoke.email}</p>
                 {confirmRevoke.email && confirmRevoke.name && (
                   <p className="text-xs text-slate-400">{confirmRevoke.email}</p>
                 )}
               </div>
-              {revokeError && (
-                <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
-                  <XCircle className="h-3.5 w-3.5 shrink-0" />
-                  {revokeError}
-                </div>
-              )}
-              <div className="mt-4 flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => setConfirmRevoke(null)} disabled={revoking !== null}>
-                  Cancelar
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => revokeRole(confirmRevoke)}
-                  disabled={revoking !== null}
-                  className="gap-1.5"
-                >
-                  {revoking ? 'Revocando...' : <><Trash2 className="h-3.5 w-3.5" />Confirmar revocación</>}
-                </Button>
+            )}
+            {revokeError && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+                <XCircle className="h-3.5 w-3.5 shrink-0" />
+                {revokeError}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            )}
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmRevoke(null)}
+                disabled={revoking !== null}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => confirmRevoke && revokeRole(confirmRevoke)}
+                disabled={revoking !== null}
+                className="gap-1.5"
+              >
+                {revoking
+                  ? 'Revocando...'
+                  : <><Trash2 className="h-3.5 w-3.5" />Confirmar revocación</>
+                }
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

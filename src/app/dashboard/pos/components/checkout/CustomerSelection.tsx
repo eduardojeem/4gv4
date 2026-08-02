@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
 import { 
   Users, 
   Star, 
@@ -17,9 +18,6 @@ import {
   MapPin, 
   AlertCircle
 } from 'lucide-react'
-import { CustomerProvider } from '@/contexts/CustomerContext'
-import { CustomerSyncSection } from '../CustomerSyncSection'
-import { CustomerRefreshButton } from '../CustomerRefreshButton'
 import { usePOSCustomer } from '../../contexts/POSCustomerContext'
 
 interface CreditSummary {
@@ -68,11 +66,9 @@ export function CustomerSelection({
     showFrequentOnly,
     setShowFrequentOnly,
     filteredCustomers,
-    setCustomers,
-    setCustomersSourceSupabase,
     customersSourceSupabase,
     lastCustomerRefreshCount,
-    setLastCustomerRefreshCount,
+    refreshCustomers,
     newCustomerOpen,
     setNewCustomerOpen,
     newFirstName,
@@ -90,7 +86,6 @@ export function CustomerSelection({
   } = usePOSCustomer()
 
   return (
-    <CustomerProvider>
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -105,14 +100,6 @@ export function CustomerSelection({
         </div>
 
         {/* Sincronización */}
-        <CustomerSyncSection
-          onSync={(rows, fromSupabase) => { 
-            setCustomers(rows)
-            setCustomersSourceSupabase(fromSupabase)
-          }}
-          onCount={(n) => setLastCustomerRefreshCount(n)}
-        />
-
         {/* Filtros de búsqueda */}
         <div className="flex items-center gap-2">
           <Input
@@ -138,13 +125,15 @@ export function CustomerSelection({
           >
             {showFrequentOnly ? 'Frecuentes ✓' : 'Frecuentes'}
           </Button>
-          <CustomerRefreshButton
-            onUpdated={(rows) => setCustomers(rows)}
-            setCustomersSourceSupabase={setCustomersSourceSupabase}
-            setLastCustomerRefreshCount={setLastCustomerRefreshCount}
-            lastCustomerRefreshCount={lastCustomerRefreshCount}
-            setCustomers={setCustomers}
-          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refreshCustomers()
+              .then(() => toast.success('Clientes actualizados'))
+              .catch(() => toast.error('No se pudieron actualizar los clientes'))}
+          >
+            {lastCustomerRefreshCount != null ? `Refrescar (${lastCustomerRefreshCount})` : 'Refrescar'}
+          </Button>
         </div>
 
         {/* Información de origen */}
@@ -389,6 +378,5 @@ export function CustomerSelection({
           </DialogContent>
         </Dialog>
       </div>
-    </CustomerProvider>
   )
 }

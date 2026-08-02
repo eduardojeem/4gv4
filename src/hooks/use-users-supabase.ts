@@ -7,6 +7,14 @@ import { toast } from 'sonner'
 export interface SupabaseUser extends User {
   avatar_url?: string
   updated_at?: string
+  /** Acceso a precios mayoristas (permiso products.read_wholesale_prices). */
+  isWholesale?: boolean
+  branches?: Array<{
+    id: string
+    name: string
+    city?: string | null
+    isPrimary?: boolean
+  }>
   organizations?: Array<{
     id: string
     name: string
@@ -19,6 +27,10 @@ export interface SupabaseUser extends User {
 interface UseUsersOptions {
   page?: number
   pageSize?: number
+  /** Poblacion a listar: staff de la organizacion, clientes, o ambos. */
+  scope?: 'staff' | 'customers' | 'all'
+  /** Limita el listado a quienes tienen acceso mayorista. */
+  wholesaleOnly?: boolean
   search?: string
   roleFilter?: string
   statusFilter?: string
@@ -48,10 +60,12 @@ type ApiUserProfile = {
   avatar_url?: string | null
   permissions?: string[] | null
   organizations?: SupabaseUser['organizations']
+  branches?: SupabaseUser['branches']
   updated_at?: string | null
   created_at?: string | null
   /** Real last sign-in time from auth.users (may be present in some API responses) */
   last_sign_in_at?: string | null
+  is_wholesale?: boolean | null
 }
 
 const DEFAULT_ROLE: CanonicalRole = 'cliente'
@@ -110,6 +124,8 @@ export function useUsersSupabase({
   search = '',
   roleFilter = 'all',
   statusFilter = 'all',
+  scope = 'staff',
+  wholesaleOnly = false,
 }: UseUsersOptions = {}) {
   const [users, setUsers] = useState<SupabaseUser[]>([])
   const [stats, setStats] = useState({
@@ -118,6 +134,7 @@ export function useUsersSupabase({
     inactive: 0,
     admins: 0,
     newThisMonth: 0,
+    byRole: { admin: 0, vendedor: 0, tecnico: 0, cliente: 0 } as Record<string, number>,
   })
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -136,7 +153,9 @@ export function useUsersSupabase({
     phone: profile.phone || '',
     avatar_url: profile.avatar_url ?? undefined,
     permissions: profile.permissions || [],
+    isWholesale: Boolean(profile.is_wholesale),
     organizations: profile.organizations || [],
+    branches: profile.branches || [],
     // Prefer the real last sign-in timestamp; fall back to null so the UI can
     // distinguish "never logged in" from "profile was recently edited".
     lastLogin: profile.last_sign_in_at ?? null,
@@ -157,7 +176,12 @@ export function useUsersSupabase({
         pageSize: String(pageSize),
         role: roleFilter || 'all',
         status: statusFilter || 'all',
+        scope,
       })
+
+      if (wholesaleOnly) {
+        params.set('wholesale', 'true')
+      }
 
       if (normalizedSearch) {
         params.set('search', normalizedSearch)
@@ -177,6 +201,7 @@ export function useUsersSupabase({
         inactive: payload.stats?.inactive || 0,
         admins: payload.stats?.admins || 0,
         newThisMonth: payload.stats?.newThisMonth || 0,
+        byRole: payload.stats?.byRole ?? { admin: 0, vendedor: 0, tecnico: 0, cliente: 0 },
       })
       setUsers((payload.data || []).map(mapProfileToUser))
     } catch (err: unknown) {
@@ -187,8 +212,7 @@ export function useUsersSupabase({
     } finally {
       setIsLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, search, roleFilter, statusFilter])
+  }, [page, pageSize, search, roleFilter, statusFilter, scope, wholesaleOnly])
 
   useEffect(() => {
     void fetchUsers()

@@ -1,5 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { normalizePlanCode } from '@/lib/saas/subscription-service'
+import { chunkValues, fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
 import {
   SubscriptionsDashboard,
   type SuperAdminSubscription,
@@ -53,14 +54,16 @@ type CommercialPlanRow = {
 export default async function SuperAdminSubscriptionsPage() {
   const admin = createAdminSupabase()
 
-  const [{ data, error }, { data: plansData }, { data: commercialPlansData }] = await Promise.all([
-    admin
-      .from('subscriptions')
-      .select(
-        'id, organization_id, plan, status, provider, provider_customer_id, provider_subscription_id, trial_ends_at, current_period_starts_at, current_period_ends_at, cancel_at_period_end, created_at, updated_at'
-      )
-      .order('updated_at', { ascending: false })
-      .limit(250),
+  const [subscriptionsResult, { data: plansData, error: plansError }, { data: commercialPlansData, error: commercialPlansError }] = await Promise.all([
+    fetchAllRows<SubscriptionRow>((from, to) =>
+      admin
+        .from('subscriptions')
+        .select(
+          'id, organization_id, plan, status, provider, provider_customer_id, provider_subscription_id, trial_ends_at, current_period_starts_at, current_period_ends_at, cancel_at_period_end, created_at, updated_at'
+        )
+        .order('updated_at', { ascending: false })
+        .range(from, to)
+    ),
     admin
       .from('plans')
       .select('code, name, limits, modules, is_active')
@@ -71,25 +74,37 @@ export default async function SuperAdminSubscriptionsPage() {
       .order('price', { ascending: true }),
   ])
 
-  const subscriptions = error ? [] : ((data ?? []) as SubscriptionRow[])
+  if (plansError || commercialPlansError) {
+    throw new Error(plansError?.message || commercialPlansError?.message || 'No se pudieron cargar los planes.')
+  }
+
+  const subscriptions = subscriptionsResult
   const organizationIds = Array.from(new Set(subscriptions.map((subscription) => subscription.organization_id).filter(Boolean)))
 
-  const { data: organizationsData } = organizationIds.length
-    ? await admin
-        .from('organizations')
-        .select('id, name, slug, plan, owner_id')
-        .in('id', organizationIds)
-    : { data: [] }
+  const organizationsData = organizationIds.length
+    ? (await Promise.all(chunkValues(organizationIds).map(async (ids) => {
+        const { data, error } = await admin
+          .from('organizations')
+          .select('id, name, slug, plan, owner_id')
+          .in('id', ids)
+        if (error) throw new Error(error.message)
+        return data ?? []
+      }))).flat()
+    : []
 
   const organizations = (organizationsData ?? []) as OrganizationRow[]
   const ownerIds = Array.from(new Set(organizations.map((organization) => organization.owner_id).filter(Boolean))) as string[]
 
-  const { data: profilesData } = ownerIds.length
-    ? await admin
-        .from('profiles')
-        .select('id, email, full_name')
-        .in('id', ownerIds)
-    : { data: [] }
+  const profilesData = ownerIds.length
+    ? (await Promise.all(chunkValues(ownerIds).map(async (ids) => {
+        const { data, error } = await admin
+          .from('profiles')
+          .select('id, email, full_name')
+          .in('id', ids)
+        if (error) throw new Error(error.message)
+        return data ?? []
+      }))).flat()
+    : []
 
   // Load member counts and product counts per organization (using count queries for performance)
   const memberCountMap = new Map<string, number>()
@@ -100,20 +115,20 @@ export default async function SuperAdminSubscriptionsPage() {
     // Use individual count queries per org is too slow for many orgs.
     // Instead, use a single grouped RPC or raw count approach.
     // For now, use lightweight select with head:true per batch.
-    const [{ data: membersRaw }, { data: productsRaw }, { data: salesRaw }] = await Promise.all([
-      admin.from('organization_members').select('organization_id', { count: 'exact', head: false }).in('organization_id', organizationIds).eq('status', 'active'),
-      admin.from('products').select('organization_id', { count: 'exact', head: false }).in('organization_id', organizationIds).eq('is_active', true).limit(5000),
-      admin.from('sales').select('organization_id', { count: 'exact', head: false }).in('organization_id', organizationIds).limit(5000),
-    ])
+    const { data: usageRows, error: usageError } = await admin.rpc('get_superadmin_org_usage_counts', {
+      p_organization_ids: organizationIds,
+    })
+    if (usageError) throw new Error(usageError.message)
 
-    for (const row of (membersRaw ?? []) as { organization_id: string }[]) {
-      memberCountMap.set(row.organization_id, (memberCountMap.get(row.organization_id) ?? 0) + 1)
-    }
-    for (const row of (productsRaw ?? []) as { organization_id: string }[]) {
-      productCountMap.set(row.organization_id, (productCountMap.get(row.organization_id) ?? 0) + 1)
-    }
-    for (const row of (salesRaw ?? []) as { organization_id: string }[]) {
-      salesCountMap.set(row.organization_id, (salesCountMap.get(row.organization_id) ?? 0) + 1)
+    for (const row of (usageRows ?? []) as Array<{
+      organization_id: string
+      members_count: number
+      products_count: number
+      sales_count: number
+    }>) {
+      memberCountMap.set(row.organization_id, Number(row.members_count) || 0)
+      productCountMap.set(row.organization_id, Number(row.products_count) || 0)
+      salesCountMap.set(row.organization_id, Number(row.sales_count) || 0)
     }
   }
 
@@ -147,7 +162,7 @@ export default async function SuperAdminSubscriptionsPage() {
             code: planDetails.code,
             name: commercialPlan?.name || planDetails.name,
             price_monthly: Number(commercialPlan?.price || 0),
-            currency: 'USD',
+            currency: 'PYG',
             limits: planDetails.limits || {},
             modules: planDetails.modules || [],
             is_active: planDetails.is_active !== false && commercialPlan?.is_active !== false,
@@ -174,9 +189,7 @@ export default async function SuperAdminSubscriptionsPage() {
       subscriptions={dashboardSubscriptions}
       planOptions={planOptions}
       loadError={
-        error
-          ? 'No se pudo cargar subscriptions. Verifica que la migracion SaaS este aplicada y que el esquema tenga current_period_ends_at.'
-          : null
+        null
       }
     />
   )

@@ -8,7 +8,6 @@ import {
   Globe,
   Package,
   Search,
-  Sparkles,
   Store,
   Tag,
   TrendingUp,

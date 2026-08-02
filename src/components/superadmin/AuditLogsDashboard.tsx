@@ -7,22 +7,16 @@ import {
   Activity,
   AlertCircle,
   AlertTriangle,
-  ArrowUpDown,
   Building2,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
-  ChevronUp,
-  Clock,
   Crown,
   Download,
-  Eye,
   FileText,
   Globe,
   LifeBuoy,
   LogIn,
   LogOut,
-  Mail,
   Minus,
   RefreshCw,
   Search,
@@ -32,9 +26,7 @@ import {
   ShieldCheck,
   Trash2,
   User,
-  UserMinus,
   UserPlus,
-  X,
   XCircle,
   Zap,
 } from 'lucide-react'
@@ -42,7 +34,15 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { SortIndicator } from '@/components/superadmin/sort-indicator'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -177,50 +177,44 @@ function StatCard({ label, value, sub, icon: Icon, tone = 'default' }: {
 // ---------------------------------------------------------------------------
 
 type LogPayload = { details: unknown; new_values: unknown; old_values: unknown } | null
+type LoadedLogPayload = { logId: string; payload: LogPayload }
 
 function DetailsDrawer({ log, onClose }: { log: AuditLogRow; onClose: () => void }) {
   const actionMeta = ACTION_META[log.action] ?? { label: log.action, color: 'text-slate-600', icon: Activity, category: 'other' }
   const severityMeta = SEVERITY_META[log.severity] ?? SEVERITY_META.low
   const ActionIcon = actionMeta.icon
   const SeverityIcon = severityMeta.icon
-  const [payload, setPayload] = useState<LogPayload>(null)
-  const [loadingPayload, setLoadingPayload] = useState(false)
+  const [loadedPayload, setLoadedPayload] = useState<LoadedLogPayload | null>(null)
+  const payload = loadedPayload?.logId === log.id ? loadedPayload.payload : null
+  const loadingPayload = loadedPayload?.logId !== log.id
 
   useEffect(() => {
-    setLoadingPayload(true)
-    fetch(`/api/superadmin/audit-logs/${log.id}`)
+    const controller = new AbortController()
+    fetch(`/api/superadmin/audit-logs/${log.id}`, { signal: controller.signal })
       .then((r) => r.json())
-      .then((data) => setPayload(data))
+      .then((data) => setLoadedPayload({ logId: log.id, payload: data }))
       .catch(() => {})
-      .finally(() => setLoadingPayload(false))
+    return () => controller.abort()
   }, [log.id])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
-      <div
-        className="h-full w-full max-w-lg overflow-y-auto border-l bg-background shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 p-4 backdrop-blur">
+    <Sheet open onOpenChange={(open) => { if (!open) onClose() }}>
+      <SheetContent className="w-full gap-0 overflow-y-auto p-0 sm:max-w-lg">
+        <SheetHeader className="sticky top-0 z-10 border-b bg-background/95 p-4 pr-12 text-left backdrop-blur">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
               <ActionIcon className={cn('h-4 w-4', actionMeta.color)} />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">{actionMeta.label}</h2>
-              <p className="text-xs text-slate-400">ID: {log.id.slice(0, 8)}...</p>
+              <SheetTitle className="text-base text-slate-900 dark:text-slate-50">
+                {actionMeta.label}
+              </SheetTitle>
+              <SheetDescription className="text-xs">
+                ID: {log.id.slice(0, 8)}...
+              </SheetDescription>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        </SheetHeader>
 
         <div className="space-y-4 p-4">
           {/* Metadata */}
@@ -322,8 +316,8 @@ function DetailsDrawer({ log, onClose }: { log: AuditLogRow; onClose: () => void
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -341,9 +335,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 // ---------------------------------------------------------------------------
 
 type SortKey = 'date' | 'action' | 'user' | 'severity'
-type FilterSeverity = 'all' | 'low' | 'medium' | 'high' | 'critical'
 type FilterCategory = 'all' | 'auth' | 'resource' | 'security' | 'user' | 'platform'
-type DateFilter = 'all' | '1h' | '24h' | '7d' | '30d'
 
 export function AuditLogsDashboard({
   rows, period, severityParam, page, pageSize, total,
@@ -442,13 +434,6 @@ export function AuditLogsDashboard({
     a.href = url
     a.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
-  }
-
-  const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sortKey !== col) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
-    return sortDir === 'asc'
-      ? <ChevronUp className="ml-1 h-3 w-3 text-indigo-500" />
-      : <ChevronDown className="ml-1 h-3 w-3 text-indigo-500" />
   }
 
   const thClass = 'px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400'
@@ -643,23 +628,23 @@ export function AuditLogsDashboard({
                 <tr>
                   <th className={cn(thClass, 'pl-4 w-24')}>
                     <button className={thBtn} onClick={() => toggleSort('date')}>
-                      Fecha <SortIcon col="date" />
+                      Fecha <SortIndicator active={sortKey === 'date'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>
                     <button className={thBtn} onClick={() => toggleSort('action')}>
-                      Acción <SortIcon col="action" />
+                      Acción <SortIndicator active={sortKey === 'action'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>Recurso</th>
                   <th className={thClass}>
                     <button className={thBtn} onClick={() => toggleSort('severity')}>
-                      Severidad <SortIcon col="severity" />
+                      Severidad <SortIndicator active={sortKey === 'severity'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>
                     <button className={thBtn} onClick={() => toggleSort('user')}>
-                      Usuario <SortIcon col="user" />
+                      Usuario <SortIndicator active={sortKey === 'user'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>IP</th>

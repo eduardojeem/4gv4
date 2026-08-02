@@ -679,6 +679,7 @@ export interface Database {
         Row: {
           id: string
           name: string
+          is_active: boolean
           is_open: boolean | null
           balance: number | null
           created_by: string | null
@@ -689,6 +690,7 @@ export interface Database {
         Insert: {
           id?: string
           name: string
+          is_active?: boolean
           is_open?: boolean | null
           balance?: number | null
           created_by?: string | null
@@ -699,6 +701,7 @@ export interface Database {
         Update: {
           id?: string
           name?: string
+          is_active?: boolean
           is_open?: boolean | null
           balance?: number | null
           created_by?: string | null

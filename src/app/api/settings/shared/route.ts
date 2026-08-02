@@ -3,13 +3,11 @@ import { resolveRequestAuthUser } from '@/lib/auth/request-auth'
 import { getCurrentOrganizationContext } from '@/lib/saas/context'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import {
-  SystemSettingsPartialSchema,
   mapDBToSettings,
   mapSettingsToDB,
   type SystemSettingsPartial,
 } from '@/lib/validations/system-settings'
-
-const TENANT_SETTINGS_KEY = 'admin_settings'
+import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 
 // Columnas de `system_settings` que son política de plataforma (super_admin) y
 // no deben viajar a los tenants en el endpoint compartido.
@@ -76,7 +74,7 @@ export async function GET() {
 
   const [
     { data: orgSettings, error: orgError },
-    { data: branch, error: branchError },
+    { data: legacyBranchFallback, error: branchError },
     { data: organization },
   ] = await Promise.all([
       admin
@@ -108,21 +106,19 @@ export async function GET() {
   }
 
   const effectiveSettings = toFrontendSettings(globalRow as Record<string, unknown>)
-  const modules = orgSettings?.modules
-  const rawOverrides =
-    modules && typeof modules === 'object' && !Array.isArray(modules)
-      ? (modules as Record<string, unknown>)[TENANT_SETTINGS_KEY]
-      : undefined
-  const parsedOverrides = SystemSettingsPartialSchema.safeParse(rawOverrides)
-  if (parsedOverrides.success) Object.assign(effectiveSettings, parsedOverrides.data)
+  const tenantOverrides = getTenantAdminSettings(orgSettings?.modules)
+  Object.assign(effectiveSettings, tenantOverrides)
 
   if (orgSettings?.display_name) effectiveSettings.companyName = orgSettings.display_name
   if (orgSettings?.currency) effectiveSettings.currency = orgSettings.currency
   if (orgSettings?.timezone) effectiveSettings.timeZone = orgSettings.timezone
-  if (branch?.email) effectiveSettings.companyEmail = branch.email
-  if (branch?.phone) effectiveSettings.companyPhone = branch.phone
-  if (branch?.address) effectiveSettings.companyAddress = branch.address
-  if (branch?.city) effectiveSettings.city = branch.city
+  // Compatibilidad con organizaciones creadas antes de que el contacto de
+  // empresa se guardara en admin_settings. Una vez configurado, la sucursal ya
+  // no vuelve a sobrescribir estos datos.
+  if (tenantOverrides.companyEmail === undefined && legacyBranchFallback?.email) effectiveSettings.companyEmail = legacyBranchFallback.email
+  if (tenantOverrides.companyPhone === undefined && legacyBranchFallback?.phone) effectiveSettings.companyPhone = legacyBranchFallback.phone
+  if (tenantOverrides.companyAddress === undefined && legacyBranchFallback?.address) effectiveSettings.companyAddress = legacyBranchFallback.address
+  if (tenantOverrides.city === undefined && legacyBranchFallback?.city) effectiveSettings.city = legacyBranchFallback.city
 
   // No exponer la política de seguridad de la PLATAFORMA a los tenants: estos
   // campos son globales (los administra el super_admin) y no tienen por qué

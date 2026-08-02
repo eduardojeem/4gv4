@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 import { usePublicCart } from '@/hooks/use-public-cart'
 import { useWebsiteSettings } from '@/hooks/useWebsiteSettings'
 import { useAuth } from '@/contexts/auth-context'
@@ -118,7 +118,6 @@ export function CartPageClient({
   const customerLoginHref = organizationSlug
     ? `/${organizationSlug}/cliente/login?next=${encodeURIComponent(`/${organizationSlug}/carrito`)}`
     : '/login?redirect=/carrito'
-  const { toast } = useToast()
   const { user, loading: loadingAuth, refreshUser } = useAuth()
   const { items, subtotal, setQuantity, setAvailableStock, removeItem, clear } = usePublicCart()
   const { settings: siteSettings } = useWebsiteSettings()
@@ -222,10 +221,10 @@ export function CartPageClient({
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Código promocional inválido.')
       setAppliedPromotion(payload.data)
       setPromotionCode(payload.data.code)
-      toast({ title: 'Promoción aplicada', description: `${payload.data.name}: ahorro de ${formatMoney(payload.data.discountAmount)}.` })
+      toast.success('Promoción aplicada', { description: `${payload.data.name}: ahorro de ${formatMoney(payload.data.discountAmount)}.` })
     } catch (error) {
       setAppliedPromotion(null)
-      toast({ title: 'No se pudo aplicar', description: error instanceof Error ? error.message : 'Código promocional inválido.', variant: 'destructive' })
+      toast.error('No se pudo aplicar la promoción', { description: error instanceof Error ? error.message : 'Código promocional inválido.' })
     } finally {
       setValidatingPromotion(false)
     }
@@ -338,10 +337,8 @@ export function CartPageClient({
       clear()
       setCreatedOrderNumber(payload.data.order_number as string)
     } catch (error) {
-      toast({
-        title: 'No se pudo confirmar',
+      toast.error('No se pudo confirmar el pedido', {
         description: error instanceof Error ? error.message : 'Intenta nuevamente.',
-        variant: 'destructive',
       })
     } finally {
       setLoading(false)

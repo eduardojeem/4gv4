@@ -29,6 +29,7 @@ describe('superadmin promo codes', () => {
 
     expect(result.subscriptionPatch).toEqual({
       status: 'active',
+      payment_status: 'paid',
       current_period_ends_at: '2026-07-31T00:00:00.000Z',
       cancel_at_period_end: false,
     })

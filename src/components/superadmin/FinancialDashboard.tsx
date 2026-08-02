@@ -13,7 +13,6 @@ import {
   CreditCard,
   ExternalLink,
   FileText,
-  Minus,
   RefreshCw,
   Sparkles,
   TrendingDown,
@@ -26,6 +25,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import type { CurrencyTotal } from '@/lib/superadmin/money-totals'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,8 +37,8 @@ export type FinancialData = {
   potentialMrr: number
   churnedMrr: number
   churnRate: number
-  totalRevenue: number
-  monthlyRevenue: number
+  revenueByCurrency: CurrencyTotal[]
+  monthlyRevenueByCurrency: CurrencyTotal[]
   counts: {
     total: number; active: number; trialing: number; pastDue: number
     suspended: number; canceled: number; cancelingSoon: number; renewalsSoon: number
@@ -58,10 +58,15 @@ function formatPYG(amount: number) {
   return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(amount)
 }
 
-function formatCompact(amount: number) {
-  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1)}M Gs`
-  if (amount >= 1_000) return `${(amount / 1_000).toFixed(0)}k Gs`
-  return `${amount} Gs`
+function formatCurrencyTotals(totals: CurrencyTotal[]) {
+  if (totals.length === 0) return formatPYG(0)
+  return totals
+    .map(({ amount, currency }) => new Intl.NumberFormat('es-PY', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: currency === 'PYG' ? 0 : 2,
+    }).format(amount))
+    .join(' + ')
 }
 
 const PLAN_COLORS: Record<string, { bar: string; badge: string }> = {
@@ -86,10 +91,10 @@ function BigMetric({
 }) {
   const tones = {
     default: 'bg-card border',
-    success: 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/50 dark:from-emerald-950/30 dark:to-slate-900',
-    warning: 'border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/50 dark:from-amber-950/30 dark:to-slate-900',
-    danger:  'border-red-200 bg-gradient-to-br from-red-50 to-white dark:border-red-900/50 dark:from-red-950/30 dark:to-slate-900',
-    info:    'border-blue-200 bg-gradient-to-br from-blue-50 to-white dark:border-blue-900/50 dark:from-blue-950/30 dark:to-slate-900',
+    success: 'border-emerald-200 bg-card dark:border-emerald-900/50',
+    warning: 'border-amber-200 bg-card dark:border-amber-900/50',
+    danger:  'border-red-200 bg-card dark:border-red-900/50',
+    info:    'border-blue-200 bg-card dark:border-blue-900/50',
   }
   const iconTones = {
     default: 'text-slate-500',
@@ -100,7 +105,7 @@ function BigMetric({
   }
 
   return (
-    <div className={cn('rounded-2xl border p-6', tones[tone])}>
+    <div className={cn('rounded-lg border p-4', tones[tone])}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -118,10 +123,10 @@ function BigMetric({
               </span>
             )}
           </div>
-          <p className="mt-2 text-3xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{value}</p>
+          <p className="mt-2 break-words text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-50">{value}</p>
           {sub && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{sub}</p>}
         </div>
-        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-background', iconTones[tone])}>
+        <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background', iconTones[tone])}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
@@ -405,7 +410,7 @@ export function FinancialDashboard({ data }: { data: FinancialData }) {
         />
         <BigMetric
           label="Revenue total"
-          value={formatPYG(data.totalRevenue)}
+          value={formatCurrencyTotals(data.revenueByCurrency)}
           sub={`${data.paymentCount} pagos recibidos`}
           icon={Wallet}
         />
@@ -421,10 +426,10 @@ export function FinancialDashboard({ data }: { data: FinancialData }) {
       </div>
 
       {/* Secondary metrics */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-2 xl:grid-cols-4 [&>div]:rounded-none [&>div]:border-0">
         <BigMetric
           label="Revenue este mes"
-          value={formatPYG(data.monthlyRevenue)}
+          value={formatCurrencyTotals(data.monthlyRevenueByCurrency)}
           sub="pagos confirmados últimos 30d"
           icon={Calendar}
         />

@@ -19,7 +19,7 @@ import {
   FileText,
   Code
 } from 'lucide-react'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 
 const SETUP_STEPS = [
   {
@@ -71,20 +71,15 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key`
 export default function SupabaseSetup() {
   const [currentStep, setCurrentStep] = useState(0)
   const [completedSteps, setCompletedSteps] = useState<string[]>([])
-  const { toast } = useToast()
-
   const copyToClipboard = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text)
-      toast({
-        title: 'Copiado',
+      toast.success('Copiado', {
         description: `${label} copiado al portapapeles`
       })
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo copiar al portapapeles',
-        variant: 'destructive'
+    } catch {
+      toast.error('No se pudo copiar al portapapeles', {
+        description: 'Copialo manualmente.'
       })
     }
   }
@@ -92,8 +87,7 @@ export default function SupabaseSetup() {
   const markStepCompleted = (stepId: string) => {
     if (!completedSteps.includes(stepId)) {
       setCompletedSteps([...completedSteps, stepId])
-      toast({
-        title: 'Paso completado',
+      toast.success('Paso completado', {
         description: `${SETUP_STEPS.find(s => s.id === stepId)?.title} marcado como completado`
       })
     }

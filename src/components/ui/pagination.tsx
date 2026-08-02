@@ -67,9 +67,9 @@ export function Pagination({
   }
 
   return (
-    <div className={cn("flex flex-col sm:flex-row items-center justify-between gap-4", className)}>
+    <div className={cn("flex flex-col items-center justify-between gap-3 sm:flex-row", className)}>
       {/* Items info and per page selector */}
-      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground sm:justify-start">
         <span>
           Mostrando {startItem} a {endItem} de {totalItems} resultados
         </span>
@@ -97,13 +97,14 @@ export function Pagination({
       </div>
 
       {/* Pagination controls */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-center gap-1">
         {/* First page */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => onPageChange(1)}
           disabled={currentPage === 1}
+          className="hidden h-8 w-8 p-0 sm:inline-flex"
           aria-label="Ir a la primera página"
         >
           <ChevronsLeft className="h-4 w-4" />
@@ -115,13 +116,14 @@ export function Pagination({
           size="sm"
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
+          className="h-8 w-8 p-0"
           aria-label="Página anterior"
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
         {/* Page numbers */}
-        <div className="flex items-center gap-1">
+        <div className="hidden items-center gap-1 md:flex">
           {getVisiblePages().map((page, index) => (
             <React.Fragment key={index}>
               {page === "..." ? (
@@ -131,7 +133,7 @@ export function Pagination({
                   variant={currentPage === page ? "default" : "outline"}
                   size="sm"
                   onClick={() => onPageChange(page as number)}
-                  className="min-w-[32px]"
+                  className="h-8 min-w-8 px-2"
                   aria-label={`Ir a la página ${page}`}
                   aria-current={currentPage === page ? "page" : undefined}
                 >
@@ -141,6 +143,9 @@ export function Pagination({
             </React.Fragment>
           ))}
         </div>
+        <span className="min-w-24 px-2 text-center text-sm text-muted-foreground md:hidden">
+          Página {currentPage} de {totalPages}
+        </span>
 
         {/* Next page */}
         <Button
@@ -148,6 +153,7 @@ export function Pagination({
           size="sm"
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
+          className="h-8 w-8 p-0"
           aria-label="Página siguiente"
         >
           <ChevronRight className="h-4 w-4" />
@@ -159,6 +165,7 @@ export function Pagination({
           size="sm"
           onClick={() => onPageChange(totalPages)}
           disabled={currentPage === totalPages}
+          className="hidden h-8 w-8 p-0 sm:inline-flex"
           aria-label="Ir a la última página"
         >
           <ChevronsRight className="h-4 w-4" />

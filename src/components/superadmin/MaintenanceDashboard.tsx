@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Clock,
   Database,
-  ExternalLink,
   FileX,
   HardDrive,
   History,
@@ -23,7 +22,6 @@ import {
   TrendingDown,
   Wrench,
   X,
-  XCircle,
   Zap,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'

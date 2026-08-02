@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireSuperAdmin } from '@/lib/superadmin/auth'
+import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import { siteUrl } from '@/lib/site-url'
 
@@ -23,7 +23,7 @@ function normalizePlanCode(value: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const superAdmin = await requireSuperAdmin()
+  const superAdmin = await getSuperAdminUser()
   if (!superAdmin) {
     return NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 })
   }
@@ -58,52 +58,27 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'El plan seleccionado no esta disponible.' }, { status: 400 })
   }
 
-  // Check slug uniqueness
-  const { data: existing } = await admin.from('organizations').select('id').eq('slug', slug).maybeSingle()
-  if (existing) return NextResponse.json({ error: `El slug "${slug}" ya está en uso.` }, { status: 409 })
-
-  // Create organization
-  const { data: org, error: orgError } = await admin
-    .from('organizations')
-    .insert({ name, slug, plan })
-    .select('id, name, slug, plan')
-    .single()
-
-  if (orgError || !org) {
-    return NextResponse.json({ error: orgError?.message || 'No se pudo crear la organización.' }, { status: 500 })
-  }
-
-  // Setup in parallel: settings + branch + subscription
   const trialDays = typeof subscriptionPlan.trial_days === 'number' && Number.isFinite(subscriptionPlan.trial_days)
     ? Math.max(0, subscriptionPlan.trial_days)
     : 14
   const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString()
-  const now = new Date().toISOString()
+  const { data: organizationRows, error: orgError } = await admin.rpc('create_superadmin_organization', {
+    p_name: name,
+    p_slug: slug,
+    p_plan: plan,
+    p_currency: currency,
+    p_timezone: timezone,
+    p_trial_ends_at: trialEndsAt,
+  })
+  const org = Array.isArray(organizationRows) ? organizationRows[0] : organizationRows
 
-  await Promise.allSettled([
-    admin.from('organization_settings').upsert({
-      organization_id: org.id,
-      display_name: name,
-      currency,
-      timezone,
-      branding: {},
-      modules: { onboarding: { status: 'pending', selected_plan: plan, started_at: now } },
-    }, { onConflict: 'organization_id' }),
-    admin.from('branches').insert({
-      organization_id: org.id,
-      name: 'Sucursal principal',
-      slug: 'principal',
-      is_active: true,
-      is_default: true,
-    }),
-    admin.from('subscriptions').upsert({
-      organization_id: org.id,
-      plan,
-      status: 'trialing',
-      trial_ends_at: trialEndsAt,
-      cancel_at_period_end: false,
-    }, { onConflict: 'organization_id' }),
-  ])
+  if (orgError || !org) {
+    const conflict = orgError?.code === '23505'
+    return NextResponse.json(
+      { error: conflict ? `El slug "${slug}" ya está en uso.` : orgError?.message || 'No se pudo crear la organización.' },
+      { status: conflict ? 409 : 500 }
+    )
+  }
 
   await logSuperAdminAction({
     actorId: superAdmin.id,
@@ -141,13 +116,14 @@ export async function POST(request: NextRequest) {
         ownerError = inviteError.message
       } else if (inviteData?.user) {
         const userId = inviteData.user.id
-        await Promise.allSettled([
-          admin.from('profiles').upsert({ id: userId, email: ownerEmail, full_name: ownerName || ownerEmail.split('@')[0], role: 'admin', status: 'active' }),
-          admin.from('user_roles').upsert({ user_id: userId, role: 'admin', is_active: true }, { onConflict: 'user_id' }),
-          admin.from('organization_members').upsert({ organization_id: org.id, user_id: userId, role: 'owner', status: 'active' }, { onConflict: 'organization_id,user_id' }),
-          admin.from('organizations').update({ owner_id: userId }).eq('id', org.id),
-        ])
-        ownerCreated = true
+        const { error: assignmentError } = await admin.rpc('assign_superadmin_organization_owner', {
+          p_organization_id: org.id,
+          p_user_id: userId,
+          p_email: ownerEmail,
+          p_full_name: ownerName || ownerEmail.split('@')[0],
+        })
+        ownerError = assignmentError?.message ?? null
+        ownerCreated = !assignmentError
         await logSuperAdminAction({
           actorId: superAdmin.id,
           actorEmail: superAdmin.email,
@@ -175,7 +151,7 @@ export async function POST(request: NextRequest) {
 
 // Slug availability check
 export async function GET(request: NextRequest) {
-  const superAdmin = await requireSuperAdmin()
+  const superAdmin = await getSuperAdminUser()
   if (!superAdmin) return NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 })
 
   const slug = request.nextUrl.searchParams.get('slug')

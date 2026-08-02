@@ -57,7 +57,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 import { addDays, subDays, format, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns'
 
 // Tipos para reportes
@@ -389,8 +389,6 @@ function KeyMetrics({ data }: { data: any }) {
 
 // Componente de exportación
 function ExportOptions({ onExport }: { onExport: (format: string) => void }) {
-  const { toast } = useToast()
-
   const exportFormats = [
     { id: 'pdf', name: 'PDF', icon: FileText, description: 'Documento PDF completo' },
     { id: 'excel', name: 'Excel', icon: FileSpreadsheet, description: 'Hoja de cálculo Excel' },
@@ -399,9 +397,8 @@ function ExportOptions({ onExport }: { onExport: (format: string) => void }) {
   ]
 
   const handleExport = (format: string) => {
-    toast({
-      title: 'Exportando reporte',
-      description: `Generando archivo ${format.toUpperCase()}...`
+    toast.info('Exportando reporte', {
+      description: `Generando archivo ${format.toUpperCase()}…`
     })
     onExport(format)
   }
@@ -450,7 +447,6 @@ export default function ReportsModule({ products = [] }: { products?: any[] }) {
   })
   const [activeReport, setActiveReport] = useState('sales')
   const [autoRefresh, setAutoRefresh] = useState(false)
-  const { toast } = useToast()
 
   const {
     salesData,
@@ -495,17 +491,15 @@ export default function ReportsModule({ products = [] }: { products?: any[] }) {
   const handleExport = (format: string) => {
     // Simulación de exportación
     setTimeout(() => {
-      toast({
-        title: 'Reporte exportado',
-        description: `El archivo ${format.toUpperCase()} se ha descargado correctamente.`
+      toast.success('Reporte exportado', {
+        description: `El archivo ${format.toUpperCase()} se descargó correctamente.`
       })
     }, 2000)
   }
 
   const handleRefresh = () => {
-    toast({
-      title: 'Actualizando datos',
-      description: 'Los reportes se están actualizando...'
+    toast.info('Actualizando datos', {
+      description: 'Los reportes se están actualizando…'
     })
   }
 

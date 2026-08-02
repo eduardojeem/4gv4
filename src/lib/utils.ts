@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { formatCurrency } from '@/lib/currency'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -44,11 +45,7 @@ export function formatDuration(milliseconds: number): string {
  * Formatea un precio en guaraníes paraguayos
  */
 export function formatPrice(price: number): string {
-  return new Intl.NumberFormat('es-PY', {
-    style: 'currency',
-    currency: 'PYG',
-    minimumFractionDigits: 0
-  }).format(price)
+  return formatCurrency(price)
 }
 
 /**

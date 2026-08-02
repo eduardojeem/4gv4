@@ -50,7 +50,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 
 // Tipos de datos adaptados a Supabase
@@ -84,7 +84,6 @@ const categories = ['Todos', 'Gestión', 'Tecnología', 'Marketing', 'Analytics'
 const statusOptions = ['Todos', 'Publicado', 'Borrador', 'Archivado']
 
 export default function PostsPage() {
-  const { toast } = useToast()
   // Estados principales
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
@@ -153,15 +152,13 @@ export default function PostsPage() {
       }
     } catch (error) {
       logger.error('Error fetching posts', { error })
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los posts.",
-        variant: "destructive"
+      toast.error("No se pudieron cargar los posts", {
+        description: "Intenta nuevamente."
       })
     } finally {
       setLoading(false)
     }
-  }, [toast])
+  }, [])
 
   useEffect(() => {
     fetchPosts()
@@ -306,9 +303,8 @@ export default function PostsPage() {
 
       if (error) throw error
 
-      toast({
-        title: "Post creado",
-        description: "El post se ha creado exitosamente."
+      toast.success("Post creado", {
+        description: "El post se creó exitosamente."
       })
 
       // Recargar posts
@@ -328,10 +324,8 @@ export default function PostsPage() {
 
     } catch (error) {
       logger.error('Error creating post', { error })
-      toast({
-        title: "Error",
-        description: "No se pudo crear el post. Asegúrate de estar autenticado.",
-        variant: "destructive"
+      toast.error("No se pudo crear el post", {
+        description: "Asegúrate de estar autenticado."
       })
     } finally {
       setIsSubmitting(false)
@@ -348,18 +342,15 @@ export default function PostsPage() {
 
       if (error) throw error
 
-      toast({
-        title: "Post eliminado",
-        description: "El post ha sido eliminado correctamente."
+      toast.success("Post eliminado", {
+        description: "El post se eliminó correctamente."
       })
       
       setPosts(prev => prev.filter(p => p.id !== id))
     } catch (error) {
       logger.error('Error deleting post', { error })
-      toast({
-        title: "Error",
-        description: "No se pudo eliminar el post.",
-        variant: "destructive"
+      toast.error("No se pudo eliminar el post", {
+        description: "Intenta nuevamente."
       })
     }
   }

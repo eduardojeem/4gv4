@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth, AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { canCreateResource } from '@/lib/saas/subscription-service'
+import { logger } from '@/lib/logger'
+import { startOfDayInTimeZone, DEFAULT_TIME_ZONE } from '@/lib/date/timezone'
+import {
+  parseBranchInventoryInitialization,
+  type BranchInventoryInitialization,
+} from '@/lib/branches/inventory-initialization'
 
 type BranchPayload = {
   organization_id?: unknown
@@ -15,6 +21,7 @@ type BranchPayload = {
   manager_name?: unknown
   is_active?: unknown
   is_default?: unknown
+  inventory_initialization?: unknown
 }
 
 type OrganizationSummary = {
@@ -138,71 +145,260 @@ async function resolveWritableOrganizationId(ctx: AdminAuthContext, requestedOrg
   return data.id
 }
 
-async function getBranchMetrics(branchId: string) {
-  const supabase = createAdminSupabase()
-  const monthStart = new Date()
-  monthStart.setDate(1)
-  monthStart.setHours(0, 0, 0, 0)
-  const monthStartIso = monthStart.toISOString()
+const INVENTORY_PAGE_SIZE = 1000
+const INVENTORY_INSERT_BATCH_SIZE = 500
 
-  const [
-    usersCountResult,
-    primaryUsersResult,
-    registersCountResult,
-    openRegistersCountResult,
-    salesResult,
-    repairsCountResult,
-  ] = await Promise.all([
+async function loadAllRows<T>(loadPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>) {
+  const rows: T[] = []
+
+  for (let from = 0; ; from += INVENTORY_PAGE_SIZE) {
+    const { data, error } = await loadPage(from, from + INVENTORY_PAGE_SIZE - 1)
+    if (error) throw new Error(error.message || 'No se pudo preparar el inventario inicial.')
+
+    const page = data ?? []
+    rows.push(...page)
+    if (page.length < INVENTORY_PAGE_SIZE) return rows
+  }
+}
+
+async function initializeBranchInventory(params: {
+  supabase: ReturnType<typeof createAdminSupabase>
+  organizationId: string
+  branchId: string
+  initialization: BranchInventoryInitialization
+}) {
+  const { supabase, organizationId, branchId, initialization } = params
+
+  if (initialization.mode === 'copy') {
+    const { data: sourceBranch, error: sourceError } = await supabase
+      .from('branches')
+      .select('id')
+      .eq('id', initialization.sourceBranchId)
+      .eq('organization_id', organizationId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (sourceError) throw sourceError
+    if (!sourceBranch) {
+      throw new Error('La sucursal de origen no existe, esta inactiva o pertenece a otra organizacion.')
+    }
+  }
+
+  const products = await loadAllRows<{ id: string }>((from, to) =>
+    supabase
+      .from('products')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
+
+  if (products.length === 0) return 0
+
+  const sourceStock = new Map<string, number>()
+  if (initialization.mode === 'copy') {
+    const inventoryRows = await loadAllRows<{ product_id: string; stock_quantity: number | null }>((from, to) =>
+      supabase
+        .from('branch_inventory')
+        .select('product_id, stock_quantity')
+        .eq('branch_id', initialization.sourceBranchId)
+        .order('product_id', { ascending: true })
+        .range(from, to)
+    )
+
+    for (const row of inventoryRows) {
+      sourceStock.set(row.product_id, Math.max(0, Number(row.stock_quantity || 0)))
+    }
+  }
+
+  const inventoryRows = products.map((product) => ({
+    branch_id: branchId,
+    product_id: product.id,
+    stock_quantity: initialization.mode === 'copy' ? sourceStock.get(product.id) ?? 0 : 0,
+    reserved_quantity: 0,
+  }))
+
+  for (let index = 0; index < inventoryRows.length; index += INVENTORY_INSERT_BATCH_SIZE) {
+    const { error } = await supabase
+      .from('branch_inventory')
+      .upsert(inventoryRows.slice(index, index + INVENTORY_INSERT_BATCH_SIZE), {
+        onConflict: 'branch_id,product_id',
+      })
+    if (error) throw error
+  }
+
+  return inventoryRows.length
+}
+
+type BranchMetrics = {
+  users_count: number
+  primary_users_count: number
+  registers_count: number
+  open_registers_count: number
+  sales_count: number
+  repairs_count: number
+  revenue_total: number
+}
+
+const EMPTY_METRICS: BranchMetrics = {
+  users_count: 0,
+  primary_users_count: 0,
+  registers_count: 0,
+  open_registers_count: 0,
+  sales_count: 0,
+  repairs_count: 0,
+  revenue_total: 0,
+}
+
+/**
+ * Inicio del mes en la zona de la organizacion. Hacerlo con `setHours` en el
+ * servidor resolveria contra la zona del host (UTC en produccion) y correria el
+ * corte varias horas, metiendo ventas en el mes equivocado.
+ */
+async function resolveMonthStartIso(organizationId: string | null) {
+  const supabase = createAdminSupabase()
+  let timeZone: string | undefined
+
+  if (organizationId) {
+    const { data } = await supabase
+      .from('organizations')
+      .select('timezone')
+      .eq('id', organizationId)
+      .maybeSingle()
+    timeZone = (data?.timezone as string | undefined) ?? undefined
+  }
+
+  const startOfToday = startOfDayInTimeZone(timeZone)
+  // Retroceder al dia 1 conservando el instante de medianoche local.
+  const localDay = Number(
+    new Intl.DateTimeFormat('en-US', { timeZone: timeZone || DEFAULT_TIME_ZONE, day: 'numeric' })
+      .format(startOfToday)
+  )
+  const monthStart = new Date(startOfToday.getTime() - (localDay - 1) * 24 * 60 * 60 * 1000)
+  return monthStart.toISOString()
+}
+
+/**
+ * Respaldo sin RPC: una consulta por tabla para TODAS las sucursales y el
+ * agrupado en memoria. Se usa mientras la migracion del agregado no este
+ * aplicada. Sigue siendo 4 consultas en total en lugar de 6 por sucursal.
+ */
+async function loadBranchMetricsFallback(branchIds: string[], monthStartIso: string) {
+  const supabase = createAdminSupabase()
+  const metrics = new Map<string, BranchMetrics>()
+  for (const id of branchIds) metrics.set(id, { ...EMPTY_METRICS })
+
+  const bump = (branchId: unknown, apply: (entry: BranchMetrics) => void) => {
+    const entry = metrics.get(String(branchId))
+    if (entry) apply(entry)
+  }
+
+  // `sales` arrastra deriva de esquema: algunas instalaciones tienen
+  // `total_amount`, otras `total`. Si la columna no existe la consulta falla,
+  // asi que se reintenta con el set minimo.
+  const loadSales = async () => {
+    const full = await supabase
+      .from('sales')
+      .select('branch_id, total_amount, total')
+      .in('branch_id', branchIds)
+      .gte('created_at', monthStartIso)
+
+    if (!full.error) return full
+    return supabase
+      .from('sales')
+      .select('branch_id, total_amount')
+      .in('branch_id', branchIds)
+      .gte('created_at', monthStartIso)
+  }
+
+  const [assignments, registers, sales, repairs] = await Promise.all([
     supabase
       .from('user_branch_assignments')
-      .select('id', { count: 'exact', head: true })
-      .eq('branch_id', branchId)
+      .select('branch_id, is_primary')
+      .in('branch_id', branchIds)
       .eq('is_active', true),
     supabase
-      .from('user_branch_assignments')
-      .select('id', { count: 'exact', head: true })
-      .eq('branch_id', branchId)
-      .eq('is_active', true)
-      .eq('is_primary', true),
-    supabase
       .from('cash_registers')
-      .select('id', { count: 'exact', head: true })
-      .eq('branch_id', branchId),
-    supabase
-      .from('cash_registers')
-      .select('id', { count: 'exact', head: true })
-      .eq('branch_id', branchId)
-      .eq('is_open', true),
-    supabase
-      .from('sales')
-      .select('id, total_amount, total, created_at')
-      .eq('branch_id', branchId)
-      .gte('created_at', monthStartIso),
+      .select('branch_id, is_open')
+      .in('branch_id', branchIds),
+    loadSales(),
     supabase
       .from('repairs')
-      .select('id', { count: 'exact', head: true })
-      .eq('branch_id', branchId),
+      .select('branch_id')
+      .in('branch_id', branchIds),
   ])
 
-  const salesRows = (salesResult.data ?? []) as Array<{
-    total_amount?: number | string | null
-    total?: number | string | null
-  }>
-
-  const revenueTotal = salesRows.reduce((sum, sale) => {
-    const totalAmount = Number(sale.total_amount ?? sale.total ?? 0)
-    return sum + (Number.isFinite(totalAmount) ? totalAmount : 0)
-  }, 0)
-
-  return {
-    users_count: usersCountResult.count ?? 0,
-    primary_users_count: primaryUsersResult.count ?? 0,
-    registers_count: registersCountResult.count ?? 0,
-    open_registers_count: openRegistersCountResult.count ?? 0,
-    sales_count: salesRows.length,
-    repairs_count: repairsCountResult.count ?? 0,
-    revenue_total: revenueTotal,
+  for (const row of (assignments.data ?? []) as Array<Record<string, unknown>>) {
+    bump(row.branch_id, (entry) => {
+      entry.users_count += 1
+      if (row.is_primary) entry.primary_users_count += 1
+    })
   }
+
+  for (const row of (registers.data ?? []) as Array<Record<string, unknown>>) {
+    bump(row.branch_id, (entry) => {
+      entry.registers_count += 1
+      if (row.is_open) entry.open_registers_count += 1
+    })
+  }
+
+  for (const row of (sales.data ?? []) as Array<Record<string, unknown>>) {
+    bump(row.branch_id, (entry) => {
+      entry.sales_count += 1
+      const amount = Number(row.total_amount ?? row.total ?? 0)
+      if (Number.isFinite(amount)) entry.revenue_total += amount
+    })
+  }
+
+  for (const row of (repairs.data ?? []) as Array<Record<string, unknown>>) {
+    bump(row.branch_id, (entry) => { entry.repairs_count += 1 })
+  }
+
+  return metrics
+}
+
+/** Metricas de todas las sucursales en una sola consulta agregada. */
+async function loadBranchMetrics(branchIds: string[], organizationId: string | null) {
+  const metrics = new Map<string, BranchMetrics>()
+  if (branchIds.length === 0) return metrics
+
+  const supabase = createAdminSupabase()
+  const monthStartIso = await resolveMonthStartIso(organizationId)
+
+  const { data, error } = await supabase.rpc('branch_metrics', {
+    p_branch_ids: branchIds,
+    p_month_start: monthStartIso,
+  })
+
+  if (error) {
+    // La migracion que crea el RPC puede no haber corrido todavia. En ese caso
+    // se calculan las metricas en el servidor con consultas por lote: no es tan
+    // exacto como el agregado en base (PostgREST corta las lecturas en 1000
+    // filas), pero devuelve datos reales en lugar de ceros.
+    logger.warn('branch_metrics RPC unavailable; falling back to batched queries', {
+      error: error.message,
+      organizationId,
+    })
+    return loadBranchMetricsFallback(branchIds, monthStartIso)
+  }
+
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    metrics.set(String(row.branch_id), {
+      users_count: Number(row.users_count ?? 0),
+      primary_users_count: Number(row.primary_users_count ?? 0),
+      registers_count: Number(row.registers_count ?? 0),
+      open_registers_count: Number(row.open_registers_count ?? 0),
+      sales_count: Number(row.sales_count ?? 0),
+      repairs_count: Number(row.repairs_count ?? 0),
+      revenue_total: Number(row.revenue_total ?? 0),
+    })
+  }
+
+  for (const id of branchIds) {
+    if (!metrics.has(id)) metrics.set(id, EMPTY_METRICS)
+  }
+
+  return metrics
 }
 
 async function getHandler(request: NextRequest, ctx: AdminAuthContext) {
@@ -245,15 +441,18 @@ async function getHandler(request: NextRequest, ctx: AdminAuthContext) {
       ? await loadOrganizationMap(rows.map((branch) => String(branch.organization_id ?? '')))
       : new Map<string, OrganizationSummary>()
 
-    const branches = await Promise.all(
-      rows.map(async (branch) => ({
-        ...branch,
-        organization: typeof branch.organization_id === 'string'
-          ? organizationMap.get(branch.organization_id) ?? null
-          : null,
-        ...(await getBranchMetrics(String(branch.id))),
-      }))
+    const metricsByBranchId = await loadBranchMetrics(
+      rows.map((branch) => String(branch.id)),
+      ctx.organizationId ?? requestedOrganizationId ?? null
     )
+
+    const branches = rows.map((branch) => ({
+      ...branch,
+      organization: typeof branch.organization_id === 'string'
+        ? organizationMap.get(branch.organization_id) ?? null
+        : null,
+      ...(metricsByBranchId.get(String(branch.id)) ?? EMPTY_METRICS),
+    }))
 
     return NextResponse.json({ branches, organizations })
   } catch (error) {
@@ -265,6 +464,15 @@ async function getHandler(request: NextRequest, ctx: AdminAuthContext) {
 async function postHandler(request: NextRequest, ctx: AdminAuthContext) {
   try {
     const body = await request.json() as BranchPayload
+    let inventoryInitialization: BranchInventoryInitialization
+    try {
+      inventoryInitialization = parseBranchInventoryInitialization(body.inventory_initialization)
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Configuracion de inventario invalida.' },
+        { status: 400 }
+      )
+    }
 
     const name = toText(body.name)
     const code = toText(body.code).toUpperCase() || slugify(name).slice(0, 12).toUpperCase()
@@ -302,8 +510,8 @@ async function postHandler(request: NextRequest, ctx: AdminAuthContext) {
           error: planGate.blocked
             ? 'No se puede crear la sucursal porque la suscripcion esta suspendida o cancelada. Reactiva la suscripcion para habilitar mas sucursales.'
             : planGate.expired
-              ? `No hay cupo para crear esta sucursal. Como el plan vencio, la organizacion quedo con el limite Free de ${limitText} sucursal(es). Elimina una sucursal que no uses o actualiza el plan.`
-              : `No hay cupo para crear esta sucursal. El plan ${planName} permite ${limitText} sucursal(es). Elimina una sucursal que no uses o actualiza el plan.`,
+              ? `No hay cupo para crear esta sucursal. Como el plan vencio, la organizacion quedo con el limite Free de ${limitText} sucursal(es). Actualiza el plan para habilitar mas sucursales.`
+              : `No hay cupo para crear esta sucursal. El plan ${planName} permite ${limitText} sucursal(es). Actualiza el plan para habilitar mas sucursales.`,
           code: planGate.blocked ? 'SUBSCRIPTION_BLOCKED' : 'PLAN_LIMIT_REACHED',
           resource: 'branches',
           current: planGate.current,
@@ -341,7 +549,42 @@ async function postHandler(request: NextRequest, ctx: AdminAuthContext) {
       )
     }
 
-    await supabase
+    let initializedProducts = 0
+    try {
+      initializedProducts = await initializeBranchInventory({
+        supabase,
+        organizationId,
+        branchId: data.id,
+        initialization: inventoryInitialization,
+      })
+    } catch (inventoryError) {
+      const { error: rollbackError } = await supabase
+        .from('branches')
+        .delete()
+        .eq('id', data.id)
+        .eq('organization_id', organizationId)
+
+      logger.error('Branch inventory initialization failed', {
+        error: inventoryError instanceof Error ? inventoryError.message : inventoryError,
+        rollbackError: rollbackError?.message,
+        branchId: data.id,
+        organizationId,
+      })
+
+      return NextResponse.json(
+        {
+          error: rollbackError
+            ? 'No se pudo inicializar el inventario y la sucursal requiere revision manual.'
+            : inventoryError instanceof Error
+              ? inventoryError.message
+              : 'No se pudo inicializar el inventario de la sucursal.',
+          code: 'BRANCH_INVENTORY_INITIALIZATION_FAILED',
+        },
+        { status: 500 }
+      )
+    }
+
+    const { error: assignmentError } = await supabase
       .from('user_branch_assignments')
       .insert({
         user_id: ctx.user.id,
@@ -353,7 +596,23 @@ async function postHandler(request: NextRequest, ctx: AdminAuthContext) {
       .select('id')
       .maybeSingle()
 
-    return NextResponse.json({ branch: data }, { status: 201 })
+    // No revierte el alta: la sucursal ya es valida sin la asignacion, pero si
+    // esto falla el creador no la ve en su selector y hay que poder rastrearlo.
+    if (assignmentError) {
+      logger.warn('Branch created but creator assignment failed', {
+        error: assignmentError.message,
+        branchId: data.id,
+        userId: ctx.user.id,
+      })
+    }
+
+    return NextResponse.json({
+      branch: data,
+      inventory: {
+        mode: inventoryInitialization.mode,
+        products_initialized: initializedProducts,
+      },
+    }, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Error interno del servidor.'
     return NextResponse.json({ error: message }, { status: 500 })

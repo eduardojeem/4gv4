@@ -2,34 +2,14 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
-
-type MembershipRow = {
-  organization_id: string
-  organizations:
-    | {
-        id: string
-        name: string
-        slug: string
-        plan: string
-      }
-    | Array<{
-        id: string
-        name: string
-        slug: string
-        plan: string
-      }>
-    | null
-}
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import { getTenantAdminSettings } from '@/lib/organization/admin-settings'
 
 type SettingsModules = {
   onboarding?: {
     status?: string
     completed_at?: string | null
   }
-}
-
-function getOrganization(row: MembershipRow) {
-  return Array.isArray(row.organizations) ? row.organizations[0] : row.organizations
 }
 
 export async function GET() {
@@ -42,24 +22,7 @@ export async function GET() {
 
   const admin = createAdminSupabase()
 
-  const { data: membership, error: membershipError } = await admin
-    .from('organization_members')
-    .select('organization_id, organizations!inner(id, name, slug, plan)')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (membershipError) {
-    logger.error('Failed to load onboarding status organization', {
-      error: membershipError.message,
-      userId: user.id,
-    })
-    return NextResponse.json({ error: 'No se pudo cargar la empresa.' }, { status: 500 })
-  }
-
-  const organization = membership ? getOrganization(membership as unknown as MembershipRow) : null
+  const organization = await getCurrentOrganizationContext(user.id)
 
   if (!organization) {
     return NextResponse.json({
@@ -98,10 +61,15 @@ export async function GET() {
   }
 
   const modules = (settings?.modules ?? {}) as SettingsModules
+  const adminSettings = getTenantAdminSettings(settings?.modules)
   const companyInfo = (companyInfoSetting?.value ?? {}) as { phone?: string; address?: string }
   const isCompleted = modules.onboarding?.status === 'completed'
   const hasCompanyBasics = Boolean((settings?.display_name || organization.name) && settings?.currency && settings?.timezone)
-  const hasContactBasics = Boolean((branch?.phone || companyInfo.phone) && (branch?.address || companyInfo.address) && branch?.city)
+  const hasContactBasics = Boolean(
+    (adminSettings.companyPhone ?? branch?.phone ?? companyInfo.phone)
+    && (adminSettings.companyAddress ?? branch?.address ?? companyInfo.address)
+    && (adminSettings.city ?? branch?.city)
+  )
 
   // Una vez que el admin completa explícitamente el onboarding, NO se lo fuerza
   // de vuelta. Los heurísticos de datos solo sirven para auto-saltar/mostrar el

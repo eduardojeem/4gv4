@@ -24,6 +24,7 @@ import {
   X
 } from 'lucide-react'
 import type { Customer } from '@/hooks/use-customer-state'
+import { formatCurrency } from '@/lib/currency'
 
 interface CustomerDetailModalProps {
   open: boolean
@@ -68,14 +69,6 @@ export function CustomerDetailModal({ open, onClose, customer }: CustomerDetailM
     } catch {
       return 'No disponible'
     }
-  }
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-PY', {
-      style: 'currency',
-      currency: 'PYG',
-      minimumFractionDigits: 0
-    }).format(amount)
   }
 
   return (

@@ -8,8 +8,6 @@ import {
   Eye,
   ImageIcon,
   LayoutTemplate,
-  Mail,
-  MapPin,
   MessageSquare,
   Phone,
   Sparkles,

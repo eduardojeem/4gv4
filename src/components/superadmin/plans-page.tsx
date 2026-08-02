@@ -74,22 +74,22 @@ const tierBadge: Record<string, string> = {
 
 const kpiTones = [
   {
-    wrap: 'border-blue-100/60 bg-gradient-to-br from-blue-50 to-sky-50 dark:border-blue-900/30 dark:from-blue-950/30 dark:to-sky-950/20',
+    wrap: 'border-blue-200 bg-card dark:border-blue-900/40',
     icon: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
     value: 'text-blue-700 dark:text-blue-300',
   },
   {
-    wrap: 'border-violet-100/60 bg-gradient-to-br from-violet-50 to-purple-50 dark:border-violet-900/30 dark:from-violet-950/30 dark:to-purple-950/20',
+    wrap: 'border-violet-200 bg-card dark:border-violet-900/40',
     icon: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
     value: 'text-violet-700 dark:text-violet-300',
   },
   {
-    wrap: 'border-emerald-100/60 bg-gradient-to-br from-emerald-50 to-teal-50 dark:border-emerald-900/30 dark:from-emerald-950/30 dark:to-teal-950/20',
+    wrap: 'border-emerald-200 bg-card dark:border-emerald-900/40',
     icon: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
     value: 'text-emerald-700 dark:text-emerald-300',
   },
   {
-    wrap: 'border-amber-100/60 bg-gradient-to-br from-amber-50 to-orange-50 dark:border-amber-900/30 dark:from-amber-950/30 dark:to-orange-950/20',
+    wrap: 'border-amber-200 bg-card dark:border-amber-900/40',
     icon: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
     value: 'text-amber-700 dark:text-amber-300',
   },
@@ -123,17 +123,17 @@ function KPICard({
 }) {
   const t = kpiTones[tone]
   return (
-    <Card className={cn('rounded-2xl border shadow-sm transition-shadow hover:shadow-md', t.wrap)}>
-      <CardContent className="p-5">
+    <Card className={cn('rounded-lg border shadow-none', t.wrap)}>
+      <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">
               {label}
             </p>
-            <p className={cn('text-2xl font-extrabold tracking-tight', t.value)}>{value}</p>
+            <p className={cn('text-xl font-bold', t.value)}>{value}</p>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">{helper}</p>
           </div>
-          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', t.icon)}>
+          <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-md', t.icon)}>
             <Icon className="h-5 w-5" />
           </div>
         </div>
@@ -229,7 +229,7 @@ function PlanCard({
   return (
     <div
       className={cn(
-        'group relative flex flex-col overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:shadow-lg dark:bg-slate-900',
+        'group relative flex flex-col overflow-hidden rounded-lg border bg-white transition-colors duration-200 hover:border-slate-400 dark:bg-slate-900 dark:hover:border-slate-600',
         !plan.is_active && 'opacity-70 grayscale',
         plan.is_popular
           ? 'border-violet-300 ring-2 ring-violet-200 dark:border-violet-700 dark:ring-violet-800/40'
@@ -252,7 +252,7 @@ function PlanCard({
       <div className="flex flex-col gap-5 p-6">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
-          <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl', plan.color_config?.icon || 'bg-slate-100 dark:bg-slate-800')}>
+          <div className={cn('flex h-10 w-10 items-center justify-center rounded-md', plan.color_config?.icon || 'bg-slate-100 dark:bg-slate-800')}>
             <Icon className="h-5 w-5" />
           </div>
           <span className={cn('rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider', badge)}>
@@ -281,8 +281,8 @@ function PlanCard({
 
         {/* Org count pill */}
         <div className={cn(
-          'flex items-center justify-between rounded-xl px-4 py-2.5',
-          'bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800/60 dark:to-slate-800/40',
+          'flex items-center justify-between rounded-md px-4 py-2.5',
+          'bg-slate-50 dark:bg-slate-800/50',
           'border border-slate-200/60 dark:border-slate-700/40',
         )}>
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
@@ -471,7 +471,7 @@ function FeatureTableHeader({ plan }: { plan: SubscriptionPlan }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function PlansPageContent() {
-  const [activeTab, setActiveTab] = useState<'cards' | 'table'>('cards')
+  const [activeTab, setActiveTab] = useState<'cards' | 'table'>('table')
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
   const [stats, setStats] = useState<SubscriptionPlanStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -590,24 +590,20 @@ export function PlansPageContent() {
   ]
 
   return (
-    <div className="mx-auto flex max-w-[1480px] flex-col gap-10">
+    <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
 
       {/* ── Premium Header ── */}
-      <header className="relative overflow-hidden rounded-3xl border border-slate-200/60 bg-gradient-to-br from-slate-900 via-slate-800 to-violet-950 px-8 py-8 shadow-xl dark:border-slate-800">
-        {/* Decorative glow */}
-        <div className="pointer-events-none absolute -right-32 -top-32 h-80 w-80 rounded-full bg-violet-600/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-20 left-20 h-48 w-48 rounded-full bg-blue-500/10 blur-2xl" />
-
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="contents">
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-              <Sparkles className="h-3 w-3 text-violet-400" />
+            <div className="flex items-center gap-2 text-xs font-bold uppercase text-slate-400">
+              <Sparkles className="h-3.5 w-3.5 text-violet-500" />
               Superadmin · Facturación · SaaS
             </div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-white">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
               Gestión de Planes
             </h1>
-            <p className="max-w-lg text-sm leading-relaxed text-slate-400">
+            <p className="max-w-2xl text-sm text-slate-500 dark:text-slate-400">
               Control completo sobre precios, límites y features de los planes SaaS. Los cambios se aplican en tiempo real.
             </p>
           </div>
@@ -618,7 +614,7 @@ export function PlansPageContent() {
               size="sm"
               onClick={loadPlans}
               disabled={loading}
-              className="h-9 gap-2 rounded-xl border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-white"
+              className="h-9 gap-2"
             >
               <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
               Actualizar
@@ -628,7 +624,7 @@ export function PlansPageContent() {
               size="sm"
               onClick={exportJson}
               disabled={loading || plans.length === 0}
-              className="h-9 gap-2 rounded-xl border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-white"
+              className="h-9 gap-2"
             >
               <Download className="h-4 w-4" />
               Exportar JSON
@@ -638,7 +634,7 @@ export function PlansPageContent() {
               onClick={() => setCreateOpen(true)}
               disabled={loading || allTiersUsed}
               title={allTiersUsed ? 'Ya existen los 4 planes (free, basic, pro, enterprise). Editá uno existente.' : undefined}
-              className="h-9 gap-2 rounded-xl bg-violet-600 text-white shadow-lg hover:bg-violet-700"
+              className="h-9 gap-2"
             >
               <Plus className="h-4 w-4" />
               Nuevo plan
@@ -656,11 +652,11 @@ export function PlansPageContent() {
 
       {/* ── View toggle ── */}
       <div className="flex items-center justify-between gap-4">
-        <div className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-900">
           <button
             onClick={() => setActiveTab('cards')}
             className={cn(
-              'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all',
+              'flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors',
               activeTab === 'cards'
                 ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-slate-50'
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
@@ -672,7 +668,7 @@ export function PlansPageContent() {
           <button
             onClick={() => setActiveTab('table')}
             className={cn(
-              'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all',
+              'flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors',
               activeTab === 'table'
                 ? 'bg-white text-slate-950 shadow-sm dark:bg-slate-800 dark:text-slate-50'
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
@@ -694,10 +690,10 @@ export function PlansPageContent() {
         <section className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
           {loading ? (
             Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-[520px] w-full rounded-2xl" />
+              <Skeleton key={i} className="h-[520px] w-full rounded-lg" />
             ))
           ) : plans.length === 0 ? (
-            <div className="col-span-4 flex flex-col items-center gap-4 rounded-3xl border border-dashed border-slate-300 bg-slate-50/50 p-16 text-center dark:border-slate-700 dark:bg-slate-900/30">
+            <div className="col-span-4 flex flex-col items-center gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center dark:border-slate-700 dark:bg-slate-900/30">
               <AlertCircle className="h-10 w-10 text-slate-300" />
               <div>
                 <p className="font-semibold text-slate-600 dark:text-slate-400">Sin planes configurados</p>
@@ -725,7 +721,7 @@ export function PlansPageContent() {
 
       {/* ── Feature Comparison Table ── */}
       {activeTab === 'table' && (
-        <Card className="overflow-hidden rounded-3xl border-slate-200/80 shadow-sm dark:border-slate-800">
+        <Card className="overflow-hidden rounded-lg border-slate-200/80 shadow-none dark:border-slate-800">
           <CardHeader className="border-b border-slate-100 px-6 py-5 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <div>

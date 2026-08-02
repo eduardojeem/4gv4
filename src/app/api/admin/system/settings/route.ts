@@ -8,11 +8,14 @@ import {
   mapSettingsToDB,
   type SystemSettingsPartial,
 } from '@/lib/validations/system-settings'
+import {
+  getTenantAdminSettings,
+  mergeTenantAdminSettings,
+  normalizeOrganizationModules,
+} from '@/lib/organization/admin-settings'
 
 const RATE_LIMIT = 20
 const RATE_LIMIT_WINDOW = 60 * 1000
-const TENANT_SETTINGS_KEY = 'admin_settings'
-
 const PLATFORM_ONLY_KEYS: ReadonlyArray<keyof SystemSettingsPartial> = [
   'maintenanceMode',
   'allowRegistration',
@@ -46,7 +49,8 @@ function toResponseRow(
 
 async function handleTenantUpdate(
   context: AdminAuthContext,
-  settings: SystemSettingsPartial
+  settings: SystemSettingsPartial,
+  confirmCurrencyChange: boolean
 ) {
   const organizationId = context.organizationId
   if (!organizationId) {
@@ -57,39 +61,48 @@ async function handleTenantUpdate(
   }
 
   const supabase = createAdminSupabase()
-  const [{ data: globalRow, error: globalError }, { data: orgSettings, error: orgError }, { data: branch, error: branchError }] =
+  const [{ data: globalRow, error: globalError }, { data: orgSettings, error: orgError }, { data: organization, error: organizationReadError }] =
     await Promise.all([
       supabase.from('system_settings').select('*').eq('id', 'system').single(),
       supabase
         .from('organization_settings')
-        .select('modules')
+        .select('modules, currency')
         .eq('organization_id', organizationId)
         .maybeSingle(),
-      supabase
-        .from('branches')
-        .select('id')
-        .eq('organization_id', organizationId)
-        .eq('is_default', true)
-        .maybeSingle(),
+      supabase.from('organizations').select('name').eq('id', organizationId).maybeSingle(),
     ])
 
-  if (globalError || orgError || branchError || !globalRow) {
-    console.error('Failed to load tenant settings context', { globalError, orgError, branchError })
+  if (globalError || orgError || organizationReadError || !globalRow || !organization) {
+    console.error('Failed to load tenant settings context', { globalError, orgError, organizationReadError })
     return NextResponse.json(
       { success: false, error: 'No se pudo cargar la configuración actual' },
       { status: 500 }
     )
   }
 
-  const existingModules =
-    orgSettings?.modules && typeof orgSettings.modules === 'object' && !Array.isArray(orgSettings.modules)
-      ? orgSettings.modules
-      : {}
-  const existingTenantSettings = SystemSettingsPartialSchema.safeParse(
-    (existingModules as Record<string, unknown>)[TENANT_SETTINGS_KEY]
-  )
+  const existingModules = normalizeOrganizationModules(orgSettings?.modules)
+  const existingTenantSettings = getTenantAdminSettings(existingModules)
+  const currentEffectiveSettings = {
+    ...toFrontendSettings(globalRow as Record<string, unknown>),
+    ...existingTenantSettings,
+    ...(orgSettings?.currency ? { currency: orgSettings.currency } : {}),
+  }
+  if (
+    settings.currency !== undefined
+    && settings.currency !== currentEffectiveSettings.currency
+    && !confirmCurrencyChange
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        code: 'CURRENCY_CHANGE_CONFIRMATION_REQUIRED',
+        error: 'Confirma que el cambio de moneda no convierte precios, saldos ni operaciones existentes.',
+      },
+      { status: 409 }
+    )
+  }
   const tenantSettings = {
-    ...(existingTenantSettings.success ? existingTenantSettings.data : {}),
+    ...existingTenantSettings,
     ...withoutPlatformSettings(settings),
   }
   const effectiveSettings = {
@@ -102,57 +115,52 @@ async function handleTenantUpdate(
     display_name: effectiveSettings.companyName,
     currency: effectiveSettings.currency,
     timezone: effectiveSettings.timeZone,
-    modules: {
-      ...existingModules,
-      [TENANT_SETTINGS_KEY]: tenantSettings,
-    },
+    modules: mergeTenantAdminSettings(existingModules, tenantSettings),
     updated_at: new Date().toISOString(),
   }
 
-  const branchChanges = {
-    ...(settings.companyPhone !== undefined ? { phone: settings.companyPhone || null } : {}),
-    ...(settings.companyAddress !== undefined ? { address: settings.companyAddress || null } : {}),
-    ...(settings.companyEmail !== undefined ? { email: settings.companyEmail || null } : {}),
-    ...(settings.city !== undefined ? { city: settings.city || null } : {}),
+  const companyNameChanged = settings.companyName !== undefined && settings.companyName !== organization.name
+  if (companyNameChanged) {
+    const { error: companyError } = await supabase
+      .from('organizations')
+      .update({ name: settings.companyName })
+      .eq('id', organizationId)
+    if (companyError) {
+      console.error('Failed to update organization name', { companyError, organizationId })
+      return NextResponse.json(
+        { success: false, error: 'No se pudo actualizar el nombre de la organización' },
+        { status: 500 }
+      )
+    }
   }
-  const branchUpdate = branch?.id && Object.keys(branchChanges).length > 0
-    ? supabase
-        .from('branches')
-        .update(branchChanges)
-        .eq('id', branch.id)
-        .eq('organization_id', organizationId)
-    : Promise.resolve({ error: null })
 
-  const companyUpdate = settings.companyName !== undefined
-    ? supabase.from('organizations').update({ name: settings.companyName }).eq('id', organizationId)
-    : Promise.resolve({ error: null })
+  const { error: organizationError } = await supabase
+    .from('organization_settings')
+    .upsert(organizationUpdate, { onConflict: 'organization_id' })
 
-  const [{ error: organizationError }, { error: companyError }, { error: defaultBranchError }] =
-    await Promise.all([
-      supabase.from('organization_settings').upsert(organizationUpdate, { onConflict: 'organization_id' }),
-      companyUpdate,
-      branchUpdate,
-    ])
-
-  if (organizationError || companyError || defaultBranchError) {
-    console.error('Failed to update tenant settings', {
-      organizationError,
-      companyError,
-      defaultBranchError,
-    })
+  if (organizationError) {
+    if (companyNameChanged) {
+      const { error: rollbackError } = await supabase
+        .from('organizations')
+        .update({ name: organization.name })
+        .eq('id', organizationId)
+      if (rollbackError) console.error('Failed to roll back organization name', { rollbackError, organizationId })
+    }
+    console.error('Failed to update tenant settings', { organizationError })
     return NextResponse.json(
-      { success: false, error: 'No se pudo guardar toda la configuración de la organización' },
+      { success: false, error: 'No se pudo guardar la configuración de la organización' },
       { status: 500 }
     )
   }
 
-  await supabase.from('audit_log').insert({
+  const { error: auditError } = await supabase.from('audit_log').insert({
     user_id: context.user.id,
     action: 'update_organization_settings',
     resource: 'organization_settings',
     resource_id: organizationId,
-    new_values: tenantSettings,
+    new_values: withoutPlatformSettings(settings),
   })
+  if (auditError) console.error('Failed to audit organization settings update', { auditError, organizationId })
 
   return NextResponse.json({
     success: true,
@@ -184,7 +192,7 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
     }
 
     if (context.user.role !== 'super_admin') {
-      return handleTenantUpdate(context, validation.data)
+      return handleTenantUpdate(context, validation.data, body?.confirmCurrencyChange === true)
     }
 
     const supabase = createAdminSupabase()
@@ -210,13 +218,14 @@ async function handler(request: NextRequest, context: AdminAuthContext) {
       )
     }
 
-    await supabase.from('audit_log').insert({
+    const { error: auditError } = await supabase.from('audit_log').insert({
       user_id: context.user.id,
       action: 'update_system_settings',
       resource: 'system_settings',
       resource_id: 'system',
       new_values: validation.data,
     })
+    if (auditError) console.error('Failed to audit global settings update', { auditError })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {

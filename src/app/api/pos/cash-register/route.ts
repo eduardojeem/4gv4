@@ -58,8 +58,18 @@ export const POST = withTenantAuth(
       })
 
       if (error) {
-        const status = error.message.includes('already open') ? 409 : 400
-        return NextResponse.json({ success: false, error: error.message }, { status })
+        const alreadyOpen = error.message.includes('already open')
+        const invalidRegister = error.message.includes('REGISTER_NOT_IN_BRANCH')
+        const incompatibleSchema = error.code === '42703' && error.message.includes('is_active')
+        const message = incompatibleSchema
+          ? 'La configuración de cajas está desactualizada. Aplica la migración pendiente y vuelve a intentar.'
+          : invalidRegister
+            ? 'La caja seleccionada no pertenece a esta sucursal.'
+            : error.message
+        return NextResponse.json(
+          { success: false, error: message, code: error.code },
+          { status: incompatibleSchema ? 503 : alreadyOpen ? 409 : 400 }
+        )
       }
 
       return NextResponse.json({ success: true, data })

@@ -1,5 +1,7 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { OrganizationsDashboard, type SuperAdminOrganization } from '@/components/superadmin/organizations/organizations-dashboard'
+import { chunkValues, fetchAllRows } from '@/lib/superadmin/fetch-all-rows'
+import { getEffectiveOrganizationPlan, summarizeOrganizationMembers } from '@/lib/superadmin/organization-directory'
 
 type OrganizationRow = {
   id: string
@@ -20,9 +22,13 @@ type MemberRow = {
 
 type SubscriptionRow = {
   organization_id: string
+  plan: string | null
   status: string | null
+  payment_status: string | null
+  provider: string | null
   trial_ends_at: string | null
   current_period_ends_at: string | null
+  cancel_at_period_end: boolean | null
 }
 
 type ProfileRow = {
@@ -34,40 +40,48 @@ type ProfileRow = {
 export default async function SuperAdminOrganizationsPage() {
   const admin = createAdminSupabase()
 
-  const { data: organizationsData } = await admin
-    .from('organizations')
-    .select('id, name, slug, plan, logo_url, owner_id, created_at, updated_at')
-    .order('created_at', { ascending: false })
-    .limit(250)
-
-  const organizations = (organizationsData ?? []) as OrganizationRow[]
+  const organizations = await fetchAllRows<OrganizationRow>((from, to) =>
+    admin
+      .from('organizations')
+      .select('id, name, slug, plan, logo_url, owner_id, created_at, updated_at')
+      .order('created_at', { ascending: false })
+      .range(from, to)
+  )
   const organizationIds = organizations.map((organization) => organization.id)
   const ownerIds = organizations.map((organization) => organization.owner_id).filter(Boolean) as string[]
 
-  const [membersResult, subscriptionsResult, profilesResult] = await Promise.all([
+  const organizationIdChunks = chunkValues(organizationIds)
+  const [members, subscriptions, profiles] = await Promise.all([
     organizationIds.length
-      ? admin
-          .from('organization_members')
-          .select('organization_id, role, status')
-          .in('organization_id', organizationIds)
-      : Promise.resolve({ data: [] }),
+      ? Promise.all(organizationIdChunks.map((ids) =>
+          fetchAllRows<MemberRow>((from, to) =>
+            admin
+              .from('organization_members')
+              .select('organization_id, role, status')
+              .in('organization_id', ids)
+              .range(from, to)
+          )
+        )).then((chunks) => chunks.flat())
+      : Promise.resolve([]),
     organizationIds.length
-      ? admin
-          .from('subscriptions')
-          .select('organization_id, status, trial_ends_at, current_period_ends_at')
-          .in('organization_id', organizationIds)
-      : Promise.resolve({ data: [] }),
+      ? Promise.all(organizationIdChunks.map((ids) =>
+          fetchAllRows<SubscriptionRow>((from, to) =>
+            admin
+              .from('subscriptions')
+              .select('organization_id, plan, status, payment_status, provider, trial_ends_at, current_period_ends_at, cancel_at_period_end')
+              .in('organization_id', ids)
+              .range(from, to)
+          )
+        )).then((chunks) => chunks.flat())
+      : Promise.resolve([]),
     ownerIds.length
-      ? admin
-          .from('profiles')
-          .select('id, email, full_name')
-          .in('id', ownerIds)
-      : Promise.resolve({ data: [] }),
+      ? Promise.all(chunkValues(ownerIds).map(async (ids) => {
+          const { data, error } = await admin.from('profiles').select('id, email, full_name').in('id', ids)
+          if (error) throw new Error(error.message)
+          return (data ?? []) as ProfileRow[]
+        })).then((chunks) => chunks.flat())
+      : Promise.resolve([]),
   ])
-
-  const members = (membersResult.data ?? []) as MemberRow[]
-  const subscriptions = (subscriptionsResult.data ?? []) as SubscriptionRow[]
-  const profiles = (profilesResult.data ?? []) as ProfileRow[]
 
   const membersByOrganization = new Map<string, MemberRow[]>()
   members.forEach((member) => {
@@ -83,12 +97,13 @@ export default async function SuperAdminOrganizationsPage() {
     const orgMembers = membersByOrganization.get(organization.id) ?? []
     const subscription = subscriptionsByOrganization.get(organization.id)
     const ownerProfile = organization.owner_id ? profilesById.get(organization.owner_id) : null
+    const memberSummary = summarizeOrganizationMembers(orgMembers)
 
     return {
       id: organization.id,
       name: organization.name,
       slug: organization.slug,
-      plan: organization.plan || 'FREE',
+      plan: getEffectiveOrganizationPlan(organization.plan, subscription?.plan ?? null),
       logo_url: organization.logo_url,
       owner_id: organization.owner_id,
       owner_name: ownerProfile?.full_name || null,
@@ -96,14 +111,27 @@ export default async function SuperAdminOrganizationsPage() {
       created_at: organization.created_at,
       updated_at: organization.updated_at,
       subscription_status: subscription?.status || null,
+      payment_status: subscription?.payment_status || null,
+      subscription_provider: subscription?.provider || null,
       trial_ends_at: subscription?.trial_ends_at || null,
       current_period_ends_at: subscription?.current_period_ends_at || null,
+      cancel_at_period_end: Boolean(subscription?.cancel_at_period_end),
       members_total: orgMembers.length,
       members_active: orgMembers.filter((member) => member.status === 'active').length,
       members_invited: orgMembers.filter((member) => member.status === 'invited').length,
       members_suspended: orgMembers.filter((member) => member.status === 'suspended').length,
+      staff_total: memberSummary.staffTotal,
+      staff_active: memberSummary.staffActive,
+      staff_invited: memberSummary.staffInvited,
+      staff_suspended: memberSummary.staffSuspended,
+      customers_total: memberSummary.customersTotal,
     }
   })
 
-  return <OrganizationsDashboard organizations={dashboardOrganizations} />
+  return (
+    <OrganizationsDashboard
+      organizations={dashboardOrganizations}
+      referenceTime={new Date().toISOString()}
+    />
+  )
 }

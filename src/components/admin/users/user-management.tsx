@@ -23,14 +23,18 @@ import {
   Copy,
   CheckCircle2,
   Link2,
+  Network,
+  UserRound,
 } from 'lucide-react'
 import { UserStatsCards } from './user-stats-cards'
 import { UserActivityTimeline } from './user-activity-timeline'
 import { UsersTable } from './users-table'
+import { UsersRoleTree } from './users-role-tree'
 import { UsersFilters } from './users-filters'
 import { UserDetailDialog } from './user-detail-dialog'
 import { useDebounce } from '@/hooks/use-debounce'
 import { toast } from 'sonner'
+import { logger } from '@/lib/logger'
 import { EditUserForm } from './EditUserForm'
 
 // ── Simple email validation ───────────────────────────────────────────────────
@@ -70,9 +74,18 @@ export function UserManagement() {
   const [roleFilter, setRoleFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [activeTab, setActiveTab] = useState('users')
+  const [wholesaleFilter, setWholesaleFilter] = useState<'all' | 'wholesale'>('all')
   const requestedEditUserId = searchParams.get('editUser')
 
   const debouncedSearch = useDebounce(searchTerm, 500)
+
+  // La pestaña activa decide qué población se pide y con qué tamaño de página:
+  // el árbol agrupa por rol, así que necesita traer bastante más que una tabla.
+  const scope: 'staff' | 'customers' = activeTab === 'customers' ? 'customers' : 'staff'
+  const listPageSize = activeTab === 'tree' ? 100 : pageSize
+  // En la pestaña de clientes el rol ya está fijado por el scope; arrastrar un
+  // filtro de rol elegido en otra pestaña devolvería siempre cero resultados.
+  const effectiveRoleFilter = activeTab === 'customers' ? 'all' : roleFilter
 
   // Hook de Supabase con paginación
   const {
@@ -89,10 +102,13 @@ export function UserManagement() {
     syncUsers
   } = useUsersSupabase({
     page,
-    pageSize,
+    pageSize: listPageSize,
     search: debouncedSearch,
-    roleFilter,
-    statusFilter
+    roleFilter: effectiveRoleFilter,
+    statusFilter,
+    scope,
+    // El filtro mayorista solo aplica a la pestaña de clientes.
+    wholesaleOnly: activeTab === 'customers' && wholesaleFilter === 'wholesale'
   })
 
   // Security Check
@@ -149,6 +165,7 @@ export function UserManagement() {
     phone: profile.phone || '',
     avatar_url: profile.avatar_url,
     permissions: profile.permissions || [],
+    isWholesale: Boolean(profile.isWholesale),
     lastLogin: profile.lastLogin ?? null,
     createdAt: profile.created_at || new Date().toISOString(),
     loginAttempts: 0,
@@ -161,20 +178,14 @@ export function UserManagement() {
 
     setIsLoadingUserQuota(true)
     try {
-      let response = await fetch('/api/admin/users/quota', { cache: 'no-store' })
-      let payload = await response.json().catch(() => ({}))
+      // Solo lectura. La regularizacion del cupo suspende usuarios, asi que no
+      // puede dispararse como efecto de abrir la pantalla: se ejecuta desde
+      // `enforceUserQuota`, con confirmacion explicita del administrador.
+      const response = await fetch('/api/admin/users/quota', { cache: 'no-store' })
+      const payload = await response.json().catch(() => ({}))
 
       if (!response.ok || !payload?.success) {
         throw new Error(payload?.error || 'No se pudo verificar el plan actual')
-      }
-
-      if (payload.overLimit && !payload.blocked) {
-        response = await fetch('/api/admin/users/quota', { method: 'POST', cache: 'no-store' })
-        payload = await response.json().catch(() => ({}))
-
-        if (!response.ok || !payload?.success) {
-          throw new Error(payload?.error || 'No se pudo regularizar el cupo del plan actual')
-        }
       }
 
       setUserQuota({
@@ -189,18 +200,54 @@ export function UserManagement() {
         message: payload.message || 'Estado del plan verificado.',
       })
 
-      const enforcedSuspensions = Number(payload.enforcedSuspensions ?? 0)
-      if (enforcedSuspensions > 0) {
-        toast.info(`Se suspendieron ${enforcedSuspensions} usuario(s) excedentes del cupo del plan.`)
-        refreshUsers()
-      }
     } catch (err: unknown) {
-      console.error('Error fetching user quota:', err)
+      logger.error('Error fetching user quota', { error: err })
       setUserQuota(null)
     } finally {
       setIsLoadingUserQuota(false)
     }
-  }, [isAdmin, refreshUsers])
+  }, [isAdmin])
+
+  // Suspende los usuarios que exceden el cupo del plan. Es destructivo, asi que
+  // se ejecuta solo a pedido explicito del administrador y previa confirmacion.
+  const enforceUserQuota = useCallback(async () => {
+    if (!isAdmin || !userQuota) return
+
+    const excess = userQuota.limit === null ? 0 : Math.max(0, userQuota.current - userQuota.limit)
+    const confirmed = window.confirm(
+      `Se van a suspender ${excess} usuario(s) para ajustar la organización al cupo del plan.\n\n` +
+        'Se conservan primero tu cuenta y los administradores; se suspenden los miembros más recientes. ' +
+        'Podés reactivarlos luego si liberás cupo o mejorás el plan.\n\n¿Querés continuar?'
+    )
+    if (!confirmed) return
+
+    setIsLoadingUserQuota(true)
+    try {
+      const response = await fetch('/api/admin/users/quota', { method: 'POST', cache: 'no-store' })
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo regularizar el cupo del plan actual')
+      }
+
+      const enforcedSuspensions = Number(payload.enforcedSuspensions ?? 0)
+      if (enforcedSuspensions > 0) {
+        toast.success(`Se suspendieron ${enforcedSuspensions} usuario(s) para ajustar el cupo del plan.`)
+        refreshUsers()
+      } else {
+        toast.info('No hubo usuarios que suspender: la organización ya está dentro del cupo.')
+      }
+
+      await refreshUserQuota()
+    } catch (err: unknown) {
+      logger.error('Error enforcing user quota', { error: err })
+      toast.error('No se pudo regularizar el cupo', {
+        description: err instanceof Error ? err.message : 'Intenta nuevamente.',
+      })
+    } finally {
+      setIsLoadingUserQuota(false)
+    }
+  }, [isAdmin, userQuota, refreshUsers, refreshUserQuota])
 
   useEffect(() => {
     if (!authLoading && user && isAdmin) {
@@ -208,10 +255,10 @@ export function UserManagement() {
     }
   }, [authLoading, isAdmin, refreshUserQuota, user])
 
-  // Reset page when filters change
+  // Reset page when filters or the active population change
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, roleFilter, statusFilter])
+  }, [debouncedSearch, roleFilter, statusFilter, activeTab, wholesaleFilter])
 
   useEffect(() => {
     if (!isSuperAdmin && (roleFilter === 'super_admin' || roleFilter === 'cliente')) {
@@ -488,17 +535,29 @@ export function UserManagement() {
           {(userQuota?.blocked || !userQuota?.allowed) && !isSuperAdmin ? (
             <div className="flex flex-wrap gap-2">
               {userQuota?.overLimit ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setActiveTab('users')
-                    setStatusFilter('active')
-                    setRoleFilter('all')
-                  }}
-                >
-                  Ver usuarios activos
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setActiveTab('users')
+                      setStatusFilter('active')
+                      setRoleFilter('all')
+                    }}
+                  >
+                    Ver usuarios activos
+                  </Button>
+                  {!userQuota.blocked ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isLoadingUserQuota}
+                      onClick={() => void enforceUserQuota()}
+                    >
+                      {isLoadingUserQuota ? 'Regularizando…' : 'Regularizar cupo'}
+                    </Button>
+                  ) : null}
+                </>
               ) : null}
               <Button size="sm" variant="outline" onClick={() => router.push('/admin/subscriptions')}>
                 Ver planes
@@ -517,6 +576,14 @@ export function UserManagement() {
           <TabsTrigger value="users" className="text-xs gap-1.5">
             <Users className="h-3.5 w-3.5" />
             Usuarios
+          </TabsTrigger>
+          <TabsTrigger value="tree" className="text-xs gap-1.5">
+            <Network className="h-3.5 w-3.5" />
+            Por rol
+          </TabsTrigger>
+          <TabsTrigger value="customers" className="text-xs gap-1.5">
+            <UserRound className="h-3.5 w-3.5" />
+            Clientes
           </TabsTrigger>
           <TabsTrigger value="activity" className="text-xs gap-1.5">
             <Activity className="h-3.5 w-3.5" />
@@ -543,6 +610,86 @@ export function UserManagement() {
                 showOrganization={isSuperAdmin}
                 page={page}
                 pageSize={pageSize}
+                totalCount={totalCount}
+                onPageChange={setPage}
+                onEdit={openEditDialog}
+                onDelete={(user) => {
+                  setSelectedUser(user)
+                  setIsDeleteDialogOpen(true)
+                }}
+                onView={(user) => {
+                  setSelectedUser(user)
+                  setIsViewDialogOpen(true)
+                }}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tree" className="space-y-4">
+          <UsersFilters
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            roleFilter={roleFilter}
+            onRoleFilterChange={setRoleFilter}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            showGlobalRoles={isSuperAdmin}
+          />
+
+          <Card className="border shadow-sm overflow-hidden">
+            <CardContent className="p-0">
+              <UsersRoleTree
+                users={users}
+                isLoading={dataLoading}
+                // Los totales por rol son de toda la organización y no reflejan
+                // los filtros, así que solo se muestran cuando no hay ninguno.
+                countsByRole={
+                  debouncedSearch || roleFilter !== 'all' || statusFilter !== 'all'
+                    ? undefined
+                    : stats.byRole
+                }
+                onView={(user) => {
+                  setSelectedUser(user)
+                  setIsViewDialogOpen(true)
+                }}
+                onEdit={openEditDialog}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="customers" className="space-y-4">
+          <div className="flex items-start gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            <UserRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <p>
+              Clientes vinculados a la organización. Compran en la tienda pública y no ocupan
+              cupo de staff del plan.
+            </p>
+          </div>
+
+          <UsersFilters
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+            roleFilter="all"
+            onRoleFilterChange={() => {}}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            showGlobalRoles={false}
+            hideRoleFilter
+            showWholesaleFilter
+            wholesaleFilter={wholesaleFilter}
+            onWholesaleFilterChange={setWholesaleFilter}
+          />
+
+          <Card className="border shadow-sm overflow-hidden">
+            <CardContent className="p-0">
+              <UsersTable
+                users={users}
+                isLoading={dataLoading}
+                showOrganization={isSuperAdmin}
+                page={page}
+                pageSize={listPageSize}
                 totalCount={totalCount}
                 onPageChange={setPage}
                 onEdit={openEditDialog}
@@ -760,6 +907,9 @@ export function UserManagement() {
         user={selectedUser}
         open={isViewDialogOpen}
         onOpenChange={setIsViewDialogOpen}
+        // Un cliente puede tener su propia organización: no se consultan ni se
+        // muestran sus permisos ni su actividad global de la plataforma.
+        isCustomerView={scope === 'customers' || selectedUser?.role === 'cliente'}
         onEdit={openEditDialog}
         onDeactivate={(targetUser) => handleSetStatusFromDetail(targetUser, 'inactive')}
         onReactivate={(targetUser) => handleSetStatusFromDetail(targetUser, 'active')}
@@ -816,7 +966,7 @@ export function UserManagement() {
             ) : (
               <div className="flex items-start gap-2 rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-3 text-xs text-blue-700 dark:text-blue-300">
                 <Link2 className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                El usuario recibirá un email de confirmación. Una vez que lo confirme, podrá usar "Olvidé mi contraseña" para configurar su acceso.
+                El usuario recibirá un email de confirmación. Una vez que lo confirme, podrá usar &quot;Olvidé mi contraseña&quot; para configurar su acceso.
               </div>
             )}
             <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">

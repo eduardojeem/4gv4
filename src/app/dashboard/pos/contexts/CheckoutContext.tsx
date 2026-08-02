@@ -30,6 +30,14 @@ interface CheckoutContextType {
   setCardNumber: (number: string) => void
   transferReference: string
   setTransferReference: (ref: string) => void
+  electronicProvider: string
+  setElectronicProvider: (provider: string) => void
+  electronicInstitution: string
+  setElectronicInstitution: (institution: string) => void
+  electronicChannel: 'card_terminal' | 'bank_transfer' | 'qr'
+  setElectronicChannel: (channel: 'card_terminal' | 'bank_transfer' | 'qr') => void
+  terminalId: string
+  setTerminalId: (terminalId: string) => void
   splitAmount: number
   setSplitAmount: (amount: number) => void
   notes: string
@@ -64,6 +72,10 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   const [cashReceived, setCashReceived] = useState<number>(0)
   const [cardNumber, setCardNumber] = useState('')
   const [transferReference, setTransferReference] = useState('')
+  const [electronicProvider, setElectronicProvider] = useState('')
+  const [electronicInstitution, setElectronicInstitution] = useState('')
+  const [electronicChannel, setElectronicChannel] = useState<'card_terminal' | 'bank_transfer' | 'qr'>('bank_transfer')
+  const [terminalId, setTerminalId] = useState('')
   const [splitAmount, setSplitAmount] = useState<number>(0)
   const [notes, setNotes] = useState('')
   const [discount, setDiscount] = useState<number>(0)
@@ -76,13 +88,17 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
       ...prev,
       {
         id: crypto.randomUUID(),
-        method: method as any,
+        method: method as PaymentSplit['method'],
         amount,
         reference,
-        cardLast4: method === 'card' && cardNumber ? cardNumber.slice(-4) : undefined
+        cardLast4: method === 'card' && cardNumber ? cardNumber.slice(-4) : undefined,
+        provider: electronicProvider || undefined,
+        institution: electronicInstitution || undefined,
+        channel: method === 'card' ? 'card_terminal' : method === 'transfer' ? electronicChannel : undefined,
+        terminalId: method === 'card' ? terminalId || undefined : undefined,
       }
     ])
-  }, [cardNumber])
+  }, [cardNumber, electronicChannel, electronicInstitution, electronicProvider, terminalId])
 
   const removePaymentSplit = useCallback((id: string) => {
     setPaymentSplit(prev => prev.filter(p => p.id !== id))
@@ -96,6 +112,10 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     setCashReceived(0)
     setCardNumber('')
     setTransferReference('')
+    setElectronicProvider('')
+    setElectronicInstitution('')
+    setElectronicChannel('bank_transfer')
+    setTerminalId('')
     setSplitAmount(0)
     setNotes('')
     setDiscount(0)
@@ -121,6 +141,14 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
       setCardNumber,
       transferReference,
       setTransferReference,
+      electronicProvider,
+      setElectronicProvider,
+      electronicInstitution,
+      setElectronicInstitution,
+      electronicChannel,
+      setElectronicChannel,
+      terminalId,
+      setTerminalId,
       splitAmount,
       setSplitAmount,
       notes,

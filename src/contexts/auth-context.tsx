@@ -5,7 +5,7 @@ import { createClient as createSupabaseClient } from '../lib/supabase/client'
 import { User as SupabaseUser, Session } from '@supabase/supabase-js'
 import { UserRole, hasEffectivePermission, canManageUser } from '../lib/auth/roles-permissions'
 import { normalizeRole } from '../lib/auth/role-utils'
-import { useToast } from '../components/ui/use-toast'
+import { toast } from 'sonner'
 import { logAuthEventClient } from '@/lib/auth-event-client'
 
 type ProfileStatus = 'active' | 'inactive' | 'suspended'
@@ -164,7 +164,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
-  const { toast } = useToast()
   const latestUserRef = useRef<AuthUser | null>(null)
 
   const supabase = useMemo(() => createSupabaseClient(), [])
@@ -404,10 +403,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signOut()
       if (error) {
         console.error('Error signing out:', error)
-        toast({
-          title: 'Error',
-          description: 'Error al cerrar sesión',
-          variant: 'destructive'
+        toast.error('No se pudo cerrar sesión', {
+          description: 'Intenta nuevamente.',
         })
       }
     } catch (error) {
@@ -415,7 +412,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false)
     }
-  }, [supabase, user, toast])
+  }, [supabase, user])
 
   // Función para actualizar el perfil
   const updateProfile = useCallback(async (updates: Partial<AuthUser['profile']>) => {

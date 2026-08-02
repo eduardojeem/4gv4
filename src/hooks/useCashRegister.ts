@@ -6,6 +6,7 @@ import { config } from '@/lib/config'
 import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders, withBranchFilter } from '@/lib/branches/client'
+import { calculateExpectedCashBalance, isPhysicalManualMovement } from '@/app/dashboard/pos/lib/cash-balance'
 
 export interface CashMovement {
     id: string
@@ -72,8 +73,8 @@ export function useCashRegister() {
     // Load available registers
     const loadRegisters = useCallback(async () => {
         if (!config.supabase.isConfigured || !supabase) {
-            setRegisters([{ id: 'principal', name: 'Caja Principal', is_active: true }])
-            return
+            setRegisters([])
+            return []
         }
 
         let query = supabase
@@ -85,14 +86,15 @@ export function useCashRegister() {
         const { data, error } = await query
 
         if (error) {
-            setRegisters(prev => prev.length ? prev : [{ id: 'principal', name: 'Caja Principal', is_active: true }])
-            return
+            throw new Error(error.message || 'No se pudieron cargar las cajas de la sucursal.')
         }
 
-        setRegisters((data || []).map(register => ({
+        const nextRegisters = (data || []).map(register => ({
             ...register,
             is_active: true
-        })))
+        }))
+        setRegisters(nextRegisters)
+        return nextRegisters
     }, [selectedBranchId, supabase])
 
     // Fetch history (closed sessions)
@@ -352,6 +354,7 @@ export function useCashRegister() {
                 return fullSession
             }
 
+            setCurrentSession(null)
             return null
         } catch (error: unknown) {
             // Check if error is due to network/fetch failure
@@ -381,8 +384,15 @@ export function useCashRegister() {
                 return false
             }
 
+            if (!registerId.trim()) {
+                toast.error('Selecciona una caja antes de abrirla')
+                return false
+            }
+
+            const normalizedRegisterId = registerId.trim()
+
             // Check if already open
-            const existingSession = await checkOpenSession(registerId)
+            const existingSession = await checkOpenSession(normalizedRegisterId)
             if (existingSession) {
                 toast.error('Esta caja ya está abierta')
                 return false
@@ -396,7 +406,7 @@ export function useCashRegister() {
                     ...branchHeaders(selectedBranchId),
                 },
                 body: JSON.stringify({
-                    registerId,
+                    registerId: normalizedRegisterId,
                     openingBalance,
                     note,
                     branchId: selectedBranchId,
@@ -405,6 +415,7 @@ export function useCashRegister() {
             const payload = await response.json() as {
                 success?: boolean
                 error?: string
+                code?: string
                 data?: {
                     id: string
                     register_id: string
@@ -447,7 +458,7 @@ export function useCashRegister() {
             const message = error instanceof Error
                 ? error.message
                 : (e?.message || e?.details || e?.hint || (e?.code ? `Código ${e.code}` : 'Desconocido'))
-            console.error('Error opening register:', JSON.stringify(error), error)
+            console.warn(`No se pudo abrir la caja: ${message}`)
             toast.error(`Error al abrir caja: ${message}`)
             return false
         } finally {
@@ -531,26 +542,26 @@ export function useCashRegister() {
         }
 
         try {
-            const actorId = await resolveActorId(userId)
-            const { data, error } = await supabase
-                .from('cash_movements')
-                .insert({
-                    session_id: currentSession.id,
+            await resolveActorId(userId)
+            const response = await fetch('/api/pos/cash-movements', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...branchHeaders(selectedBranchId) },
+                body: JSON.stringify({
+                    sessionId: currentSession.id,
                     type: 'cash_in',
                     amount,
                     reason,
-                    created_by: actorId,
-                    created_at: new Date().toISOString(),
-                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
-                })
-                .select()
-                .single()
-
-            if (error) throw error
+                    branchId: selectedBranchId,
+                }),
+            })
+            const payload = await response.json() as { success?: boolean; error?: string; data?: CashMovement }
+            if (!response.ok || !payload.success || !payload.data) {
+                throw new Error(payload.error || 'No se pudo registrar la entrada.')
+            }
 
             setCurrentSession(prev => prev ? {
                 ...prev,
-                movements: [...prev.movements, data]
+                movements: [...prev.movements, payload.data as CashMovement]
             } : null)
 
             toast.success('Entrada de efectivo registrada')
@@ -576,26 +587,26 @@ export function useCashRegister() {
         }
 
         try {
-            const actorId = await resolveActorId(userId)
-            const { data, error } = await supabase
-                .from('cash_movements')
-                .insert({
-                    session_id: currentSession.id,
+            await resolveActorId(userId)
+            const response = await fetch('/api/pos/cash-movements', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...branchHeaders(selectedBranchId) },
+                body: JSON.stringify({
+                    sessionId: currentSession.id,
                     type: 'cash_out',
                     amount,
                     reason,
-                    created_by: actorId,
-                    created_at: new Date().toISOString(),
-                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
-                })
-                .select()
-                .single()
-
-            if (error) throw error
+                    branchId: selectedBranchId,
+                }),
+            })
+            const payload = await response.json() as { success?: boolean; error?: string; data?: CashMovement }
+            if (!response.ok || !payload.success || !payload.data) {
+                throw new Error(payload.error || 'No se pudo registrar la salida.')
+            }
 
             setCurrentSession(prev => prev ? {
                 ...prev,
-                movements: [...prev.movements, data]
+                movements: [...prev.movements, payload.data as CashMovement]
             } : null)
 
             toast.success('Salida de efectivo registrada')
@@ -608,64 +619,23 @@ export function useCashRegister() {
     }, [currentSession, resolveActorId, selectedBranchId, supabase])
 
     // Register sale
-    const registerSale = useCallback(async (saleId: string, amount: number, method?: 'cash' | 'card' | 'transfer' | 'mixed') => {
-        if (!currentSession) return false
-
-        if (!config.supabase.isConfigured || !supabase) {
-            console.error('Supabase not configured for sale registration')
-            return false
-        }
-
-        try {
-            const actorId = await resolveActorId()
-            const { data, error } = await supabase
-                .from('cash_movements')
-                .insert({
-                    session_id: currentSession.id,
-                    type: 'sale',
-                    amount,
-                    reason: `Venta ${saleId}`,
-                    payment_method: method,
-                    created_by: actorId,
-                    created_at: new Date().toISOString(),
-                    ...(selectedBranchId ? { branch_id: selectedBranchId } : {})
-                })
-                .select()
-                .single()
-
-            if (error) throw error
-
-            // Update local state with REAL data
-            setCurrentSession(prev => prev ? {
-                ...prev,
-                // Ensure no duplicates by ID just in case
-                movements: [...prev.movements.filter(m => m.id !== data.id), data]
-            } : null)
-
-            return true
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Error desconocido'
-            console.error('Error registering sale movement:', error)
-            // We do NOT modify local state on error. The sale might have happened in database but cash movement failed?
-            // This is a critical consistency issue. 
-            // Ideally we should alert.
-            toast.error(`Error al registrar movimiento de caja para la venta: ${message}`)
-            return false
-        }
-    }, [currentSession, resolveActorId, selectedBranchId, supabase])
+    const registerSale = useCallback(async (
+        _saleId?: string,
+        _amount?: number,
+        _method?: 'cash' | 'card' | 'transfer' | 'mixed'
+    ) => {
+        void _saleId
+        void _amount
+        void _method
+        console.warn('registerSale is deprecated; process-sale records the movement atomically.')
+        return false
+    }, [])
 
     // Get current balance
     const getCurrentBalance = useCallback(() => {
         if (!currentSession) return 0
 
-        return currentSession.movements.reduce((sum, mov) => {
-            if (mov.type === 'opening' || mov.type === 'sale' || mov.type === 'cash_in') {
-                return sum + mov.amount
-            } else if (mov.type === 'cash_out') {
-                return sum - mov.amount
-            }
-            return sum
-        }, 0)
+        return calculateExpectedCashBalance(currentSession.movements)
     }, [currentSession])
 
     // Get session report
@@ -673,8 +643,8 @@ export function useCashRegister() {
         if (!currentSession) return null
 
         const sales = currentSession.movements.filter(m => m.type === 'sale')
-        const cashIns = currentSession.movements.filter(m => m.type === 'cash_in')
-        const cashOuts = currentSession.movements.filter(m => m.type === 'cash_out')
+        const cashIns = currentSession.movements.filter(m => m.type === 'cash_in' && isPhysicalManualMovement(m))
+        const cashOuts = currentSession.movements.filter(m => m.type === 'cash_out' && isPhysicalManualMovement(m))
 
         const totalSales = sales.reduce((sum, m) => sum + m.amount, 0)
         const totalCashIn = cashIns.reduce((sum, m) => sum + m.amount, 0)

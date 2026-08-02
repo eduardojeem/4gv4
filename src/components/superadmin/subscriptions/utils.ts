@@ -24,10 +24,10 @@ export function formatDate(value: string | null) {
   return new Intl.DateTimeFormat('es-PY', { dateStyle: 'medium' }).format(new Date(value))
 }
 
-export function formatMoney(value: number) {
+export function formatMoney(value: number, currency = 'PYG') {
   return new Intl.NumberFormat('es-PY', {
-    currency: 'USD',
-    maximumFractionDigits: 0,
+    currency,
+    maximumFractionDigits: currency === 'PYG' ? 0 : 2,
     style: 'currency',
   }).format(value)
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import {
   Activity,
@@ -8,15 +9,12 @@ import {
   ArrowUpRight,
   Award,
   BarChart3,
-  Building2,
-  CheckCircle2,
   Crown,
   DollarSign,
   Download,
   Loader2,
   PieChart as PieChartIcon,
   RefreshCw,
-  Sparkles,
   TrendingDown,
   TrendingUp,
   Users,
@@ -51,13 +49,6 @@ const PLAN_COLORS: Record<string, string> = {
   ENTERPRISE: '#f59e0b',
 }
 
-const PLAN_BADGE_CLASS: Record<string, string> = {
-  FREE: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
-  BASIC: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-300',
-  PRO: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/20 dark:text-violet-300',
-  ENTERPRISE: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300',
-}
-
 const emptyAnalytics: SuperAdminAnalyticsData = {
   growthData: [],
   planDistribution: [],
@@ -69,16 +60,6 @@ const emptyAnalytics: SuperAdminAnalyticsData = {
 
 function formatPYG(value: number) {
   return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(value)
-}
-
-function formatCompact(value: number) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`
-  return String(value)
-}
-
-function getInitials(name: string) {
-  return name.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'
 }
 
 // ---------------------------------------------------------------------------
@@ -96,10 +77,10 @@ function HeroMetric({
   trend?: { value: number; label: string }
 }) {
   const tones = {
-    indigo:  'from-indigo-500/10 to-transparent border-indigo-200/50 dark:border-indigo-900/50',
-    emerald: 'from-emerald-500/10 to-transparent border-emerald-200/50 dark:border-emerald-900/50',
-    amber:   'from-amber-500/10 to-transparent border-amber-200/50 dark:border-amber-900/50',
-    violet:  'from-violet-500/10 to-transparent border-violet-200/50 dark:border-violet-900/50',
+    indigo:  'border-indigo-200/70 bg-card dark:border-indigo-900/60',
+    emerald: 'border-emerald-200/70 bg-card dark:border-emerald-900/60',
+    amber:   'border-amber-200/70 bg-card dark:border-amber-900/60',
+    violet:  'border-violet-200/70 bg-card dark:border-violet-900/60',
   }
   const iconTones = {
     indigo:  'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
@@ -108,7 +89,7 @@ function HeroMetric({
     violet:  'bg-violet-500/15 text-violet-600 dark:text-violet-400',
   }
   return (
-    <div className={cn('overflow-hidden rounded-2xl border bg-gradient-to-br p-5', tones[tone])}>
+    <div className={cn('overflow-hidden rounded-lg border p-5', tones[tone])}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</p>
@@ -175,16 +156,22 @@ export function SuperAdminAnalyticsDashboard() {
       ['MRR', analytics.revenueData.mrr],
       ['ARR', analytics.revenueData.arr],
       ['Suscripciones activas', analytics.revenueData.activeSubscriptions],
-      ['ARPU (promedio)', analytics.revenueData.averageRevenuePerSub],
+      ['ARPS (promedio)', analytics.revenueData.averageRevenuePerSub],
       [],
       ['Mes', 'Nuevas organizaciones'],
       ...analytics.growthData.map((g) => [g.month, g.count]),
       [],
       ['Plan', 'Cantidad'],
       ...analytics.planDistribution.map((p) => [p.name, p.value]),
+      [],
+      ['Mes', 'Altas activas', 'Altas en otros estados'],
+      ...analytics.activityData.map((item) => [item.month, item.activeRegistrations, item.otherRegistrations]),
+      [],
+      ['Organización', 'Personal registrado'],
+      ...analytics.topOrganizations.map((organization) => [organization.name, organization.user_count]),
     ]
     const csv = rows.map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -216,7 +203,7 @@ export function SuperAdminAnalyticsDashboard() {
   }
 
   const { growthData, planDistribution, activityData, revenueData, topOrganizations } = analytics
-  const totalOrgs = growthData.reduce((sum, item) => sum + item.count, 0)
+  const totalOrgs = planDistribution.reduce((sum, item) => sum + item.value, 0)
   const currentMonth = growthData[growthData.length - 1]?.count || 0
   const previousMonth = growthData[growthData.length - 2]?.count || 0
   const growthPercentage = previousMonth > 0
@@ -240,6 +227,7 @@ export function SuperAdminAnalyticsDashboard() {
                 key={p}
                 type="button"
                 onClick={() => setPeriod(p)}
+                aria-pressed={period === p}
                 className={cn(
                   'h-7 rounded-md px-3 text-xs font-medium transition-colors',
                   period === p
@@ -271,7 +259,7 @@ export function SuperAdminAnalyticsDashboard() {
         <HeroMetric
           label="MRR"
           value={formatPYG(revenueData.mrr)}
-          sub="ingresos mensuales recurrentes"
+          sub="suscripciones activas cobrables"
           icon={DollarSign}
           tone="emerald"
         />
@@ -285,7 +273,7 @@ export function SuperAdminAnalyticsDashboard() {
         <HeroMetric
           label="Suscripciones activas"
           value={revenueData.activeSubscriptions.toString()}
-          sub={`ARPU: ${formatPYG(revenueData.averageRevenuePerSub)}`}
+          sub={`ARPS: ${formatPYG(revenueData.averageRevenuePerSub)}`}
           icon={Users}
           tone="indigo"
         />
@@ -315,8 +303,8 @@ export function SuperAdminAnalyticsDashboard() {
                   <p className="mt-0.5 text-xs text-slate-500">Nuevos tenants por mes</p>
                 </div>
               </div>
-              <Badge variant="outline" className="rounded-full text-xs">
-                Total: {totalOrgs}
+                  <Badge variant="outline" className="rounded-full text-xs">
+                    Organizaciones: {totalOrgs}
               </Badge>
             </div>
           </CardHeader>
@@ -439,8 +427,8 @@ export function SuperAdminAnalyticsDashboard() {
                 <Users className="h-4 w-4" />
               </div>
               <div>
-                <CardTitle className="text-base">Actividad de usuarios</CardTitle>
-                <p className="mt-0.5 text-xs text-slate-500">Activos vs inactivos por mes</p>
+                <CardTitle className="text-base">Altas de usuarios</CardTitle>
+                <p className="mt-0.5 text-xs text-slate-500">Personal registrado por mes y estado actual</p>
               </div>
             </div>
           </CardHeader>
@@ -465,8 +453,8 @@ export function SuperAdminAnalyticsDashboard() {
                     iconType="circle"
                     wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }}
                   />
-                  <Bar dataKey="active" fill="#10b981" name="Activos" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="inactive" fill="#64748b" name="Inactivos" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="activeRegistrations" fill="#10b981" name="Actualmente activos" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="otherRegistrations" fill="#64748b" name="Otros estados" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -504,7 +492,11 @@ export function SuperAdminAnalyticsDashboard() {
                     2: <Award className="h-3.5 w-3.5 text-orange-600" />,
                   }
                   return (
-                    <div key={`${org.name}-${index}`} className="rounded-lg border bg-card p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <Link
+                      key={org.id}
+                      href={`/superadmin/organizations?q=${encodeURIComponent(org.slug || org.name)}`}
+                      className="block rounded-lg border bg-card p-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                    >
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           'flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold',
@@ -536,7 +528,7 @@ export function SuperAdminAnalyticsDashboard() {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </Link>
                   )
                 })}
               </div>

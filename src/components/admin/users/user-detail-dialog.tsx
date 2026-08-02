@@ -67,6 +67,14 @@ interface UserDetailDialogProps {
   onResendInvite?: (user: SupabaseUser) => Promise<{ success: boolean; invite_link?: string | null }> | void
   isUpdatingStatus?: boolean
   currentUserId?: string | null
+  /**
+   * Vista de cliente: la persona solo esta vinculada a la organizacion como
+   * comprador. Puede ademas tener su propia organizacion en la plataforma, y
+   * ni `audit_log` ni `user_permissions` estan acotadas por organizacion, asi
+   * que consultarlas expondria su actividad y permisos de OTRO inquilino.
+   * Con esto activo esas consultas no se ejecutan y sus secciones no se rinden.
+   */
+  isCustomerView?: boolean
 }
 
 interface PermissionActions {
@@ -283,6 +291,7 @@ export function UserDetailDialog({
   onResendInvite,
   isUpdatingStatus = false,
   currentUserId,
+  isCustomerView = false,
 }: UserDetailDialogProps) {
   const supabase = useMemo(() => createClient(), [])
 
@@ -371,9 +380,11 @@ export function UserDetailDialog({
 
   useEffect(() => {
     if (!user || !open) return
+    // En vista de cliente no se consultan: son datos de alcance global.
+    if (isCustomerView) return
     void loadPermissions()
     void loadActivity()
-  }, [open, user, loadPermissions, loadActivity])
+  }, [open, user, isCustomerView, loadPermissions, loadActivity])
 
   const rolePermissions = useMemo(
     () => new Set((user ? ROLE_PERMISSIONS[user.role]?.permissions || [] : []).map((permission) => permission.id)),
@@ -473,7 +484,11 @@ export function UserDetailDialog({
 
   if (!user) return null
 
-  const hasWholesaleAccess = effectivePermissions.has(WHOLESALE_PRICE_PERMISSION)
+  // En vista de cliente no se cargan los permisos (son de alcance global), asi
+  // que el estado mayorista viene del campo puntual que resuelve la API.
+  const hasWholesaleAccess = isCustomerView
+    ? Boolean(user.isWholesale)
+    : effectivePermissions.has(WHOLESALE_PRICE_PERMISSION) || Boolean(user.isWholesale)
   const accountAgeDays = getAccountAgeDays(user.createdAt)
   const isSelfUser = currentUserId === user.id
   const canRunStatusAction =
@@ -604,12 +619,18 @@ export function UserDetailDialog({
 
         <div className="flex-1 overflow-hidden min-h-0 flex flex-col bg-slate-50/30 dark:bg-slate-900/20">
           <div className="px-4 md:px-8 pt-4 md:pt-6 pb-2 shrink-0">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className={cn('grid gap-4', isCustomerView ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4')}>
               {[
                 { icon: Clock3, label: 'Último acceso', value: getRelativeTime(user.lastLogin), color: 'text-blue-500', bg: 'bg-blue-500/10' },
                 { icon: CalendarDays, label: 'Antigüedad', value: `${accountAgeDays} días`, color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
-                { icon: ShieldCheck, label: 'Permisos', value: effectivePermissions.size, color: 'text-violet-500', bg: 'bg-violet-500/10' },
-                { icon: KeyRound, label: 'Acciones', value: totalGrantedActions, color: 'text-fuchsia-500', bg: 'bg-fuchsia-500/10' }
+                // Permisos y acciones son de alcance global: no se muestran a
+                // quien solo administra la relacion comercial con esta persona.
+                ...(isCustomerView
+                  ? []
+                  : [
+                      { icon: ShieldCheck, label: 'Permisos', value: effectivePermissions.size, color: 'text-violet-500', bg: 'bg-violet-500/10' },
+                      { icon: KeyRound, label: 'Acciones', value: totalGrantedActions, color: 'text-fuchsia-500', bg: 'bg-fuchsia-500/10' },
+                    ]),
               ].map((stat, i) => (
                 <div key={i} className="group relative overflow-hidden rounded-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/50 p-4 transition-all hover:shadow-md hover:bg-white dark:hover:bg-slate-900">
                   <div className="flex items-center gap-3">
@@ -631,19 +652,26 @@ export function UserDetailDialog({
           </div>
 
           <Tabs defaultValue="info" className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-4 md:px-8 md:pb-8">
-            <TabsList className="grid h-auto w-full shrink-0 grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-950 lg:w-[520px]">
+            <TabsList className={cn(
+              'grid h-auto w-full shrink-0 gap-1 rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-950',
+              isCustomerView ? 'grid-cols-1 lg:w-[200px]' : 'grid-cols-3 lg:w-[520px]'
+            )}>
               <TabsTrigger value="info" className="min-w-0 rounded-md px-2 py-2 text-xs font-medium data-[state=active]:bg-slate-100 data-[state=active]:shadow-none dark:data-[state=active]:bg-slate-900 sm:text-sm">
                 <User className="mr-1.5 h-4 w-4 shrink-0" />
                 <span className="truncate">Detalles</span>
               </TabsTrigger>
-              <TabsTrigger value="activity" className="min-w-0 rounded-md px-2 py-2 text-xs font-medium data-[state=active]:bg-slate-100 data-[state=active]:shadow-none dark:data-[state=active]:bg-slate-900 sm:text-sm">
-                <Activity className="mr-1.5 h-4 w-4 shrink-0" />
-                <span className="truncate">Actividad</span>
-              </TabsTrigger>
-              <TabsTrigger value="permissions" className="min-w-0 rounded-md px-2 py-2 text-xs font-medium data-[state=active]:bg-slate-100 data-[state=active]:shadow-none dark:data-[state=active]:bg-slate-900 sm:text-sm">
-                <Shield className="mr-1.5 h-4 w-4 shrink-0" />
-                <span className="truncate">Permisos</span>
-              </TabsTrigger>
+              {!isCustomerView && (
+                <>
+                  <TabsTrigger value="activity" className="min-w-0 rounded-md px-2 py-2 text-xs font-medium data-[state=active]:bg-slate-100 data-[state=active]:shadow-none dark:data-[state=active]:bg-slate-900 sm:text-sm">
+                    <Activity className="mr-1.5 h-4 w-4 shrink-0" />
+                    <span className="truncate">Actividad</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="permissions" className="min-w-0 rounded-md px-2 py-2 text-xs font-medium data-[state=active]:bg-slate-100 data-[state=active]:shadow-none dark:data-[state=active]:bg-slate-900 sm:text-sm">
+                    <Shield className="mr-1.5 h-4 w-4 shrink-0" />
+                    <span className="truncate">Permisos</span>
+                  </TabsTrigger>
+                </>
+              )}
             </TabsList>
 
             <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-0 md:pr-2">
@@ -674,7 +702,9 @@ export function UserDetailDialog({
                           <span className="text-left text-sm font-medium text-slate-900 dark:text-slate-100 sm:text-right">{user.phone}</span>
                         </div>
                       ) : null}
-                      {user.department ? (
+                      {/* El departamento es un dato laboral de la organizacion a la
+                          que pertenece la persona, no de su relacion como cliente. */}
+                      {user.department && !isCustomerView ? (
                         <div className="flex flex-col justify-between gap-2 px-4 py-3 sm:flex-row sm:items-start">
                           <div className="flex items-center gap-3 shrink-0">
                             <Building2 className="h-4 w-4 text-slate-400" />
@@ -705,9 +735,12 @@ export function UserDetailDialog({
                       <div className="flex flex-col justify-between gap-2 px-4 py-3 sm:flex-row sm:items-start">
                         <div className="flex items-center gap-3 shrink-0">
                           <Clock className="h-4 w-4 text-slate-400" />
-                          <span className="text-sm text-slate-500 dark:text-slate-400">Acceso</span>
+                          <span className="text-sm text-slate-500 dark:text-slate-400">Último acceso</span>
                         </div>
-                        <span className="text-left text-sm font-medium text-slate-900 dark:text-slate-100 sm:text-right">{formatDateTime(user.lastLogin)}</span>
+                        <div className="text-left sm:text-right">
+                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100 block">{formatDateTime(user.lastLogin)}</span>
+                          {user.lastLogin ? <span className="text-xs text-slate-400 font-medium">({getRelativeTime(user.lastLogin)})</span> : null}
+                        </div>
                       </div>
                       <div className="flex flex-col gap-2 px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -716,6 +749,41 @@ export function UserDetailDialog({
                         </div>
                         <span className="select-all break-all rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-mono text-xs leading-5 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">{user.id}</span>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Branch Assignments */}
+                  <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                    <h3 className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900 dark:border-slate-800 dark:text-slate-100">
+                      <div className="rounded-lg bg-blue-50 p-1.5 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                        <Building2 className="h-3.5 w-3.5" />
+                      </div>
+                      Sucursales Asignadas
+                    </h3>
+                    <div className="p-4">
+                      {user.branches && user.branches.length > 0 ? (
+                        <div className="space-y-2">
+                          {user.branches.map((b) => (
+                            <div key={b.id} className="flex items-center justify-between p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Building2 className="h-4 w-4 text-blue-500 shrink-0" />
+                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{b.name}</span>
+                                {b.city ? <span className="text-xs text-slate-400">· {b.city}</span> : null}
+                              </div>
+                              {b.isPrimary ? (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 text-[10px] font-bold uppercase">
+                                  Principal
+                                </Badge>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-xs text-slate-500 py-2">
+                          <Building2 className="h-4 w-4 text-slate-400" />
+                          <span>Acceso a todas las sucursales (Global / Sin restricción)</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -735,6 +803,8 @@ export function UserDetailDialog({
                 ) : null}
               </TabsContent>
 
+              {!isCustomerView && (
+              <>
               <TabsContent value="activity" className="m-0">
                 <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
                   <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
@@ -892,6 +962,8 @@ export function UserDetailDialog({
                   </div>
                 ) : null}
               </TabsContent>
+              </>
+              )}
             </div>
           </Tabs>
         </div>

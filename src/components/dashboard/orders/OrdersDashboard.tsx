@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { isPaymentConfirmable } from '@/lib/orders/payment-flow'
 import {
@@ -270,7 +270,6 @@ function OrderRow({
   onCancelRequest: () => void
   onDetailRequest: () => void
 }) {
-  const { toast } = useToast()
   const currentIdx = ORDER_FLOW.indexOf(order.status)
   const isTerminal = ['DELIVERED', 'CANCELLED'].includes(order.status)
   const nextStatus = !isTerminal && currentIdx < ORDER_FLOW.length - 1 ? ORDER_FLOW[currentIdx + 1] : null
@@ -300,7 +299,7 @@ function OrderRow({
     const items = order.order_items.map((i) => `• ${i.quantity}x ${i.product_name}`).join('\n')
     const text = `Pedido: ${order.order_number}\nCliente: ${order.customer_name}\nTel: ${order.customer_phone ?? '-'}\nTotal: ${formatMoney(order.total)}\n${items}`
     navigator.clipboard.writeText(text)
-    toast({ title: 'Copiado', description: order.order_number })
+    toast.success('Copiado', { description: order.order_number })
   }
 
   return (
@@ -629,7 +628,6 @@ function OrderDetailDialog({ order, open, onOpenChange }: {
 }
 
 export function OrdersDashboard() {
-  const { toast } = useToast()
   const abortRef = useRef<AbortController | null>(null)
   const statsLoadedRef = useRef(false)
 
@@ -653,9 +651,6 @@ export function OrdersDashboard() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null)
   const [detailOrder, setDetailOrder] = useState<CustomerOrder | null>(null)
-
-  const toastRef = useRef(toast)
-  toastRef.current = toast
 
   // Derived metrics (org-wide values come from the API `stats`/`meta`, not the page)
   const needsAction = (stats['PENDING'] ?? 0) + (stats['READY'] ?? 0)
@@ -690,7 +685,7 @@ export function OrdersDashboard() {
       if (data.meta) { setTodayCount(data.meta.todayCount); setTodayRevenue(data.meta.todayRevenue) }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return
-      toastRef.current({ title: 'Error al cargar pedidos', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })
+      toast.error('No se pudieron cargar los pedidos', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
     } finally {
       if (abortRef.current === controller) setLoading(false)
     }
@@ -717,9 +712,9 @@ export function OrdersDashboard() {
         return statusTab !== 'ALL' && updated.status !== statusTab ? mapped.filter((r) => r.id !== order.id) : mapped
       })
       setStats((cur) => ({ ...cur, [order.status]: Math.max(0, (cur[order.status] ?? 0) - 1), [nextStatus]: (cur[nextStatus] ?? 0) + 1 }))
-      toast({ title: 'Estado actualizado', description: `${order.order_number} → ${ORDER_STATUS_META[nextStatus].label}` })
+      toast.success('Estado actualizado', { description: `${order.order_number} → ${ORDER_STATUS_META[nextStatus].label}` })
     } catch (error) {
-      toast({ title: 'No se pudo actualizar', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })
+      toast.error('No se pudo actualizar', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
     } finally { setUpdatingId(null) }
   }
 
@@ -742,9 +737,9 @@ export function OrdersDashboard() {
       if (updated.payment_status === 'PAID' && order.payment_status !== 'PAID') {
         setTodayRevenue((cur) => cur + Number(updated.total || 0))
       }
-      toast({ title: 'Pago actualizado', description: `${order.order_number} → ${PAYMENT_STATUS_META[paymentStatus].label}` })
+      toast.success('Pago actualizado', { description: `${order.order_number} → ${PAYMENT_STATUS_META[paymentStatus].label}` })
     } catch (error) {
-      toast({ title: 'No se pudo actualizar el pago', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })
+      toast.error('No se pudo actualizar el pago', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
     } finally {
       setUpdatingId(null) 
     }
@@ -808,13 +803,13 @@ export function OrdersDashboard() {
       } while (current <= pages && current <= 50)
 
       if (collected.length === 0) {
-        toast({ title: 'Nada para exportar', description: 'No hay pedidos que coincidan con los filtros.' })
+        toast.info('Nada para exportar', { description: 'No hay pedidos que coincidan con los filtros.' })
         return
       }
       exportOrdersCSV(collected)
-      toast({ title: 'CSV exportado', description: `${collected.length} pedido${collected.length !== 1 ? 's' : ''}.` })
+      toast.success('CSV exportado', { description: `${collected.length} pedido${collected.length !== 1 ? 's' : ''}.` })
     } catch (error) {
-      toast({ title: 'No se pudo exportar', description: error instanceof Error ? error.message : 'Intenta nuevamente.', variant: 'destructive' })
+      toast.error('No se pudo exportar', { description: error instanceof Error ? error.message : 'Intenta nuevamente.' })
     } finally {
       setExporting(false)
     }

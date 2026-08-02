@@ -10,6 +10,8 @@ type BranchRow = {
   organization_id?: string | null
 }
 
+const PRIMARY_BRANCH_ASSIGNMENT_REQUIRED = 'PRIMARY_BRANCH_ASSIGNMENT_REQUIRED'
+
 async function assertUserInOrganization(
   supabaseAdmin: ReturnType<typeof createAdminSupabase>,
   userId: string,
@@ -22,6 +24,7 @@ async function assertUserInOrganization(
     .select('user_id')
     .eq('organization_id', context.organizationId)
     .eq('user_id', userId)
+    .eq('status', 'active')
     .maybeSingle()
 
   if (error) throw error
@@ -136,13 +139,45 @@ async function updateBranchAssignment(
 
     if (error) throw error
   } else {
+    const { data: currentAssignment, error: currentAssignmentError } = await supabaseAdmin
+      .from('user_branch_assignments')
+      .select('is_primary, organization_id')
+      .eq('user_id', userId)
+      .eq('branch_id', branchId)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (currentAssignmentError) throw currentAssignmentError
+
     const { error } = await supabaseAdmin
       .from('user_branch_assignments')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .update({ is_active: false, is_primary: false, updated_at: new Date().toISOString() })
       .eq('user_id', userId)
       .eq('branch_id', branchId)
 
     if (error) throw error
+
+    if (currentAssignment?.is_primary) {
+      const { data: replacement, error: replacementError } = await supabaseAdmin
+        .from('user_branch_assignments')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('organization_id', currentAssignment.organization_id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      if (replacementError) throw replacementError
+      if (replacement) {
+        const { error: promoteError } = await supabaseAdmin
+          .from('user_branch_assignments')
+          .update({ is_primary: true, updated_at: new Date().toISOString() })
+          .eq('id', replacement.id)
+
+        if (promoteError) throw promoteError
+      }
+    }
   }
 
   return loadBranches(request, context)
@@ -179,6 +214,26 @@ async function setPrimaryBranch(
 
   if (targetBranchError) throw targetBranchError
 
+  const { data: targetAssignment, error: targetAssignmentError } = await supabaseAdmin
+    .from('user_branch_assignments')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('branch_id', branchId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (targetAssignmentError) throw targetAssignmentError
+  if (!targetAssignment) {
+    return NextResponse.json(
+      {
+        success: false,
+        code: PRIMARY_BRANCH_ASSIGNMENT_REQUIRED,
+        error: 'Asigna primero la sucursal antes de marcarla como principal.',
+      },
+      { status: 409 }
+    )
+  }
+
   const { data: organizationBranches, error: organizationBranchesError } =
     await supabaseAdmin
       .from('branches')
@@ -203,6 +258,7 @@ async function setPrimaryBranch(
     .update({ is_primary: true, is_active: true, updated_at: nowIso })
     .eq('user_id', userId)
     .eq('branch_id', branchId)
+    .eq('is_active', true)
 
   if (error) throw error
 

@@ -16,16 +16,19 @@ import {
 } from "@/components/ui/dialog"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Info } from 'lucide-react'
+import { Info, Loader2 } from 'lucide-react'
 import { useCashRegisterContext } from '../contexts/CashRegisterContext'
 import { CashCountModal } from '../components/CashCountModal'
 import { useAuth } from '@/contexts/auth-context'
+import { isPhysicalCashSale, isPhysicalManualMovement } from '../lib/cash-balance'
 
 import { CashRegisterHeader } from './components/CashRegisterHeader'
 import { CashRegisterOverview } from './components/CashRegisterOverview'
 import { CashRegisterReport } from './components/CashRegisterReport'
 import { CashRegisterHistory } from './components/CashRegisterHistory'
 import { CashRegisterAudit } from './components/CashRegisterAudit'
+import { ElectronicPaymentsPanel } from './components/ElectronicPaymentsPanel'
+import { OpenCashRegisterDialog } from '../components/OpenCashRegisterDialog'
 
 export default function CashRegisterPage() {
   const router = useRouter()
@@ -84,6 +87,7 @@ export default function CashRegisterPage() {
   const [movementNote, setMovementNote] = useState('')
 
   const [isCashCountModalOpen, setIsCashCountModalOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (!activeRegisterId && registers && registers.length > 0) {
@@ -91,18 +95,10 @@ export default function CashRegisterPage() {
     }
   }, [registers, activeRegisterId, setActiveRegisterId])
 
-  const parsedOpeningAmount = useMemo(() => {
-    const n = Number(openingAmount)
-    return Number.isFinite(n) && n >= 0 ? n : 0
-  }, [openingAmount])
-
   const parsedMovementAmount = useMemo(() => {
     const n = Number(movementAmount)
     return Number.isFinite(n) && n > 0 ? n : 0
   }, [movementAmount])
-
-  // Fix #13: monto de apertura requiere > 0 para ser válido (monto 0 no permitido)
-  const isOpeningAmountValid = parsedOpeningAmount > 0
 
   const [closingCountedAmount, setClosingCountedAmount] = useState('')
 
@@ -240,8 +236,9 @@ export default function CashRegisterPage() {
       )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className={`grid w-full max-w-2xl ${canAccessAudit ? 'grid-cols-4' : 'grid-cols-3'} mb-4`}>
+        <TabsList className={`grid w-full max-w-3xl ${canAccessAudit ? 'grid-cols-5' : 'grid-cols-4'} mb-4`}>
           <TabsTrigger value="overview">Resumen</TabsTrigger>
+          <TabsTrigger value="electronic">Cobros</TabsTrigger>
           <TabsTrigger value="report">Reporte</TabsTrigger>
           <TabsTrigger value="history">Historial</TabsTrigger>
           {canAccessAudit && <TabsTrigger value="audit">Auditoria</TabsTrigger>}
@@ -258,6 +255,10 @@ export default function CashRegisterPage() {
               advancedMode={isAdmin && viewMode === 'advanced'}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="electronic" className="space-y-4">
+          {activeTab === 'electronic' && <ElectronicPaymentsPanel />}
         </TabsContent>
 
         <TabsContent value="report" className="space-y-4">
@@ -287,52 +288,29 @@ export default function CashRegisterPage() {
         )}
       </Tabs>
 
-      <Dialog open={isOpenRegisterDialogOpen} onOpenChange={setIsOpenRegisterDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Abrir Caja</DialogTitle>
-            <DialogDescription>
-              Ingrese el monto inicial en caja para comenzar el turno.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="amount">Monto Inicial</Label>
-              <Input
-                id="amount"
-                type="number"
-                inputMode="decimal"
-                value={openingAmount}
-                onChange={(e) => setOpeningAmount(e.target.value)}
-                placeholder="0"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="note">Nota (Opcional)</Label>
-              <Input
-                id="note"
-                value={openingNote}
-                onChange={(e) => setOpeningNote(e.target.value)}
-                placeholder="Ej. Turno manana"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsOpenRegisterDialogOpen(false)}>Cancelar</Button>
-            <Button
-              disabled={!isOpeningAmountValid}
-              onClick={() => {
-                openRegister(parsedOpeningAmount, openingNote, user?.id)
-                setIsOpenRegisterDialogOpen(false)
-                setOpeningAmount('')
-                setOpeningNote('')
-              }}
-            >
-              Abrir Caja
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OpenCashRegisterDialog
+        open={isOpenRegisterDialogOpen}
+        onOpenChange={setIsOpenRegisterDialogOpen}
+        amount={openingAmount}
+        onAmountChange={setOpeningAmount}
+        note={openingNote}
+        onNoteChange={setOpeningNote}
+        registerName={registers.find((register) => register.id === activeRegisterId)?.name}
+        isSubmitting={isSubmitting}
+        onSubmit={async (amount, note) => {
+          setIsSubmitting(true)
+          try {
+            const opened = await openRegister(amount, note, user?.id)
+            if (opened) {
+              setIsOpenRegisterDialogOpen(false)
+              setOpeningAmount('')
+              setOpeningNote('')
+            }
+          } finally {
+            setIsSubmitting(false)
+          }
+        }}
+      />
 
       <Dialog open={isCloseDialogOpen} onOpenChange={(open) => {
         setIsCloseDialogOpen(open)
@@ -358,7 +336,7 @@ export default function CashRegisterPage() {
               <span className="text-muted-foreground">Ventas:</span>
               <span className="font-semibold text-emerald-600">
                 +{new Intl.NumberFormat('es-PY').format(
-                  currentRegister.movements.filter(m => m.type === 'sale').reduce((s, m) => s + m.amount, 0)
+                  currentRegister.movements.filter(isPhysicalCashSale).reduce((s, m) => s + m.amount, 0)
                 )} Gs.
               </span>
             </div>
@@ -366,7 +344,7 @@ export default function CashRegisterPage() {
               <span className="text-muted-foreground">Entradas:</span>
               <span className="font-semibold text-emerald-600">
                 +{new Intl.NumberFormat('es-PY').format(
-                  currentRegister.movements.filter(m => m.type === 'cash_in').reduce((s, m) => s + m.amount, 0)
+                  currentRegister.movements.filter(m => m.type === 'cash_in' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
                 )} Gs.
               </span>
             </div>
@@ -374,7 +352,7 @@ export default function CashRegisterPage() {
               <span className="text-muted-foreground">Salidas:</span>
               <span className="font-semibold text-rose-600">
                 -{new Intl.NumberFormat('es-PY').format(
-                  currentRegister.movements.filter(m => m.type === 'cash_out').reduce((s, m) => s + m.amount, 0)
+                  currentRegister.movements.filter(m => m.type === 'cash_out' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0)
                 )} Gs.
               </span>
             </div>
@@ -425,15 +403,23 @@ export default function CashRegisterPage() {
             }}>Cancelar</Button>
             <Button
               variant="destructive"
-              disabled={parsedClosingAmount === null}
-              onClick={() => {
+              disabled={parsedClosingAmount === null || isSubmitting}
+              onClick={async () => {
                 if (parsedClosingAmount === null) return
-                closeRegister(parsedClosingAmount, user?.id)
-                setIsCloseDialogOpen(false)
-                setClosingCountedAmount('')
+                setIsSubmitting(true)
+                try {
+                  const closed = await closeRegister(parsedClosingAmount, user?.id)
+                  if (closed) {
+                    setIsCloseDialogOpen(false)
+                    setClosingCountedAmount('')
+                  }
+                } finally {
+                  setIsSubmitting(false)
+                }
               }}
             >
-              Confirmar Cierre
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSubmitting ? 'Cerrando...' : 'Confirmar Cierre'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -490,19 +476,30 @@ export default function CashRegisterPage() {
             <Button variant="outline" onClick={() => setIsMovementDialogOpen(false)}>Cancelar</Button>
             <Button
               variant={movementType === 'out' ? 'destructive' : 'default'}
-              disabled={parsedMovementAmount <= 0}
-              onClick={() => {
+              disabled={parsedMovementAmount <= 0 || isSubmitting}
+              onClick={async () => {
                 if (parsedMovementAmount <= 0) return
-                addMovement(
-                  // Fix: tipos correctos 'cash_in' / 'cash_out'
-                  movementType === 'in' ? 'cash_in' : 'cash_out',
-                  parsedMovementAmount,
-                  movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
-                )
-                setIsMovementDialogOpen(false)
+                setIsSubmitting(true)
+                try {
+                  const saved = await addMovement(
+                    movementType === 'in' ? 'cash_in' : 'cash_out',
+                    parsedMovementAmount,
+                    movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
+                  )
+                  if (saved) {
+                    setIsMovementDialogOpen(false)
+                    setMovementAmount('')
+                    setMovementNote('')
+                  }
+                } finally {
+                  setIsSubmitting(false)
+                }
               }}
             >
-              {movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSubmitting
+                ? 'Guardando...'
+                : movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}
             </Button>
           </DialogFooter>
         </DialogContent>

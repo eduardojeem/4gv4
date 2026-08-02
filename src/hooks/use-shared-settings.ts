@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { DEFAULT_SYSTEM_COLOR_SCHEME } from '@/lib/theme/color-schemes'
+import { setRegionalFormatConfig } from '@/lib/currency'
 import { normalizeSupabaseError } from '@/utils/supabase-error'
 
 // Interface matching the database table 'system_settings'
@@ -82,8 +83,11 @@ export interface SharedSettings {
   maintenanceMode: boolean
 }
 
-export type SharedSettingsSource = 'remote' | 'cache' | 'default'
-const SETTINGS_CACHE_KEY = 'admin.shared-settings.cache'
+export type SharedSettingsSource = 'remote' | 'default'
+
+export interface SaveSettingsOptions {
+  confirmCurrencyChange?: boolean
+}
 
 export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   companyName: 'Mi Empresa',
@@ -115,29 +119,6 @@ export const DEFAULT_SHARED_SETTINGS: SharedSettings = {
   maintenanceMode: false
 }
 
-function readSettingsCache(): SharedSettings | null {
-  if (typeof window === 'undefined') return null
-
-  try {
-    const cached = window.localStorage.getItem(SETTINGS_CACHE_KEY)
-    if (!cached) return null
-    const parsed = JSON.parse(cached)
-    return { ...DEFAULT_SHARED_SETTINGS, ...parsed }
-  } catch {
-    return null
-  }
-}
-
-function writeSettingsCache(settings: SharedSettings) {
-  if (typeof window === 'undefined') return
-
-  try {
-    window.localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(settings))
-  } catch {
-    // Cache failure should never block settings usage.
-  }
-}
-
 // ============================================================================
 // Mapper
 // ============================================================================
@@ -145,12 +126,12 @@ function writeSettingsCache(settings: SharedSettings) {
 function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
   return {
     companyName: data.company_name || DEFAULT_SHARED_SETTINGS.companyName,
-    companyLogo: (data as { company_logo?: string | null }).company_logo || DEFAULT_SHARED_SETTINGS.companyLogo,
+    companyLogo: (data as { company_logo?: string | null }).company_logo ?? DEFAULT_SHARED_SETTINGS.companyLogo,
     companyEmail: data.company_email || DEFAULT_SHARED_SETTINGS.companyEmail,
-    companyPhone: data.company_phone || DEFAULT_SHARED_SETTINGS.companyPhone,
-    companyRuc: data.company_ruc || DEFAULT_SHARED_SETTINGS.companyRuc,
-    companyAddress: data.company_address || DEFAULT_SHARED_SETTINGS.companyAddress,
-    city: data.city || DEFAULT_SHARED_SETTINGS.city,
+    companyPhone: data.company_phone ?? DEFAULT_SHARED_SETTINGS.companyPhone,
+    companyRuc: data.company_ruc ?? DEFAULT_SHARED_SETTINGS.companyRuc,
+    companyAddress: data.company_address ?? DEFAULT_SHARED_SETTINGS.companyAddress,
+    city: data.city ?? DEFAULT_SHARED_SETTINGS.city,
     currency: data.currency || DEFAULT_SHARED_SETTINGS.currency,
     taxRate: data.tax_rate === null || data.tax_rate === undefined ? DEFAULT_SHARED_SETTINGS.taxRate : Number(data.tax_rate),
     theme: data.theme || DEFAULT_SHARED_SETTINGS.theme,
@@ -174,6 +155,10 @@ function mapToAppSettings(data: SystemSettingsRow): SharedSettings {
   }
 }
 
+function applyRegionalSettings(settings: Pick<SharedSettings, 'currency' | 'language'>) {
+  setRegionalFormatConfig(settings)
+}
+
 // ============================================================================
 // Hook
 // ============================================================================
@@ -191,7 +176,7 @@ export function useSharedSettings() {
   // Track original settings as JSON for efficient comparison
   const originalRef = useRef<string>(JSON.stringify(DEFAULT_SHARED_SETTINGS))
 
-  // Load settings from Supabase (stale-while-revalidate pattern)
+  // Load settings for the current server-resolved organization.
   const loadSettings = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -205,27 +190,28 @@ export function useSharedSettings() {
 
       if (result.data) {
         const mapped = mapToAppSettings(result.data as SystemSettingsRow)
+        applyRegionalSettings(mapped)
         setSettings(mapped)
         setOriginalSettings(mapped)
         originalRef.current = JSON.stringify(mapped)
         setSettingsSource('remote')
-        writeSettingsCache(mapped)
         return
       }
 
       // No data in DB — use defaults
-      const cachedSettings = readSettingsCache()
-      const fallback = cachedSettings || DEFAULT_SHARED_SETTINGS
+      const fallback = DEFAULT_SHARED_SETTINGS
+      applyRegionalSettings(fallback)
       setSettings(fallback)
       setOriginalSettings(fallback)
       originalRef.current = JSON.stringify(fallback)
-      setSettingsSource(cachedSettings ? 'cache' : 'default')
+      setSettingsSource('default')
     } catch (err: unknown) {
       const error = normalizeSupabaseError(err)
       console.error('Error loading settings:', error)
       setError(`Error al cargar configuraciones: ${error.message}`)
 
       setSettings(DEFAULT_SHARED_SETTINGS)
+      applyRegionalSettings(DEFAULT_SHARED_SETTINGS)
       setOriginalSettings(DEFAULT_SHARED_SETTINGS)
       originalRef.current = JSON.stringify(DEFAULT_SHARED_SETTINGS)
       setSettingsSource('default')
@@ -256,7 +242,9 @@ export function useSharedSettings() {
     setSettings(prev => ({ ...prev, ...updates }))
   }, [])
 
-  const saveSettings = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+  const saveSettings = useCallback(async (
+    options: SaveSettingsOptions = {}
+  ): Promise<{ success: boolean; error?: string }> => {
     setIsSaving(true)
     try {
       // Basic validation
@@ -264,10 +252,21 @@ export function useSharedSettings() {
         return { success: false, error: 'El nombre de la empresa es requerido' }
       }
 
+      const changedSettings = Object.fromEntries(
+        (Object.keys(settings) as Array<keyof SharedSettings>)
+          .filter((key) => JSON.stringify(settings[key]) !== JSON.stringify(originalSettings[key]))
+          .map((key) => [key, settings[key]])
+      ) as Partial<SharedSettings>
+
+      if (Object.keys(changedSettings).length === 0) return { success: true }
+
       const response = await fetch('/api/admin/system/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings })
+        body: JSON.stringify({
+          settings: changedSettings,
+          confirmCurrencyChange: options.confirmCurrencyChange === true,
+        })
       })
 
       const result = await response.json().catch(() => ({}))
@@ -277,24 +276,18 @@ export function useSharedSettings() {
 
       const mapped = mapToAppSettings(result.data as SystemSettingsRow)
 
-      // Apply org-scoped company values to what we store in state/cache
       const withOrgData = { ...mapped }
-      if (settings.companyName) withOrgData.companyName = settings.companyName
-      if (settings.companyEmail) withOrgData.companyEmail = settings.companyEmail
-      if (settings.companyPhone) withOrgData.companyPhone = settings.companyPhone
-      if (settings.companyAddress) withOrgData.companyAddress = settings.companyAddress
-      if (settings.city) withOrgData.city = settings.city
       // El logo no lo administra esta pantalla ni el esquema de guardado, así que
       // la respuesta no lo trae: se preserva el valor actual para que el recibo
       // no pierda el logo hasta la próxima recarga.
       withOrgData.companyLogo = settings.companyLogo
 
+      applyRegionalSettings(withOrgData)
       setSettings(withOrgData)
       setOriginalSettings(withOrgData)
       originalRef.current = JSON.stringify(withOrgData)
       setError(null)
       setSettingsSource('remote')
-      writeSettingsCache(withOrgData)
       return { success: true }
     } catch (err: unknown) {
       const error = normalizeSupabaseError(err)
@@ -303,7 +296,7 @@ export function useSharedSettings() {
     } finally {
       setIsSaving(false)
     }
-  }, [settings])
+  }, [originalSettings, settings])
 
   const resetSettings = useCallback(() => {
     setSettings(originalSettings)
@@ -325,6 +318,7 @@ export function useSharedSettings() {
     updateSettings,
     saveSettings,
     resetSettings,
-    resetToDefaults
+    resetToDefaults,
+    reloadSettings: loadSettings,
   }
 }

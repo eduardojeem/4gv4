@@ -8,6 +8,7 @@
  */
 
 import React, { useState } from 'react'
+import { formatCurrency } from '@/lib/currency'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -88,14 +89,6 @@ export function CustomerCardView({
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200'
     }
-  }
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-PY', {
-      style: 'currency',
-      currency: 'PYG',
-      minimumFractionDigits: 0,
-    }).format(amount)
   }
 
   if (loading) {

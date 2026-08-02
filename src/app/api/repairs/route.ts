@@ -1,9 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminSupabase } from '@/lib/supabase/admin'
-import { getAuthResponse, requireStaff, type AuthResult } from '@/lib/auth/require-auth'
-import { withBranchFilter } from '@/lib/branches/client'
-import { getCurrentOrganizationContext } from '@/lib/saas/context'
-import { roleHasPermission } from '@/lib/saas/permissions'
 import { canCreateRepair } from '@/lib/saas/subscription-service'
 import {
   isNextResponse,
@@ -39,17 +34,6 @@ const FULL_REPAIR_SELECT = `
   parts:repair_parts(*),
   notes:repair_notes(*)
 `
-
-function organizationRequiredResponse() {
-  return NextResponse.json(
-    {
-      error: 'No se pudo resolver la organizacion activa para cargar reparaciones.',
-      code: 'ACTIVE_ORGANIZATION_REQUIRED',
-      hint: 'Verifica que el usuario tenga una membresia activa en organization_members y que exista la cookie active_organization_id o una organizacion activa por defecto.',
-    },
-    { status: 403 }
-  )
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -165,21 +149,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireStaff()
-  const authResponse = getAuthResponse(auth)
-  if (authResponse) return authResponse
-  const staffAuth = auth as Extract<AuthResult, { authenticated: true }>
-  const organization = await getCurrentOrganizationContext(staffAuth.user.id)
-
-  if (!organization) {
-    return organizationRequiredResponse()
-  }
-  if (!roleHasPermission(organization.role, 'repairs.orders.read')) {
-    return NextResponse.json({ error: 'No tenes permiso para ver reparaciones.' }, { status: 403 })
-  }
-
   try {
-    const branchId = request.headers.get('x-branch-id')
+    const ctx = await resolveRepairRouteContext(request, 'repairs.orders.read')
+    if (isNextResponse(ctx)) return ctx
+
     const { searchParams } = new URL(request.url)
     const page = Math.max(1, Number(searchParams.get('page') || 1))
     const pageSize = Math.min(100, Math.max(10, Number(searchParams.get('pageSize') || 50)))
@@ -187,18 +160,16 @@ export async function GET(request: NextRequest) {
     const search = (searchParams.get('search') || '').trim()
     const offset = (page - 1) * pageSize
 
-    const supabase = createAdminSupabase()
     let lastError: unknown = null
 
     for (const selectExpr of REPAIR_SELECT_VARIANTS) {
-      let query = supabase
+      let query = ctx.supabase
         .from('repairs')
         .select(selectExpr, { count: 'exact' })
-        .eq('organization_id', organization.id)
+        .eq('organization_id', ctx.organizationId)
+        .eq('branch_id', ctx.branchId)
         .order('created_at', { ascending: false })
         .range(offset, offset + pageSize - 1)
-
-      query = withBranchFilter(query, branchId)
 
       if (status && status !== 'all') {
         query = query.eq('status', status)

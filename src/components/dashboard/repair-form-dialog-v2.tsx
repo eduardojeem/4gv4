@@ -13,6 +13,7 @@
  */
 
 import React, { useEffect, useState } from 'react'
+import { formatCurrency } from '@/lib/currency'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -1139,7 +1140,7 @@ export function RepairFormDialogV2({
                       </CardTitle>
                       {partsFields.length > 0 && (
                         <p className="text-xs text-muted-foreground dark:text-slate-400 mt-1">
-                          {partsFields.length} {partsFields.length === 1 ? 'repuesto' : 'repuestos'} • Total: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(
+                          {partsFields.length} {partsFields.length === 1 ? 'repuesto' : 'repuestos'} • Total: {formatCurrency(
                             partsFields.reduce((acc, _, index) => {
                               const cost = watch(`parts.${index}.cost`) || 0
                               const quantity = watch(`parts.${index}.quantity`) || 0
@@ -1208,7 +1209,7 @@ export function RepairFormDialogV2({
                               <span className="text-sm font-semibold text-orange-800 dark:text-orange-300">Repuesto {index + 1}</span>
                               {total > 0 && (
                                 <Badge variant="secondary" className="ml-2 bg-orange-100 dark:bg-orange-900/50 text-orange-800 dark:text-orange-300 border-orange-300 dark:border-orange-800">
-                                  Total: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(total)}
+                                  Total: {formatCurrency(total)}
                                 </Badge>
                               )}
                             </div>
@@ -1674,7 +1675,7 @@ export function RepairFormDialogV2({
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <strong className="text-sm font-black text-cyan-600 dark:text-cyan-400">
-                      {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(product.offer_price || product.sale_price || 0)}
+                      {formatCurrency(product.offer_price || product.sale_price || 0)}
                     </strong>
                     <Button type="button" size="sm" variant="secondary" className="h-7 px-3 text-xs font-bold rounded-lg">
                       Seleccionar

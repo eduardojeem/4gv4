@@ -1,23 +1,19 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
-  ArrowUpDown,
+  Ban,
   Building2,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  CreditCard,
   ExternalLink,
   Gauge,
   Package,
   RefreshCw,
   Search,
   ShieldAlert,
-  Sparkles,
   TrendingUp,
   Users,
   Boxes,
@@ -28,8 +24,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { SortIndicator } from '@/components/superadmin/sort-indicator'
 import type { SaasMetricsData, OrgUsageRow, ResourceKey } from '@/lib/superadmin/saas-metrics'
-import { RESOURCE_LABELS, calcPercent } from '@/lib/superadmin/saas-metrics'
+import { calculateUsagePercent } from '@/lib/superadmin/metrics-calculations'
+import { useUrlListState } from '@/hooks/useUrlListState'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,22 +71,38 @@ function planTone(plan: string) {
   return 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'
 }
 
-function miniBar(percent: number, limit: number | null) {
+const RESOURCE_LABELS: Record<ResourceKey, string> = {
+  users: 'Usuarios',
+  products: 'Productos',
+  branches: 'Sucursales',
+  cashRegisters: 'Cajas',
+  categories: 'Categorías',
+}
+
+function miniBar(label: string, current: number, percent: number, limit: number | null) {
   if (limit === null) return (
-    <span className="text-xs text-slate-400">∞</span>
+    <span className="text-xs tabular-nums text-slate-500">{current} / ∞</span>
   )
   const capped = Math.min(percent, 100)
   return (
-    <div className="flex items-center gap-1.5 min-w-[80px]">
-      <div className="h-1.5 w-14 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+    <div className="min-w-[96px] space-y-1">
+      <div className="flex items-center justify-between gap-2 text-[11px] tabular-nums">
+        <span className="font-medium text-slate-700 dark:text-slate-300">{current} / {limit}</span>
+        <span className={cn('font-semibold', usageTextColor(percent))}>{percent}%</span>
+      </div>
+      <div
+        className="h-1.5 w-14 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+        role="progressbar"
+        aria-label={`${label}: ${current} de ${limit}`}
+        aria-valuemin={0}
+        aria-valuemax={limit}
+        aria-valuenow={Math.min(current, limit)}
+      >
         <div
           className={cn('h-full rounded-full transition-all', usageColor(percent))}
           style={{ width: `${capped}%` }}
         />
       </div>
-      <span className={cn('text-xs tabular-nums font-medium w-8 text-right', usageTextColor(percent))}>
-        {percent}%
-      </span>
     </div>
   )
 }
@@ -144,32 +158,53 @@ const PLAN_COLORS: Record<string, string> = {
   ENTERPRISE: 'bg-amber-500',
 }
 
-function PlanDistributionBar({ distribution }: { distribution: SaasMetricsData['planDistribution'] }) {
+function PlanDistributionBar({
+  distribution,
+  statuses,
+}: {
+  distribution: SaasMetricsData['planDistribution']
+  statuses: SaasMetricsData['statusDistribution']
+}) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-semibold">Distribución por plan</CardTitle>
+        <CardTitle className="text-sm font-semibold">Distribución por plan efectivo</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex h-4 overflow-hidden rounded-full">
+        <div
+          className="flex h-4 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"
+          role="img"
+          aria-label={distribution.map((item) => `${item.plan}: ${item.percent}%`).join(', ')}
+        >
           {distribution.map((d) => (
             <div
               key={d.plan}
               className={cn('transition-all', PLAN_COLORS[d.plan] ?? 'bg-slate-300')}
               style={{ width: `${d.percent}%` }}
               title={`${d.plan}: ${d.count} orgs (${d.percent}%)`}
+              aria-hidden="true"
             />
           ))}
         </div>
         <div className="flex flex-wrap gap-3">
           {distribution.map((d) => (
             <div key={d.plan} className="flex items-center gap-1.5">
-              <div className={cn('h-2.5 w-2.5 rounded-full', PLAN_COLORS[d.plan] ?? 'bg-slate-300')} />
+              <div aria-hidden="true" className={cn('h-2.5 w-2.5 rounded-full', PLAN_COLORS[d.plan] ?? 'bg-slate-300')} />
               <span className="text-xs text-slate-600 dark:text-slate-400">
                 <span className="font-semibold">{d.plan}</span> — {d.count} org{d.count !== 1 ? 's' : ''} ({d.percent}%)
               </span>
             </div>
           ))}
+        </div>
+        <div className="border-t pt-3">
+          <p className="mb-2 text-xs font-semibold text-slate-500">Estado de suscripciones</p>
+          <div className="flex flex-wrap gap-2">
+            {statuses.map((status) => (
+              <Badge key={status.status} variant="outline" className="rounded-full text-[11px]">
+                {statusLabel(status.status)}: {status.count}
+              </Badge>
+            ))}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -181,20 +216,24 @@ function PlanDistributionBar({ distribution }: { distribution: SaasMetricsData['
 // ---------------------------------------------------------------------------
 
 function OrgRow({ org }: { org: OrgUsageRow }) {
-  const resources: ResourceKey[] = ['users', 'products', 'branches', 'cashRegisters']
+  const resources: ResourceKey[] = ['users', 'products', 'branches', 'cashRegisters', 'categories']
 
   return (
     <tr className={cn(
       'border-b border-slate-100 dark:border-slate-800 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40',
-      org.overLimit && 'bg-red-50/50 dark:bg-red-950/10',
-      !org.overLimit && org.atRisk && 'bg-amber-50/40 dark:bg-amber-950/10',
+      org.subscriptionBlocked && 'bg-rose-50/60 dark:bg-rose-950/10',
+      !org.subscriptionBlocked && org.overLimit && 'bg-red-50/50 dark:bg-red-950/10',
+      !org.subscriptionBlocked && !org.overLimit && org.atRisk && 'bg-amber-50/40 dark:bg-amber-950/10',
+      !org.subscriptionBlocked && !org.overLimit && !org.atRisk && org.nearLimit && 'bg-amber-50/20 dark:bg-amber-950/5',
     )}>
       {/* Org name */}
       <td className="py-3 pl-4 pr-3">
         <div className="flex items-center gap-2">
-          {org.overLimit ? (
+          {org.subscriptionBlocked ? (
+            <Ban className="h-4 w-4 shrink-0 text-rose-600" />
+          ) : org.overLimit ? (
             <ShieldAlert className="h-4 w-4 shrink-0 text-red-500" />
-          ) : org.atRisk ? (
+          ) : org.atRisk || org.nearLimit ? (
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
           ) : (
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500 opacity-60" />
@@ -211,19 +250,22 @@ function OrgRow({ org }: { org: OrgUsageRow }) {
         <Badge variant="outline" className={cn('rounded-full text-[11px]', planTone(org.plan))}>
           {org.plan}
         </Badge>
+        {org.contractedPlanCode !== org.plan && (
+          <p className="mt-1 text-[10px] text-slate-500">Contratado: {org.contractedPlanCode}</p>
+        )}
       </td>
 
       {/* Status */}
       <td className="px-3 py-3">
-        <Badge variant="outline" className={cn('rounded-full text-[11px]', statusTone(org.subscriptionStatus))}>
-          {statusLabel(org.subscriptionStatus)}
+        <Badge variant="outline" className={cn('rounded-full text-[11px]', statusTone(org.subscriptionExpired ? 'past_due' : org.subscriptionStatus))}>
+          {org.subscriptionExpired ? 'Vencido' : statusLabel(org.subscriptionStatus)}
         </Badge>
       </td>
 
       {/* Usage bars */}
       {resources.map((key) => (
         <td key={key} className="px-3 py-3">
-          {miniBar(calcPercent(org.usage[key], org.limits[key]), org.limits[key])}
+          {miniBar(RESOURCE_LABELS[key], org.usage[key], calculateUsagePercent(org.usage[key], org.limits[key]), org.limits[key])}
         </td>
       ))}
 
@@ -245,7 +287,7 @@ function OrgRow({ org }: { org: OrgUsageRow }) {
       {/* Action */}
       <td className="py-3 pl-3 pr-4 text-right">
         <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
-          <Link href={`/superadmin/organizations`} aria-label={`Ver ${org.name}`}>
+          <Link href={`/superadmin/organizations?q=${encodeURIComponent(org.slug || org.name)}`} aria-label={`Ver ${org.name}`} title={`Ver ${org.name}`}>
             <ExternalLink className="h-3.5 w-3.5" />
           </Link>
         </Button>
@@ -254,22 +296,94 @@ function OrgRow({ org }: { org: OrgUsageRow }) {
   )
 }
 
+function MobileOrgRow({ org }: { org: OrgUsageRow }) {
+  const resources: ResourceKey[] = ['users', 'products', 'branches', 'cashRegisters', 'categories']
+
+  return (
+    <article className="space-y-4 px-4 py-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {org.subscriptionBlocked ? (
+              <Ban className="h-4 w-4 shrink-0 text-rose-600" />
+            ) : org.overLimit ? (
+              <ShieldAlert className="h-4 w-4 shrink-0 text-red-500" />
+            ) : org.atRisk || org.nearLimit ? (
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+            )}
+            <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{org.name}</h3>
+          </div>
+          <p className="mt-1 truncate pl-6 text-xs text-slate-400">{org.slug}</p>
+        </div>
+        <span className={cn('shrink-0 text-sm font-bold tabular-nums', usageTextColor(org.overallPercent))}>
+          {org.overallPercent}%
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="outline" className={cn('rounded-full text-[11px]', planTone(org.plan))}>
+          Plan efectivo: {org.plan}
+        </Badge>
+        <Badge variant="outline" className={cn('rounded-full text-[11px]', statusTone(org.subscriptionExpired ? 'past_due' : org.subscriptionStatus))}>
+          {org.subscriptionExpired ? 'Vencido' : statusLabel(org.subscriptionStatus)}
+        </Badge>
+        {org.contractedPlanCode !== org.plan && (
+          <Badge variant="outline" className="rounded-full text-[11px] text-slate-500">
+            Contratado: {org.contractedPlanCode}
+          </Badge>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        {resources.map((key) => (
+          <div key={key} className={key === 'categories' ? 'col-span-2' : undefined}>
+            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-400">{RESOURCE_LABELS[key]}</p>
+            {miniBar(RESOURCE_LABELS[key], org.usage[key], calculateUsagePercent(org.usage[key], org.limits[key]), org.limits[key])}
+          </div>
+        ))}
+      </div>
+
+      <Button asChild variant="outline" size="sm" className="w-full justify-center">
+        <Link href={`/superadmin/organizations?q=${encodeURIComponent(org.slug || org.name)}`}>
+          Ver organización
+          <ExternalLink className="h-3.5 w-3.5" />
+        </Link>
+      </Button>
+    </article>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Main dashboard
 // ---------------------------------------------------------------------------
 
 type SortKey = 'name' | 'plan' | 'status' | 'overall'
-type FilterKey = 'all' | 'atRisk' | 'trialing' | 'overLimit' | 'noSub'
+type FilterKey = 'all' | 'nearLimit' | 'atRisk' | 'trialing' | 'expired' | 'overLimit' | 'blocked' | 'noSub'
+const SORT_KEYS: SortKey[] = ['name', 'plan', 'status', 'overall']
+const FILTER_KEYS: FilterKey[] = ['all', 'nearLimit', 'atRisk', 'trialing', 'expired', 'overLimit', 'blocked', 'noSub']
 
 export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<FilterKey>('all')
-  const [sortKey, setSortKey] = useState<SortKey>('overall')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const router = useRouter()
+  const [isRefreshing, startRefresh] = useTransition()
+  const { state, setValue } = useUrlListState({
+    q: '',
+    filter: 'all',
+    sort: 'overall',
+    dir: 'desc',
+    page: '1',
+  })
+  const search = state.q
+  const filter = FILTER_KEYS.includes(state.filter as FilterKey) ? state.filter as FilterKey : 'all'
+  const sortKey = SORT_KEYS.includes(state.sort as SortKey) ? state.sort as SortKey : 'overall'
+  const sortDir = state.dir === 'asc' ? 'asc' : 'desc'
+  const page = Math.max(1, Number.parseInt(state.page, 10) || 1)
 
   function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('desc') }
+    setValue('sort', key)
+    setValue('dir', sortKey === key && sortDir === 'desc' ? 'asc' : 'desc')
+    setValue('page', '1')
   }
 
   const filtered = useMemo(() => {
@@ -283,8 +397,11 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
 
     // Filter
     if (filter === 'atRisk') rows = rows.filter((o) => o.atRisk && !o.overLimit)
+    if (filter === 'nearLimit') rows = rows.filter((o) => o.nearLimit)
     if (filter === 'overLimit') rows = rows.filter((o) => o.overLimit)
+    if (filter === 'blocked') rows = rows.filter((o) => o.subscriptionBlocked)
     if (filter === 'trialing') rows = rows.filter((o) => o.subscriptionStatus === 'trialing')
+    if (filter === 'expired') rows = rows.filter((o) => o.subscriptionExpired)
     if (filter === 'noSub') rows = rows.filter((o) => !o.subscriptionStatus)
 
     // Sort
@@ -292,7 +409,11 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
       let cmp = 0
       if (sortKey === 'name') cmp = a.name.localeCompare(b.name)
       else if (sortKey === 'plan') cmp = a.plan.localeCompare(b.plan)
-      else if (sortKey === 'status') cmp = (a.subscriptionStatus ?? '').localeCompare(b.subscriptionStatus ?? '')
+      else if (sortKey === 'status') {
+        const leftStatus = a.subscriptionExpired ? 'expired' : a.subscriptionStatus ?? ''
+        const rightStatus = b.subscriptionExpired ? 'expired' : b.subscriptionStatus ?? ''
+        cmp = leftStatus.localeCompare(rightStatus)
+      }
       else if (sortKey === 'overall') cmp = a.overallPercent - b.overallPercent
       return sortDir === 'asc' ? cmp : -cmp
     })
@@ -300,38 +421,42 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
     return rows
   }, [data.orgs, search, filter, sortDir, sortKey])
 
-  const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sortKey !== col) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-40" />
-    return sortDir === 'asc'
-      ? <ChevronUp className="ml-1 h-3 w-3 text-indigo-500" />
-      : <ChevronDown className="ml-1 h-3 w-3 text-indigo-500" />
-  }
-
   const thClass = 'px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400'
   const thBtn = 'flex cursor-pointer select-none items-center hover:text-slate-700 dark:hover:text-slate-200'
 
   const filterBtns: Array<{ key: FilterKey; label: string; count: number }> = [
     { key: 'all', label: 'Todos', count: data.orgs.length },
-    { key: 'atRisk', label: '⚠ En riesgo', count: data.summary.atRisk },
-    { key: 'overLimit', label: '🔴 Sobre límite', count: data.summary.overLimit },
+    { key: 'nearLimit', label: 'Cerca del límite', count: data.summary.nearLimit },
+    { key: 'atRisk', label: 'En riesgo', count: data.summary.atRisk },
+    { key: 'overLimit', label: 'Sobre límite', count: data.summary.overLimit },
+    { key: 'blocked', label: 'Acceso bloqueado', count: data.summary.blocked },
     { key: 'trialing', label: 'En prueba', count: data.orgs.filter((o) => o.subscriptionStatus === 'trialing').length },
+    { key: 'expired', label: 'Vencidas', count: data.orgs.filter((o) => o.subscriptionExpired).length },
     { key: 'noSub', label: 'Sin suscripción', count: data.orgs.filter((o) => !o.subscriptionStatus).length },
   ]
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 25))
+  const safePage = Math.min(page, pageCount)
+  const visibleRows = filtered.slice((safePage - 1) * 25, safePage * 25)
+  const ariaSort = (key: SortKey): 'ascending' | 'descending' | 'none' => {
+    if (sortKey !== key) return 'none'
+    return sortDir === 'asc' ? 'ascending' : 'descending'
+  }
 
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Organizaciones" value={data.summary.total} sub="en la plataforma" icon={Building2} tone="default" />
+        <MetricCard label="Cerca del límite" value={data.summary.nearLimit} sub="entre 60% y 79%" icon={Gauge} tone={data.summary.nearLimit > 0 ? 'warning' : 'default'} />
         <MetricCard label="En riesgo" value={data.summary.atRisk} sub="≥80% de algún límite" icon={AlertTriangle} tone={data.summary.atRisk > 0 ? 'warning' : 'default'} />
         <MetricCard label="Sobre el límite" value={data.summary.overLimit} sub="superaron la cuota" icon={ShieldAlert} tone={data.summary.overLimit > 0 ? 'danger' : 'default'} />
-        <MetricCard label="Uso promedio" value={`${data.summary.avgUsagePercent}%`} sub="entre todos los tenants" icon={Gauge} tone={data.summary.avgUsagePercent >= 70 ? 'warning' : 'success'} />
+        <MetricCard label="Acceso bloqueado" value={data.summary.blocked} sub="requieren intervención" icon={Ban} tone={data.summary.blocked > 0 ? 'danger' : 'success'} />
       </div>
 
       {/* Plan distribution + most constrained */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <PlanDistributionBar distribution={data.planDistribution} />
+          <PlanDistributionBar distribution={data.planDistribution} statuses={data.statusDistribution} />
         </div>
 
         <Card>
@@ -376,21 +501,30 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
                 {filtered.length} de {data.orgs.length} organizaciones · Actualizado {new Date(data.fetchedAt).toLocaleTimeString('es-PY', { timeStyle: 'short' })}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <div className="relative flex-1 sm:flex-none">
+                <label htmlFor="saas-metrics-search" className="sr-only">Buscar organización</label>
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
-                  className="h-9 w-56 pl-9 text-sm"
+                  id="saas-metrics-search"
+                  className="h-9 w-full pl-9 text-sm sm:w-64"
                   placeholder="Buscar organización..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(event) => {
+                    setValue('q', event.target.value)
+                    setValue('page', '1')
+                  }}
                 />
               </div>
-              <Button asChild variant="outline" size="sm" className="h-9 gap-2">
-                <Link href="/superadmin/saas-metrics">
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Actualizar
-                </Link>
+              <Button
+                onClick={() => startRefresh(() => router.refresh())}
+                disabled={isRefreshing}
+                variant="outline"
+                size="sm"
+                className="h-9 gap-2"
+              >
+                <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
+                {isRefreshing ? 'Actualizando...' : 'Actualizar'}
               </Button>
             </div>
           </div>
@@ -401,7 +535,11 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
               <button
                 key={f.key}
                 type="button"
-                onClick={() => setFilter(f.key)}
+                onClick={() => {
+                  setValue('filter', f.key)
+                  setValue('page', '1')
+                }}
+                aria-pressed={filter === f.key}
                 className={cn(
                   'flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors',
                   filter === f.key
@@ -422,32 +560,43 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
         </CardHeader>
 
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
+          <div className="divide-y lg:hidden">
+            {filtered.length === 0 ? (
+              <div className="py-14 text-center">
+                <Minus className="mx-auto h-8 w-8 text-slate-300" />
+                <p className="mt-3 text-sm font-medium text-slate-500">Sin organizaciones con este filtro</p>
+              </div>
+            ) : (
+              visibleRows.map((org) => <MobileOrgRow key={org.id} org={org} />)
+            )}
+          </div>
+          <div className="hidden overflow-x-auto lg:block">
+            <table className="w-full min-w-[1040px]">
               <thead className="border-b border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/50">
                 <tr>
-                  <th className={cn(thClass, 'pl-4')}>
-                    <button className={thBtn} onClick={() => toggleSort('name')}>
-                      Organización <SortIcon col="name" />
+                  <th className={cn(thClass, 'pl-4')} aria-sort={ariaSort('name')}>
+                    <button type="button" className={thBtn} onClick={() => toggleSort('name')}>
+                      Organización <SortIndicator active={sortKey === 'name'} direction={sortDir} />
                     </button>
                   </th>
-                  <th className={thClass}>
-                    <button className={thBtn} onClick={() => toggleSort('plan')}>
-                      Plan <SortIcon col="plan" />
+                  <th className={thClass} aria-sort={ariaSort('plan')}>
+                    <button type="button" className={thBtn} onClick={() => toggleSort('plan')}>
+                      Plan <SortIndicator active={sortKey === 'plan'} direction={sortDir} />
                     </button>
                   </th>
-                  <th className={thClass}>
-                    <button className={thBtn} onClick={() => toggleSort('status')}>
-                      Estado <SortIcon col="status" />
+                  <th className={thClass} aria-sort={ariaSort('status')}>
+                    <button type="button" className={thBtn} onClick={() => toggleSort('status')}>
+                      Estado <SortIndicator active={sortKey === 'status'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}><div className="flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Usuarios</div></th>
                   <th className={thClass}><div className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Productos</div></th>
                   <th className={thClass}><div className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5" /> Sucursales</div></th>
                   <th className={thClass}><div className="flex items-center gap-1"><Boxes className="h-3.5 w-3.5" /> Cajas</div></th>
-                  <th className={thClass}>
-                    <button className={thBtn} onClick={() => toggleSort('overall')}>
-                      <TrendingUp className="mr-1 h-3.5 w-3.5" /> Global <SortIcon col="overall" />
+                  <th className={thClass}><div className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> Categorías</div></th>
+                  <th className={thClass} aria-sort={ariaSort('overall')}>
+                    <button type="button" className={thBtn} onClick={() => toggleSort('overall')}>
+                      <TrendingUp className="mr-1 h-3.5 w-3.5" /> Mayor uso <SortIndicator active={sortKey === 'overall'} direction={sortDir} />
                     </button>
                   </th>
                   <th className={cn(thClass, 'pr-4')} />
@@ -456,18 +605,31 @@ export function SaasMetricsDashboard({ data }: { data: SaasMetricsData }) {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-16 text-center">
+                    <td colSpan={10} className="py-16 text-center">
                       <Minus className="mx-auto h-8 w-8 text-slate-300" />
                       <p className="mt-3 text-sm font-medium text-slate-500">Sin organizaciones con este filtro</p>
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((org) => <OrgRow key={org.id} org={org} />)
+                  visibleRows.map((org) => <OrgRow key={org.id} org={org} />)
                 )}
               </tbody>
             </table>
           </div>
         </CardContent>
+        {filtered.length > 25 && (
+          <div className="flex items-center justify-between border-t px-4 py-3 text-sm">
+            <span className="text-slate-500">Página {safePage} de {pageCount}</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => setValue('page', String(Math.max(1, safePage - 1)))}>
+                Anterior
+              </Button>
+              <Button variant="outline" size="sm" disabled={safePage >= pageCount} onClick={() => setValue('page', String(Math.min(pageCount, safePage + 1)))}>
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Legend */}

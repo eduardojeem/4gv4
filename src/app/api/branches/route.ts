@@ -6,6 +6,7 @@ import { ACTIVE_ORGANIZATION_COOKIE } from '@/lib/saas/active-organization'
 import type { OrganizationContext } from '@/lib/saas/context'
 import type { OrganizationRole } from '@/lib/saas/permissions'
 import type { SaaSPlan } from '@/lib/saas/plans'
+import { listAccessibleBranchesForUser } from '@/lib/branches/server'
 
 type OrganizationMembershipRow = {
   organization_id: string
@@ -81,25 +82,15 @@ export async function GET() {
       return NextResponse.json({ error: 'No se pudo resolver la organizacion activa.' }, { status: 403 })
     }
 
-    const supabase = createAdminSupabase()
-    let query = supabase
-      .from('branches')
-      .select('id, organization_id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
-      .eq('is_active', true)
-      .order('is_default', { ascending: false })
-      .order('name', { ascending: true })
+    const branches = organization
+      ? await listAccessibleBranchesForUser({
+          userId: auth.user.id,
+          role: auth.role,
+          organizationId: organization.id,
+        })
+      : []
 
-    if (organization) {
-      query = query.eq('organization_id', organization.id)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    const response = NextResponse.json({ branches: data ?? [] })
+    const response = NextResponse.json({ branches })
     if (organization) {
       response.cookies.set(ACTIVE_ORGANIZATION_COOKIE, organization.id, {
         httpOnly: true,

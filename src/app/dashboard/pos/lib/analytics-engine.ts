@@ -10,6 +10,7 @@
  */
 
 import { format, startOfDay, endOfDay, subDays, isWithinInterval } from 'date-fns'
+import { formatCurrency as formatCurrencyBase } from '@/lib/currency'
 
 // ============================================================================
 // Types & Interfaces
@@ -588,10 +589,7 @@ export const analyticsEngine = new AnalyticsEngine()
  * Format currency
  */
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: 'MXN',
-  }).format(amount)
+  return formatCurrencyBase(amount)
 }
 
 /**

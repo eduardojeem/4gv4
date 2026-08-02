@@ -19,6 +19,7 @@ type NotificationRow = {
 export const GET = withTenantAuth({}, async (_request, { user, organization }) => {
   try {
     const admin = createAdminSupabase()
+    await admin.rpc('dispatch_due_global_notifications')
 
     // Solo notificaciones ya enviadas y dirigidas a esta org (o a todas).
     const { data: notifications, error } = await admin

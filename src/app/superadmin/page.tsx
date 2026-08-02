@@ -11,14 +11,9 @@ import {
   Clock,
   CreditCard,
   Database,
-  ExternalLink,
-  FileText,
   Gauge,
-  Globe,
   LayoutDashboard,
   Plus,
-  Settings,
-  Shield,
   ShieldAlert,
   Sparkles,
   Store,
@@ -91,10 +86,10 @@ function HeroMetric({
   trend?: { value: string; up?: boolean }
 }) {
   const tones = {
-    indigo:  'from-indigo-500/10 to-transparent border-indigo-200/50 dark:border-indigo-900/50',
-    emerald: 'from-emerald-500/10 to-transparent border-emerald-200/50 dark:border-emerald-900/50',
-    amber:   'from-amber-500/10 to-transparent border-amber-200/50 dark:border-amber-900/50',
-    violet:  'from-violet-500/10 to-transparent border-violet-200/50 dark:border-violet-900/50',
+    indigo:  'border-indigo-200/70 bg-card dark:border-indigo-900/60',
+    emerald: 'border-emerald-200/70 bg-card dark:border-emerald-900/60',
+    amber:   'border-amber-200/70 bg-card dark:border-amber-900/60',
+    violet:  'border-violet-200/70 bg-card dark:border-violet-900/60',
   }
   const iconTones = {
     indigo:  'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
@@ -106,7 +101,7 @@ function HeroMetric({
     <Link
       href={href}
       className={cn(
-        'group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-5 transition-all hover:shadow-md',
+        'group relative overflow-hidden rounded-lg border p-5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/50',
         tones[tone]
       )}
     >
@@ -146,14 +141,12 @@ export default async function SuperAdminPage() {
   const customers = getCount(overview, 'customers')
   const sales = getCount(overview, 'sales')
   const repairs = getCount(overview, 'repairs')
-  const activeRate = overview.subscriptionHealth.total
-    ? Math.round((overview.subscriptionHealth.active / overview.subscriptionHealth.total) * 100)
-    : 0
   const planTotal = overview.planDistribution.reduce((sum, item) => sum + item.count, 0)
   const missingTables = overview.counts.filter((item) => !item.available)
   const totalSubs = overview.subscriptionHealth.total
-  const overallHealth = totalSubs > 0
-    ? Math.round(((overview.subscriptionHealth.active + overview.subscriptionHealth.trialing * 0.5) / totalSubs) * 100)
+  const managedSubs = overview.subscriptionHealth.active + overview.subscriptionHealth.trialing + overview.subscriptionHealth.atRisk
+  const overallHealth = managedSubs > 0
+    ? Math.round(((overview.subscriptionHealth.active + overview.subscriptionHealth.trialing) / managedSubs) * 100)
     : 100
 
   const healthLabel =
@@ -161,19 +154,6 @@ export default async function SuperAdminPage() {
     overallHealth >= 60 ? 'Bueno' :
     overallHealth >= 40 ? 'Atención' :
     'Crítico'
-
-  const healthTone =
-    overallHealth >= 80 ? 'emerald' :
-    overallHealth >= 60 ? 'cyan' :
-    overallHealth >= 40 ? 'amber' :
-    'red'
-
-  const healthBg = {
-    emerald: 'from-emerald-500 to-emerald-600',
-    cyan: 'from-cyan-500 to-cyan-600',
-    amber: 'from-amber-500 to-amber-600',
-    red: 'from-red-500 to-red-600',
-  }[healthTone]
 
   return (
     <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-6">
@@ -235,7 +215,7 @@ export default async function SuperAdminPage() {
       {/* Hero metrics */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <HeroMetric
-          label="MRR estimado"
+          label="MRR confirmado"
           value={formatMoney(overview.subscriptionHealth.estimatedMrr)}
           sub={`${overview.subscriptionHealth.active} activas · ${overview.subscriptionHealth.renewalsSoon} renovaciones próximas`}
           icon={TrendingUp}
@@ -245,7 +225,7 @@ export default async function SuperAdminPage() {
         <HeroMetric
           label="Organizaciones"
           value={formatNumber(organizations?.value ?? 0)}
-          sub={`${formatNumber(members?.value ?? 0)} miembros activos`}
+          sub={`${formatNumber(members?.value ?? 0)} miembros registrados`}
           icon={Building2}
           tone="indigo"
           href="/superadmin/organizations"
@@ -259,12 +239,12 @@ export default async function SuperAdminPage() {
           href="/superadmin/subscriptions"
         />
         <HeroMetric
-          label="Salud del sistema"
+          label="Suscripciones saludables"
           value={`${overallHealth}%`}
           sub={healthLabel}
           icon={Gauge}
           tone={overallHealth >= 60 ? 'emerald' : 'amber'}
-          href="/superadmin/monitoring"
+          href="/superadmin/subscriptions"
         />
       </section>
 
@@ -550,49 +530,6 @@ export default async function SuperAdminPage() {
         </Card>
       </section>
 
-      {/* Quick actions grid */}
-      <section>
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-slate-500">Accesos rápidos</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { href: '/superadmin/organizations', icon: Building2, label: 'Organizaciones', sub: 'Owners, planes, estado', tone: 'blue' },
-            { href: '/superadmin/users', icon: Users, label: 'Usuarios', sub: 'Accesos globales', tone: 'cyan' },
-            { href: '/superadmin/plans', icon: CreditCard, label: 'Planes', sub: 'Precios y límites', tone: 'violet' },
-            { href: '/superadmin/subscriptions', icon: Sparkles, label: 'Suscripciones', sub: 'Estado por tenant', tone: 'amber' },
-            { href: '/superadmin/invoices', icon: FileText, label: 'Pagos', sub: 'Historial de cobros', tone: 'emerald' },
-            { href: '/superadmin/web-content', icon: Globe, label: 'Contenido web', sub: 'Landing y marketplace', tone: 'rose' },
-            { href: '/superadmin/audit-logs', icon: Shield, label: 'Audit log', sub: 'Eventos del sistema', tone: 'slate' },
-            { href: '/superadmin/settings', icon: Settings, label: 'Configuración', sub: 'Parámetros globales', tone: 'slate' },
-          ].map((item) => {
-            const Icon = item.icon
-            const tones: Record<string, string> = {
-              blue:    'border-blue-200 bg-blue-50/50 text-blue-600 dark:border-blue-900/50 dark:bg-blue-950/10 dark:text-blue-400',
-              cyan:    'border-cyan-200 bg-cyan-50/50 text-cyan-600 dark:border-cyan-900/50 dark:bg-cyan-950/10 dark:text-cyan-400',
-              violet:  'border-violet-200 bg-violet-50/50 text-violet-600 dark:border-violet-900/50 dark:bg-violet-950/10 dark:text-violet-400',
-              amber:   'border-amber-200 bg-amber-50/50 text-amber-600 dark:border-amber-900/50 dark:bg-amber-950/10 dark:text-amber-400',
-              emerald: 'border-emerald-200 bg-emerald-50/50 text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-950/10 dark:text-emerald-400',
-              rose:    'border-rose-200 bg-rose-50/50 text-rose-600 dark:border-rose-900/50 dark:bg-rose-950/10 dark:text-rose-400',
-              slate:   'border-slate-200 bg-slate-50/50 text-slate-600 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-400',
-            }
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="group flex items-center gap-3 rounded-xl border bg-card p-4 transition-all hover:border-slate-300 hover:shadow-sm dark:hover:border-slate-600"
-              >
-                <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border', tones[item.tone])}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{item.label}</p>
-                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">{item.sub}</p>
-                </div>
-                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-            )
-          })}
-        </div>
-      </section>
     </div>
   )
 }

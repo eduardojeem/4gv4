@@ -25,6 +25,8 @@ export interface SupplierProduct {
 
 export interface Supplier {
   id: string
+  /** Organizacion dueña del proveedor; requerida por el RLS de compras. */
+  organization_id?: string | null
   name: string
   code: string
   type: 'manufacturer' | 'distributor' | 'wholesaler' | 'dropshipper'
@@ -203,11 +205,28 @@ export abstract class SupplierIntegration {
   abstract getQuote(productId: string, quantity: number): Promise<SupplierQuote>
   abstract checkProductAvailability(sku: string): Promise<{ available: boolean; quantity: number; price: number }>
 
+  /**
+   * Organizacion dueña de este proveedor. Las tablas de compras estan acotadas
+   * por inquilino, asi que todo lo que se persista tiene que llevarla o el RLS
+   * lo rechaza.
+   */
+  protected get organizationId(): string | null {
+    return this.supplier?.organization_id ?? null
+  }
+
+  private assertOrganization(): string {
+    const organizationId = this.organizationId
+    if (!organizationId) {
+      throw new Error(`El proveedor ${this.supplier?.name || this.supplier?.id} no tiene organización asociada.`)
+    }
+    return organizationId
+  }
+
   // Métodos comunes
   async saveProduct(product: SupplierProduct): Promise<void> {
     const { error } = await this.supabase
       .from('supplier_products')
-      .upsert(product)
+      .upsert({ ...product, organization_id: this.assertOrganization() })
 
     if (error) throw error
   }
@@ -215,7 +234,7 @@ export abstract class SupplierIntegration {
   async savePurchaseOrder(order: PurchaseOrder): Promise<void> {
     const { error } = await this.supabase
       .from('purchase_orders')
-      .upsert(order)
+      .upsert({ ...order, organization_id: this.assertOrganization() })
 
     if (error) throw error
   }
@@ -728,10 +747,13 @@ export class SupplierManager {
 
   async createAutomaticReorders(): Promise<InventoryReorder[]> {
     // Obtener productos con stock bajo
+    // `products` ya esta acotada por inquilino, asi que su organization_id es
+    // la fuente para estampar la reposicion (inventory_reorders lo exige).
     const { data: lowStockProducts } = await this.supabase
       .from('products')
       .select(`
         *,
+        organization_id,
         supplier_products(*)
       `)
       .lt('stock_quantity', 'reorder_point')
@@ -760,9 +782,10 @@ export class SupplierManager {
         reorders.push(reorder)
 
         // Guardar en base de datos
+        if (!product.organization_id) continue
         await this.supabase
           .from('inventory_reorders')
-          .insert(reorder)
+          .insert({ ...reorder, organization_id: product.organization_id })
       }
     }
 

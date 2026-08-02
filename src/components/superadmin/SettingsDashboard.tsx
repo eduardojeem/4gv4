@@ -18,7 +18,6 @@ import {
   Lock,
   Mail,
   RefreshCw,
-  Save,
   Shield,
   Sparkles,
   Wrench,
@@ -28,7 +27,6 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'

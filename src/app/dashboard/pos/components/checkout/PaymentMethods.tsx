@@ -7,9 +7,8 @@ import React, { useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CreditCard, Users, Clock, AlertCircle } from 'lucide-react'
+import { CreditCard, Users, Clock, AlertCircle, Trash2 } from 'lucide-react'
 import { GSIcon } from '@/components/ui/standardized-components'
-import { formatCurrency as defaultFormatCurrency } from '@/lib/currency'
 import { useCheckout } from '../../contexts/CheckoutContext'
 import { CreditStatusPanel } from './CreditStatusPanel'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
@@ -17,17 +16,19 @@ import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
 /**
  * Genera sugerencias inteligentes de billetes basadas en el monto total
  */
-function getSmartSuggestions(amount: number): number[] {
+function getSmartSuggestions(amount: number, currency: string): number[] {
   if (amount <= 0) return []
   
   const suggestions = new Set<number>()
   suggestions.add(amount) // Monto exacto
   
-  // Redondeo al próximo 1.000
-  suggestions.add(Math.ceil(amount / 1000) * 1000)
+  const roundingUnit = currency === 'PYG' ? 1000 : 1
+  suggestions.add(Math.ceil(amount / roundingUnit) * roundingUnit)
   
   // Billetes comunes (PYG)
-  const bills = [5000, 10000, 20000, 50000, 100000]
+  const bills = currency === 'PYG'
+    ? [5000, 10000, 20000, 50000, 100000]
+    : [5, 10, 20, 50, 100]
   bills.forEach(bill => {
     if (bill > amount) {
       suggestions.add(bill)
@@ -57,13 +58,15 @@ interface PaymentMethodsProps {
   }
   
   formatCurrency: (amount: number) => string
+  currency: string
 }
 
 export function PaymentMethods({
   cartTotal,
   canUseCredit,
   creditSummary,
-  formatCurrency
+  formatCurrency,
+  currency,
 }: PaymentMethodsProps) {
   
   const {
@@ -77,9 +80,18 @@ export function PaymentMethods({
     setCardNumber,
     transferReference,
     setTransferReference,
+    electronicProvider,
+    setElectronicProvider,
+    electronicInstitution,
+    setElectronicInstitution,
+    electronicChannel,
+    setElectronicChannel,
+    terminalId,
+    setTerminalId,
     splitAmount,
     setSplitAmount,
     paymentSplit,
+    setPaymentSplit,
     addPaymentSplit,
     removePaymentSplit,
     creditTerms,
@@ -95,13 +107,13 @@ export function PaymentMethods({
     if (Number(localCashInput) !== cashReceived) {
       setLocalCashInput(cashReceived === 0 ? '' : cashReceived.toString())
     }
-  }, [cashReceived])
+  }, [cashReceived, localCashInput])
 
   React.useEffect(() => {
     if (Number(localSplitInput) !== splitAmount) {
       setLocalSplitInput(splitAmount === 0 ? '' : splitAmount.toString())
     }
-  }, [splitAmount])
+  }, [localSplitInput, splitAmount])
 
   // Calcular totales locales usando el contexto
   const getTotalPaid = useCallback(() => {
@@ -123,7 +135,7 @@ export function PaymentMethods({
     if (isMixedPayment && paymentMethod && splitAmount === 0) {
       setSplitAmount(getRemainingAmount())
     }
-  }, [paymentMethod, isMixedPayment, cartTotal, getRemainingAmount])
+  }, [cashReceived, paymentMethod, isMixedPayment, cartTotal, getRemainingAmount, setCashReceived, setSplitAmount, splitAmount])
 
   // Cálculos para pago en efectivo simple
   const cashChange = Math.max(0, cashReceived - cartTotal)
@@ -141,6 +153,21 @@ export function PaymentMethods({
     installmentCount: creditTerms.count,
     frequency: creditTerms.frequency,
   }), [cartTotal, creditTerms.count, creditTerms.frequency, creditTerms.interestRate])
+  const existingCreditPrincipal = React.useMemo(
+    () => paymentSplit
+      .filter(split => split.method === 'credit')
+      .reduce((total, split) => total + split.amount, 0),
+    [paymentSplit]
+  )
+  const creditSplitPlan = React.useMemo(() => buildCreditInstallmentPlan({
+    principalAmount: Math.max(0, existingCreditPrincipal + splitAmount),
+    interestRate: creditTerms.interestRate,
+    installmentCount: creditTerms.count,
+    frequency: creditTerms.frequency,
+  }), [creditTerms.count, creditTerms.frequency, creditTerms.interestRate, existingCreditPrincipal, splitAmount])
+  const canUseMixedCredit = Boolean(
+    creditSummary && creditSummary.availableCredit >= creditSplitPlan.financedTotal
+  )
 
   return (
     <div className="space-y-4">
@@ -150,7 +177,13 @@ export function PaymentMethods({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setIsMixedPayment(!isMixedPayment)}
+          onClick={() => {
+            const nextMixed = !isMixedPayment
+            setIsMixedPayment(nextMixed)
+            setPaymentMethod(nextMixed ? '' : 'cash')
+            setSplitAmount(0)
+            if (!nextMixed) setPaymentSplit([])
+          }}
           className="text-xs"
         >
           {isMixedPayment ? 'Pago Simple' : 'Pago Mixto'}
@@ -303,13 +336,20 @@ export function PaymentMethods({
                       size="sm"
                       onClick={() => removePaymentSplit(split.id)}
                       className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      aria-label={`Eliminar pago de ${formatCurrency(split.amount)}`}
                     >
-                      ×
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
               ))}
             </div>
+          )}
+
+          {paymentSplit.length >= 10 && (
+            <p className="text-xs font-medium text-destructive" role="alert">
+              Se alcanzó el máximo de 10 formas de pago por venta.
+            </p>
           )}
 
           {/* Agregar nuevo pago */}
@@ -323,7 +363,10 @@ export function PaymentMethods({
                   size="sm"
                   onClick={() => setPaymentMethod(method.id)}
                   className={paymentMethod === method.id ? 'bg-accent ring-1 ring-ring' : ''}
-                  disabled={method.id === 'credit' && !canUseCredit}
+                  disabled={
+                    paymentSplit.length >= 10 ||
+                    (method.id === 'credit' && (!creditSummary || creditSummary.availableCredit <= 0))
+                  }
                 >
                   <method.icon className="h-3 w-3 mr-1" />
                   {method.label}
@@ -352,7 +395,7 @@ export function PaymentMethods({
           
           {/* Sugerencias inteligentes */}
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {getSmartSuggestions(cartTotal).map((suggestion) => (
+            {getSmartSuggestions(cartTotal, currency).map((suggestion) => (
               <Button
                 key={suggestion}
                 variant="outline"
@@ -382,29 +425,25 @@ export function PaymentMethods({
       )}
 
       {paymentMethod === 'card' && !isMixedPayment && (
-        <div className="mt-4">
-          <label className="text-sm font-medium mb-2 block">Últimos 4 dígitos</label>
-          <Input
-            type="text"
-            value={cardNumber}
-            onChange={(e) => setCardNumber(e.target.value)}
-            placeholder="1234"
-            maxLength={4}
-          />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div><label className="text-sm font-medium mb-2 block">Proveedor</label><Input list="electronic-providers" value={electronicProvider} onChange={(e) => setElectronicProvider(e.target.value)} placeholder="Bancard, Pagopar..." /></div>
+          <div><label className="text-sm font-medium mb-2 block">Terminal</label><Input value={terminalId} onChange={(e) => setTerminalId(e.target.value)} placeholder="POS-01" /></div>
+          <div><label className="text-sm font-medium mb-2 block">Entidad</label><Input value={electronicInstitution} onChange={(e) => setElectronicInstitution(e.target.value)} placeholder="Banco emisor" /></div>
+          <div><label className="text-sm font-medium mb-2 block">Últimos 4 dígitos</label><Input type="text" inputMode="numeric" value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="1234" maxLength={4} /></div>
         </div>
       )}
 
       {paymentMethod === 'transfer' && !isMixedPayment && (
-        <div className="mt-4">
-          <label className="text-sm font-medium mb-2 block">Referencia</label>
-          <Input
-            type="text"
-            value={transferReference}
-            onChange={(e) => setTransferReference(e.target.value)}
-            placeholder="Número de referencia"
-          />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div><label className="text-sm font-medium mb-2 block">Canal</label><Select value={electronicChannel} onValueChange={(value) => { const channel = value as 'bank_transfer' | 'qr'; setElectronicChannel(channel); if (channel === 'qr' && !electronicProvider) setElectronicProvider('Pagopar') }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bank_transfer">Transferencia bancaria</SelectItem><SelectItem value="qr">QR</SelectItem></SelectContent></Select></div>
+          <div><label className="text-sm font-medium mb-2 block">Proveedor</label><Input list="electronic-providers" value={electronicProvider} onChange={(e) => setElectronicProvider(e.target.value)} placeholder="Banco o Pagopar" /></div>
+          <div><label className="text-sm font-medium mb-2 block">Banco o entidad</label><Input list="financial-institutions" value={electronicInstitution} onChange={(e) => setElectronicInstitution(e.target.value)} placeholder="Entidad receptora" /></div>
+          <div><label className="text-sm font-medium mb-2 block">Referencia</label><Input type="text" value={transferReference} onChange={(e) => setTransferReference(e.target.value)} placeholder="Número de referencia" /></div>
         </div>
       )}
+
+      <datalist id="electronic-providers"><option value="Bancard" /><option value="Pagopar" /><option value="Dinelco" /><option value="Terminal POS" /></datalist>
+      <datalist id="financial-institutions"><option value="Banco Nacional de Fomento" /><option value="Banco Continental" /><option value="Banco Familiar" /><option value="Banco Atlas" /><option value="Banco Itaú" /><option value="Sudameris" /><option value="ueno bank" /><option value="Bancop" /></datalist>
 
       {/* Campos para pago mixto */}
       {isMixedPayment && paymentMethod && (
@@ -426,23 +465,30 @@ export function PaymentMethods({
             />
           </div>
 
-          {/* Sugerencias inteligentes para pago mixto */}
-          <div className="flex flex-wrap gap-1.5">
-            {getSmartSuggestions(getRemainingAmount()).map((suggestion) => (
-              <Button
-                key={suggestion}
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 text-[10px] bg-background/50 hover:bg-primary hover:text-primary-foreground transition-all duration-200 border-dashed"
-                onClick={() => {
-                  setLocalSplitInput(suggestion.toString())
-                  setSplitAmount(suggestion)
-                }}
-              >
-                {formatCurrency(suggestion)}
-              </Button>
-            ))}
-          </div>
+          {getRemainingAmount() > 0.01 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const remaining = getRemainingAmount()
+                setLocalSplitInput(remaining.toString())
+                setSplitAmount(remaining)
+              }}
+            >
+              Usar restante: {formatCurrency(getRemainingAmount())}
+            </Button>
+          )}
+
+          {paymentMethod === 'credit' && creditSummary && splitAmount > 0 && (
+            <CreditStatusPanel
+              cartTotal={splitAmount}
+              creditSummary={creditSummary}
+              terms={creditTerms}
+              onTermsChange={setCreditTerms}
+              formatCurrency={formatCurrency}
+            />
+          )}
 
           {paymentMethod === 'card' && (
             <div>
@@ -450,7 +496,7 @@ export function PaymentMethods({
               <Input
                 type="text"
                 value={cardNumber}
-                onChange={(e) => setCardNumber(e.target.value)}
+                onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="1234"
                 maxLength={4}
               />
@@ -466,6 +512,17 @@ export function PaymentMethods({
                 onChange={(e) => setTransferReference(e.target.value)}
                 placeholder="Número de referencia"
               />
+            </div>
+          )}
+
+          {(paymentMethod === 'card' || paymentMethod === 'transfer') && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {paymentMethod === 'transfer' && (
+                <div><label className="text-sm font-medium mb-2 block">Canal</label><Select value={electronicChannel} onValueChange={(value) => { const channel = value as 'bank_transfer' | 'qr'; setElectronicChannel(channel); if (channel === 'qr' && !electronicProvider) setElectronicProvider('Pagopar') }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bank_transfer">Transferencia</SelectItem><SelectItem value="qr">QR</SelectItem></SelectContent></Select></div>
+              )}
+              <div><label className="text-sm font-medium mb-2 block">Proveedor</label><Input list="electronic-providers" value={electronicProvider} onChange={(e) => setElectronicProvider(e.target.value)} placeholder="Proveedor" /></div>
+              <div><label className="text-sm font-medium mb-2 block">Entidad</label><Input list="financial-institutions" value={electronicInstitution} onChange={(e) => setElectronicInstitution(e.target.value)} placeholder="Banco o entidad" /></div>
+              {paymentMethod === 'card' && <div><label className="text-sm font-medium mb-2 block">Terminal</label><Input value={terminalId} onChange={(e) => setTerminalId(e.target.value)} placeholder="POS-01" /></div>}
             </div>
           )}
 
@@ -486,6 +543,12 @@ export function PaymentMethods({
                 )
                 setSplitAmount(0)
                 setPaymentMethod('')
+                setCardNumber('')
+                setTransferReference('')
+                setElectronicProvider('')
+                setElectronicInstitution('')
+                setElectronicChannel('bank_transfer')
+                setTerminalId('')
               }
             }}
             className="w-full"
@@ -493,12 +556,19 @@ export function PaymentMethods({
               !paymentMethod ||
               splitAmount <= 0 ||
               splitAmount > getRemainingAmount() ||
+              paymentSplit.length >= 10 ||
               (paymentMethod === 'card' && cardNumber.length < 4) ||
-              (paymentMethod === 'transfer' && !transferReference)
+              (paymentMethod === 'transfer' && !transferReference) ||
+              (paymentMethod === 'credit' && !canUseMixedCredit)
             }
           >
             Agregar Pago
           </Button>
+          {paymentMethod === 'credit' && splitAmount > 0 && !canUseMixedCredit && (
+            <p className="text-xs font-medium text-destructive" role="alert">
+              El crédito disponible no cubre el monto financiado de esta parte.
+            </p>
+          )}
         </div>
       )}
     </div>

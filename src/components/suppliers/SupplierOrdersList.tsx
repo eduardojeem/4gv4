@@ -12,30 +12,27 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Plus, RefreshCw, FileText, Calendar, DollarSign } from 'lucide-react'
+import { Plus, RefreshCw, FileText, Calendar, Eye } from 'lucide-react'
+import { PurchaseOrderDetailModal, type PurchaseOrderSummary } from './PurchaseOrderDetailModal'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-interface PurchaseOrder {
-    id: string
-    ordernumber: string
-    status: 'draft' | 'sent' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled'
-    orderdate: string
-    totalamount: number
-    currency: string
+type PurchaseOrder = PurchaseOrderSummary & {
     itemcount?: number
 }
 
 interface SupplierOrdersListProps {
     supplierId: string
+    supplierName?: string
     onCreateOrder: () => void
 }
 
-export function SupplierOrdersList({ supplierId, onCreateOrder }: SupplierOrdersListProps) {
+export function SupplierOrdersList({ supplierId, supplierName = 'el proveedor', onCreateOrder }: SupplierOrdersListProps) {
     const [orders, setOrders] = useState<PurchaseOrder[]>([])
     const [loading, setLoading] = useState(true)
+    const [detailOrder, setDetailOrder] = useState<PurchaseOrder | null>(null)
     const supabase = createClient()
 
     const fetchOrders = useCallback(async () => {
@@ -137,13 +134,23 @@ export function SupplierOrdersList({ supplierId, onCreateOrder }: SupplierOrders
                                     </TableCell>
                                     <TableCell>{getStatusBadge(order.status)}</TableCell>
                                     <TableCell className="text-right font-medium">
-                                        {new Intl.NumberFormat('es-AR', {
+                                        {new Intl.NumberFormat('es-PY', {
                                             style: 'currency',
-                                            currency: order.currency || 'USD'
+                                            currency: order.currency || 'PYG',
+                                            maximumFractionDigits: 0,
                                         }).format(order.totalamount)}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="sm">Ver Detalles</Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="gap-1.5"
+                                            aria-label={`Ver detalle del pedido ${order.ordernumber}`}
+                                            onClick={() => setDetailOrder(order)}
+                                        >
+                                            <Eye className="h-3.5 w-3.5" />
+                                            Ver detalle
+                                        </Button>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -151,6 +158,14 @@ export function SupplierOrdersList({ supplierId, onCreateOrder }: SupplierOrders
                     </Table>
                 </div>
             )}
+
+            <PurchaseOrderDetailModal
+                order={detailOrder}
+                supplierName={supplierName}
+                open={Boolean(detailOrder)}
+                onOpenChange={(next) => { if (!next) setDetailOrder(null) }}
+                onOrderUpdated={() => { void fetchOrders() }}
+            />
         </div>
     )
 }

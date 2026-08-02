@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAdminAuth, type AdminAuthContext } from '@/lib/api/withAdminAuth'
 import { canCreateResource } from '@/lib/saas/subscription-service'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { logger } from '@/lib/logger'
 
 type ActiveMemberRow = {
   id: string
@@ -50,12 +51,39 @@ async function enforceActiveUserLimit(organizationId: string, limit: number, cur
 
   if (suspendIds.length === 0) return 0
 
+  const suspendedUserIds = sorted
+    .filter((member) => !keepIds.has(member.id))
+    .map((member) => member.user_id)
+
   const { error: updateError } = await supabase
     .from('organization_members')
     .update({ status: 'suspended' })
     .in('id', suspendIds)
 
   if (updateError) throw updateError
+
+  // Suspender personal es destructivo: dejar rastro de quien lo ejecuto y a quienes alcanzo.
+  const { error: auditError } = await supabase.from('audit_log').insert({
+    user_id: currentUserId,
+    action: 'enforce_user_quota',
+    resource: 'users',
+    resource_id: organizationId,
+    new_values: {
+      organization_id: organizationId,
+      limit,
+      suspended_count: suspendIds.length,
+      suspended_user_ids: suspendedUserIds,
+    },
+  })
+
+  if (auditError) {
+    logger.warn('Could not audit user quota enforcement', {
+      error: auditError.message,
+      organizationId,
+      suspendedCount: suspendIds.length,
+    })
+  }
+
   return suspendIds.length
 }
 

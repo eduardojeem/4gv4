@@ -47,10 +47,54 @@ interface POSCustomerContextType {
   setNewType: (type: string) => void
   
   // Actions
+  refreshCustomers: () => Promise<void>
   createNewCustomer: () => Promise<void>
 }
 
 const POSCustomerContext = createContext<POSCustomerContextType | null>(null)
+
+interface ApiCustomerRow {
+  id?: unknown
+  name?: unknown
+  first_name?: unknown
+  last_name?: unknown
+  email?: unknown
+  phone?: unknown
+  customer_type?: unknown
+  updated_at?: unknown
+  address?: unknown
+  city?: unknown
+  last_visit?: unknown
+  loyalty_points?: unknown
+  total_purchases?: unknown
+  total_repairs?: unknown
+  current_balance?: unknown
+  credit_limit?: unknown
+}
+
+function textValue(value: unknown) {
+  return typeof value === 'string' ? value : ''
+}
+
+function mapApiCustomer(row: ApiCustomerRow) {
+  const composedName = [textValue(row.first_name), textValue(row.last_name)].filter(Boolean).join(' ').trim()
+  return {
+    id: textValue(row.id),
+    name: textValue(row.name) || composedName || 'Cliente sin nombre',
+    email: textValue(row.email),
+    phone: textValue(row.phone),
+    type: textValue(row.customer_type) || 'regular',
+    updated_at: textValue(row.updated_at),
+    address: textValue(row.address),
+    city: textValue(row.city),
+    last_visit: textValue(row.last_visit) || null,
+    loyalty_points: Number(row.loyalty_points) || 0,
+    total_purchases: Number(row.total_purchases) || 0,
+    total_repairs: Number(row.total_repairs) || 0,
+    current_balance: Number(row.current_balance) || 0,
+    credit_limit: Number(row.credit_limit) || 0,
+  }
+}
 
 export function POSCustomerProvider({ children }: { children: ReactNode }) {
   // Estados principales
@@ -107,6 +151,46 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
     }
     return list
   }, [customers, customerSearch, customerTypeFilter, showFrequentOnly])
+
+  const refreshCustomers = useCallback(async () => {
+    if (!config.supabase.isConfigured) {
+      setCustomers([])
+      setCustomersSourceSupabase(false)
+      setLastCustomerRefreshCount(0)
+      return
+    }
+
+    const allRows: ApiCustomerRow[] = []
+    let page = 1
+    let totalPages = 1
+
+    do {
+      const response = await fetch(`/api/customers?page=${page}&limit=200`, { cache: 'no-store' })
+      const payload = await response.json().catch(() => ({}))
+
+      if (!response.ok || !payload?.success || !Array.isArray(payload.data)) {
+        throw new Error(payload?.error || 'No se pudieron cargar los clientes')
+      }
+
+      allRows.push(...payload.data)
+      totalPages = Math.max(1, Number(payload.pagination?.totalPages) || 1)
+      page += 1
+    } while (page <= totalPages)
+
+    const mapped = allRows.map(mapApiCustomer)
+    setCustomers(mapped)
+    setCustomersSourceSupabase(true)
+    setLastCustomerRefreshCount(mapped.length)
+  }, [])
+
+  React.useEffect(() => {
+    refreshCustomers().catch((error) => {
+      console.warn('No se pudieron cargar clientes del POS:', error)
+      setCustomers([])
+      setCustomersSourceSupabase(false)
+      setLastCustomerRefreshCount(0)
+    })
+  }, [refreshCustomers])
 
   // Load real aggregates from Supabase when selecting a customer (parallelized + cached)
   const customerMetricsCache = React.useRef<Map<string, { data: any; timestamp: number }>>(new Map())
@@ -186,37 +270,26 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
     setNewCustomerSaving(true)
     try {
       if (config.supabase.isConfigured) {
-        const supabase = createSupabaseClient()
-        const { data, error } = await supabase
-          .from('customers')
-          .insert({
-            first_name: newFirstName.trim(),
-            last_name: newLastName.trim(),
+        const name = [newFirstName, newLastName].filter(Boolean).join(' ').trim() || newPhone.trim()
+        const response = await fetch('/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
             phone: newPhone.trim(),
             email: newEmail.trim(),
             customer_type: newType,
-          })
-          .select('id,first_name,last_name,phone,email,customer_type,updated_at')
-          .single()
-        if (error) throw new Error(error.message)
-        const row = data as any
-        const mapped = {
-          id: row.id,
-          name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
-          email: row.email || '',
-          phone: row.phone || '',
-          type: row.customer_type || 'regular',
-          updated_at: row.updated_at,
-          address: '',
-          loyalty_points: 0,
-          total_purchases: 0,
-          total_repairs: 0,
-          current_balance: 0,
-          last_visit: null,
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok || !payload?.success || !payload.data) {
+          throw new Error(payload?.error || 'No se pudo crear el cliente')
         }
+        const mapped = mapApiCustomer(payload.data)
         setCustomers(prev => [mapped, ...prev])
-        setSelectedCustomer(row.id)
+        setSelectedCustomer(mapped.id)
         setCustomersSourceSupabase(true)
+        setLastCustomerRefreshCount(customers.length + 1)
         toast.success('Cliente creado')
       } else {
         const id = Date.now().toString()
@@ -249,7 +322,7 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
       setNewCustomerSaving(false)
       toast.error('No se pudo crear cliente: ' + String(e?.message || e || ''))
     }
-  }, [newFirstName, newLastName, newPhone, newEmail, newType])
+  }, [customers.length, newFirstName, newLastName, newPhone, newEmail, newType])
 
   return (
     <POSCustomerContext.Provider value={{
@@ -283,6 +356,7 @@ export function POSCustomerProvider({ children }: { children: ReactNode }) {
       setNewEmail,
       newType,
       setNewType,
+      refreshCustomers,
       createNewCustomer
     }}>
       {children}

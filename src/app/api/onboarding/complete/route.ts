@@ -1,21 +1,31 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
-import { z } from 'zod'
+import { getCurrentOrganizationContext } from '@/lib/saas/context'
+import {
+  SupportedCurrencySchema,
+  SupportedLanguageSchema,
+  isValidTimeZone,
+} from '@/lib/validations/system-settings'
+import {
+  getTenantAdminSettings,
+  mergeTenantAdminSettings,
+  normalizeOrganizationModules,
+  toOnboardingAdminSettings,
+} from '@/lib/organization/admin-settings'
 
-type MembershipRow = {
-  organization_id: string
-}
-
-type SettingsModules = Record<string, unknown> & {
+type OnboardingMetadata = Record<string, unknown> & {
   onboarding?: Record<string, unknown>
 }
 
 const onboardingSchema = z.object({
   displayName: z.string().trim().min(2, 'Nombre publico requerido').max(120),
-  currency: z.enum(['PYG', 'USD', 'ARS', 'BRL']).default('PYG'),
-  timezone: z.string().trim().min(3).max(80).default('America/Asuncion'),
+  currency: SupportedCurrencySchema.default('PYG'),
+  timezone: z.string().trim().refine(isValidTimeZone, 'Zona horaria invalida').default('America/Asuncion'),
+  language: SupportedLanguageSchema.default('es'),
+  confirmCurrencyChange: z.boolean().default(false),
   phone: z.string().trim().min(6, 'Telefono requerido').max(50),
   email: z.string().trim().email('Correo invalido').max(254).optional().or(z.literal('')),
   address: z.string().trim().min(4, 'Direccion requerida').max(250),
@@ -31,49 +41,40 @@ const onboardingSchema = z.object({
   tiktok: z.string().trim().max(100).optional().or(z.literal('')),
 })
 
-function slugifyBranch(value: string) {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60) || 'principal'
-}
-
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-  if (userError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (userError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = createAdminSupabase()
-
-  const { data: profile, error: profileError } = await admin
-    .from('profiles')
-    .select('role, status')
-    .eq('id', user.id)
-    .maybeSingle()
+  const [{ data: profile, error: profileError }, organizationContext] = await Promise.all([
+    admin.from('profiles').select('role, status').eq('id', user.id).maybeSingle(),
+    getCurrentOrganizationContext(user.id),
+  ])
 
   if (profileError) {
     logger.error('Failed to load onboarding user profile', { error: profileError.message, userId: user.id })
     return NextResponse.json({ error: 'No se pudo validar el usuario.' }, { status: 500 })
   }
 
-  const role = typeof profile?.role === 'string' ? profile.role : null
-  const status = typeof profile?.status === 'string' ? profile.status : null
-  const isActiveUser = status !== 'inactive' && status !== 'suspended'
-  const isAdmin = Boolean(isActiveUser && (role === 'admin' || role === 'super_admin'))
-
-  if (!isAdmin) {
+  const profileRole = typeof profile?.role === 'string' ? profile.role : null
+  const profileStatus = typeof profile?.status === 'string' ? profile.status : null
+  const isActive = profileStatus !== 'inactive' && profileStatus !== 'suspended'
+  const canComplete = Boolean(
+    isActive
+    && organizationContext
+    && (
+      profileRole === 'super_admin'
+      || organizationContext.role === 'owner'
+      || organizationContext.role === 'admin'
+    )
+  )
+  if (!canComplete) {
     return NextResponse.json({ error: 'Solo administradores pueden finalizar el onboarding.' }, { status: 403 })
   }
 
   const body = await request.json().catch(() => null)
   const validation = onboardingSchema.safeParse(body)
-
   if (!validation.success) {
     return NextResponse.json(
       {
@@ -88,30 +89,10 @@ export async function POST(request: Request) {
   }
 
   const input = validation.data
-
-  const { data: membership, error: membershipError } = await admin
-    .from('organization_members')
-    .select('organization_id, role')
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (membershipError) {
-    logger.error('Failed to load onboarding organization', { error: membershipError.message, userId: user.id })
-    return NextResponse.json({ error: 'No se pudo cargar la empresa.' }, { status: 500 })
-  }
-
-  const organizationId = (membership as MembershipRow | null)?.organization_id
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'No hay una empresa activa para este usuario.' }, { status: 404 })
-  }
-
+  const organizationId = organizationContext!.id
   const { data: settings, error: settingsError } = await admin
     .from('organization_settings')
-    .select('display_name, currency, timezone, branding, modules')
+    .select('currency, modules')
     .eq('organization_id', organizationId)
     .maybeSingle()
 
@@ -120,52 +101,47 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No se pudo cargar la configuracion.' }, { status: 500 })
   }
 
-  const currentModules = (settings?.modules ?? {}) as SettingsModules
+  const currentModules = normalizeOrganizationModules(settings?.modules) as OnboardingMetadata
+  const currentAdminSettings = getTenantAdminSettings(currentModules)
+  const currentCurrency = settings?.currency || currentAdminSettings.currency || 'PYG'
+  if (input.currency !== currentCurrency && !input.confirmCurrencyChange) {
+    return NextResponse.json(
+      {
+        error: 'Confirma que el cambio de moneda no convierte precios, saldos ni operaciones existentes.',
+        code: 'CURRENCY_CHANGE_CONFIRMATION_REQUIRED',
+      },
+      { status: 409 }
+    )
+  }
+
   const now = new Date().toISOString()
-  const alreadyCompleted = currentModules.onboarding?.status === 'completed'
-  const nextModules: SettingsModules = {
-    ...currentModules,
+  const previousOnboarding = currentModules.onboarding ?? {}
+  const alreadyCompleted = previousOnboarding.status === 'completed'
+  const modulesWithAdminSettings = mergeTenantAdminSettings(
+    currentModules,
+    toOnboardingAdminSettings(input)
+  )
+  const nextModules: OnboardingMetadata = {
+    ...modulesWithAdminSettings,
     onboarding: {
-      ...(currentModules.onboarding ?? {}),
+      ...previousOnboarding,
       status: 'completed',
-      // Preservar completed_at y completed_by originales en re-envíos
-      completed_at: alreadyCompleted
-        ? (currentModules.onboarding?.completed_at ?? now)
-        : now,
-      completed_by: alreadyCompleted
-        ? (currentModules.onboarding?.completed_by ?? user.id)
-        : user.id,
+      completed_at: alreadyCompleted ? previousOnboarding.completed_at ?? now : now,
+      completed_by: alreadyCompleted ? previousOnboarding.completed_by ?? user.id : user.id,
       last_updated_at: now,
       last_updated_by: user.id,
-      required_company_fields: ['displayName', 'phone', 'address', 'city', 'currency', 'timezone'],
+      required_company_fields: [
+        'displayName', 'phone', 'address', 'city', 'currency', 'timezone', 'language',
+      ],
     },
   }
 
-  // Buscar la sucursal principal existente por slug o is_default (limit 1 para
-  // tolerar datos duplicados sin que maybeSingle falle).
-  const { data: existingBranchRows } = await admin
-    .from('branches')
-    .select('id, metadata')
-    .eq('organization_id', organizationId)
-    .or('slug.eq.principal,is_default.eq.true')
-    .limit(1)
-  const defaultBranch = existingBranchRows?.[0] ?? null
-
   const branchPayload = {
-    organization_id: organizationId,
-    name: 'Sucursal principal',
     address: input.address,
     city: input.city,
     phone: input.phone,
-    email: input.email || null,
-    is_active: true,
-    is_default: true,
-    metadata: {
-      ...((defaultBranch?.metadata ?? {}) as Record<string, unknown>),
-      onboarding_completed_at: now,
-    },
+    email: input.email || '',
   }
-
   const websiteCompanyInfo = {
     name: input.displayName,
     phone: input.phone,
@@ -189,71 +165,28 @@ export async function POST(request: Request) {
     tiktok: input.tiktok || '',
   }
 
-  const results = await Promise.allSettled([
-    admin
-      .from('organizations')
-      .update({ name: input.displayName, marketplace_public: true })
-      .eq('id', organizationId),
-    admin
-      .from('organization_settings')
-      .upsert(
-        {
-          organization_id: organizationId,
-          display_name: input.displayName,
-          currency: input.currency,
-          timezone: input.timezone,
-          branding: settings?.branding ?? {},
-          modules: nextModules,
-        },
-        { onConflict: 'organization_id' }
-      ),
-    // Update/insert manual (sin ON CONFLICT) para evitar choques con
-    // idx_branches_org_slug y el error "cannot affect row a second time".
-    // En UPDATE NO se pisan is_active/is_default: si el admin desactivó la
-    // sucursal, re-correr el onboarding no debe reactivarla.
-    defaultBranch?.id
-      ? admin.from('branches').update({
-          organization_id: branchPayload.organization_id,
-          name: branchPayload.name,
-          address: branchPayload.address,
-          city: branchPayload.city,
-          phone: branchPayload.phone,
-          email: branchPayload.email,
-          metadata: branchPayload.metadata,
-        }).eq('id', defaultBranch.id)
-      : admin.from('branches').insert({ ...branchPayload, code: 'principal', slug: 'principal' }),
-    admin
-      .from('website_settings')
-      .upsert(
-        {
-          organization_id: organizationId,
-          key: 'company_info',
-          value: websiteCompanyInfo,
-        },
-        { onConflict: 'organization_id,key' }
-      ),
-  ])
-
-  const failed = results.find((result) => result.status === 'fulfilled' && result.value.error)
-  const rejected = results.find((result) => result.status === 'rejected')
-  const updateError = failed?.status === 'fulfilled' ? failed.value.error : rejected?.status === 'rejected' ? rejected.reason : null
+  const { data: completion, error: updateError } = await admin.rpc(
+    'complete_organization_onboarding',
+    {
+      p_organization_id: organizationId,
+      p_user_id: user.id,
+      p_display_name: input.displayName,
+      p_currency: input.currency,
+      p_timezone: input.timezone,
+      p_logo_url: input.logoUrl || '',
+      p_modules: nextModules,
+      p_branch: branchPayload,
+      p_company_info: websiteCompanyInfo,
+    }
+  )
 
   if (updateError) {
-    // Log all individual results for debugging
-    const debugResults = results.map((r, i) => {
-      const labels = ['organizations.update', 'organization_settings.upsert', 'branches.upsert', 'website_settings.upsert']
-      if (r.status === 'rejected') return { step: labels[i], error: String(r.reason) }
-      if (r.value.error) return { step: labels[i], error: r.value.error.message }
-      return { step: labels[i], ok: true }
-    })
-    console.error('[ONBOARDING] Provisioning failures:', JSON.stringify(debugResults, null, 2))
-
-    logger.error('Failed to complete onboarding', {
-      error: updateError instanceof Error ? updateError.message : String(updateError?.message ?? updateError),
-      organizationId,
-    })
-    return NextResponse.json({ error: 'No se pudo finalizar el onboarding.', _debug: debugResults }, { status: 500 })
+    logger.error('Failed to complete onboarding', { error: updateError.message, organizationId })
+    return NextResponse.json({ error: 'No se pudo finalizar el onboarding.' }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true, completedAt: now })
+  const completedAt = completion && typeof completion === 'object' && !Array.isArray(completion)
+    ? String((completion as Record<string, unknown>).completed_at || now)
+    : now
+  return NextResponse.json({ success: true, completedAt })
 }

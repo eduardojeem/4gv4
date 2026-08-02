@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireSuperAdmin } from '@/lib/superadmin/auth'
+import { getSuperAdminUser } from '@/lib/superadmin/auth'
 
 type CheckStatus = 'ok' | 'warning' | 'error' | 'skipped'
 
@@ -25,8 +25,8 @@ async function runProbe<T>(fn: () => Promise<T>): Promise<{ result: T | null; la
   }
 }
 
-export async function GET(_request: NextRequest) {
-  const me = await requireSuperAdmin()
+export async function GET() {
+  const me = await getSuperAdminUser()
   if (!me) return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
 
   const admin = createAdminSupabase()
@@ -59,7 +59,7 @@ export async function GET(_request: NextRequest) {
     id: 'auth_super_admin',
     category: 'auth',
     name: 'Acceso super admin',
-    description: 'requireSuperAdmin() responde correctamente al usuario actual',
+    description: 'getSuperAdminUser() responde correctamente al usuario actual',
     status: 'ok',
     message: `Autenticado como ${me.email ?? me.id}`,
     details: { user_id: me.id, email: me.email ?? null },

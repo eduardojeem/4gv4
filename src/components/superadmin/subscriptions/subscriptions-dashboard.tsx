@@ -13,7 +13,10 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Pagination } from '@/components/ui/pagination'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useUrlListState } from '@/hooks/useUrlListState'
+import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagination'
 
 import type { EditForm, SuperAdminSubscription, SortValue, TabValue } from './types'
 import {
@@ -55,12 +58,32 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
   const router = useRouter()
 
   // Filters
-  const [query, setQuery] = useState('')
-  const [plan, setPlan] = useState('ALL')
-  const [status, setStatus] = useState('ALL')
-  const [provider, setProvider] = useState('ALL')
-  const [sort, setSort] = useState<SortValue>('attention')
-  const [tab, setTab] = useState<TabValue>('all')
+  const { state, setValue } = useUrlListState({
+    q: '',
+    plan: 'ALL',
+    status: 'ALL',
+    provider: 'ALL',
+    sort: 'attention',
+    tab: 'all',
+    page: '1',
+    size: '25',
+  })
+  const query = state.q
+  const plan = state.plan
+  const status = state.status
+  const provider = state.provider
+  const sort = state.sort as SortValue
+  const tab = state.tab as TabValue
+  const setFilter = (key: 'q' | 'plan' | 'status' | 'provider' | 'sort' | 'tab', value: string) => {
+    setValue(key, value)
+    setValue('page', '1')
+  }
+  const setQuery = (value: string) => setFilter('q', value)
+  const setPlan = (value: string) => setFilter('plan', value)
+  const setStatus = (value: string) => setFilter('status', value)
+  const setProvider = (value: string) => setFilter('provider', value)
+  const setSort = (value: SortValue) => setFilter('sort', value)
+  const setTab = (value: TabValue) => setFilter('tab', value)
 
   // Detail dialog
   const [selected, setSelected] = useState<SuperAdminSubscription | null>(null)
@@ -144,6 +167,10 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
         return Number(isAttention(b)) - Number(isAttention(a))
       })
   }, [plan, provider, query, sort, status, subscriptions, tab])
+  const pagination = useMemo(
+    () => paginateList(filtered, state.page, state.size),
+    [filtered, state.page, state.size]
+  )
 
   // Stats
   const stats = useMemo(() => {
@@ -391,18 +418,18 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
               {TABS.map(({ value }) => (
                 <TabsContent key={value} value={value} className="m-0">
                   {/* Desktop table */}
-                  <div className="hidden xl:block">
+                  <div className="hidden lg:block">
                     <SubscriptionTable
-                      items={filtered}
+                      items={pagination.items}
                       onOpenDetail={openDetail}
                       onCopyValue={copyValue}
                     />
                   </div>
 
                   {/* Mobile/tablet cards */}
-                  <div className="grid gap-3 p-4 xl:hidden">
+                  <div className="grid gap-3 p-4 lg:hidden">
                     {filtered.length > 0 ? (
-                      filtered.map((sub) => (
+                      pagination.items.map((sub) => (
                         <SubscriptionCard
                           key={sub.id}
                           subscription={sub}
@@ -420,6 +447,19 @@ export function SubscriptionsDashboard({ subscriptions, planOptions: configuredP
                 </TabsContent>
               ))}
             </Tabs>
+            <Pagination
+              className="border-t px-4 py-3"
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              itemsPerPage={pagination.pageSize}
+              totalItems={filtered.length}
+              itemsPerPageOptions={[...SUPERADMIN_PAGE_SIZES]}
+              onPageChange={(page) => setValue('page', String(page))}
+              onItemsPerPageChange={(size) => {
+                setValue('size', String(size))
+                setValue('page', '1')
+              }}
+            />
           </CardContent>
         </Card>
 

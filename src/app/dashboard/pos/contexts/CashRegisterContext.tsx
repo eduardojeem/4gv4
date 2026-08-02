@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
 import { useCashRegister } from '@/hooks/useCashRegister'
+import { calculateExpectedCashBalance, isPhysicalManualMovement } from '../lib/cash-balance'
 
 // Extended types for advanced features
 export interface ZClosureRecord {
@@ -89,6 +90,7 @@ interface CashRegisterContextType {
   // Basic register management
   registers: Array<{ id: string; name: string; isActive: boolean }>
   activeRegisterId: string
+  currentSessionId: string | null
   setActiveRegisterId: (id: string) => void
   setRegisters: React.Dispatch<React.SetStateAction<Array<{ id: string; name: string; isActive: boolean }>>>
   refreshRegisters: () => Promise<void>
@@ -102,7 +104,7 @@ interface CashRegisterContextType {
   registerState: Record<string, CashRegisterState>
 
   // Movement operations
-  addMovement: (type: CashMovement['type'], amount: number, note?: string, paymentMethod?: string) => Promise<void>
+  addMovement: (type: CashMovement['type'], amount: number, note?: string, paymentMethod?: string) => Promise<boolean>
   registerSale: (saleId: string, amount: number, paymentMethod: string) => Promise<void>
   openRegister: (initialAmount: number, note?: string, userId?: string) => Promise<boolean>
   closeRegister: (closingBalance?: number, userId?: string) => Promise<boolean>
@@ -168,9 +170,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   } = useCashRegister()
 
   // Basic state
-  const [activeRegisterId, setActiveRegisterId] = useState<string>(
-    typeof window !== 'undefined' ? (localStorage.getItem('pos_active_register_id') ?? 'principal') : 'principal'
-  )
+  const [activeRegisterId, setActiveRegisterId] = useState<string>('')
   const [localRegisters, setLocalRegisters] = useState<Array<{ id: string; name: string; isActive: boolean }>>([])
 
   // Use hook registers if available, otherwise local fallback (or empty)
@@ -179,6 +179,30 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
       ? hookRegisters.map(r => ({ id: r.id, name: r.name, isActive: r.is_active }))
       : localRegisters
   }, [hookRegisters, localRegisters])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const syncBranchRegister = async () => {
+      try {
+        const availableRegisters = await loadRegisters()
+        if (cancelled) return
+
+        const storageKey = `pos_active_register_id:${selectedBranchId || 'unscoped'}`
+        const savedRegisterId = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null
+        const selectedRegister = availableRegisters.find(register => register.id === savedRegisterId)
+          || availableRegisters[0]
+        setActiveRegisterId(selectedRegister?.id || '')
+      } catch (error) {
+        if (cancelled) return
+        setActiveRegisterId('')
+        console.warn('No se pudieron sincronizar las cajas de la sucursal.', error)
+      }
+    }
+
+    void syncBranchRegister()
+    return () => { cancelled = true }
+  }, [loadRegisters, selectedBranchId])
 
   // Sync active register with hook
   useEffect(() => {
@@ -206,12 +230,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
       return { isOpen: false, balance: 0, movements: [] }
     }
 
-    // Calculate balance from movements
-    const balance = currentSession.movements.reduce((sum, m) => {
-      if (m.type === 'opening' || m.type === 'sale' || m.type === 'cash_in') return sum + m.amount
-      if (m.type === 'cash_out') return sum - m.amount
-      return sum
-    }, 0)
+    const balance = calculateExpectedCashBalance(currentSession.movements)
 
     return {
       isOpen: true,
@@ -234,32 +253,18 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   // lastSyncTime reserved for future sync tracking
   const [lastSyncTime] = useState<Date | null>(null)
 
-  // Default permissions
-  const [userPermissions, setUserPermissions] = useState<UserPermissions>(() => {
-    const defaultPerms: UserPermissions = {
-      canOpenRegister: true,
-      canCloseRegister: true,
-      canAddCashIn: true,
-      canAddCashOut: true,
-      canViewReports: true,
-      canExportData: true,
-      canViewAuditLog: true,
-      canManagePermissions: false,
-      maxCashOutAmount: 1000000,
-      requiresApprovalForLargeAmounts: true
-    }
-    try {
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('pos_user_permissions')
-        if (saved) {
-          const p = JSON.parse(saved)
-          if (p && typeof p === 'object') return { ...defaultPerms, ...p }
-        }
-      }
-    } catch (e) {
-      console.warn('Error loading prefs from localStorage:', e)
-    }
-    return defaultPerms
+  // These flags control presentation only. Every mutation is authorized again by the API.
+  const [userPermissions, setUserPermissions] = useState<UserPermissions>({
+    canOpenRegister: true,
+    canCloseRegister: true,
+    canAddCashIn: true,
+    canAddCashOut: true,
+    canViewReports: true,
+    canExportData: true,
+    canViewAuditLog: true,
+    canManagePermissions: false,
+    maxCashOutAmount: 1000000,
+    requiresApprovalForLargeAmounts: true
   })
 
   // Map hook history to ZClosureRecord
@@ -291,8 +296,8 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
         discrepancy: h.discrepancy || 0,
         // Totales
         totalSales,
-        totalCashIn: h.movements.filter(m => m.type === 'cash_in').reduce((s, m) => s + m.amount, 0),
-        totalCashOut: h.movements.filter(m => m.type === 'cash_out').reduce((s, m) => s + m.amount, 0),
+        totalCashIn: h.movements.filter(m => m.type === 'cash_in' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0),
+        totalCashOut: h.movements.filter(m => m.type === 'cash_out' && isPhysicalManualMovement(m)).reduce((s, m) => s + m.amount, 0),
         salesByCash,
         salesByCard,
         salesByTransfer,
@@ -321,22 +326,21 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
 
   // Load initial data
   useEffect(() => {
-    loadRegisters()
     hookFetchHistory()
     hookFetchAuditLog()
-  }, [loadRegisters, hookFetchHistory, hookFetchAuditLog])
+  }, [hookFetchHistory, hookFetchAuditLog])
 
   // Save prefs
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
-        localStorage.setItem('pos_active_register_id', activeRegisterId)
-        localStorage.setItem('pos_user_permissions', JSON.stringify(userPermissions))
+        const storageKey = `pos_active_register_id:${selectedBranchId || 'unscoped'}`
+        if (activeRegisterId) localStorage.setItem(storageKey, activeRegisterId)
       }
     } catch (error) {
       console.warn('Error saving prefs to localStorage:', error)
     }
-  }, [activeRegisterId, userPermissions])
+  }, [activeRegisterId, selectedBranchId])
 
   // Monitor online status
   useEffect(() => {
@@ -379,17 +383,18 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     if (type === 'cash_in') {
       if (!checkPermission('canAddCashIn')) {
         toast.error('Sin permisos para registrar entradas')
-        return
+        return false
       }
-      await hookAddCashIn(amount, note || '')
+      return await hookAddCashIn(amount, note || '')
     } else if (type === 'cash_out') {
       if (!checkPermission('canAddCashOut')) {
         toast.error('Sin permisos para registrar salidas')
-        return
+        return false
       }
-      await hookAddCashOut(amount, note || '')
+      return await hookAddCashOut(amount, note || '')
     }
     // Tipos 'sale', 'opening', 'closing' se manejan por sus propios métodos
+    return false
   }, [hookAddCashIn, hookAddCashOut, checkPermission])
 
   // Fix #7: tipado correcto para paymentMethod
@@ -402,8 +407,62 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
 
   const openRegister = useCallback(async (initialAmount: number, note?: string, userId?: string): Promise<boolean> => {
     if (!checkPermission('canOpenRegister')) return false
-    return await hookOpenRegister(activeRegisterId, initialAmount, userId)
-  }, [hookOpenRegister, activeRegisterId, checkPermission])
+
+    let registerId = activeRegisterId.trim()
+    let availableRegisters: Array<{ id: string }>
+
+    try {
+      availableRegisters = await loadRegisters()
+    } catch (error) {
+      console.error('No se pudieron cargar las cajas antes de la apertura.', error)
+      toast.error('No se pudieron cargar las cajas de la sucursal. Intenta nuevamente.')
+      return false
+    }
+
+    if (!availableRegisters.some(register => register.id === registerId)) {
+      registerId = availableRegisters[0]?.id || ''
+    }
+
+    if (!registerId) {
+      if (!selectedBranchId || selectedBranchId === 'all') {
+        toast.error('Selecciona una sucursal antes de abrir la caja.')
+        return false
+      }
+
+      try {
+        const response = await fetch('/api/pos/cash-registers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...branchHeaders(selectedBranchId),
+          },
+          body: JSON.stringify({
+            name: 'Caja Principal',
+            branch_id: selectedBranchId,
+          }),
+        })
+        const payload = await response.json() as {
+          success?: boolean
+          error?: string
+          data?: { id?: string }
+        }
+
+        if (!response.ok || !payload.success || !payload.data?.id) {
+          throw new Error(payload.error || 'No se pudo crear la caja principal.')
+        }
+
+        registerId = payload.data.id
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo preparar la caja.'
+        console.error('Error creating the default cash register:', { message })
+        toast.error(message)
+        return false
+      }
+    }
+
+    setActiveRegisterId(registerId)
+    return await hookOpenRegister(registerId, initialAmount, userId, note)
+  }, [hookOpenRegister, activeRegisterId, checkPermission, loadRegisters, selectedBranchId])
 
   // Fix #1: closeRegister recibe el monto real contado
   const closeRegister = useCallback(async (closingBalance?: number, userId?: string): Promise<boolean> => {
@@ -531,8 +590,9 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
   const contextValue = useMemo(() => ({
     registers,
     setRegisters: setLocalRegisters,
-    refreshRegisters: loadRegisters,
+    refreshRegisters: async () => { await loadRegisters() },
     activeRegisterId,
+    currentSessionId: currentSession?.id ?? null,
     setActiveRegisterId,
     getCurrentRegister: currentRegisterState,
 
@@ -576,7 +636,7 @@ export function CashRegisterProvider({ children }: { children: React.ReactNode }
     getMonthlyAnalytics
   }), [
     // Fix #5: eliminar updateActiveRegister (deprecated) de las deps
-    registers, loadRegisters, activeRegisterId, registerState, currentRegisterState,
+    registers, loadRegisters, activeRegisterId, currentSession?.id, registerState, currentRegisterState,
     addMovement, registerSale, openRegister, closeRegister,
     cashReport, generateCashReportForRange, exportCashReportCSV,
     registerZClosure, zClosureHistory, fetchZClosureHistory, getZClosureDetails,

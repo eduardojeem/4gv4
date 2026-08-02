@@ -1,4 +1,5 @@
 import type { Product as UnifiedProduct } from '@/types/product-unified'
+import type { ComponentType } from 'react'
 
 // Use the unified Product type for consistency
 export type Product = UnifiedProduct
@@ -38,12 +39,16 @@ export interface PaymentSplit {
   amount: number
   reference?: string
   cardLast4?: string
+  provider?: string
+  institution?: string
+  channel?: 'card_terminal' | 'bank_transfer' | 'qr'
+  terminalId?: string
 }
 
 export interface PaymentMethodOption {
   id: string
   label: string
-  icon: any
+  icon: ComponentType<{ className?: string }>
   requiresReference?: boolean
   requiresCash?: boolean
   color?: string

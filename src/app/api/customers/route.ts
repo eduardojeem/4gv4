@@ -93,7 +93,7 @@ export const GET = withTenantAuth({ permission: 'crm.customers.read', module: 'c
   }
 })
 
-export const POST = withTenantAuth({ permission: 'crm.customers.manage', module: 'crm' }, async (request, { organization }) => {
+export const POST = withTenantAuth({ permission: ['crm.customers.manage', 'pos.sales.create'], module: 'crm' }, async (request, { organization }) => {
   try {
     const validation = customerSchema.safeParse(await request.json())
 

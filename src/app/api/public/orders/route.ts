@@ -205,10 +205,11 @@ export async function POST(request: NextRequest) {
       discountAmount = result.discount_amount
     }
 
-    const now = new Date().toISOString()
     const normalizedEmail = input.customer.email?.trim().toLowerCase() || null
     const normalizedPhone = input.customer.phone?.trim() || ''
     let customerId: string | null = null
+    const authClient = await createClient()
+    const { data: { user: buyer } } = await authClient.auth.getUser()
 
     if (normalizedEmail || normalizedPhone) {
       let customerQuery = supabase
@@ -232,7 +233,7 @@ export async function POST(request: NextRequest) {
     const total = Math.max(0, subtotal + shippingCost - discountAmount)
 
     const { data: atomicResult, error: atomicError } = await supabase.rpc(
-      'create_public_order_atomic',
+      'create_public_order_with_customer_account_atomic',
       {
         p_organization_id: organization.id,
         p_customer_id: customerId,
@@ -254,6 +255,14 @@ export async function POST(request: NextRequest) {
         },
         p_items: orderItems,
         p_promotion_id: appliedPromotion?.id ?? null,
+        p_profile_id: buyer?.id ?? null,
+        p_profile_name: buyer
+          ? String(buyer.user_metadata?.full_name || buyer.user_metadata?.name || input.customer.name)
+          : null,
+        p_profile_email: buyer?.email || normalizedEmail,
+        p_profile_phone: buyer
+          ? String(buyer.user_metadata?.phone || buyer.phone || normalizedPhone).trim()
+          : normalizedPhone,
       }
     )
 
@@ -264,36 +273,6 @@ export async function POST(request: NextRequest) {
       throw new Error('La base de datos no devolvió el pedido creado.')
     }
     customerId = created.customer_id
-
-    // Best-effort: if the buyer is a logged-in customer, link this store's
-    // customer record to their global account so the order shows up in their
-    // profile and the store recognizes them. Never blocks order creation.
-    try {
-      const authClient = await createClient()
-      const { data: { user: buyer } } = await authClient.auth.getUser()
-      if (buyer && customerId) {
-        await Promise.all([
-          supabase
-            .from('customers')
-            .update({ profile_id: buyer.id, updated_at: now })
-            .eq('id', customerId)
-            .eq('organization_id', organization.id),
-          supabase.from('organization_members').upsert(
-            {
-              organization_id: organization.id,
-              user_id: buyer.id,
-              role: 'customer',
-              status: 'active',
-            },
-            { onConflict: 'organization_id,user_id' }
-          ),
-        ])
-      }
-    } catch (linkError) {
-      logger.warn('Could not link buyer to store customer record', {
-        error: linkError instanceof Error ? linkError.message : linkError,
-      })
-    }
 
     const { data: fullOrder } = await supabase
       .from('customer_orders')

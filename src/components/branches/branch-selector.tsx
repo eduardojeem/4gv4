@@ -19,7 +19,20 @@ export function BranchSelector({ compact = false, className }: BranchSelectorPro
   }
 
   if (branches.length <= 1) {
-    if (!selectedBranch) return null
+    if (!selectedBranch) {
+      return (
+        <div
+          className={cn(
+            'inline-flex h-9 items-center gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-2.5 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200',
+            className
+          )}
+          role="status"
+        >
+          <Building2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Sin sucursal asignada</span>
+        </div>
+      )
+    }
 
     return (
       <div
@@ -58,7 +71,7 @@ export function BranchSelector({ compact = false, className }: BranchSelectorPro
           <SelectItem key={branch.id} value={branch.id}>
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate">{branch.name}</span>
-              {branch.is_default ? (
+              {branch.is_primary || branch.is_default ? (
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
               ) : null}
             </div>

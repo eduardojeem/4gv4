@@ -49,10 +49,13 @@ import { StatusBadge, StatusToggle, BulkStatusSelector } from '@/components/ui/S
 import { formatters } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
+import { CustomerCreditBadge } from './CustomerCreditBadge'
+import { CustomerCreditSummary } from '@/hooks/use-customer-credits'
 
 interface CustomerListViewProps {
   customers: Customer[]
   selectedCustomers: string[]
+  creditSummaries?: Record<string, CustomerCreditSummary>
 
   onCustomerToggle: (customerId: string) => void
   onSelectAll: () => void
@@ -74,6 +77,7 @@ type SortOrder = 'asc' | 'desc'
 export function CustomerListView({
   customers,
   selectedCustomers,
+  creditSummaries = {},
 
   onCustomerToggle,
   onSelectAll,
@@ -263,6 +267,7 @@ export function CustomerListView({
               onDeleteCustomer={onDeleteCustomer}
               onToggleCustomerStatus={onToggleCustomerStatus}
               metricsMap={metricsMap}
+              creditSummaries={creditSummaries}
             />
           </motion.div>
         ) : (
@@ -282,6 +287,7 @@ export function CustomerListView({
               onDeleteCustomer={onDeleteCustomer}
               onToggleCustomerStatus={onToggleCustomerStatus}
               metricsMap={metricsMap}
+              creditSummaries={creditSummaries}
             />
           </motion.div>
         )}
@@ -305,7 +311,8 @@ function TableView({
   onEditCustomer,
   onDeleteCustomer,
   onToggleCustomerStatus,
-  metricsMap
+  metricsMap,
+  creditSummaries = {}
 }: {
   customers: Customer[]
   selectedCustomers: string[]
@@ -321,6 +328,7 @@ function TableView({
   onDeleteCustomer: (customer: Customer) => void
   onToggleCustomerStatus?: (customer: Customer) => void
   metricsMap: Record<string, CustomerMetrics>
+  creditSummaries?: Record<string, CustomerCreditSummary>
 }) {
   const renderSortIcon = (field: SortField) => {
     if (sortField !== field) return null
@@ -396,6 +404,9 @@ function TableView({
                   Última Actividad
                   {renderSortIcon('last_activity')}
                 </div>
+              </TableHead>
+              <TableHead className="bg-muted/20 border-border/40 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground">
+                Deuda
               </TableHead>
               <TableHead className="w-20 bg-muted/20 border-border/40 text-[11px] uppercase tracking-wide font-semibold text-muted-foreground text-right">
                 Acciones
@@ -495,6 +506,14 @@ function TableView({
                     </div>
                   </div>
                 </TableCell>
+                {/* Columna deuda */}
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <CustomerCreditBadge
+                    creditSummary={creditSummaries[customer.id] ?? null}
+                    variant="compact"
+                    showTooltip
+                  />
+                </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <CustomerActions
                     customer={customer}
@@ -522,7 +541,8 @@ function GridView({
   onEditCustomer,
   onDeleteCustomer,
   onToggleCustomerStatus,
-  metricsMap
+  metricsMap,
+  creditSummaries = {}
 }: {
   customers: Customer[]
   selectedCustomers: string[]
@@ -532,6 +552,7 @@ function GridView({
   onDeleteCustomer: (customer: Customer) => void
   onToggleCustomerStatus?: (customer: Customer) => void
   metricsMap: Record<string, CustomerMetrics>
+  creditSummaries?: Record<string, CustomerCreditSummary>
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -551,6 +572,7 @@ function GridView({
             onDelete={() => onDeleteCustomer(customer)}
             onToggleStatus={onToggleCustomerStatus ? () => onToggleCustomerStatus(customer) : undefined}
             metricsMap={metricsMap}
+            creditSummary={creditSummaries[customer.id] ?? null}
           />
         </motion.div>
       ))}
@@ -567,7 +589,8 @@ function CustomerCard({
   onEdit,
   onDelete,
   onToggleStatus,
-  metricsMap
+  metricsMap,
+  creditSummary
 }: {
   customer: Customer
   selected: boolean
@@ -577,6 +600,7 @@ function CustomerCard({
   onDelete: () => void
   onToggleStatus?: () => void
   metricsMap: Record<string, CustomerMetrics>
+  creditSummary?: CustomerCreditSummary | null
 }) {
   return (
     <Card className={cn(
@@ -657,6 +681,12 @@ function CustomerCard({
               Premium
             </Badge>
           )}
+          {/* Indicador de deuda */}
+          <CustomerCreditBadge
+            creditSummary={creditSummary ?? null}
+            variant="compact"
+            showTooltip
+          />
         </div>
 
         {/* Métricas */}

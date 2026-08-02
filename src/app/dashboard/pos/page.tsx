@@ -77,17 +77,18 @@ import { ProductCard } from './components/ProductCard'
 import { POSHeader } from './components/POSHeader'
 import { POSCart } from './components/POSCart'
 import { CheckoutModal } from './components/CheckoutModal'
+import { OpenCashRegisterDialog } from './components/OpenCashRegisterDialog'
 import { useOptimizedCart } from './hooks/useOptimizedCart'
 import { useCheckout } from './contexts/CheckoutContext'
 import { usePOSCustomer } from './contexts/POSCustomerContext'
 import { useBranch } from '@/contexts/branch-context'
 import { useAuth } from '@/contexts/auth-context'
-import { CartItem, PaymentSplit, PaymentMethodOption } from './types'
+import { CartItem, PaymentMethodOption } from './types'
 import type { Product } from '@/types/product-unified'
-import { SALE_STATUS } from '@/lib/sales-status'
 import { branchHeaders } from '@/lib/branches/client'
 import { buildQuickItemPayload, getQuickItemApiError } from './lib/quick-item'
 import { buildPosCreditSummary } from '@/lib/credits/pos-credit-summary'
+import { getMixedPaymentValidation } from './lib/payment-validation'
 
 const getErrorMessage = (e: unknown) => {
   if (!e) return 'Unknown error'
@@ -185,8 +186,6 @@ function POSPageContent() {
     selectedCustomer, 
     setSelectedCustomer, 
     customers, 
-    setCustomers,
-    setCustomersSourceSupabase,
     setNewCustomerOpen
   } = usePOSCustomer()
 
@@ -208,12 +207,14 @@ function POSPageContent() {
     setCardNumber,
     transferReference,
     setTransferReference,
+    electronicProvider,
+    electronicInstitution,
+    electronicChannel,
+    terminalId,
     splitAmount,
     setSplitAmount,
     notes,
     setNotes,
-    discount,
-    setDiscount,
     creditTerms,
     paymentSplit,
     setPaymentSplit,
@@ -268,8 +269,10 @@ function POSPageContent() {
   // Opciones de vinculación de reparación
   const [markRepairDelivered, setMarkRepairDelivered] = useState(false)
   const [deliveryOutcome, setDeliveryOutcome] = useState<'repaired' | 'withdrawn' | 'unrepairable'>('repaired')
-  const [finalCostFromSale, setFinalCostFromSale] = useState(false)
-  const selectedRepairs = useMemo(() => customerRepairs.filter((r: any) => selectedRepairIds.includes(r.id)), [customerRepairs, selectedRepairIds])
+  const selectedRepairs = useMemo(
+    () => customerRepairs.filter(repair => selectedRepairIds.includes(repair.id)),
+    [customerRepairs, selectedRepairIds]
+  )
   const supabaseStatusToLabel: Record<string, string> = {
     recibido: 'Recibido',
     'diagnostico': 'En diagnóstico',
@@ -282,7 +285,6 @@ function POSPageContent() {
     if (!isCheckoutOpen) {
       setMarkRepairDelivered(false)
       setDeliveryOutcome('repaired')
-      setFinalCostFromSale(false)
     }
   }, [isCheckoutOpen, selectedRepairIds])
 
@@ -291,6 +293,36 @@ function POSPageContent() {
     setMarkRepairDelivered(selectedRepairIds.length > 0)
   }, [selectedRepairIds, isCheckoutOpen])
   const [showFeatured, setShowFeatured] = useState(false)
+  const [showPosGuide, setShowPosGuide] = useState(true)
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('pos_guide_hidden') === 'true') {
+        setShowPosGuide(false)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const handleHidePosGuide = () => {
+    setShowPosGuide(false)
+    try {
+      localStorage.setItem('pos_guide_hidden', 'true')
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleShowPosGuide = () => {
+    setShowPosGuide(true)
+    try {
+      localStorage.removeItem('pos_guide_hidden')
+    } catch {
+      // ignore
+    }
+  }
+
   const [barcodeInput, setBarcodeInput] = useState('')
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showAccessibilitySettings, setShowAccessibilitySettings] = useState(false)
@@ -331,15 +363,16 @@ function POSPageContent() {
     setRegisters,
     refreshRegisters,
     activeRegisterId, 
+    currentSessionId,
     setActiveRegisterId, 
     getCurrentRegister,
     registerState,
     addMovement,
-    openRegister,
-    registerSale
+    openRegister
   } = useCashRegisterContext()
   const { selectedBranchId } = useBranch()
   const { user } = useAuth()
+  const cashierName = user?.profile?.name || user?.email || 'Cajero'
   const canManageRegisters = user?.role === 'admin' || user?.role === 'super_admin'
 
   const handleRegisterChange = useCallback((id: string) => {
@@ -365,8 +398,9 @@ function POSPageContent() {
 
   // Gestor de cajas: crear, renombrar, eliminar
   const [isOpenRegisterDialogOpen, setIsOpenRegisterDialogOpen] = useState(false)
-  const [openingAmount, setOpeningAmount] = useState('0')
+  const [openingAmount, setOpeningAmount] = useState('')
   const [openingNote, setOpeningNote] = useState('')
+  const [isOpeningRegister, setIsOpeningRegister] = useState(false)
   const [isRegisterManagerOpen, setIsRegisterManagerOpen] = useState(false)
   const [newRegisterName, setNewRegisterName] = useState('')
   const [renameRegisterId, setRenameRegisterId] = useState<string | null>(null)
@@ -433,6 +467,7 @@ function POSPageContent() {
   const [movementType, setMovementType] = useState<'in' | 'out'>('out')
   const [movementAmount, setMovementAmount] = useState('')
   const [movementNote, setMovementNote] = useState('')
+  const [movementSaving, setMovementSaving] = useState(false)
 
   // Estados para múltiples métodos de pago
   // Eliminados estados locales que ahora están en CheckoutContext
@@ -515,31 +550,6 @@ function POSPageContent() {
   // Mantener compatibilidad con el inventoryManager existente
   const inventoryManager = useMemo(() => ({
     getProducts: () => inventoryProducts,
-    processSale: (items: Array<{ productId: string; quantity: number }>) => {
-      // Convertir items array a SaleData format
-      const cartItems = items.map(item => {
-        const product = inventoryProducts.find(p => p.id === item.productId)
-        return {
-          id: item.productId,
-          name: product?.name || '',
-          sku: product?.sku || '',
-          price: product?.sale_price || 0,
-          quantity: item.quantity,
-          stock: product?.stock_quantity || 0,
-          subtotal: (product?.sale_price || 0) * item.quantity
-        }
-      })
-
-      const total = cartItems.reduce((sum, item) => sum + item.subtotal, 0)
-
-      const saleData = {
-        items: cartItems,
-        total,
-        payment_method: 'cash' as const
-      }
-
-      return processInventorySale(saleData)
-    },
     subscribe: (callback: (products: any[]) => void) => {
       // Para compatibilidad, retornamos una función de desuscripción vacía
       // ya que los productos se actualizan automáticamente con el hook
@@ -549,106 +559,7 @@ function POSPageContent() {
       // En modo demo, no necesitamos importar datos ya que usamos Supabase
       console.log('Modo Supabase: importData no necesario')
     }
-  }), [inventoryProducts, processInventorySale])
-
-  // Sincronizar clientes: cargar y suscribirse en tiempo real
-  useEffect(() => {
-    if (!config.supabase.isConfigured) {
-      setCustomers([])
-      return
-    }
-
-    const supabase = createSupabaseClient()
-
-    const mapRowToCustomer = (row: any) => ({
-      id: row.id,
-      name: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
-      email: row.email || '',
-      phone: row.phone || '',
-      type: row.customer_type || 'regular',
-      updated_at: row.updated_at,
-      address: row.address || '',
-      city: row.city || '',
-      last_visit: row.last_visit || null,
-      loyalty_points: typeof row.loyalty_points === 'number' ? row.loyalty_points : 0,
-      total_purchases: typeof row.total_purchases === 'number' ? row.total_purchases : 0,
-      total_repairs: typeof row.total_repairs === 'number' ? row.total_repairs : 0,
-      current_balance: typeof row.current_balance === 'number' ? row.current_balance : 0,
-    })
-
-    const loadInitial = async (): Promise<boolean> => {
-      // Filter out restricted roles
-      let restrictedIds: string[] = []
-      try {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id')
-          .in('role', ['admin', 'technician', 'vendedor'])
-        if (profiles) restrictedIds = profiles.map(p => p.id)
-      } catch (e) {
-        console.warn('Error loading restricted profiles', e)
-      }
-
-      let query = supabase
-        .from('customers')
-        .select('id,first_name,last_name,phone,email,customer_type,updated_at,address,city,last_visit,loyalty_points,total_purchases,total_repairs,current_balance,credit_limit,profile_id')
-
-      if (restrictedIds.length > 0) {
-         const idsParam = `(${restrictedIds.join(',')})`
-         query = query.or(`profile_id.is.null,profile_id.not.in.${idsParam}`)
-      }
-
-      const { data, error } = await query
-
-      if (error) {
-        console.warn('Error cargando clientes:', error.message)
-        setCustomers([])
-        toast.warning('No se pudo cargar clientes desde Supabase')
-        setCustomersSourceSupabase(false)
-        return false
-      }
-
-      const mapped = (data || []).map(mapRowToCustomer)
-      setCustomers(mapped)
-      setCustomersSourceSupabase(true)
-      return true
-    }
-
-    let channel: RealtimeChannel | null = null
-      ; (async () => {
-        const ok = await loadInitial()
-        if (ok) {
-          const channelInstance = supabase
-            .channel('customers-sync')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, (payload: any) => {
-              const row = (payload.new || payload.old) as any
-              if (!row) return
-
-              if (payload.eventType === 'DELETE') {
-                setCustomers(customers.filter(c => c.id !== row.id))
-                return
-              }
-
-              const mapped = mapRowToCustomer(row)
-              const idx = customers.findIndex(c => c.id === row.id)
-              if (idx === -1) {
-                setCustomers([mapped, ...customers])
-              } else {
-                const copy = [...customers]
-                copy[idx] = mapped
-                setCustomers(copy)
-              }
-            })
-
-          channel = channelInstance
-          channelInstance.subscribe()
-        }
-      })()
-
-    return () => {
-      if (channel) channel.unsubscribe()
-    }
-  }, [])
+  }), [inventoryProducts])
 
   // Cargar reparaciónes del cliente seleccionado y suscribirse a cambios
   useEffect(() => {
@@ -665,7 +576,7 @@ function POSPageContent() {
     const loadRepairs = async () => {
       const { data, error }: any = await supabase
         .from('repairs')
-        .select('id, device_brand, device_model, status, created_at, final_cost, estimated_cost, notes:problem_description, customer_id')
+        .select('id, device_brand, device_model, status, payment_status, paid_amount, created_at, final_cost, estimated_cost, notes:problem_description, customer_id')
         .eq('customer_id', selectedCustomer)
         .order('created_at', { ascending: false })
       if (error) {
@@ -714,232 +625,6 @@ function POSPageContent() {
       if (channel) channel.unsubscribe()
     }
   }, [selectedCustomer])
-
-  // Persistir venta y actualizar stock en Supabase
-  const persistSaleToSupabase = useCallback(
-    async (
-      items: CartItem[],
-      method: string,
-      discountValue: number,
-      taxValue: number,
-      totalValue: number,
-      existingSaleId?: string
-    ) => {
-      try {
-        // Persistir en Supabase
-        const supabase = createSupabaseClient()
-        const { data: auth } = await supabase.auth.getUser()
-        const userId = auth?.user?.id || 'pos-user'
-
-        const methodMap: Record<string, string> = {
-          cash: 'efectivo',
-          card: 'tarjeta',
-          transfer: 'transferencia',
-          credit: 'credit',
-          // Pago mixto: usar efectivo como fallback en esquema actual
-          mixed: 'efectivo',
-        }
-        const paymentMethodDb = methodMap[method] || 'efectivo'
-
-        let saleId: string | undefined = existingSaleId
-        const productItems = items.filter(i => !i.isService)
-        const subtotalAmount = productItems.reduce((sum, i) => {
-          const unitApplied = isWholesale
-            ? (typeof i.wholesalePrice === 'number' ? i.wholesalePrice : (i.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
-            : i.price
-          return sum + unitApplied * i.quantity
-        }, 0)
-        const code = `POS-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0,14)}-${Math.floor(Math.random()*1000)}`
-
-        const preGeneratedSaleId = crypto.randomUUID()
-        let saleInserted = false
-
-        if (!saleId) {
-          const { data: saleRow, error: saleError } = await supabase
-            .from('sales')
-            .insert({
-              id: preGeneratedSaleId, // USE PRE-GENERATED ID
-              customer_id: selectedCustomer || null,
-              created_by: userId,
-              code,
-              subtotal_amount: subtotalAmount,
-              total_amount: totalValue,
-              tax_amount: (taxValue || 0),
-              discount_amount: (discountValue || 0),
-              payment_method: paymentMethodDb,
-              status: SALE_STATUS.COMPLETED,
-            })
-            .select()
-            .single()
-
-          if (saleError) throw new Error(saleError.message)
-          saleId = saleRow?.id
-          saleInserted = true
-        }
-
-        // Venta a crédito: exige cliente y registra la deuda.
-        // Si no se puede registrar el crédito (ej. cupo insuficiente), se aborta toda la
-        // venta — nunca se entrega mercadería sin dejar registrada la deuda.
-        if (method === 'credit') {
-          if (!selectedCustomer) {
-            if (saleInserted && saleId) {
-              await supabase.from('sales').delete().eq('id', saleId)
-            }
-            throw new Error('Seleccioná un cliente para registrar la venta a crédito.')
-          }
-          try {
-            const creditResponse = await fetch('/api/credits/sale', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                customerId: selectedCustomer,
-                amount: totalValue,
-                interestRate: creditTerms.interestRate,
-                installments: { count: creditTerms.count, frequency: creditTerms.frequency },
-                saleId: saleId, // PASS THE ACTUAL SALE ID
-              }),
-            })
-            const creditResult = await creditResponse.json().catch(() => null) as { error?: string } | null
-            if (!creditResponse.ok) {
-              throw new Error(creditResult?.error || 'No se pudo registrar la venta a crédito.')
-            }
-          } catch (error) {
-            // Rollback sale if it was just inserted
-            if (saleInserted && saleId) {
-              await supabase.from('sales').delete().eq('id', saleId)
-            }
-            const msg = error instanceof Error ? error.message : String(error || '')
-            const missingCreditsTables = msg.includes('relation "customer_credits" does not exist')
-              || msg.includes('relation "credit_installments" does not exist')
-            if (missingCreditsTables) {
-              console.warn('Supabase: tablas de créditos no encontradas. Omitiendo creación de crédito.')
-            } else {
-              throw error instanceof Error ? error : new Error(msg)
-            }
-          }
-        }
-
-        if (saleId) {
-          if (!existingSaleId) {
-            const saleItems = productItems.map((i) => {
-              const unitApplied = isWholesale
-                ? (typeof i.wholesalePrice === 'number' ? i.wholesalePrice : (i.price * (1 - (WHOLESALE_DISCOUNT_RATE / 100))))
-                : i.price
-              const lineTotal = unitApplied * i.quantity
-              return {
-                sale_id: saleId!,
-                product_id: i.id,
-                quantity: i.quantity,
-                unit_price: unitApplied,
-                subtotal: lineTotal,
-              }
-            })
-            
-            if (saleItems.length > 0) {
-              const { error: itemsError } = await supabase
-                .from('sale_items')
-                .insert(saleItems)
-              if (itemsError) throw new Error(itemsError.message)
-            }
-          }
-
-          if (!existingSaleId) {
-            const productItems = items.filter(i => !i.isService)
-            for (const i of productItems) {
-              // Descuento atómico (bloqueo de fila + chequeo de stock) para evitar sobreventa.
-              const { data: ok, error: updError } = await supabase.rpc('pos_decrement_stock', {
-                p_product_id: i.id,
-                p_quantity: i.quantity,
-              })
-              if (updError) throw new Error(updError.message)
-              if (ok !== true) {
-                throw new Error(`Stock insuficiente para "${i.name}". Actualizá el carrito.`)
-              }
-            }
-          }
-
-          // Vincular venta a reparaciónes
-          if (selectedRepairIds && selectedRepairIds.length > 0) {
-            try {
-              // Scoping por sucursal (defensa en profundidad, además de RLS):
-              // evita tocar reparaciones fuera de la sucursal activa.
-              const scopeBranch = Boolean(selectedBranchId && selectedBranchId !== 'all')
-
-              let repairSelect = supabase
-                .from('repairs')
-                .select('id, problem_description, status, final_cost')
-                .in('id', selectedRepairIds)
-              if (scopeBranch) repairSelect = repairSelect.eq('branch_id', selectedBranchId)
-
-              const { data: repairRows, error: repairGetError } = await repairSelect
-
-              if (repairGetError) throw new Error(repairGetError.message)
-
-              const saleSummary = items.map(i => `${i.name} x${i.quantity}`).join(', ')
-              const linkLine = `\n\nVenta relacionada #${saleId} (${paymentMethodDb}) por ${totalValue}. Items: ${saleSummary}.`
-
-              for (const r of (repairRows || [])) {
-                const newNotes = `${(r.problem_description || '').trim()}${linkLine}`
-                const updatePayload: any = { problem_description: newNotes, updated_at: new Date().toISOString() }
-
-                if (markRepairDelivered) {
-                  updatePayload.status = 'entregado'
-                  updatePayload.picked_up_at = new Date().toISOString()
-                  updatePayload.delivery_outcome = deliveryOutcome
-                  updatePayload.completed_at = new Date().toISOString()
-                }
-
-                if (finalCostFromSale) {
-                  // Si hay múltiples reparaciónes, dividimos el costo total equitativamente
-                  // Si es solo una, asignamos el total
-                  const repairShare = selectedRepairIds.length > 1
-                    ? (totalValue / selectedRepairIds.length)
-                    : totalValue
-                  updatePayload.final_cost = repairShare
-
-                  // La venta cobra (o financia, si es a crédito) la reparación:
-                  // se marca pagada y se registra el monto para que no quede como
-                  // "pendiente" en la lista/filtros. La deuda del crédito vive en
-                  // el módulo de créditos, atada al sale_id.
-                  updatePayload.payment_status = 'pagado'
-                  updatePayload.paid_amount = repairShare
-                }
-
-                let repairUpdate = supabase
-                  .from('repairs')
-                  .update(updatePayload)
-                  .eq('id', r.id)
-                if (scopeBranch) repairUpdate = repairUpdate.eq('branch_id', selectedBranchId)
-
-                const { error: repairUpdError } = await repairUpdate.select().maybeSingle()
-                if (repairUpdError) throw new Error(repairUpdError.message)
-              }
-            } catch (e: any) {
-              console.error('No se pudo vincular venta a reparaciónes:', e?.message || e)
-            }
-          }
-        }
-      } catch (err: any) {
-        const msg = String(err?.message || err || '')
-        const lower = msg.toLowerCase()
-        const missingSalesTable = lower.includes("could not find the table 'public.sales'")
-          || lower.includes('relation "sales" does not exist')
-
-        if (missingSalesTable) {
-          console.warn('Supabase: tabla sales no encontrada. Omitiendo persistencia y continuando.')
-          try { (toast as any)?.warning?.('Supabase sin tabla sales: venta no persistida') } catch (e) {
-            console.warn('Toast warning failed:', e)
-          }
-          // No lanzar para no romper el flujo de venta en modo sin esquema completo
-          return
-        }
-
-        console.error('Error persistiendo venta:', msg)
-        throw err
-      }
-    },
-    [selectedCustomer, selectedRepairIds, finalCostFromSale, markRepairDelivered, deliveryOutcome, creditTerms, selectedBranchId]
-  )
 
   // Estados para búsqueda avanzada
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'stock' | 'category'>('name')
@@ -1352,10 +1037,6 @@ function POSPageContent() {
     return paymentSplit.reduce((total, split) => total + split.amount, 0)
   }, [paymentSplit])
 
-  const getRemainingAmount = useCallback(() => {
-    return roundToTwo(unifiedCalculations.total - getTotalPaid())
-  }, [unifiedCalculations.total, getTotalPaid, roundToTwo])
-
   // Adapter for backward compatibility and unified usage
   const cartCalculations = useMemo(() => ({
     subtotal: unifiedCalculations.subtotalNonWholesale,
@@ -1538,59 +1219,15 @@ function POSPageContent() {
     return Math.floor(basePoints * bonusMultiplier)
   }, [])
 
-  const mapSaleMethodToCashMethod = useCallback((method: string): 'cash' | 'card' | 'transfer' | null => {
-    const normalized = String(method || '').toLowerCase()
-    if (normalized === 'cash') return 'cash'
-    if (normalized === 'card') return 'card'
-    if (normalized === 'transfer') return 'transfer'
-    // Ventas a credito no deben sumar a caja en el momento de la venta
-    if (normalized === 'credit') return null
-    return null
-  }, [])
-
-  const syncSaleWithCashRegister = useCallback(async (
-    saleId: string,
-    total: number,
-    method: string,
-    splits?: PaymentSplit[]
-  ): Promise<boolean> => {
-    if (!getCurrentRegister.isOpen) return false
-
-    // Pago mixto: registrar cada tramo por metodo
-    if (String(method).toLowerCase() === 'mixed' && Array.isArray(splits)) {
-      let ok = true
-      for (const split of splits) {
-        const mapped = mapSaleMethodToCashMethod(split.method)
-        if (!mapped) continue
-        if ((split.amount || 0) <= 0) continue
-        try {
-          await registerSale(saleId, split.amount, mapped)
-        } catch {
-          ok = false
-        }
-      }
-      return ok
-    }
-
-    const mappedMethod = mapSaleMethodToCashMethod(method)
-    if (!mappedMethod) {
-      // Ej.: credito. Venta registrada en POS pero sin impacto inmediato en caja.
-      return true
-    }
-
-    try {
-      await registerSale(saleId, total, mappedMethod)
-      return true
-    } catch {
-      return false
-    }
-  }, [getCurrentRegister.isOpen, mapSaleMethodToCashMethod, registerSale])
-
   // Procesar venta
   const processSale = useCallback(async () => {
     return measureSaleProcessing(async () => {
       if (!getCurrentRegister.isOpen) {
         toast.error('La caja está cerrada. No se pueden procesar ventas.')
+        return
+      }
+      if (!currentSessionId) {
+        toast.error('No se pudo identificar la sesión de caja abierta.')
         return
       }
 
@@ -1675,53 +1312,73 @@ function POSPageContent() {
         receiptCalculations,
         payments,
         customer,
-        'Cajero Principal'
+        cashierName
       )
 
       // Guardar datos de la última venta
-      setLastSaleData(receiptData)
-      setCurrentReceipt(receiptData)
-
       // Procesar venta de inventario usando la API interna del POS.
       setPaymentStatus('processing')
       setPaymentError('')
       addPaymentAttempt({ status: 'processing', method: 'single', amount: (cartCalculations as any).total, message: 'Procesando pago simple' })
       let saleResult: any = null
       try {
-        // Usar el hook de Supabase para procesar la venta solo si hay items
+        // Confirmar venta, pagos, stock, crédito, reparaciones y caja en una transacción.
         const productItems = combinedCartItems.filter(item => !item.isService)
-        if (productItems.length > 0) {
-          saleResult = await processInventorySale({
-            items: productItems.map(item => ({
-              id: item.id,
-              name: item.name,
-              sku: item.sku,
-              price: item.price,
-              quantity: item.quantity,
-              stock: item.stock,
-              discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
-              subtotal: item.price * item.quantity
-            })),
-            total: (cartCalculations as any).total,
+        saleResult = await processInventorySale({
+          items: productItems.map(item => ({
+            id: item.id,
+            name: item.name,
+            sku: item.sku,
+            price: item.price,
+            quantity: item.quantity,
+            stock: item.stock,
+            discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
+            subtotal: item.price * item.quantity
+          })),
+          total: (cartCalculations as any).total,
+          payment_method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
+          payments: [{
             payment_method: paymentMethod as 'cash' | 'card' | 'transfer' | 'credit',
-            customer_id: selectedCustomer || undefined,
-            notes: notes || undefined
-          })
+            amount: (cartCalculations as any).total,
+            reference: paymentMethod === 'transfer' ? transferReference : undefined,
+            card_last4: paymentMethod === 'card' && cardNumber ? cardNumber.slice(-4) : undefined,
+            provider: paymentMethod === 'card' || paymentMethod === 'transfer' ? electronicProvider || undefined : undefined,
+            institution: paymentMethod === 'card' || paymentMethod === 'transfer' ? electronicInstitution || undefined : undefined,
+            channel: paymentMethod === 'card' ? 'card_terminal' : paymentMethod === 'transfer' ? electronicChannel : undefined,
+            terminal_id: paymentMethod === 'card' ? terminalId || undefined : undefined,
+          }],
+          session_id: currentSessionId,
+          price_mode: isWholesale ? 'wholesale' : 'retail',
+          order_discount_rate: generalDiscount,
+          customer_id: selectedCustomer || undefined,
+          notes: notes || undefined,
+          credit: paymentMethod === 'credit' ? {
+            interest_rate: creditTerms.interestRate,
+            installment_count: creditTerms.count,
+            frequency: creditTerms.frequency,
+          } : undefined,
+          repair_ids: selectedRepairIds,
+          mark_repairs_delivered: markRepairDelivered,
+          delivery_outcome: deliveryOutcome,
+        })
 
-          if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
-            throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta de inventario'))
-          }
+        if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
+          throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
         }
-
-        // Persistir en Supabase (venta, items y stock)
-        await persistSaleToSupabase(
-          combinedCartItems,
-          paymentMethod,
-          (cartCalculations as any).discount ?? 0,
-          (cartCalculations as any).tax ?? 0,
-          (cartCalculations as any).total,
-          (saleResult && (saleResult as any).saleId) ? (saleResult as any).saleId : undefined
-        )
+        const persistedReceipt = {
+          ...receiptData,
+          receiptNumber: saleResult?.saleId
+            ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
+            : receiptData.receiptNumber,
+          tax: Number.isFinite(Number(saleResult?.data?.tax))
+            ? Number(saleResult.data.tax)
+            : receiptData.tax,
+          totalDiscount: Number.isFinite(Number(saleResult?.data?.discount))
+            ? Number(saleResult.data.discount)
+            : receiptData.totalDiscount,
+        }
+        setLastSaleData(persistedReceipt)
+        setCurrentReceipt(persistedReceipt)
         setPaymentStatus('success')
         toast.success('Venta procesada exitosamente')
         addPaymentAttempt({ status: 'success', method: 'single', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
@@ -1740,19 +1397,6 @@ function POSPageContent() {
         addPaymentAttempt({ status: 'failed', method: 'single', amount: (cartCalculations as any).total, message: msg })
         return
       }
-      // Sincronizar venta con caja (await + validacion por metodo de pago)
-      if (getCurrentRegister.isOpen) {
-        const sid = (saleResult && (saleResult as any).saleId) ? String((saleResult as any).saleId) : 'POS'
-        const synced = await syncSaleWithCashRegister(
-          sid,
-          (cartCalculations as any).total,
-          paymentMethod
-        )
-        if (!synced) {
-          toast.warning('Venta guardada, pero no se pudo registrar correctamente en caja.')
-        }
-      }
-
       // Mostrar modal de ticket
       setShowReceiptModal(true)
 
@@ -1768,7 +1412,7 @@ function POSPageContent() {
         setPaymentStatus('idle')
       }, 600)
     })
-  }, [combinedCartItems, paymentMethod, cashReceived, clearCart, persistSaleToSupabase, processInventorySale, calculateCartSummary, selectedCustomer, isWholesale, measureSaleProcessing, getCurrentRegister.isOpen, syncSaleWithCashRegister, notes, markRepairDelivered, selectedRepairIds, normalizePaymentError, resetCheckoutState, creditTerms])
+  }, [addPaymentAttempt, cardNumber, cartCalculations, cashReceived, calculateCartSummary, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, electronicChannel, electronicInstitution, electronicProvider, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, measureSaleProcessing, normalizePaymentError, notes, paymentMethod, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setPaymentError, setPaymentStatus, setSelectedCustomer, terminalId, transferReference])
 
 
 
@@ -1777,56 +1421,25 @@ function POSPageContent() {
       toast.error('La caja está cerrada. No se pueden procesar ventas.')
       return
     }
-    const totalPaid = getTotalPaid()
-    const remaining = getRemainingAmount()
-    if (remaining > 0.01) {
-      const msg = `Faltan ${formatCurrency(remaining)} para completar el pago`
-      toast.error(msg)
-      setPaymentStatus('failed')
-      setPaymentError(msg)
-      addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
+    if (!currentSessionId) {
+      toast.error('No se pudo identificar la sesión de caja abierta.')
       return
     }
-
-    // Validar cada split: monto positivo y detalles requeridos
-    for (const split of paymentSplit) {
-      if (split.amount <= 0) {
-        const msg = 'Cada pago debe tener un monto positivo'
-        toast.error(msg)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
-        return
-      }
-      if (split.method === 'card' && (!split.cardLast4 || split.cardLast4.length < 4)) {
-        const msg = 'Ingrese los últimos 4 dígitos de la tarjeta'
-        toast.error(msg)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
-        return
-      }
-      if (split.method === 'transfer' && !split.reference) {
-        const msg = 'Ingrese la referencia de la transferencia'
-        toast.error(msg)
-        setPaymentStatus('failed')
-        setPaymentError(msg)
-        addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
-        return
-      }
-    }
-
-    if (remaining > 0.01) {
-      const msg = `Faltan ${formatCurrency(remaining)} por pagar`
-      toast.error(msg)
-      setPaymentStatus('failed')
-      setPaymentError(msg)
-      addPaymentAttempt({ status: 'failed', method: 'mixed', amount: (cartCalculations as any).total, message: msg })
-      return
-    }
-
-    if (remaining < -0.01) {
-      const msg = `Exceso de pago: ${formatCurrency(Math.abs(remaining))}`
+    const paymentValidation = getMixedPaymentValidation(cartCalculations.total, paymentSplit)
+    if (!paymentValidation.valid) {
+      const msg = paymentValidation.code === 'PAYMENT_INCOMPLETE'
+        ? `Faltan ${formatCurrency(paymentValidation.remaining)} para completar el pago`
+        : paymentValidation.code === 'PAYMENT_EXCESS'
+          ? `Exceso de pago: ${formatCurrency(Math.abs(paymentValidation.remaining))}`
+          : paymentValidation.code === 'CARD_REFERENCE_REQUIRED'
+            ? 'Ingrese los últimos 4 dígitos de cada tarjeta'
+            : paymentValidation.code === 'TRANSFER_REFERENCE_REQUIRED'
+              ? 'Ingrese la referencia de cada transferencia'
+              : paymentValidation.code === 'PAYMENT_LIMIT_EXCEEDED'
+                ? 'Solo se permiten hasta 10 formas de pago por venta'
+                : paymentValidation.code === 'PAYMENTS_REQUIRED'
+                  ? 'Agregue al menos una forma de pago'
+                  : 'Cada pago debe tener un monto positivo'
       toast.error(msg)
       setPaymentStatus('failed')
       setPaymentError(msg)
@@ -1837,59 +1450,92 @@ function POSPageContent() {
     // Crear datos del ticket para pago mixto
     const customer = selectedCustomer ? customers.find(c => c.id === selectedCustomer) : undefined
 
+    const creditPrincipal = paymentSplit
+      .filter(split => split.method === 'credit')
+      .reduce((total, split) => total + split.amount, 0)
+    const mixedCreditSummary = creditPrincipal > 0
+      ? buildPosCreditSummary(creditPrincipal, creditTerms)
+      : null
     const receiptData = createReceiptData(
       combinedCartItems,
-      cartCalculations,
+      mixedCreditSummary
+        ? {
+            ...cartCalculations,
+            creditInfo: {
+              ...mixedCreditSummary,
+              interestRate: creditTerms.interestRate,
+            },
+          }
+        : cartCalculations,
       paymentSplit,
       customer,
-      'Cajero Principal'
+      cashierName
     )
 
     // Guardar datos de la última venta
-    setLastSaleData(receiptData)
-    setCurrentReceipt(receiptData)
-
     // Procesar venta en el inventario usando el hook de Supabase
     setPaymentStatus('processing')
     setPaymentError('')
     addPaymentAttempt({ status: 'processing', method: 'mixed', amount: (cartCalculations as any).total, message: 'Procesando pago mixto' })
     let saleResult: any = null
     try {
-      // Usar el hook de Supabase para procesar la venta
+      // La misma transacción conserva cada medio de pago y su monto.
       const productItems = combinedCartItems.filter(item => !item.isService)
-      
-      if (productItems.length > 0) {
-        saleResult = await processInventorySale({
-          items: productItems.map(item => ({
-            id: item.id,
-            name: item.name,
-            sku: item.sku,
-            price: item.price,
-            quantity: item.quantity,
-            stock: item.stock,
-            discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
-            subtotal: item.price * item.quantity
-          })),
-          total: (cartCalculations as any).total,
-          payment_method: (paymentSplit && paymentSplit.length > 0 ? paymentSplit[0].method : 'cash') as 'cash' | 'card' | 'transfer',
-          customer_id: selectedCustomer || undefined,
-          notes: notes || undefined
-        })
+      saleResult = await processInventorySale({
+        items: productItems.map(item => ({
+          id: item.id,
+          name: item.name,
+          sku: item.sku,
+          price: item.price,
+          quantity: item.quantity,
+          stock: item.stock,
+          discount_amount: (item as any).discount ? (item.price * item.quantity * ((item as any).discount / 100)) : 0,
+          subtotal: item.price * item.quantity
+        })),
+        total: (cartCalculations as any).total,
+        payment_method: (paymentSplit[0]?.method || 'cash') as 'cash' | 'card' | 'transfer' | 'credit',
+        payments: paymentSplit.map(split => ({
+          payment_method: split.method,
+          amount: split.amount,
+          reference: split.reference,
+          card_last4: split.cardLast4,
+          provider: split.provider,
+          institution: split.institution,
+          channel: split.channel,
+          terminal_id: split.terminalId,
+        })),
+        session_id: currentSessionId,
+        price_mode: isWholesale ? 'wholesale' : 'retail',
+        order_discount_rate: generalDiscount,
+        customer_id: selectedCustomer || undefined,
+        notes: notes || undefined,
+        credit: paymentSplit.some(split => split.method === 'credit') ? {
+          interest_rate: creditTerms.interestRate,
+          installment_count: creditTerms.count,
+          frequency: creditTerms.frequency,
+        } : undefined,
+        repair_ids: selectedRepairIds,
+        mark_repairs_delivered: markRepairDelivered,
+        delivery_outcome: deliveryOutcome,
+      })
 
-        if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
-          throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta de inventario'))
-        }
+      if (saleResult && typeof saleResult === 'object' && 'success' in saleResult && saleResult.success === false) {
+        throw new Error(String((saleResult as { error?: unknown }).error || 'No se pudo procesar la venta'))
       }
-      
-      // Persistir en Supabase como pago mixto
-      await persistSaleToSupabase(
-        combinedCartItems,
-        'mixed',
-        (cartCalculations as any).discount ?? 0,
-        (cartCalculations as any).tax ?? 0,
-        (cartCalculations as any).total,
-        (saleResult && (saleResult as any).saleId) ? (saleResult as any).saleId : undefined
-      )
+      const persistedReceipt = {
+        ...receiptData,
+        receiptNumber: saleResult?.saleId
+          ? `POS-${String(saleResult.saleId).slice(0, 8).toUpperCase()}`
+          : receiptData.receiptNumber,
+        tax: Number.isFinite(Number(saleResult?.data?.tax))
+          ? Number(saleResult.data.tax)
+          : receiptData.tax,
+        totalDiscount: Number.isFinite(Number(saleResult?.data?.discount))
+          ? Number(saleResult.data.discount)
+          : receiptData.totalDiscount,
+      }
+      setLastSaleData(persistedReceipt)
+      setCurrentReceipt(persistedReceipt)
       setPaymentStatus('success')
       toast.success('Venta procesada con múltiples métodos de pago')
       addPaymentAttempt({ status: 'success', method: 'mixed', amount: (cartCalculations as any).total, message: 'Pago exitoso' })
@@ -1909,38 +1555,21 @@ function POSPageContent() {
       return
     }
 
-    // Sincronizar pago mixto con caja (await)
-    if (getCurrentRegister.isOpen) {
-      const sid = (saleResult && (saleResult as any).saleId) ? String((saleResult as any).saleId) : 'POS'
-      const synced = await syncSaleWithCashRegister(
-        sid,
-        (cartCalculations as any).total,
-        'mixed',
-        paymentSplit
-      )
-      if (!synced) {
-        toast.warning('Venta guardada, pero no se pudo registrar correctamente en caja.')
-      }
-    }
-
     // Mostrar modal de ticket
     setShowReceiptModal(true)
 
     // Limpiar todo
     clearCart(true)
     setSelectedCustomer('')
-    setPaymentMethod('')
-    setPaymentSplit([])
-    setIsMixedPayment(false)
-    setDiscount(0)
-    setNotes('')
-    setCashReceived(0)
+    setSelectedRepairIds([])
+    setGeneralDiscount(0)
+    resetCheckoutState()
     // Cerrar luego de una breve confirmación visual
     setTimeout(() => {
       setIsCheckoutOpen(false)
       setPaymentStatus('idle')
     }, 600)
-  }, [combinedCartItems, getTotalPaid, getRemainingAmount, formatCurrency, clearCart, persistSaleToSupabase, processInventorySale, getCurrentRegister.isOpen, paymentSplit, syncSaleWithCashRegister, normalizePaymentError, markRepairDelivered, selectedRepairIds])
+  }, [addPaymentAttempt, cartCalculations, cashierName, clearCart, combinedCartItems, creditTerms, currentSessionId, customers, deliveryOutcome, formatCurrency, generalDiscount, getCurrentRegister.isOpen, isWholesale, markRepairDelivered, normalizePaymentError, notes, paymentSplit, processInventorySale, resetCheckoutState, selectedCustomer, selectedRepairIds, setGeneralDiscount, setPaymentError, setPaymentStatus, setSelectedCustomer])
 
 
   // Cerrar sugerencias al hacer clic fuera
@@ -2402,52 +2031,80 @@ function POSPageContent() {
           </div>
 
           {/* Guía de funcionamiento del POS */}
-          <div className="px-4 lg:px-6 pt-2">
-            <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
-              <details className="group">
-                <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-4 pb-2.5">
-                  <div className="text-sm font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
-                    <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Punto de Venta (POS)?
-                  </div>
-                  <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
-                    <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
-                    <span className="hidden group-open:flex items-center gap-1">Ocultar guía ↑</span>
-                  </div>
-                </summary>
-                <CardContent className="pt-0 pb-4 text-xs">
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                      <h4 className="font-semibold text-foreground flex items-center gap-1.5">
-                        <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
-                        Venta y Búsqueda
-                      </h4>
-                      <p className="text-muted-foreground leading-relaxed">
-                        Busca productos por nombre, SKU o escaneando el código de barras. Haz clic sobre el ítem para agregarlo al carrito. Puedes mezclar repuestos y servicios de mano de obra.
-                      </p>
+          {showPosGuide ? (
+            <div className="px-4 lg:px-6 pt-2">
+              <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
+                <details className="group">
+                  <summary className="list-none cursor-pointer [&::-webkit-details-marker]:hidden flex items-center justify-between p-4 pb-2.5">
+                    <div className="text-sm font-bold flex items-center gap-2 text-blue-700 dark:text-blue-400">
+                      <Info className="h-4.5 w-4.5" /> ¿Cómo funciona el Punto de Venta (POS)?
                     </div>
-                    <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                      <h4 className="font-semibold text-foreground flex items-center gap-2">
-                        <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
-                        Caja Abierta/Cerrada
-                      </h4>
-                      <p className="text-muted-foreground leading-relaxed">
-                        Para operar en el POS, la sucursal debe tener la caja abierta con saldo inicial. Todos los cobros se imputarán y sumarán directamente a la sesión activa del cajero.
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 select-none">
+                        <span className="group-open:hidden flex items-center gap-1">Mostrar guía ↓</span>
+                        <span className="hidden group-open:flex items-center gap-1">Plegar guía ↑</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleHidePosGuide()
+                        }}
+                        className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors px-2 py-1 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-slate-200/60 dark:border-slate-800"
+                        title="Ocultar esta sección"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        <span>Ocultar guía</span>
+                      </button>
                     </div>
-                    <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
-                      <h4 className="font-semibold text-foreground flex items-center gap-2">
-                        <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
-                        Proceso de Cobro
-                      </h4>
-                      <p className="text-muted-foreground leading-relaxed">
-                        Al presionar "Cobrar", selecciona cliente, el método de pago (efectivo, tarjeta, transferencia o mixto) y genera el comprobante digital o físico para impresión.
-                      </p>
+                  </summary>
+                  <CardContent className="pt-0 pb-4 text-xs">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                        <h4 className="font-semibold text-foreground flex items-center gap-1.5">
+                          <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">1</Badge>
+                          Venta y Búsqueda
+                        </h4>
+                        <p className="text-muted-foreground leading-relaxed">
+                          Busca productos por nombre, SKU o escaneando el código de barras. Haz clic sobre el ítem para agregarlo al carrito. Puedes mezclar repuestos y servicios de mano de obra.
+                        </p>
+                      </div>
+                      <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                        <h4 className="font-semibold text-foreground flex items-center gap-2">
+                          <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">2</Badge>
+                          Caja Abierta/Cerrada
+                        </h4>
+                        <p className="text-muted-foreground leading-relaxed">
+                          Para operar en el POS, la sucursal debe tener la caja abierta con saldo inicial. Todos los cobros se imputarán y sumarán directamente a la sesión activa del cajero.
+                        </p>
+                      </div>
+                      <div className="space-y-1 p-3 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">
+                        <h4 className="font-semibold text-foreground flex items-center gap-2">
+                          <Badge variant="secondary" className="h-4.5 w-4.5 p-0 flex items-center justify-center rounded-full text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">3</Badge>
+                          Proceso de Cobro
+                        </h4>
+                        <p className="text-muted-foreground leading-relaxed">
+                          Al presionar "Cobrar", selecciona cliente, el método de pago (efectivo, tarjeta, transferencia o mixto) y genera el comprobante digital o físico para impresión.
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </details>
-            </Card>
-          </div>
+                  </CardContent>
+                </details>
+              </Card>
+            </div>
+          ) : (
+            <div className="px-4 lg:px-6 pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={handleShowPosGuide}
+                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline px-2 py-1"
+              >
+                <Info className="h-3.5 w-3.5" />
+                <span>¿Cómo funciona el POS? (Mostrar guía)</span>
+              </button>
+            </div>
+          )}
 
           {/* Barra de búsqueda y filtros */}
           <div className="border-b border-border bg-card/80 p-3 backdrop-blur lg:p-4">
@@ -3119,14 +2776,14 @@ function POSPageContent() {
         setMarkRepairDelivered={setMarkRepairDelivered}
         deliveryOutcome={deliveryOutcome}
         setDeliveryOutcome={setDeliveryOutcome}
-        finalCostFromSale={finalCostFromSale}
-        setFinalCostFromSale={setFinalCostFromSale}
-        selectedRepairs={selectedRepairs}
         supabaseStatusToLabel={supabaseStatusToLabel}
         cart={combinedCartItems}
         cartCalculations={cartCalculations}
         isWholesale={isWholesale}
         WHOLESALE_DISCOUNT_RATE={WHOLESALE_DISCOUNT_RATE}
+        discount={generalDiscount}
+        onDiscountChange={setGeneralDiscount}
+        currency={settings.currency || 'PYG'}
         processSale={processSale}
         processMixedPayment={processMixedPayment}
         formatCurrency={formatCurrency}
@@ -3141,50 +2798,30 @@ function POSPageContent() {
         }}
       />
 
-      {/* Diálogo para abrir caja */}
-      <Dialog open={isOpenRegisterDialogOpen} onOpenChange={setIsOpenRegisterDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Abrir Caja</DialogTitle>
-            <DialogDescription>
-              Ingrese el monto inicial en caja para comenzar el turno.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="amount">Monto Inicial</Label>
-              <Input
-                id="amount"
-                type="number"
-                value={openingAmount}
-                onChange={(e) => setOpeningAmount(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="note">Nota (Opcional)</Label>
-              <Input
-                id="note"
-                value={openingNote}
-                onChange={(e) => setOpeningNote(e.target.value)}
-                placeholder="Ej. Turno mañana"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsOpenRegisterDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={async () => {
-              const amount = parseFloat(openingAmount) || 0
-              const opened = await openRegister(amount, openingNote)
-              if (opened) {
-                await refreshRegisterOpenStatus()
-                setIsOpenRegisterDialogOpen(false)
-                setOpeningAmount('0')
-                setOpeningNote('')
-              }
-            }}>Abrir Caja</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <OpenCashRegisterDialog
+        open={isOpenRegisterDialogOpen}
+        onOpenChange={setIsOpenRegisterDialogOpen}
+        amount={openingAmount}
+        onAmountChange={setOpeningAmount}
+        note={openingNote}
+        onNoteChange={setOpeningNote}
+        registerName={registers.find((register) => register.id === activeRegisterId)?.name}
+        isSubmitting={isOpeningRegister}
+        onSubmit={async (amount, note) => {
+          setIsOpeningRegister(true)
+          try {
+            const opened = await openRegister(amount, note)
+            if (opened) {
+              await refreshRegisterOpenStatus()
+              setIsOpenRegisterDialogOpen(false)
+              setOpeningAmount('')
+              setOpeningNote('')
+            }
+          } finally {
+            setIsOpeningRegister(false)
+          }
+        }}
+      />
 
       {/* Diálogo de Gestión de Cajas */}
       <Dialog open={canManageRegisters && isRegisterManagerOpen} onOpenChange={(open) => setIsRegisterManagerOpen(canManageRegisters && open)}>
@@ -3613,18 +3250,34 @@ function POSPageContent() {
             <Button 
               variant={movementType === 'out' ? "destructive" : "default"}
               className={movementType === 'in' ? "bg-green-600 hover:bg-green-700" : ""}
-              onClick={() => {
+              disabled={movementSaving}
+              onClick={async () => {
                 const amount = parseFloat(movementAmount)
                 if (!amount || amount <= 0) {
                   toast.error('Ingrese un monto válido')
                   return
                 }
-                addMovement(movementType, amount, movementNote)
-                setIsMovementDialogOpen(false)
-                toast.success('Movimiento registrado')
+                setMovementSaving(true)
+                try {
+                  const saved = await addMovement(
+                    movementType === 'in' ? 'cash_in' : 'cash_out',
+                    amount,
+                    movementNote || (movementType === 'in' ? 'Ingreso' : 'Egreso')
+                  )
+                  if (saved) {
+                    setIsMovementDialogOpen(false)
+                    setMovementAmount('')
+                    setMovementNote('')
+                  }
+                } finally {
+                  setMovementSaving(false)
+                }
               }}
             >
-              {movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}
+              {movementSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {movementSaving
+                ? 'Guardando...'
+                : movementType === 'in' ? 'Registrar Ingreso' : 'Registrar Egreso'}
             </Button>
           </DialogFooter>
         </DialogContent>

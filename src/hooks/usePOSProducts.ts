@@ -1,16 +1,13 @@
 'use client'
 
 // Force re-evaluation - remove this comment if HMR issues occur
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { Database } from '@/lib/supabase/types'
 import type { Product as UnifiedProduct } from '@/types/product-unified'
 import { config } from '@/lib/config'
 import { useProductRealTimeSync } from './useRealTimeSync'
-import { SALE_STATUS } from '@/lib/sales-status'
 import { useBranch } from '@/contexts/branch-context'
 import { branchHeaders } from '@/lib/branches/client'
-import { applyBranchInventoryToProducts, loadBranchInventoryStockMap } from '@/lib/branches/inventory'
 import { mapProductForPOS, type PosProductRow } from '@/app/dashboard/pos/lib/pos-product-mapper'
 
 type DbProductRow = Database['public']['Tables']['products']['Row']
@@ -45,8 +42,25 @@ interface SaleData {
   items: CartItem[]
   total: number
   payment_method: 'cash' | 'card' | 'transfer' | 'credit'
+  payments: Array<{
+    payment_method: 'cash' | 'card' | 'transfer' | 'credit'
+    amount: number
+    reference?: string
+    card_last4?: string
+    provider?: string
+    institution?: string
+    channel?: 'card_terminal' | 'bank_transfer' | 'qr'
+    terminal_id?: string
+  }>
+  session_id: string
+  price_mode?: 'retail' | 'wholesale'
+  order_discount_rate?: number
   customer_id?: string
   notes?: string
+  credit?: { interest_rate: number; installment_count: number; frequency: 'weekly' | 'biweekly' | 'monthly' }
+  repair_ids?: string[]
+  mark_repairs_delivered?: boolean
+  delivery_outcome?: string
 }
 
 // ============================================================================
@@ -88,7 +102,7 @@ export function usePOSProducts() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [realTimeEnabled, setRealTimeEnabled] = useState(true)
 
-  const supabase = useMemo(() => createClient(), [])
+  const pendingSaleAttempt = useRef<{ signature: string; idempotencyKey: string } | null>(null)
 
   // Función para actualizar un producto específico en tiempo real
   const updateProductInState = useCallback((updatedProduct: Product) => {
@@ -124,26 +138,6 @@ export function usePOSProducts() {
         // Keep cache in sync
         setProductsCache(selectedBranchId, newProducts)
         return newProducts
-      } else if (updatedProduct.is_active) {
-        const newProduct = {
-          id: updatedProduct.id,
-          name: updatedProduct.name,
-          sku: updatedProduct.sku,
-          barcode: updatedProduct.barcode || undefined,
-          sale_price: updatedProduct.sale_price,
-          wholesale_price: updatedProduct.wholesale_price,
-          stock_quantity: updatedProduct.stock_quantity,
-          category_id: updatedProduct.category_id ?? null,
-          category: prevProducts.find(p => p.category_id === updatedProduct.category_id)?.category,
-          description: updatedProduct.description || undefined,
-          image: updatedProduct.images?.[0] || updatedProduct.image_url || undefined,
-          unit_measure: updatedProduct.unit_measure || 'unidad',
-          is_active: updatedProduct.is_active,
-          purchase_price: updatedProduct.cost_price || 0
-        } as unknown as UnifiedProduct
-        const updated = [...prevProducts, newProduct]
-        setProductsCache(selectedBranchId, updated)
-        return updated
       }
       
       return prevProducts
@@ -193,26 +187,36 @@ export function usePOSProducts() {
           // NOTE: no filtramos por is_active. is_active controla la visibilidad
           // en el catálogo PÚBLICO; en el POS (venta interna) se debe poder
           // vender cualquier producto aunque esté oculto del público.
-          const { data: dbProducts, error } = await supabase
-            .from('products')
-            .select('id, name, sku, barcode, sale_price, wholesale_price, stock_quantity, category_id, description, is_active, image_url, images, unit_measure, categories(name)')
-            .order('name')
-            .limit(5000)
-
-          if (error) {
-            throw error
+          const loadPage = async (page: number) => {
+            const response = await fetch(`/api/products?page=${page}&per_page=100&strict_branch_stock=true`, {
+              headers: branchHeaders(selectedBranchId),
+              cache: 'no-store',
+            })
+            const payload = await response.json().catch(() => null) as {
+              success?: boolean
+              error?: string
+              data?: {
+                products?: Array<PosProductRow & { category?: { name?: string } | null }>
+                total?: number
+              }
+            } | null
+            if (!response.ok || !payload?.success || !Array.isArray(payload.data?.products)) {
+              throw new Error(payload?.error || 'No se pudieron cargar los productos del POS')
+            }
+            return { products: payload.data.products, total: Number(payload.data.total || 0) }
           }
 
-          const baseProducts = (dbProducts || []).map((product) => mapProductForPOS(product as unknown as PosProductRow))
+          const firstPage = await loadPage(1)
+          const pageCount = Math.max(1, Math.ceil(firstPage.total / 100))
+          const remainingPages = pageCount > 1
+            ? await Promise.all(Array.from({ length: pageCount - 1 }, (_, index) => loadPage(index + 2)))
+            : []
+          const dbProducts = [firstPage, ...remainingPages].flatMap(page => page.products)
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { stockMap, branchScoped } = await (loadBranchInventoryStockMap as any)(
-            supabase,
-            selectedBranchId,
-            baseProducts.map((product) => product.id)
-          )
-
-          return applyBranchInventoryToProducts(baseProducts, stockMap, branchScoped)
+          return dbProducts.map((product) => mapProductForPOS({
+            ...product,
+            categories: product.categories ?? (product.category?.name ? { name: product.category.name } : null),
+          } as PosProductRow))
         })().finally(() => {
           delete productsFetchPromisesByBranch[cacheKey]
         })
@@ -228,7 +232,7 @@ export function usePOSProducts() {
     } finally {
       setLoading(false)
     }
-  }, [selectedBranchId, supabase])
+  }, [selectedBranchId])
 
   // Cargar productos iniciales (use cache if fresh)
   useEffect(() => {
@@ -242,38 +246,8 @@ export function usePOSProducts() {
 
   // Función para buscar producto por código de barras
   const findProductByBarcode = useCallback(async (barcode: string): Promise<UnifiedProduct | null> => {
-    try {
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          *,
-          categories (
-            name
-          )
-        `)
-        .eq('barcode', barcode)
-        .single()
-
-      if (error) {
-        console.error('Error buscando por código de barras:', error)
-        return null
-      }
-
-      if (!data) {
-        return null
-      }
-
-      const baseProduct = mapProductForPOS(data as unknown as PosProductRow)
-
-      const [branchAwareProduct] = await (loadBranchInventoryStockMap as any)(supabase, selectedBranchId, [baseProduct.id])
-        .then(({ stockMap, branchScoped }: any) => (applyBranchInventoryToProducts as any)([baseProduct], stockMap, branchScoped))
-
-      return branchAwareProduct
-    } catch (err) {
-      console.error('Error buscando producto por código de barras:', err)
-      return null
-    }
-  }, [selectedBranchId, supabase])
+    return products.find(product => product.barcode === barcode) ?? null
+  }, [products])
 
   // Función para agregar producto al carrito
   const addToCart = useCallback((product: UnifiedProduct, quantity: number = 1) => {
@@ -363,7 +337,7 @@ export function usePOSProducts() {
 
   // Procesa la venta de inventario vía API server-side para evitar depender de RPCs del cliente.
   const processSale = useCallback(async (saleData: SaleData) => {
-    if (cart.length === 0 && (!saleData.items || saleData.items.length === 0)) {
+    if (cart.length === 0 && (!saleData.items || saleData.items.length === 0) && !saleData.repair_ids?.length) {
       setError('El carrito está vacío')
       return { success: false, error: 'El carrito está vacío' }
     }
@@ -375,39 +349,48 @@ export function usePOSProducts() {
       const saleItems = (saleData.items || cart).map(item => ({
         product_id: item.id,
         quantity: item.quantity,
-        unit_price: item.price,
         discount_amount: item.discount_amount || 0,
-        subtotal: item.subtotal
       }))
+
+      const signature = JSON.stringify({
+        items: saleItems,
+        payments: saleData.payments,
+        customerId: saleData.customer_id || null,
+        sessionId: saleData.session_id,
+        repairs: saleData.repair_ids || [],
+        priceMode: saleData.price_mode || 'retail',
+        orderDiscountRate: saleData.order_discount_rate || 0,
+        notes: saleData.notes || '',
+        credit: saleData.credit || null,
+        markRepairsDelivered: saleData.mark_repairs_delivered === true,
+        deliveryOutcome: saleData.delivery_outcome || null,
+      })
+      if (pendingSaleAttempt.current?.signature !== signature) {
+        pendingSaleAttempt.current = { signature, idempotencyKey: crypto.randomUUID() }
+      }
+      const idempotencyKey = pendingSaleAttempt.current.idempotencyKey
 
       const payload = {
         p_sale_data: {
-          code: `SALE-${Date.now()}`,
           customer_id: saleData.customer_id || null,
-          total_amount: saleData.total,
-          subtotal_amount: saleItems.reduce((sum, item) => sum + item.subtotal, 0),
-          tax_amount: 0, // Ajustar si se manejan impuestos globales fuera del subtotal
-          discount_amount: saleItems.reduce((sum, item) => sum + item.discount_amount, 0),
-          payment_method: saleData.payment_method,
-          payment_status: 'completed',
           notes: saleData.notes || '',
-          status: SALE_STATUS.COMPLETED,
-          created_at: new Date().toISOString()
         },
         p_items: saleItems,
-        p_payments: [
-          {
-            payment_method: saleData.payment_method,
-            amount: saleData.total,
-            status: 'completed'
-          }
-        ]
+        p_payments: saleData.payments,
+        p_session_id: saleData.session_id,
+        p_price_mode: saleData.price_mode || 'retail',
+        p_order_discount_rate: saleData.order_discount_rate || 0,
+        p_credit: saleData.credit || null,
+        p_repair_ids: saleData.repair_ids || [],
+        p_mark_repairs_delivered: saleData.mark_repairs_delivered === true,
+        p_delivery_outcome: saleData.delivery_outcome || null,
       }
 
       const response = await fetch('/api/pos/process-sale', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-idempotency-key': idempotencyKey,
           ...branchHeaders(selectedBranchId),
         },
         body: JSON.stringify(payload),
@@ -424,8 +407,7 @@ export function usePOSProducts() {
         throw new Error(result?.error || 'No se pudo procesar la venta POS')
       }
 
-      // Limpiar carrito y recargar productos
-      clearCart()
+      pendingSaleAttempt.current = null
       await fetchProducts()
 
       return { 
@@ -447,7 +429,7 @@ export function usePOSProducts() {
     } finally {
       setLoading(false)
     }
-  }, [cart, clearCart, fetchProducts, selectedBranchId])
+  }, [cart, fetchProducts, selectedBranchId])
 
   // Productos filtrados
   const filteredProducts = useMemo(() => {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireSuperAdmin } from '@/lib/superadmin/auth'
+import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 
 // ---------------------------------------------------------------------------
@@ -8,7 +8,7 @@ import { logSuperAdminAction } from '@/lib/superadmin/audit'
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
-  const me = await requireSuperAdmin()
+  const me = await getSuperAdminUser()
   if (!me) return NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
@@ -35,20 +35,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `No existe un usuario con email ${email}.` }, { status: 404 })
   }
 
-  // Upsert user_roles + profiles
-  const [{ error: roleError }, { error: profileError }] = await Promise.all([
-    admin.from('user_roles').upsert(
-      { user_id: targetUser.id, role: 'super_admin', is_active: true, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id' }
-    ),
-    admin.from('profiles').upsert(
-      { id: targetUser.id, email: targetUser.email, role: 'super_admin', status: 'active' },
-      { onConflict: 'id' }
-    ),
-  ])
+  const { error: roleError } = await admin.rpc('set_super_admin_role', {
+    p_target_user_id: targetUser.id,
+    p_email: targetUser.email ?? email,
+    p_grant: true,
+  })
 
-  if (roleError || profileError) {
-    return NextResponse.json({ error: (roleError ?? profileError)?.message || 'No se pudo asignar el rol.' }, { status: 500 })
+  if (roleError) {
+    return NextResponse.json({ error: roleError.message || 'No se pudo asignar el rol.' }, { status: 500 })
   }
 
   await logSuperAdminAction({
@@ -70,7 +64,7 @@ export async function POST(request: NextRequest) {
 // ---------------------------------------------------------------------------
 
 export async function DELETE(request: NextRequest) {
-  const me = await requireSuperAdmin()
+  const me = await getSuperAdminUser()
   if (!me) return NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 })
 
   const userId = request.nextUrl.searchParams.get('userId')
@@ -82,26 +76,20 @@ export async function DELETE(request: NextRequest) {
 
   const admin = createAdminSupabase()
 
-  // Make sure at least one super_admin remains
-  const { count, error: countError } = await admin
-    .from('user_roles')
-    .select('user_id', { count: 'exact', head: true })
-    .eq('role', 'super_admin')
-    .eq('is_active', true)
+  const { error: roleError } = await admin.rpc('set_super_admin_role', {
+    p_target_user_id: userId,
+    p_email: '',
+    p_grant: false,
+  })
 
-  if (countError) return NextResponse.json({ error: countError.message }, { status: 500 })
-  if ((count ?? 0) <= 1) {
-    return NextResponse.json({ error: 'Debe quedar al menos un super_admin activo.' }, { status: 400 })
-  }
-
-  // Demote to 'admin' (don't fully delete to keep audit trail consistent)
-  const [{ error: roleError }, { error: profileError }] = await Promise.all([
-    admin.from('user_roles').update({ role: 'admin', updated_at: new Date().toISOString() }).eq('user_id', userId),
-    admin.from('profiles').update({ role: 'admin' }).eq('id', userId),
-  ])
-
-  if (roleError || profileError) {
-    return NextResponse.json({ error: (roleError ?? profileError)?.message || 'No se pudo revocar el rol.' }, { status: 500 })
+  if (roleError) {
+    if (roleError.message.includes('LAST_SUPER_ADMIN')) {
+      return NextResponse.json({ error: 'Debe quedar al menos un super_admin activo.' }, { status: 400 })
+    }
+    if (roleError.message.includes('SUPER_ADMIN_NOT_FOUND')) {
+      return NextResponse.json({ error: 'El usuario no es un super_admin activo.' }, { status: 404 })
+    }
+    return NextResponse.json({ error: roleError.message || 'No se pudo revocar el rol.' }, { status: 500 })
   }
 
   await logSuperAdminAction({

@@ -48,7 +48,7 @@ export function SupportSessionBanner({ session }: SupportSessionBannerProps) {
   const orgLabel = session.organizationName || session.organizationSlug || 'organización'
 
   return (
-    <div className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-2 bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950 shadow">
+    <div className="z-50 flex shrink-0 flex-wrap items-center justify-between gap-2 bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950 shadow-sm">
       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <ShieldAlert className="h-4 w-4 shrink-0" />
         Modo <strong>SOPORTE</strong> activo en <strong>{orgLabel}</strong>

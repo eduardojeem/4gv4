@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 import { useAuth } from '@/contexts/auth-context'
 import {
   ORDER_FLOW,
@@ -39,7 +39,6 @@ import { cn } from '@/lib/utils'
 const HISTORY_KEY = 'mipos-order-track-history'
 
 export function TrackOrderClient({ organizationSlug }: { organizationSlug?: string | null }) {
-  const { toast } = useToast()
   const { user, loading: loadingAuth } = useAuth()
   const [orderNumber, setOrderNumber] = useState('')
   const [contact, setContact]         = useState('')   // email or phone
@@ -93,10 +92,8 @@ export function TrackOrderClient({ organizationSlug }: { organizationSlug?: stri
       } catch (error) {
         if (!cancelled) {
           setMyOrders([])
-          toast({
-            title: 'No se pudieron cargar tus pedidos',
+          toast.error('No se pudieron cargar tus pedidos', {
             description: error instanceof Error ? error.message : 'Intenta nuevamente.',
-            variant: 'destructive',
           })
         }
       } finally {
@@ -109,7 +106,7 @@ export function TrackOrderClient({ organizationSlug }: { organizationSlug?: stri
     return () => {
       cancelled = true
     }
-  }, [loadingAuth, user, organizationSlug, toast])
+  }, [loadingAuth, user, organizationSlug])
 
   const progress = useMemo(
     () => (order ? getOrderProgress(order.status) : -1),
@@ -144,11 +141,11 @@ export function TrackOrderClient({ organizationSlug }: { organizationSlug?: stri
     const ctc = contact.trim()
 
     if (!num) {
-      toast({ title: 'Dato requerido', description: 'Ingresa el número de pedido.', variant: 'destructive' })
+      toast.error('Dato requerido', { description: 'Ingresa el número de pedido.' })
       return
     }
     if (!ctc) {
-      toast({ title: 'Dato requerido', description: 'Ingresa el email o teléfono con el que realizaste el pedido.', variant: 'destructive' })
+      toast.error('Dato requerido', { description: 'Ingresa el email o teléfono con el que realizaste el pedido.' })
       return
     }
 
@@ -174,10 +171,8 @@ export function TrackOrderClient({ organizationSlug }: { organizationSlug?: stri
         return
       }
       if (response.status === 429) {
-        toast({
-          title: 'Demasiadas consultas',
+        toast.warning('Demasiadas consultas', {
           description: payload?.error || 'Intenta de nuevo en unos minutos.',
-          variant: 'destructive',
         })
         return
       }
@@ -191,10 +186,8 @@ export function TrackOrderClient({ organizationSlug }: { organizationSlug?: stri
         resultsTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 100)
     } catch (error) {
-      toast({
-        title: 'No se pudo buscar',
+      toast.error('No se pudo buscar el pedido', {
         description: error instanceof Error ? error.message : 'Intenta nuevamente.',
-        variant: 'destructive',
       })
     } finally {
       setLoading(false)

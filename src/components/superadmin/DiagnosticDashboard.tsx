@@ -4,12 +4,10 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertCircle,
-  AlertTriangle,
   Bug,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Clock,
   Database,
   ExternalLink,
   Globe,

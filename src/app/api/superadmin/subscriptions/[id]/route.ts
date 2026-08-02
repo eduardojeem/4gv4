@@ -41,12 +41,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const plan = typeof body.plan === 'string' ? normalizePlanCode(body.plan) : undefined
+  const plan = typeof body.plan === 'string' ? normalizePlanCode(body.plan) : null
   const status = typeof body.status === 'string' ? body.status : undefined
   const trialEndsAt = normalizeDate(body.trial_ends_at)
   const periodStartsAt = normalizeDate(body.current_period_starts_at)
   const periodEndsAt = normalizeDate(body.current_period_ends_at)
   const cancelAtPeriodEnd = typeof body.cancel_at_period_end === 'boolean' ? body.cancel_at_period_end : undefined
+
+  if (!plan) {
+    return NextResponse.json({ error: 'Subscription plan is required' }, { status: 400 })
+  }
 
   if (!status || !VALID_STATUSES.has(status)) {
     return NextResponse.json({ error: 'Invalid subscription status' }, { status: 400 })
@@ -61,21 +65,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   const admin = createAdminSupabase()
-  const { data: activePlan, error: activePlanError } = await admin
-    .from('subscription_plans')
-    .select('tier')
-    .eq('tier', plan.toLowerCase())
-    .eq('is_active', true)
-    .maybeSingle()
-
-  if (activePlanError) {
-    return NextResponse.json({ error: 'Failed to validate plan' }, { status: 500 })
-  }
-
-  if (!activePlan) {
-    return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
-  }
-
   const { data: previous, error: previousError } = await admin
     .from('subscriptions')
     .select('id, organization_id, plan, status, trial_ends_at, current_period_starts_at, current_period_ends_at, cancel_at_period_end')
@@ -100,24 +89,29 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     updated_at: new Date().toISOString(),
   }
 
-  const { data: subscription, error: updateError } = await admin
-    .from('subscriptions')
-    .update(updatePayload)
-    .eq('id', id)
-    .select('id, organization_id, plan, status, provider, provider_customer_id, provider_subscription_id, trial_ends_at, current_period_starts_at, current_period_ends_at, cancel_at_period_end, created_at, updated_at')
-    .single()
+  const { data: updatedRows, error: updateError } = await admin.rpc('update_superadmin_subscription', {
+    p_subscription_id: id,
+    p_plan: plan,
+    p_status: status,
+    p_trial_ends_at: trialEndsAt,
+    p_period_starts_at: periodStartsAt,
+    p_period_ends_at: periodEndsAt,
+    p_cancel_at_period_end: cancelAtPeriodEnd ?? false,
+  })
+  const subscription = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows
 
   if (updateError) {
+    if (updateError.message.includes('INVALID_PLAN')) {
+      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
+    }
+    if (updateError.message.includes('SUBSCRIPTION_NOT_FOUND')) {
+      return NextResponse.json({ error: 'Subscription not found' }, { status: 404 })
+    }
     return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 })
   }
 
-  const { error: organizationError } = await admin
-    .from('organizations')
-    .update({ plan, updated_at: new Date().toISOString() })
-    .eq('id', previous.organization_id)
-
-  if (organizationError) {
-    return NextResponse.json({ error: 'Subscription updated but organization plan sync failed' }, { status: 500 })
+  if (!subscription) {
+    return NextResponse.json({ error: 'Subscription not found' }, { status: 404 })
   }
 
   await admin.from('tenant_audit_log').insert({

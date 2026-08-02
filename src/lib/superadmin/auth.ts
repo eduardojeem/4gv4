@@ -45,26 +45,6 @@ export async function getSuperAdminUser(): Promise<SuperAdminUser | null> {
     }
   }
 
-  if (profile?.role === 'super_admin') {
-    return {
-      id: user.id,
-      email: user.email ?? null,
-      role: 'super_admin',
-    }
-  }
-
-  const appRole = typeof user.app_metadata?.role === 'string'
-    ? user.app_metadata.role.toLowerCase()
-    : ''
-
-  if (appRole === 'super_admin') {
-    return {
-      id: user.id,
-      email: user.email ?? null,
-      role: 'super_admin',
-    }
-  }
-
   return null
 }
 

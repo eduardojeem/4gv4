@@ -77,7 +77,10 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      const preferredBranch = branchRows.find((branch) => branch.is_default) ?? branchRows[0] ?? null
+      const preferredBranch = branchRows.find((branch) => branch.is_primary)
+        ?? branchRows.find((branch) => branch.is_default)
+        ?? branchRows[0]
+        ?? null
       setSelectedBranchId(preferredBranch?.id ?? null)
     } catch (err: unknown) {
       const error = normalizeSupabaseError(err)

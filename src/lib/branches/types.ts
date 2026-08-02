@@ -16,6 +16,7 @@ export interface BranchRecord {
   manager_name?: string | null
   is_active?: boolean | null
   is_default?: boolean | null
+  is_primary?: boolean | null
   created_at?: string
   updated_at?: string
 }
@@ -28,6 +29,20 @@ export interface BranchSummary extends BranchRecord {
   sales_count?: number
   repairs_count?: number
   revenue_total?: number
+}
+
+export interface BranchAssignedUser {
+  id: string
+  full_name?: string | null
+  email?: string | null
+  phone?: string | null
+  role?: string | null
+  status?: string | null
+  department?: string | null
+  avatar_url?: string | null
+  is_primary: boolean
+  assigned_at?: string | null
+  updated_at?: string | null
 }
 
 export interface BranchScopeResolution {

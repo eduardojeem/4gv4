@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { evaluateSubscriptionStatus } from '@/lib/saas/subscription-status'
 import type { ModuleTrial } from './plan-features'
 
 export type ResourceType = 'users' | 'branches' | 'cashRegisters' | 'products' | 'categories'
@@ -327,9 +328,13 @@ export async function getOrganizationUsage(organizationId: string): Promise<Orga
 
 export async function getCommercialPlanPrices(): Promise<Record<string, number>> {
   const supabase = createAdminSupabase()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('subscription_plans')
     .select('tier, price, is_active')
+
+  if (error) {
+    throw new Error(`No se pudieron cargar los precios de los planes: ${error.message}`)
+  }
 
   return Object.fromEntries(
     ((data ?? []) as Array<Record<string, unknown>>)
@@ -517,9 +522,6 @@ export async function getOrganizationPlanInfo(
   }
 }
 
-const HARD_BLOCKED_STATUSES = new Set(['suspended', 'cancelled', 'canceled'])
-const EXPIRED_STATUSES = new Set(['past_due', 'expired', 'unpaid'])
-
 export async function getSubscriptionStatus(organizationId: string): Promise<{
   status: string | null
   isBlocked: boolean
@@ -539,30 +541,12 @@ export async function getSubscriptionStatus(organizationId: string): Promise<{
     throw new Error(`No se pudo validar el estado de la suscripción: ${error.message}`)
   }
 
-  const status = data?.status ?? null
-  const paymentStatus = typeof data?.payment_status === 'string' ? data.payment_status : null
-  const isBlocked = status ? HARD_BLOCKED_STATUSES.has(status) : false
-  const isTrialing = status === 'trialing'
-  const periodEndsAt = data?.current_period_ends_at ? new Date(data.current_period_ends_at).getTime() : null
-  const isExpired = Boolean(
-    (status && EXPIRED_STATUSES.has(status)) ||
-    (paymentStatus === 'unpaid' && !(status === 'active' && periodEndsAt !== null && periodEndsAt > Date.now())) ||
-    (status === 'active' && periodEndsAt !== null && periodEndsAt <= Date.now())
-  )
-  let trialDaysLeft: number | null = null
-  let periodDaysLeft: number | null = null
-
-  if (isTrialing && data?.trial_ends_at) {
-    const msLeft = new Date(data.trial_ends_at).getTime() - Date.now()
-    trialDaysLeft = Math.max(0, Math.ceil(msLeft / 86400000))
-  }
-
-  if (status === 'active' && periodEndsAt !== null) {
-    const msLeft = periodEndsAt - Date.now()
-    periodDaysLeft = Math.max(0, Math.ceil(msLeft / 86400000))
-  }
-
-  return { status, isBlocked, isExpired, isTrialing, trialDaysLeft, periodDaysLeft }
+  return evaluateSubscriptionStatus({
+    status: data?.status,
+    paymentStatus: data?.payment_status,
+    trialEndsAt: data?.trial_ends_at,
+    periodEndsAt: data?.current_period_ends_at,
+  })
 }
 
 export async function canCreateResource(

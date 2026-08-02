@@ -25,11 +25,13 @@ export default async function SuperAdminLayout({ children }: { children: React.R
   const supportSession = await getActiveSupportSession()
 
   return (
-    <>
+    <div className="flex h-dvh flex-col overflow-hidden bg-slate-950">
       {supportSession && <SupportSessionBanner session={supportSession} />}
-      <SuperAdminShell userEmail={user.email}>
-        {children}
-      </SuperAdminShell>
-    </>
+      <div className="min-h-0 flex-1">
+        <SuperAdminShell userEmail={user.email}>
+          {children}
+        </SuperAdminShell>
+      </div>
+    </div>
   )
 }

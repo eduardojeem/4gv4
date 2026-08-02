@@ -39,11 +39,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'sonner'
 import { useBranch } from '@/contexts/branch-context'
 import { validateDeliveryContact } from '@/lib/orders/creation-rules'
 import { cn } from '@/lib/utils'
 import { formatMoney } from './format'
+import { BarcodeScanner } from '@/components/ui/barcode-scanner'
 
 type ProductOption = {
   id: string
@@ -102,7 +103,6 @@ export function CreateOrderDialog({
   onOpenChange: (open: boolean) => void
   onCreated: () => void
 }) {
-  const { toast } = useToast()
   const { selectedBranchId, selectedBranch } = useBranch()
   const [products, setProducts] = useState<ProductOption[]>([])
   const [customers, setCustomers] = useState<CustomerOption[]>([])
@@ -331,7 +331,7 @@ export function CreateOrderDialog({
   async function submit() {
     const validationError = validate()
     if (validationError) {
-      toast({ title: 'Revisa el formulario', description: validationError, variant: 'destructive' })
+      toast.error('Revisa el formulario', { description: validationError })
       return
     }
 
@@ -359,15 +359,13 @@ export function CreateOrderDialog({
       })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok || payload?.success === false) throw new Error(payload?.error ?? 'No se pudo crear el pedido.')
-      toast({ title: 'Pedido creado', description: 'El pedido fue registrado exitosamente.' })
+      toast.success('Pedido creado', { description: 'El pedido fue registrado exitosamente.' })
       reset()
       onOpenChange(false)
       onCreated()
     } catch (error) {
-      toast({
-        title: 'No se pudo crear',
+      toast.error('No se pudo crear el pedido', {
         description: error instanceof Error ? error.message : 'Intenta nuevamente.',
-        variant: 'destructive',
       })
     } finally {
       setLoading(false)
@@ -591,9 +589,22 @@ export function CreateOrderDialog({
                       className={cn('h-9 pl-9 text-sm', INPUT_DARK)}
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
-                      placeholder="Buscar por nombre, SKU o marca…"
+                      placeholder="Nombre, SKU o código de barras…"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && products.length === 1) {
+                          e.preventDefault()
+                          addProduct(products[0])
+                        }
+                      }}
                     />
                   </div>
+                  <BarcodeScanner
+                    onScan={(code) => setProductSearch(code)}
+                    label="Escanear"
+                    variant="outline"
+                    size="sm"
+                    className={cn('h-9 border-white/10 text-slate-300 hover:bg-white/8 hover:text-white')}
+                  />
                   <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                     <SelectTrigger className={cn('h-9 w-full text-sm sm:w-[170px]', INPUT_DARK)}>
                       <SelectValue placeholder="Categoría" />

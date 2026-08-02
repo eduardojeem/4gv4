@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, ImageIcon, Loader2, Save, Sparkles, Store } from 'lucide-react'
@@ -193,7 +194,14 @@ export function PlatformBrandingForm({ initial }: { initial: PlatformBranding })
                 <div className="flex items-center gap-3">
                   {draft.logoUrl ? (
                     <div className="flex h-10 items-center">
-                      <img src={draft.logoUrl} alt={draft.platformName} className="h-10 w-auto max-w-[180px] object-contain" />
+                      <Image
+                        src={draft.logoUrl}
+                        alt={draft.platformName}
+                        width={180}
+                        height={40}
+                        unoptimized
+                        className="h-10 w-auto max-w-[180px] object-contain"
+                      />
                     </div>
                   ) : (
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">

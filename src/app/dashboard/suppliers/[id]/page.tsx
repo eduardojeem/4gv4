@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Building2, Mail, Phone, MapPin, Globe, Star, Package, TrendingUp, FileText, Calendar } from 'lucide-react'
+import { ArrowLeft, Building2, Mail, Phone, MapPin, Globe, Star, Package, TrendingUp, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import type { UISupplier } from '@/lib/types/supplier-ui'
-import { SupplierProductsList } from '@/components/suppliers/SupplierProductsList'
+import { SupplierProductsList, type SupplierProduct } from '@/components/suppliers/SupplierProductsList'
+import { SupplierNotes } from '@/components/suppliers/SupplierNotes'
 import { SupplierOrdersList } from '@/components/suppliers/SupplierOrdersList'
 import { CreateOrderModal } from '@/components/suppliers/CreateOrderModal'
 import { formatCurrency } from '@/lib/currency'
@@ -22,6 +23,8 @@ export default function SupplierDetailPage() {
     const [supplier, setSupplier] = useState<UISupplier | null>(null)
     const [loading, setLoading] = useState(true)
     const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false)
+    // Producto precargado al pedir desde la lista de productos del proveedor.
+    const [orderSeedProduct, setOrderSeedProduct] = useState<SupplierProduct | null>(null)
     const supabase = createClient()
 
     useEffect(() => {
@@ -58,7 +61,7 @@ export default function SupplierDetailPage() {
                     country: s.country || '',
                     postal_code: s.postal_code || '',
                     website: s.website || '',
-                    business_type: (s.business_type || 'distributor') as any,
+                    business_type: (s.business_type || 'distributor') as UISupplier['business_type'],
                     status: s.is_active ? 'active' : 'inactive',
                     rating: s.rating || 0,
                     products_count: productsCount || 0,
@@ -283,6 +286,7 @@ export default function SupplierDetailPage() {
                         <CardContent>
                             <SupplierOrdersList 
                                 supplierId={supplier.id} 
+                                supplierName={supplier.name}
                                 onCreateOrder={() => setIsCreateOrderOpen(true)}
                             />
                         </CardContent>
@@ -295,7 +299,13 @@ export default function SupplierDetailPage() {
                             <CardTitle>Productos del Proveedor</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <SupplierProductsList supplierId={supplier.id} />
+                            <SupplierProductsList
+                                supplierId={supplier.id}
+                                onOrderProduct={(product) => {
+                                    setOrderSeedProduct(product)
+                                    setIsCreateOrderOpen(true)
+                                }}
+                            />
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -309,11 +319,14 @@ export default function SupplierDetailPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            {supplier.notes ? (
-                                <p className="whitespace-pre-wrap">{supplier.notes}</p>
-                            ) : (
-                                <p className="text-gray-500 text-center py-8">No hay notas disponibles</p>
-                            )}
+                            <SupplierNotes
+                                supplierId={supplier.id}
+                                notes={supplier.notes}
+                                updatedAt={supplier.updated_at}
+                                onSaved={(nextNotes) => setSupplier((current) => current
+                                    ? { ...current, notes: nextNotes ?? '', updated_at: new Date().toISOString() }
+                                    : current)}
+                            />
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -321,7 +334,19 @@ export default function SupplierDetailPage() {
 
             <CreateOrderModal 
                 isOpen={isCreateOrderOpen}
-                onClose={() => setIsCreateOrderOpen(false)}
+                onClose={() => { setIsCreateOrderOpen(false); setOrderSeedProduct(null) }}
+                initialProduct={orderSeedProduct ? {
+                    id: orderSeedProduct.id,
+                    name: orderSeedProduct.name,
+                    suppliersku: orderSeedProduct.sku || '',
+                    // Se pide al costo, no al precio de venta.
+                    unitprice: orderSeedProduct.purchasePrice,
+                    currency: 'PYG',
+                    stock: orderSeedProduct.stock,
+                    minStock: orderSeedProduct.minStock,
+                    imageUrl: orderSeedProduct.imageUrl,
+                    source: 'own',
+                } : null}
                 supplierId={supplier.id}
                 supplierName={supplier.name}
                 onOrderCreated={() => {

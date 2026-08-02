@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import type { SuperAdminSubscription } from './types'
 import { StatusBadge } from './subscription-badges'
-import { getRecommendation, isAttention } from './utils'
+import { getRecommendation } from './utils'
 
 type Stats = {
   active: number

@@ -2,35 +2,40 @@ import { NextResponse } from 'next/server'
 import { withTenantAuth } from '@/lib/api/withTenantAuth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { canCreateResource } from '@/lib/saas/subscription-service'
+import { getRequestedBranchId, resolveBranchScopeForUser } from '@/lib/branches/server'
 
-export const POST = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos' }, async (request, { organization }) => {
+export const POST = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos' }, async (request, { organization, user }) => {
   const body = await request.json().catch(() => ({}))
   const name = typeof body.name === 'string' ? body.name.trim() : ''
-  const branchId = typeof body.branch_id === 'string' ? body.branch_id.trim() : ''
+  const requestedBranchId = typeof body.branch_id === 'string' ? body.branch_id.trim() : ''
 
   if (name.length < 2) {
     return NextResponse.json({ success: false, error: 'Ingresa un nombre valido para la caja.' }, { status: 400 })
   }
 
-  if (!branchId || branchId === 'all') {
+  if (!requestedBranchId || requestedBranchId === 'all') {
     return NextResponse.json({ success: false, error: 'Selecciona una sucursal antes de crear una caja.' }, { status: 400 })
   }
 
+  let branchScope
+  try {
+    branchScope = await resolveBranchScopeForUser({
+      userId: user.id,
+      role: user.role as Parameters<typeof resolveBranchScopeForUser>[0]['role'],
+      requestedBranchId: getRequestedBranchId(request, requestedBranchId),
+      organizationId: organization.id,
+      strict: true,
+    })
+  } catch {
+    return NextResponse.json({ success: false, error: 'No tenes acceso a la sucursal seleccionada.' }, { status: 403 })
+  }
+
+  if (!branchScope.branchId) {
+    return NextResponse.json({ success: false, error: 'No tenes una sucursal asignada para crear cajas.' }, { status: 403 })
+  }
+
+  const branchId = branchScope.branchId
   const supabase = createAdminSupabase()
-  const { data: branch, error: branchError } = await supabase
-    .from('branches')
-    .select('id')
-    .eq('id', branchId)
-    .eq('organization_id', organization.id)
-    .maybeSingle()
-
-  if (branchError) {
-    return NextResponse.json({ success: false, error: 'No se pudo validar la sucursal seleccionada.' }, { status: 500 })
-  }
-
-  if (!branch) {
-    return NextResponse.json({ success: false, error: 'La sucursal seleccionada no pertenece a esta organizacion.' }, { status: 403 })
-  }
 
   const planGate = await canCreateResource(organization.id, 'cashRegisters')
 
@@ -62,7 +67,7 @@ export const POST = withTenantAuth({ permission: 'pos.cash.manage', module: 'pos
 
   const { data, error } = await supabase
     .from('cash_registers')
-    .insert({ name, is_open: false, balance: 0, branch_id: branchId })
+    .insert({ name, is_open: false, balance: 0, branch_id: branchId, organization_id: organization.id })
     .select('id, name')
     .single()
 

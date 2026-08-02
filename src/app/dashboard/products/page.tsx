@@ -7,7 +7,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Info, Plus, RefreshCw } from "lucide-react";
+import { AlertCircle, Info, Plus, RefreshCw, Warehouse } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,11 +49,13 @@ import type { DashboardMetrics } from "@/types/products-dashboard";
 import type { QuickFilterCounts } from "@/components/dashboard/products-modern/QuickFiltersBar";
 import type { Database } from "@/lib/supabase/types";
 import { PlanLimitBanner } from "@/components/subscription/PlanLimitBanner";
+import { useBranch } from "@/contexts/branch-context";
 type Json = Database["public"]["Tables"]["products"]["Row"]["dimensions"];
 
 export default function ProductsPage() {
   const router = useRouter();
   const { hasPermission } = usePermissions();
+  const { selectedBranch } = useBranch();
   const {
     products,
     categories,
@@ -619,6 +621,16 @@ export default function ProductsPage() {
           onDismissAlert={handleDismissAlert}
         />
 
+        <Alert className="border-border bg-muted/30">
+          <Warehouse className="h-4 w-4" />
+          <AlertTitle>
+            {selectedBranch ? `Inventario de ${selectedBranch.name}` : "Inventario general"}
+          </AlertTitle>
+          <AlertDescription>
+            Nombre, SKU, imagenes y precios se comparten entre todas las sucursales. Las existencias, movimientos y alertas corresponden {selectedBranch ? "solamente a la sucursal seleccionada" : "al inventario general"}.
+          </AlertDescription>
+        </Alert>
+
         {/* Guía de funcionamiento de catálogo de productos */}
         <Card className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 border border-blue-100/50 dark:border-blue-950/20 backdrop-blur-md">
           <details className="group">
@@ -648,7 +660,7 @@ export default function ProductsPage() {
                     Stock y Alertas
                   </h4>
                   <p className="text-muted-foreground leading-relaxed">
-                    Configura los mínimos de inventario recomendados. La pestaña superior de alertas te notificará automáticamente cuando un artículo esté por debajo del límite de reabastecimiento o agotado.
+                    Configura los mínimos recomendados y ajusta las existencias de la sucursal seleccionada. Las alertas se calculan sobre ese inventario, no sobre el stock de otras sedes.
                   </p>
                 </div>
                 <div className="space-y-1.5 p-3.5 rounded-xl bg-background/60 border border-border/40 backdrop-blur-sm">

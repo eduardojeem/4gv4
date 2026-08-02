@@ -130,7 +130,7 @@ export async function redeemSubscriptionPromo(input: RedeemPromoInput): Promise<
         status: 'paid',
         payment_method: 'activation_code',
         provider: 'activation',
-        external_reference: promo.code,
+        external_reference: `${promo.code}:${redemption.id}`,
         paid_at: now.toISOString(),
       })
     } catch (err) {

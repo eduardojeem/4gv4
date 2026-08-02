@@ -23,7 +23,6 @@ import {
   Calendar,
   Users,
   Clock,
-  PackageCheck,
   PackageX,
 } from 'lucide-react'
 import { CustomerCreditHistory } from '@/components/pos/CustomerCreditHistory'
@@ -36,23 +35,33 @@ import { SaleSummary } from './checkout/SaleSummary'
 import { PromotionsSection } from './checkout/PromotionsSection'
 import type { Promotion } from '@/types/promotion'
 import { buildCreditInstallmentPlan } from '@/lib/credits/installments'
+import { getMixedPaymentValidation } from '../lib/payment-validation'
 
 import { useCheckout } from '../contexts/CheckoutContext'
 import { usePOSCustomer } from '../contexts/POSCustomerContext'
+
+type CheckoutRepair = {
+  id: string
+  status: string
+  device_brand?: string | null
+  device_model?: string | null
+  created_at: string
+  final_cost?: number | null
+  estimated_cost?: number | null
+  notes?: string | null
+  payment_status?: string | null
+}
 
 // Define props interface
 export interface CheckoutModalProps {
   // Repair Linking
   selectedRepairIds: string[]
   setSelectedRepairIds: (val: string[]) => void
-  customerRepairs: any[]
+  customerRepairs: CheckoutRepair[]
   markRepairDelivered: boolean
   setMarkRepairDelivered: (val: boolean) => void
   deliveryOutcome: 'repaired' | 'withdrawn' | 'unrepairable'
   setDeliveryOutcome: (val: 'repaired' | 'withdrawn' | 'unrepairable') => void
-  finalCostFromSale: boolean
-  setFinalCostFromSale: (val: boolean) => void
-  selectedRepairs: any[]
   supabaseStatusToLabel: Record<string, string>
   
   // Cart & Calculations
@@ -74,6 +83,9 @@ export interface CheckoutModalProps {
   }
   isWholesale: boolean
   WHOLESALE_DISCOUNT_RATE: number
+  discount: number
+  onDiscountChange: (discount: number) => void
+  currency: string
   
   // Actions
   processSale: () => void
@@ -100,14 +112,14 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
   setMarkRepairDelivered,
   deliveryOutcome,
   setDeliveryOutcome,
-  finalCostFromSale,
-  setFinalCostFromSale,
-  selectedRepairs,
   supabaseStatusToLabel,
   cart,
   cartCalculations,
   isWholesale,
   WHOLESALE_DISCOUNT_RATE,
+  discount,
+  onDiscountChange,
+  currency,
   processSale,
   processMixedPayment,
   formatCurrency,
@@ -119,29 +131,17 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
 }) => {
   const {
     isCheckoutOpen,
-    setIsCheckoutOpen,
     paymentStatus,
     paymentError,
     paymentMethod,
-    setPaymentMethod,
     isMixedPayment,
-    setIsMixedPayment,
     cashReceived,
-    setCashReceived,
     cardNumber,
-    setCardNumber,
     transferReference,
-    setTransferReference,
-    splitAmount,
-    setSplitAmount,
     notes,
     setNotes,
-    discount,
-    setDiscount,
     creditTerms,
-    paymentSplit,
-    addPaymentSplit,
-    removePaymentSplit
+    paymentSplit
   } = useCheckout()
 
   const {
@@ -149,14 +149,10 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
     selectedCustomer
   } = usePOSCustomer()
 
-  // Calculate totals locally
-  const getTotalPaid = () => {
-    return paymentSplit.reduce((total, split) => total + split.amount, 0)
-  }
-
-  const getRemainingAmount = () => {
-    return Math.round((cartCalculations.total - getTotalPaid()) * 100) / 100
-  }
+  const mixedPaymentValidation = React.useMemo(
+    () => getMixedPaymentValidation(cartCalculations.total, paymentSplit),
+    [cartCalculations.total, paymentSplit]
+  )
 
   // Sistema de creditos
   const { canSellOnCredit, getCreditSummary, loadCreditData } = useCreditSystem()
@@ -277,7 +273,11 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
             {selectedCustomer && (
               <div className="mt-6 border-t pt-4">
                 {(() => {
-                   const activeRepairs = customerRepairs.filter(r => r.status !== 'entregado' && !(paymentStatus === 'success' && selectedRepairIds.includes(r.id)))
+                   const activeRepairs = customerRepairs.filter(repair => (
+                     repair.status !== 'entregado' &&
+                     repair.payment_status !== 'pagado' &&
+                     !(paymentStatus === 'success' && selectedRepairIds.includes(repair.id))
+                   ))
                    
                    return (
                    <>
@@ -305,7 +305,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                          </div>
                       ) : (
                          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                            {activeRepairs.map((repair: any) => {
+                             {activeRepairs.map((repair) => {
                                const isSelected = selectedRepairIds.includes(repair.id);
                                return (
                                   <div key={repair.id} 
@@ -427,18 +427,6 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                            </div>
                          )}
 
-                         <div className="flex items-center justify-between rounded-lg border p-2 bg-background hover:bg-muted/20 transition-colors">
-                            <div className="flex gap-2 items-center">
-                               <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
-                                  <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                               </div>
-                               <div>
-                                  <div className="text-xs font-semibold leading-tight">Actualizar costo final</div>
-                                  <div className="text-[10px] text-muted-foreground leading-tight">Usar precio de venta</div>
-                               </div>
-                            </div>
-                            <Switch checked={finalCostFromSale} onCheckedChange={setFinalCostFromSale} />
-                         </div>
                       </div>
                    </div>
                 )}
@@ -450,6 +438,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               canUseCredit={canUseCredit}
               creditSummary={creditSummary || undefined}
               formatCurrency={formatCurrency}
+              currency={currency}
             />
 
             {/* Seccion de Promociones */}
@@ -468,8 +457,9 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
               <Input
                 type="number"
                 value={discount}
-                onChange={(e) => setDiscount(Number(e.target.value))}
+                onChange={(e) => onDiscountChange(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
                 placeholder="0"
+                min="0"
                 max="100"
               />
             </div>
@@ -552,7 +542,7 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                 <Button
                   className="pos-button-primary pos-button-confirm-sale w-full h-12 text-base font-semibold shadow-md"
                   onClick={processMixedPayment}
-                  disabled={!isRegisterOpen || paymentStatus === 'processing' || getRemainingAmount() > 0.01}
+                  disabled={!isRegisterOpen || paymentStatus === 'processing' || !mixedPaymentValidation.valid}
                 >
                   {paymentStatus === 'processing' ? (
                     <span className="flex items-center justify-center gap-2">
@@ -561,9 +551,13 @@ export const CheckoutModal = memo<CheckoutModalProps>(({
                     </span>
                   ) : (
                     <>
-                      {getRemainingAmount() > 0.01
-                        ? `Faltan ${formatCurrency(getRemainingAmount())}`
-                        : 'Confirmar Venta Mixta'}
+                      {mixedPaymentValidation.code === 'PAYMENT_INCOMPLETE'
+                        ? `Faltan ${formatCurrency(mixedPaymentValidation.remaining)}`
+                        : mixedPaymentValidation.code === 'PAYMENT_EXCESS'
+                          ? `Exceso ${formatCurrency(Math.abs(mixedPaymentValidation.remaining))}`
+                          : paymentSplit.length === 0
+                            ? 'Agregue una forma de pago'
+                            : 'Confirmar Venta Mixta'}
                     </>
                   )}
                 </Button>

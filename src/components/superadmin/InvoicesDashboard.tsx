@@ -1,12 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   AlertCircle,
   ArrowUpDown,
-  Building2,
   Calendar,
   CheckCircle2,
   ChevronDown,
@@ -27,7 +26,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Pagination } from '@/components/ui/pagination'
+import { useUrlListState } from '@/hooks/useUrlListState'
 import { cn } from '@/lib/utils'
+import { paginateList, SUPERADMIN_PAGE_SIZES } from '@/lib/superadmin/list-pagination'
+import { sumMoneyByCurrency, type CurrencyTotal } from '@/lib/superadmin/money-totals'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,9 +71,9 @@ function formatMoney(amount: number, currency: string) {
   }
 }
 
-function formatDate(value: string | null) {
-  if (!value) return '—'
-  return new Intl.DateTimeFormat('es-PY', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+function formatCurrencyTotals(totals: CurrencyTotal[]) {
+  if (totals.length === 0) return formatMoney(0, 'PYG')
+  return totals.map(({ amount, currency }) => formatMoney(amount, currency)).join(' + ')
 }
 
 function formatDateShort(value: string | null) {
@@ -84,6 +87,21 @@ function getInitials(name: string | null) {
 }
 
 function csvCell(v: unknown) { return `"${String(v ?? '').replace(/"/g, '""')}"` }
+
+function SortIndicator({
+  col,
+  sortKey,
+  sortDir,
+}: {
+  col: SortKey
+  sortKey: SortKey
+  sortDir: 'asc' | 'desc'
+}) {
+  if (sortKey !== col) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
+  return sortDir === 'asc'
+    ? <ChevronUp className="ml-1 h-3 w-3 text-indigo-500" />
+    : <ChevronDown className="ml-1 h-3 w-3 text-indigo-500" />
+}
 
 const STATUS_META: Record<string, { label: string; color: string; icon: React.ComponentType<{ className?: string }> }> = {
   paid:      { label: 'Pagada',      color: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300', icon: CheckCircle2 },
@@ -203,18 +221,40 @@ type SortKey = 'date' | 'org' | 'amount' | 'status'
 type FilterStatus = 'all' | 'paid' | 'pending' | 'failed'
 type DateFilter = 'all' | '7d' | '30d' | '90d'
 
-export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
+export function InvoicesDashboard({ rows, referenceTime }: { rows: InvoiceRow[]; referenceTime: string }) {
   const router = useRouter()
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all')
-  const [dateFilter, setDateFilter] = useState<DateFilter>('all')
-  const [providerFilter, setProviderFilter] = useState<string>('all')
-  const [sortKey, setSortKey] = useState<SortKey>('date')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const { state, setValue } = useUrlListState({
+    q: '',
+    status: 'all',
+    period: 'all',
+    provider: 'all',
+    sort: 'date',
+    dir: 'desc',
+    page: '1',
+    size: '25',
+  })
+  const search = state.q
+  const statusFilter = state.status as FilterStatus
+  const dateFilter = state.period as DateFilter
+  const providerFilter = state.provider
+  const sortKey = state.sort as SortKey
+  const sortDir = state.dir as 'asc' | 'desc'
+  const setFilter = (key: 'q' | 'status' | 'period' | 'provider', value: string) => {
+    setValue(key, value)
+    setValue('page', '1')
+  }
+  const setSearch = (value: string) => setFilter('q', value)
+  const setStatusFilter = (value: FilterStatus) => setFilter('status', value)
+  const setDateFilter = (value: DateFilter) => setFilter('period', value)
+  const setProviderFilter = (value: string) => setFilter('provider', value)
 
   function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir((d) => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir(key === 'date' || key === 'amount' ? 'desc' : 'asc') }
+    if (sortKey === key) setValue('dir', sortDir === 'asc' ? 'desc' : 'asc')
+    else {
+      setValue('sort', key)
+      setValue('dir', key === 'date' || key === 'amount' ? 'desc' : 'asc')
+    }
+    setValue('page', '1')
   }
 
   const stats = useMemo(() => {
@@ -222,15 +262,15 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
     const pending = rows.filter((r) => r.status === 'pending')
     const failed = rows.filter((r) => r.status === 'failed')
 
-    const totalRevenue = paid.reduce((sum, r) => sum + r.amount, 0)
+    const totalRevenue = sumMoneyByCurrency(paid)
 
-    const now = Date.now()
+    const now = new Date(referenceTime).getTime()
     const monthAgo = now - 30 * 86400000
-    const thisMonthRevenue = paid
-      .filter((r) => r.paidAt && new Date(r.paidAt).getTime() >= monthAgo)
-      .reduce((sum, r) => sum + r.amount, 0)
+    const thisMonthRevenue = sumMoneyByCurrency(
+      paid.filter((r) => r.paidAt && new Date(r.paidAt).getTime() >= monthAgo)
+    )
 
-    const pendingAmount = pending.reduce((sum, r) => sum + r.amount, 0)
+    const pendingAmount = sumMoneyByCurrency(pending)
     const successRate = (paid.length + failed.length) > 0
       ? Math.round((paid.length / (paid.length + failed.length)) * 100)
       : 0
@@ -239,7 +279,7 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
       total: rows.length, paid: paid.length, pending: pending.length, failed: failed.length,
       totalRevenue, thisMonthRevenue, pendingAmount, successRate,
     }
-  }, [rows])
+  }, [referenceTime, rows])
 
   const statusCounts = useMemo(() => {
     const m = new Map<string, number>()
@@ -255,7 +295,7 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const now = Date.now()
+    const now = new Date(referenceTime).getTime()
     const cutoff = dateFilter === '7d' ? now - 7 * 86400000
       : dateFilter === '30d' ? now - 30 * 86400000
       : dateFilter === '90d' ? now - 90 * 86400000
@@ -282,7 +322,11 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
     })
 
     return list
-  }, [rows, search, statusFilter, providerFilter, dateFilter, sortKey, sortDir])
+  }, [rows, search, statusFilter, providerFilter, dateFilter, sortKey, sortDir, referenceTime])
+  const pagination = useMemo(
+    () => paginateList(filtered, state.page, state.size),
+    [filtered, state.page, state.size]
+  )
 
   function exportCsv() {
     const header = ['Fecha', 'Organización', 'Slug', 'Plan', 'Monto', 'Moneda', 'Estado', 'Proveedor', 'Método', 'Referencia', 'Provider ID']
@@ -297,13 +341,6 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
     a.href = url
     a.download = `facturas-${new Date().toISOString().slice(0, 10)}.csv`
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
-  }
-
-  const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sortKey !== col) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
-    return sortDir === 'asc'
-      ? <ChevronUp className="ml-1 h-3 w-3 text-indigo-500" />
-      : <ChevronDown className="ml-1 h-3 w-3 text-indigo-500" />
   }
 
   const thClass = 'px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400'
@@ -352,9 +389,9 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total recaudado" value={formatMoney(stats.totalRevenue, 'PYG')} sub={`${stats.paid} pagos confirmados`} icon={TrendingUp} tone="success" />
-        <StatCard label="Este mes" value={formatMoney(stats.thisMonthRevenue, 'PYG')} sub="últimos 30 días" icon={Calendar} tone="info" />
-        <StatCard label="Pendientes" value={formatMoney(stats.pendingAmount, 'PYG')} sub={`${stats.pending} pagos en espera`} icon={Clock} tone={stats.pending > 0 ? 'warning' : 'default'} />
+        <StatCard label="Total recaudado" value={formatCurrencyTotals(stats.totalRevenue)} sub={`${stats.paid} pagos confirmados`} icon={TrendingUp} tone="success" />
+        <StatCard label="Este mes" value={formatCurrencyTotals(stats.thisMonthRevenue)} sub="últimos 30 días" icon={Calendar} tone="info" />
+        <StatCard label="Pendientes" value={formatCurrencyTotals(stats.pendingAmount)} sub={`${stats.pending} pagos en espera`} icon={Clock} tone={stats.pending > 0 ? 'warning' : 'default'} />
         <StatCard label="Tasa de éxito" value={`${stats.successRate}%`} sub={`${stats.failed} pagos fallidos`} icon={CheckCircle2} tone={stats.successRate >= 90 ? 'success' : stats.successRate >= 70 ? 'warning' : 'danger'} />
       </div>
 
@@ -383,7 +420,7 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">Cobros pendientes</p>
                   <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
-                    <strong className="text-slate-900 dark:text-slate-100">{formatMoney(stats.pendingAmount, 'PYG')}</strong> en {stats.pending} pagos esperando confirmación
+                    <strong className="text-slate-900 dark:text-slate-100">{formatCurrencyTotals(stats.pendingAmount)}</strong> en {stats.pending} pagos esperando confirmación
                   </p>
                 </div>
               </div>
@@ -507,22 +544,22 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
                 <tr>
                   <th className={cn(thClass, 'pl-4')}>
                     <button className={thBtn} onClick={() => toggleSort('date')}>
-                      Fecha <SortIcon col="date" />
+                      Fecha <SortIndicator col="date" sortKey={sortKey} sortDir={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>
                     <button className={thBtn} onClick={() => toggleSort('org')}>
-                      Organización <SortIcon col="org" />
+                      Organización <SortIndicator col="org" sortKey={sortKey} sortDir={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>
                     <button className={thBtn} onClick={() => toggleSort('amount')}>
-                      Monto <SortIcon col="amount" />
+                      Monto <SortIndicator col="amount" sortKey={sortKey} sortDir={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>
                     <button className={thBtn} onClick={() => toggleSort('status')}>
-                      Estado <SortIcon col="status" />
+                      Estado <SortIndicator col="status" sortKey={sortKey} sortDir={sortDir} />
                     </button>
                   </th>
                   <th className={thClass}>Proveedor</th>
@@ -540,7 +577,7 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
                       </p>
                     </td>
                   </tr>
-                ) : filtered.map((r) => {
+                ) : pagination.items.map((r) => {
                   const statusMeta = STATUS_META[r.status] ?? { label: r.status, color: 'border-slate-200 bg-slate-50 text-slate-500', icon: AlertCircle }
                   const providerMeta = PROVIDER_META[r.provider ?? 'manual'] ?? { label: r.provider ?? '—', color: 'border-slate-200 bg-slate-50 text-slate-600' }
                   const StatusIcon = statusMeta.icon
@@ -643,6 +680,19 @@ export function InvoicesDashboard({ rows }: { rows: InvoiceRow[] }) {
               </tbody>
             </table>
           </div>
+          <Pagination
+            className="border-t px-4 py-3"
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            itemsPerPage={pagination.pageSize}
+            totalItems={filtered.length}
+            itemsPerPageOptions={[...SUPERADMIN_PAGE_SIZES]}
+            onPageChange={(page) => setValue('page', String(page))}
+            onItemsPerPageChange={(size) => {
+              setValue('size', String(size))
+              setValue('page', '1')
+            }}
+          />
         </CardContent>
       </Card>
     </div>

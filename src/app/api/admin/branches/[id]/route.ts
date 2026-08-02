@@ -28,6 +28,91 @@ function toBoolean(value: unknown) {
   return typeof value === 'boolean' ? value : undefined
 }
 
+async function loadBranchDetail(
+  request: NextRequest,
+  ctx: AdminAuthContext & { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await ctx.params
+    if (!id) {
+      return NextResponse.json({ error: 'Sucursal inválida.' }, { status: 400 })
+    }
+
+    const supabase = createAdminSupabase()
+    let branchQuery = supabase
+      .from('branches')
+      .select('id, organization_id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at')
+      .eq('id', id)
+
+    if (ctx.organizationId) {
+      branchQuery = branchQuery.eq('organization_id', ctx.organizationId)
+    }
+
+    const { data: branch, error: branchError } = await branchQuery.maybeSingle()
+    if (branchError) throw branchError
+    if (!branch?.organization_id) {
+      return NextResponse.json({ error: 'Sucursal no encontrada.' }, { status: 404 })
+    }
+
+    const { data: assignments, error: assignmentsError } = await supabase
+      .from('user_branch_assignments')
+      .select('user_id, is_primary, created_at, updated_at')
+      .eq('branch_id', branch.id)
+      .eq('is_active', true)
+
+    if (assignmentsError) throw assignmentsError
+
+    const userIds = Array.from(new Set((assignments || []).map((row) => row.user_id).filter(Boolean)))
+    if (userIds.length === 0) {
+      return NextResponse.json({ branch, users: [] })
+    }
+
+    const [{ data: profiles, error: profilesError }, { data: memberships, error: membershipsError }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, full_name, email, phone, role, status, department, avatar_url, updated_at')
+        .in('id', userIds),
+      supabase
+        .from('organization_members')
+        .select('user_id, role, status')
+        .eq('organization_id', branch.organization_id)
+        .in('user_id', userIds),
+    ])
+
+    if (profilesError) throw profilesError
+    if (membershipsError) throw membershipsError
+
+    const profileById = new Map((profiles || []).map((profile) => [profile.id, profile]))
+    const membershipById = new Map((memberships || []).map((membership) => [membership.user_id, membership]))
+    const users = (assignments || []).map((assignment) => {
+      const profile = profileById.get(assignment.user_id)
+      const membership = membershipById.get(assignment.user_id)
+
+      return {
+        id: assignment.user_id,
+        full_name: profile?.full_name || null,
+        email: profile?.email || null,
+        phone: profile?.phone || null,
+        role: membership?.role || profile?.role || null,
+        status: membership?.status || profile?.status || null,
+        department: profile?.department || null,
+        avatar_url: profile?.avatar_url || null,
+        is_primary: Boolean(assignment.is_primary),
+        assigned_at: assignment.created_at,
+        updated_at: profile?.updated_at || assignment.updated_at,
+      }
+    }).sort((left, right) => {
+      if (left.is_primary !== right.is_primary) return left.is_primary ? -1 : 1
+      return (left.full_name || left.email || '').localeCompare(right.full_name || right.email || '', 'es')
+    })
+
+    return NextResponse.json({ branch, users })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Error interno del servidor.'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
 async function patchHandler(
   request: NextRequest,
   ctx: AdminAuthContext & { params: Promise<{ id: string }> }
@@ -65,6 +150,40 @@ async function patchHandler(
     }
 
     const supabase = createAdminSupabase()
+
+    // Desactivar la ultima sucursal activa deja a la organizacion sin lugar
+    // operativo: caja, stock y reparaciones dependen de que exista una.
+    if (isActive === false) {
+      const { data: current } = await supabase
+        .from('branches')
+        .select('organization_id, is_default, is_active')
+        .eq('id', id)
+        .maybeSingle()
+
+      if (current?.is_active !== false && current?.organization_id) {
+        const { count: otherActive } = await supabase
+          .from('branches')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', current.organization_id)
+          .eq('is_active', true)
+          .neq('id', id)
+
+        if ((otherActive ?? 0) === 0) {
+          return NextResponse.json(
+            { error: 'No podés desactivar la única sucursal activa. Activá otra sucursal primero.' },
+            { status: 409 }
+          )
+        }
+
+        if (current.is_default) {
+          return NextResponse.json(
+            { error: 'No podés desactivar la sucursal predeterminada. Asigná otra como predeterminada primero.' },
+            { status: 409 }
+          )
+        }
+      }
+    }
+
     let updateQuery = supabase
       .from('branches')
       .update(patch)
@@ -102,5 +221,14 @@ export function PATCH(
 ) {
   return withAdminAuth((req, authCtx) =>
     patchHandler(req, { ...authCtx, params: context.params })
+  )(request)
+}
+
+export function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return withAdminAuth((req, authCtx) =>
+    loadBranchDetail(req, { ...authCtx, params: context.params })
   )(request)
 }

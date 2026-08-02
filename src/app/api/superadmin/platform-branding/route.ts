@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { requireSuperAdmin } from '@/lib/superadmin/auth'
+import { getSuperAdminUser } from '@/lib/superadmin/auth'
 import { logSuperAdminAction } from '@/lib/superadmin/audit'
 import {
   DEFAULT_PLATFORM_BRANDING,
@@ -32,7 +32,7 @@ function isSafeHref(value: string) {
 }
 
 export async function GET() {
-  const me = await requireSuperAdmin()
+  const me = await getSuperAdminUser()
   if (!me) return NextResponse.json({ success: false, error: 'Acceso denegado.' }, { status: 403 })
 
   const admin = createAdminSupabase()
@@ -55,7 +55,7 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const me = await requireSuperAdmin()
+  const me = await getSuperAdminUser()
   if (!me) return NextResponse.json({ success: false, error: 'Acceso denegado.' }, { status: 403 })
 
   const body = await request.json().catch(() => null)

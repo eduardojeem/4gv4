@@ -14,6 +14,12 @@ interface UsersFiltersProps {
   statusFilter: string
   onStatusFilterChange: (value: string) => void
   showGlobalRoles?: boolean
+  /** Oculta el selector de rol cuando la vista ya fija una poblacion (ej. clientes). */
+  hideRoleFilter?: boolean
+  /** Muestra el selector de acceso mayorista (solo tiene sentido en clientes). */
+  showWholesaleFilter?: boolean
+  wholesaleFilter?: 'all' | 'wholesale'
+  onWholesaleFilterChange?: (value: 'all' | 'wholesale') => void
 }
 
 const ROLE_OPTIONS = [
@@ -46,6 +52,10 @@ export function UsersFilters({
   statusFilter,
   onStatusFilterChange,
   showGlobalRoles = false,
+  hideRoleFilter = false,
+  showWholesaleFilter = false,
+  wholesaleFilter = 'all',
+  onWholesaleFilterChange,
 }: UsersFiltersProps) {
   const normalizedSearchTerm = searchTerm.trim()
   const roleOptions = showGlobalRoles
@@ -53,7 +63,8 @@ export function UsersFilters({
     : ROLE_OPTIONS.filter((option) => option.value !== 'super_admin' && option.value !== 'cliente')
   const activeFilterCount = [
     normalizedSearchTerm !== '',
-    roleFilter !== 'all',
+    !hideRoleFilter && roleFilter !== 'all',
+    showWholesaleFilter && wholesaleFilter !== 'all',
     statusFilter !== 'all',
   ].filter(Boolean).length
 
@@ -61,6 +72,7 @@ export function UsersFilters({
     onSearchChange('')
     onRoleFilterChange('all')
     onStatusFilterChange('all')
+    onWholesaleFilterChange?.('all')
   }
 
   const roleLabel = roleOptions.find((o) => o.value === roleFilter)?.label
@@ -90,16 +102,31 @@ export function UsersFilters({
         </div>
 
         {/* Role filter */}
-        <Select value={roleFilter} onValueChange={onRoleFilterChange}>
-          <SelectTrigger className="w-[160px] h-9 text-sm">
-            <SelectValue placeholder="Rol" />
-          </SelectTrigger>
-          <SelectContent>
-            {roleOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {!hideRoleFilter && (
+          <Select value={roleFilter} onValueChange={onRoleFilterChange}>
+            <SelectTrigger className="w-[160px] h-9 text-sm">
+              <SelectValue placeholder="Rol" />
+            </SelectTrigger>
+            <SelectContent>
+              {roleOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Wholesale filter */}
+        {showWholesaleFilter && (
+          <Select value={wholesaleFilter} onValueChange={(v) => onWholesaleFilterChange?.(v as 'all' | 'wholesale')}>
+            <SelectTrigger className="w-[170px] h-9 text-sm">
+              <SelectValue placeholder="Tipo de cliente" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los clientes</SelectItem>
+              <SelectItem value="wholesale">Solo mayoristas</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
 
         {/* Status filter */}
         <Select value={statusFilter} onValueChange={onStatusFilterChange}>
@@ -140,7 +167,7 @@ export function UsersFilters({
               onClick={() => onSearchChange('')}
               className="inline-flex items-center gap-1 rounded-full border bg-muted/60 px-2.5 py-0.5 text-xs font-medium hover:bg-muted transition-colors"
             >
-              "{normalizedSearchTerm}"
+              &quot;{normalizedSearchTerm}&quot;
               <X className="h-3 w-3 text-muted-foreground" />
             </button>
           )}
@@ -152,6 +179,16 @@ export function UsersFilters({
             >
               {roleLabel}
               <X className="h-3 w-3 text-muted-foreground" />
+            </button>
+          )}
+
+          {showWholesaleFilter && wholesaleFilter !== 'all' && (
+            <button
+              onClick={() => onWholesaleFilterChange?.('all')}
+              className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 transition-opacity hover:opacity-80 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400"
+            >
+              Solo mayoristas
+              <X className="h-3 w-3" />
             </button>
           )}
 

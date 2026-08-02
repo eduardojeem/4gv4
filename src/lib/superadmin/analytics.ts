@@ -1,5 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { getCommercialPlanPrices, normalizePlanCode } from '@/lib/saas/subscription-service'
+import { buildMonthSeries, calculateRecurringRevenue } from '@/lib/superadmin/metrics-calculations'
 
 export interface GrowthDataPoint {
   month: string
@@ -13,8 +14,8 @@ export interface PlanDistribution {
 
 export interface ActivityDataPoint {
   month: string
-  active: number
-  inactive: number
+  activeRegistrations: number
+  otherRegistrations: number
 }
 
 export interface RevenueMetrics {
@@ -25,6 +26,8 @@ export interface RevenueMetrics {
 }
 
 export interface TopOrganization {
+  id: string
+  slug: string
   name: string
   user_count: number
 }
@@ -42,43 +45,36 @@ function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
-function monthLabel(date: Date) {
-  return new Intl.DateTimeFormat('es-PY', { month: 'short' }).format(date)
-}
-
-function lastMonths(count: number) {
-  const now = new Date()
-  return Array.from({ length: count }, (_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth() - (count - 1 - index), 1)
-    return {
-      key: monthKey(date),
-      label: monthLabel(date),
-    }
-  })
-}
-
 function normalizePlan(plan: string | null | undefined) {
   return normalizePlanCode(plan)
 }
 
 export async function getSuperAdminAnalytics(): Promise<SuperAdminAnalyticsData> {
   const admin = createAdminSupabase()
-  const months = lastMonths(6)
+  const months = buildMonthSeries(12)
   const commercialPlanPricesPromise = getCommercialPlanPrices()
 
-  const { data: organizations } = await admin
-    .from('organizations')
-    .select('id, name, plan, created_at')
-
-  const [{ data: members }, commercialPlanPrices] = await Promise.all([
+  const [organizationsResult, membersResult, subscriptionsResult, commercialPlanPrices] = await Promise.all([
+    admin
+      .from('organizations')
+      .select('id, name, slug, plan, created_at'),
     admin
       .from('organization_members')
-      .select('organization_id, status, created_at'),
+      .select('organization_id, status, created_at')
+      .neq('role', 'customer'),
+    admin
+      .from('subscriptions')
+      .select('organization_id, plan, status, payment_status'),
     commercialPlanPricesPromise,
   ])
 
-  const orgRows = organizations ?? []
-  const memberRows = members ?? []
+  const queryError = [organizationsResult.error, membersResult.error, subscriptionsResult.error].find(Boolean)
+  if (queryError) throw new Error(`No se pudieron cargar las analíticas: ${queryError.message}`)
+
+  const orgRows = organizationsResult.data ?? []
+  const memberRows = membersResult.data ?? []
+  const subscriptionRows = subscriptionsResult.data ?? []
+  const subscriptionsByOrg = new Map(subscriptionRows.map((subscription) => [subscription.organization_id, subscription]))
 
   const growthData = months.map((month) => ({
     month: month.label,
@@ -87,7 +83,7 @@ export async function getSuperAdminAnalytics(): Promise<SuperAdminAnalyticsData>
 
   const planCounts = new Map<string, number>()
   orgRows.forEach((org) => {
-    const plan = normalizePlan(org.plan)
+    const plan = normalizePlan(subscriptionsByOrg.get(org.id)?.plan ?? org.plan)
     planCounts.set(plan, (planCounts.get(plan) ?? 0) + 1)
   })
 
@@ -99,17 +95,19 @@ export async function getSuperAdminAnalytics(): Promise<SuperAdminAnalyticsData>
     const rows = memberRows.filter((member) => member.created_at && monthKey(new Date(member.created_at)) === month.key)
     return {
       month: month.label,
-      active: rows.filter((member) => member.status === 'active').length,
-      inactive: rows.filter((member) => member.status !== 'active').length,
+      activeRegistrations: rows.filter((member) => member.status === 'active').length,
+      otherRegistrations: rows.filter((member) => member.status !== 'active').length,
     }
   })
 
-  const activePaidPlans = orgRows
-    .map((org) => normalizePlan(org.plan))
-    .filter((plan) => plan !== 'FREE')
-
-  const mrr = activePaidPlans.reduce((sum, plan) => sum + (commercialPlanPrices[plan] ?? 0), 0)
-  const activeSubscriptions = activePaidPlans.length
+  const revenueData = calculateRecurringRevenue(
+    subscriptionRows.map((subscription) => ({
+      plan: subscription.plan,
+      status: subscription.status,
+      paymentStatus: subscription.payment_status,
+    })),
+    commercialPlanPrices
+  )
 
   const usersByOrg = new Map<string, number>()
   memberRows.forEach((member) => {
@@ -118,6 +116,8 @@ export async function getSuperAdminAnalytics(): Promise<SuperAdminAnalyticsData>
 
   const topOrganizations = orgRows
     .map((org) => ({
+      id: org.id,
+      slug: org.slug ?? '',
       name: org.name,
       user_count: usersByOrg.get(org.id) ?? 0,
     }))
@@ -129,10 +129,10 @@ export async function getSuperAdminAnalytics(): Promise<SuperAdminAnalyticsData>
     planDistribution,
     activityData,
     revenueData: {
-      mrr,
-      arr: mrr * 12,
-      activeSubscriptions,
-      averageRevenuePerSub: activeSubscriptions > 0 ? mrr / activeSubscriptions : 0,
+      mrr: revenueData.mrr,
+      arr: revenueData.arr,
+      activeSubscriptions: revenueData.activeSubscriptions,
+      averageRevenuePerSub: revenueData.averageRevenuePerSubscription,
     },
     topOrganizations,
     generatedAt: new Date().toISOString(),

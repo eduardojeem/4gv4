@@ -8,6 +8,10 @@ type AssignmentRow = {
   is_active?: boolean | null
 }
 
+type OrganizationMembershipRow = {
+  role: string
+}
+
 const BRANCH_SELECT = 'id, organization_id, code, name, slug, address, city, phone, email, manager_name, is_active, is_default, created_at, updated_at'
 
 function isUuidLike(value: string | null | undefined) {
@@ -59,6 +63,52 @@ async function fetchBranchesByIds(branchIds: string[], organizationId?: string |
   }
 
   return (data ?? []) as BranchRecord[]
+}
+
+async function fetchOrganizationBranches(organizationId: string) {
+  const supabase = createAdminSupabase()
+  const { data, error } = await supabase
+    .from('branches')
+    .select(BRANCH_SELECT)
+    .eq('organization_id', organizationId)
+    .eq('is_active', true)
+
+  if (error) {
+    console.error('[branches] Error loading organization branches:', error)
+    return [] as BranchRecord[]
+  }
+
+  return (data ?? []) as BranchRecord[]
+}
+
+async function fetchActiveOrganizationMembership(userId: string, organizationId: string) {
+  const supabase = createAdminSupabase()
+  const { data, error } = await supabase
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (error) {
+    console.error('[branches] Error loading organization membership:', error)
+    return null
+  }
+
+  return (data as OrganizationMembershipRow | null) ?? null
+}
+
+function sortBranches<T extends BranchRecord & { is_primary?: boolean | null }>(branches: T[]) {
+  return [...branches].sort((left, right) => {
+    if (Boolean(left.is_primary) !== Boolean(right.is_primary)) {
+      return Number(Boolean(right.is_primary)) - Number(Boolean(left.is_primary))
+    }
+    if (Boolean(left.is_default) !== Boolean(right.is_default)) {
+      return Number(Boolean(right.is_default)) - Number(Boolean(left.is_default))
+    }
+    return left.name.localeCompare(right.name, 'es')
+  })
 }
 
 export async function getDefaultBranch(organizationId?: string | null): Promise<BranchRecord | null> {
@@ -115,24 +165,47 @@ export async function listUserBranches(userId: string, organizationId?: string |
       safeAssignments.map((assignment) => [assignment.branch_id, assignment])
     )
 
-    return branches
+    return sortBranches(branches
       .map((branch) => ({
         ...branch,
         is_primary: assignmentMap.get(branch.id)?.is_primary ?? false,
-      }))
-      .sort((left, right) => {
-        const leftPrimary = left.is_primary ? 1 : 0
-        const rightPrimary = right.is_primary ? 1 : 0
-        if (leftPrimary !== rightPrimary) return rightPrimary - leftPrimary
-        if ((left.is_default ? 1 : 0) !== (right.is_default ? 1 : 0)) {
-          return (right.is_default ? 1 : 0) - (left.is_default ? 1 : 0)
-        }
-        return left.name.localeCompare(right.name, 'es')
-      })
+      })))
   } catch (error) {
     console.error('[branches] User branch list failed:', error)
     return [] as Array<BranchRecord & { is_primary?: boolean | null }>
   }
+}
+
+export async function listAccessibleBranchesForUser(params: {
+  userId: string
+  role?: AppRole
+  organizationId: string
+}) {
+  const { userId, role, organizationId } = params
+  const assignedBranches = await listUserBranches(userId, organizationId)
+
+  if (role === 'super_admin') {
+    const branches = await fetchOrganizationBranches(organizationId)
+    const assignmentMap = new Map(assignedBranches.map((branch) => [branch.id, branch.is_primary]))
+    return sortBranches(branches.map((branch) => ({
+      ...branch,
+      is_primary: assignmentMap.get(branch.id) ?? false,
+    })))
+  }
+
+  const membership = await fetchActiveOrganizationMembership(userId, organizationId)
+  if (!membership) return []
+
+  if (membership.role === 'owner' || membership.role === 'admin') {
+    const branches = await fetchOrganizationBranches(organizationId)
+    const assignmentMap = new Map(assignedBranches.map((branch) => [branch.id, branch.is_primary]))
+    return sortBranches(branches.map((branch) => ({
+      ...branch,
+      is_primary: assignmentMap.get(branch.id) ?? false,
+    })))
+  }
+
+  return assignedBranches
 }
 
 export async function resolveBranchScopeForUser(params: {
@@ -166,7 +239,11 @@ export async function resolveBranchScopeForUser(params: {
     return { branchId: null, branch: null, source: 'unavailable' }
   }
 
-  const availableBranches = await listUserBranches(userId, organizationId)
+  if (!organizationId) {
+    return { branchId: null, branch: null, source: 'unavailable' }
+  }
+
+  const availableBranches = await listAccessibleBranchesForUser({ userId, role, organizationId })
 
   if (requestedBranchId) {
     const requestedBranch = availableBranches.find((branch) => branch.id === requestedBranchId)
@@ -185,11 +262,12 @@ export async function resolveBranchScopeForUser(params: {
   }
 
   if (availableBranches[0]) {
-    return { branchId: availableBranches[0].id, branch: availableBranches[0], source: 'primary' }
-  }
-
-  if (defaultBranch) {
-    return { branchId: defaultBranch.id, branch: defaultBranch, source: 'default' }
+    const branch = availableBranches[0]
+    return {
+      branchId: branch.id,
+      branch,
+      source: branch.is_default ? 'default' : 'primary',
+    }
   }
 
   return { branchId: null, branch: null, source: 'unavailable' }

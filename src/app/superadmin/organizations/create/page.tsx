@@ -1,17 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle,
   ArrowLeft,
-  ArrowRight,
   Building2,
   CheckCircle2,
   Clock,
   CreditCard,
-  Globe,
   Loader2,
   Mail,
   Settings,
@@ -30,34 +27,6 @@ import { getSubscriptionPlans, type SubscriptionPlan } from '@/services/subscrip
 // ---------------------------------------------------------------------------
 // Plan data
 // ---------------------------------------------------------------------------
-
-const PLANS = [
-  {
-    id: 'FREE', name: 'Free', price: 'Gratis',
-    color: 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800',
-    badge: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
-    features: ['2 usuarios', '1 sucursal', '50 productos', 'Trial 14 días'],
-  },
-  {
-    id: 'BASIC', name: 'Basic', price: '70.000 Gs',
-    color: 'border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/20',
-    badge: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-300',
-    features: ['10 usuarios', '2 sucursales', '500 productos', 'Trial 14 días'],
-  },
-  {
-    id: 'PRO', name: 'Pro', price: '150.000 Gs',
-    color: 'border-violet-200 bg-violet-50 dark:border-violet-900/60 dark:bg-violet-950/20',
-    badge: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/20 dark:text-violet-300',
-    popular: true,
-    features: ['25 usuarios', '5 sucursales', '5.000 productos', 'Marketplace'],
-  },
-  {
-    id: 'ENTERPRISE', name: 'Enterprise', price: '300.000 Gs',
-    color: 'border-amber-200 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/20',
-    badge: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-300',
-    features: ['Ilimitados', 'Ilimitadas', 'Ilimitados', 'Todo incluido'],
-  },
-]
 
 const PLAN_STYLE: Record<string, { color: string; badge: string }> = {
   FREE: {
@@ -117,29 +86,29 @@ const TIMEZONES = [
 // ---------------------------------------------------------------------------
 
 function useSlugCheck(slug: string) {
-  const [state, setState] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  const [result, setResult] = useState<{ slug: string; state: 'available' | 'taken' } | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const canCheck = slug.length >= 2 && /^[a-z0-9-]+$/.test(slug)
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    if (!slug || slug.length < 2) { setState('idle'); return }
-    if (!/^[a-z0-9-]+$/.test(slug)) { setState('idle'); return }
+    if (!canCheck) return
 
-    setState('checking')
     timerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/superadmin/organizations?slug=${encodeURIComponent(slug)}`)
         const data = await res.json() as { available?: boolean }
-        setState(data.available ? 'available' : 'taken')
+        setResult({ slug, state: data.available ? 'available' : 'taken' })
       } catch {
-        setState('idle')
+        setResult(null)
       }
     }, 500)
 
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [slug])
+  }, [canCheck, slug])
 
-  return state
+  if (!canCheck) return 'idle'
+  return result?.slug === slug ? result.state : 'checking'
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +135,6 @@ function Field({ label, required, error, hint, children }: {
 // ---------------------------------------------------------------------------
 
 export default function SuperAdminCreateOrganizationPage() {
-  const router = useRouter()
 
   // Form state
   const [name, setName] = useState('')

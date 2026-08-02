@@ -1,14 +1,19 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { FinancialDashboard, type FinancialData } from '@/components/superadmin/FinancialDashboard'
+import { sumMoneyByCurrency } from '@/lib/superadmin/money-totals'
 
 async function getFinancialData(): Promise<FinancialData> {
   const admin = createAdminSupabase()
 
-  const [{ data: plans }, { data: subs }, { data: payments }] = await Promise.all([
+  const [{ data: plans, error: plansError }, { data: subs, error: subscriptionsError }, { data: payments, error: paymentsError }] = await Promise.all([
     admin.from('subscription_plans').select('tier, name, price, is_active').eq('is_active', true),
     admin.from('subscriptions').select('id, organization_id, plan, status, trial_ends_at, current_period_ends_at, cancel_at_period_end, created_at, updated_at'),
     admin.from('subscription_payments').select('amount, currency, status, paid_at, created_at, provider, plan_id'),
   ])
+
+  if (plansError || subscriptionsError || paymentsError) {
+    throw new Error(plansError?.message || subscriptionsError?.message || paymentsError?.message || 'No se pudieron cargar los datos financieros.')
+  }
 
   // Price lookup by plan tier
   const priceByTier = new Map<string, number>()
@@ -63,10 +68,14 @@ async function getFinancialData(): Promise<FinancialData> {
     amount: number; currency: string; status: string; paid_at: string | null; created_at: string | null; provider: string | null; plan_id: string | null
   }>).filter((p) => p.status === 'paid')
 
-  const totalRevenue = paidPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
-  const monthlyRevenue = paidPayments
-    .filter((p) => (p.paid_at ? new Date(p.paid_at).getTime() : 0) >= monthAgo)
-    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+  const revenueByCurrency = sumMoneyByCurrency(
+    paidPayments.map((payment) => ({ amount: payment.amount, currency: payment.currency }))
+  )
+  const monthlyRevenueByCurrency = sumMoneyByCurrency(
+    paidPayments
+      .filter((p) => (p.paid_at ? new Date(p.paid_at).getTime() : 0) >= monthAgo)
+      .map((payment) => ({ amount: payment.amount, currency: payment.currency }))
+  )
 
   // Revenue por plan
   const revenueByPlan = new Map<string, number>()
@@ -105,7 +114,7 @@ async function getFinancialData(): Promise<FinancialData> {
 
   return {
     mrr, arr, potentialMrr, churnedMrr, churnRate,
-    totalRevenue, monthlyRevenue,
+    revenueByCurrency, monthlyRevenueByCurrency,
     counts: {
       total: subscriptions.length,
       active: activeSubs.length,
