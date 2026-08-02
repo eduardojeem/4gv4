@@ -152,7 +152,7 @@ export function InventoryProvider({ children }: InventoryProviderProps) {
         if (catRes.success && catRes.data) {
           targetCategoryId = catRes.data.id
         } else {
-          throw new Error("No se pudo crear la categoría de Servicios")
+          throw new Error(catRes.error || "No se pudo crear la categoría de Servicios")
         }
       }
 

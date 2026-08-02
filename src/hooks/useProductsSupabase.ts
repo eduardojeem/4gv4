@@ -71,6 +71,13 @@ interface ProductsListApiPayload {
   message?: string
 }
 
+interface CategoryApiPayload {
+  success?: boolean
+  data?: Category
+  error?: string
+  message?: string
+}
+
 function getProductApiError(payload: ProductApiPayload | null, fallback: string) {
   if (!payload) return fallback
 
@@ -686,26 +693,34 @@ export function useProductsSupabase(options?: { enabled?: boolean }) {
   // Función para crear categoría
   const createCategory = useCallback(async (name: string, description?: string) => {
     try {
-      const { data, error } = await supabase
-        .from('categories')
-        .insert({ name, description, is_active: true })
-        .select()
-        .single()
+      const response = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description?.trim() || null,
+          is_active: true,
+        }),
+      })
+      const payload = await response.json().catch(() => null) as CategoryApiPayload | null
 
-      if (error) throw error
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.message || payload?.error || 'No se pudo crear la categoria')
+      }
       
       // Refrescar categorías
       await fetchCategories()
       
-      return { success: true, data }
-    } catch (err) {
-      console.error('Error creating category:', err)
+      return { success: true, data: payload.data }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido al crear la categoria'
+      console.warn('Category creation failed:', errorMessage)
       return { 
         success: false, 
-        error: err instanceof Error ? err.message : 'Error desconocido' 
+        error: errorMessage,
       }
     }
-  }, [supabase, fetchCategories])
+  }, [fetchCategories])
 
   // Función para obtener productos más vendidos
   const getTopSellingProducts = useCallback(async (limit = 10) => {
