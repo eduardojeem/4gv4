@@ -431,6 +431,7 @@ end;
 $$;
 
 drop policy if exists "tenant members can create cash movements" on public.cash_movements;
+drop policy if exists "cash managers can create cash movements" on public.cash_movements;
 create policy "cash managers can create cash movements"
 on public.cash_movements
 for insert to authenticated

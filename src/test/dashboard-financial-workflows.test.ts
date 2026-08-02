@@ -144,6 +144,7 @@ describe('dashboard financial workflow contracts', () => {
     const cashHook = readFileSync(resolve(workspace, 'src/hooks/useCashRegister.ts'), 'utf8')
 
     expect(cashRegisterMigration).toContain('function public.record_cash_movement_atomic')
+    expect(cashRegisterMigration).toContain('drop policy if exists "cash managers can create cash movements"')
     expect(movementRoute).toContain("permission: 'pos.cash.manage'")
     expect(movementRoute).toContain("'record_cash_movement_atomic'")
     expect(cashHook).toContain("fetch('/api/pos/cash-movements'")
