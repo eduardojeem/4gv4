@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import useSWR, { mutate } from 'swr'
 import { WebsiteSettings } from '@/types/website-settings'
 import { createSupabaseClient } from '@/lib/supabase/client'
 import { usePathname } from 'next/navigation'
 import { getTenantSlugFromPathname } from '@/lib/saas/tenant'
+import { getHydrationSafeWebsiteSettingsState } from '@/lib/website/hydration-state'
 
 type FetchError = Error & { status?: number }
 type RealtimeClient = ReturnType<typeof createSupabaseClient>
@@ -19,6 +20,10 @@ let adminRealtimeChannel: RealtimeChannel | null = null
 
 const WEBSITE_SETTINGS_CACHE_KEY = '/api/public/website/settings'
 const ADMIN_WEBSITE_SETTINGS_CACHE_KEY = '/api/admin/website/settings'
+
+const subscribeToHydration = () => () => undefined
+const getClientHydrationSnapshot = () => true
+const getServerHydrationSnapshot = () => false
 
 function ensurePublicWebsiteSettingsRealtime() {
   if (publicRealtimeChannel) return
@@ -81,6 +86,11 @@ function releaseAdminWebsiteSettingsRealtime() {
 }
 
 export function useWebsiteSettings() {
+  const isHydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getClientHydrationSnapshot,
+    getServerHydrationSnapshot
+  )
   const pathname = usePathname()
   const tenantSlug = getTenantSlugFromPathname(pathname)
   const cacheKey = tenantSlug ? `${WEBSITE_SETTINGS_CACHE_KEY}?org=${encodeURIComponent(tenantSlug)}` : WEBSITE_SETTINGS_CACHE_KEY
@@ -118,7 +128,12 @@ export function useWebsiteSettings() {
     }
   }, [])
 
-  return { settings: data ?? null, isLoading, error: error ? (error as Error).message : null }
+  const hydrationSafeState = getHydrationSafeWebsiteSettingsState(isHydrated, data, isLoading)
+
+  return {
+    ...hydrationSafeState,
+    error: error ? (error as Error).message : null,
+  }
 }
 
 export function useAdminWebsiteSettings() {
