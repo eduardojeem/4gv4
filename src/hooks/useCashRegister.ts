@@ -499,6 +499,7 @@ export function useCashRegister() {
             const payload = await response.json() as {
                 success?: boolean
                 error?: string
+                code?: string
                 data?: { discrepancy?: number }
             }
 
@@ -521,8 +522,9 @@ export function useCashRegister() {
             return true
         } catch (error: unknown) {
             // Fix #3: NO limpiar sesión local si DB falló → evitar inconsistencia
-            console.error('Error al cerrar caja:', error)
-            toast.error('Error al cerrar caja. Verifique la conexión e intente nuevamente.')
+            const message = error instanceof Error ? error.message : 'No se pudo cerrar la caja.'
+            console.warn(`No se pudo cerrar la caja: ${message}`)
+            toast.error(message)
             return false
         } finally {
             setLoading(false)

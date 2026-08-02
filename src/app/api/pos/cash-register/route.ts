@@ -109,7 +109,15 @@ export const PATCH = withTenantAuth(
       })
 
       if (error) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 })
+        const incompatibleMovementFunction = error.message.includes('cash_movement_effect')
+          && error.message.includes('does not exist')
+        const message = incompatibleMovementFunction
+          ? 'La función de movimientos de caja está desactualizada. Aplica la migración pendiente y vuelve a intentar.'
+          : error.message
+        return NextResponse.json(
+          { success: false, error: message, code: error.code },
+          { status: incompatibleMovementFunction ? 503 : 400 }
+        )
       }
 
       return NextResponse.json({ success: true, data })

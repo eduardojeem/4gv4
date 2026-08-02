@@ -23,6 +23,10 @@ const cashRegisterActiveContractMigration = readFileSync(
   resolve(workspace, 'supabase/migrations/20260802180000_fix_cash_register_active_contract.sql'),
   'utf8'
 )
+const cashMovementEnumCastMigration = readFileSync(
+  resolve(workspace, 'supabase/migrations/20260802193000_fix_cash_movement_enum_cast.sql'),
+  'utf8'
+)
 
 describe('dashboard financial workflow contracts', () => {
   it.each([
@@ -124,6 +128,12 @@ describe('dashboard financial workflow contracts', () => {
     expect(cashRegisterActiveContractMigration).toContain('alter column is_active set not null')
     expect(cashRegisterActiveContractMigration).toContain("c.register_id = 'principal'")
     expect(cashRegisterActiveContractMigration).toContain('public.calculate_cash_session_expected')
+  })
+
+  it('casts the cash movement enum before calculating its register effect', () => {
+    expect(cashRegisterMigration).toContain('cash_movement_effect(new.type::text')
+    expect(cashMovementEnumCastMigration).toContain('cash_movement_effect(new.type::text')
+    expect(cashMovementEnumCastMigration).toContain('create or replace function public.sync_cash_register_balance_from_movement')
   })
 
   it('routes manual cash movements through a protected atomic endpoint', () => {

@@ -66,7 +66,7 @@ begin
   if target_register_id is not null then
     update public.cash_registers r
     set balance = coalesce(r.balance, 0)
-      + public.cash_movement_effect(new.type, new.payment_method, new.amount)
+      + public.cash_movement_effect(new.type::text, new.payment_method, new.amount)
     where r.id::text = target_register_id
       and r.organization_id = new.organization_id
       and r.branch_id = new.branch_id;
